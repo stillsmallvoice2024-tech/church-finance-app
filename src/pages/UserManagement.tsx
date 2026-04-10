@@ -1,4 +1,4 @@
-import { Users, UserPlus, Pencil } from 'lucide-react'
+import { UserPlus, Pencil } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { DataTable, type Column } from '../components/ui/DataTable'

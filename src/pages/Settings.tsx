@@ -5,7 +5,9 @@ import { useRole } from '../hooks/useRole'
 import { ROLE_LABELS } from '../utils/constants'
 
 export default function Settings() {
-  const { fullName, email } = useAuth()
+  const { user, profile } = useAuth()
+  const fullName = profile?.full_name ?? ''
+  const email = user?.email ?? ''
   const { role } = useRole()
 
   return (

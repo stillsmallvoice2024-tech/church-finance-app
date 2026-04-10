@@ -1,7 +1,6 @@
 import { Target, Plus } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
-import { CurrencyDisplay } from '../components/ui/CurrencyDisplay'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import type { SpecialProject } from '../types'
 

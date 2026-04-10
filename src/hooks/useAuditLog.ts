@@ -69,7 +69,7 @@ export function useAuditLog(limit = 100): AuditLogResult {
     if (err) {
       setError(err.message)
     } else {
-      setEntries((data ?? []) as AuditLogEntry[])
+      setEntries((data ?? []) as unknown as AuditLogEntry[])
     }
     setLoading(false)
   }, [limit])  // role is read from store at call-time, not a dep

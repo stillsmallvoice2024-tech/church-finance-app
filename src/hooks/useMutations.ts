@@ -126,7 +126,7 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
         action:    'INSERT',
         tableName: 'inflow_transactions',
         recordId:  data.id,
-        newData:   input as Record<string, unknown>,
+        newData:   input as unknown as Record<string, unknown>,
       })
 
       return data.id
@@ -170,7 +170,7 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
         action:    'INSERT',
         tableName: 'outflow_transactions',
         recordId:  data.id,
-        newData:   input as Record<string, unknown>,
+        newData:   input as unknown as Record<string, unknown>,
       })
 
       return data.id
@@ -214,7 +214,7 @@ export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {
         action:    'INSERT',
         tableName: 'intra_flows',
         recordId:  data.id,
-        newData:   input as Record<string, unknown>,
+        newData:   input as unknown as Record<string, unknown>,
       })
 
       return data.id

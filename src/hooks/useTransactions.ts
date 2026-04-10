@@ -86,13 +86,6 @@ export interface PaginatedResult<T> {
   refetch: () => void
 }
 
-// ── Shared helpers ─────────────────────────────────────────────────────────────
-
-function parseError(err: unknown): string {
-  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message)
-  if (err instanceof Error) return err.message
-  return 'An unexpected error occurred'
-}
 
 // ── useInflowTransactions ──────────────────────────────────────────────────────
 
