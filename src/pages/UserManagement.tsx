@@ -4,18 +4,19 @@ import { Badge } from '../components/ui/Badge'
 import { DataTable, type Column } from '../components/ui/DataTable'
 import { getInitials, formatDate } from '../utils/formatters'
 import { ROLE_LABELS } from '../utils/constants'
+import { AdminOnly } from '../components/auth/RoleGates'
 import type { UserProfile } from '../types'
 
 const MOCK_USERS: UserProfile[] = [
-  { id: '1', email: 'pastor@tsci.org', full_name: 'Pastor Emmanuel Okafor', role: 'admin', created_at: '2024-01-01' },
-  { id: '2', email: 'finance@tsci.org', full_name: 'Deacon Grace Adeyemi', role: 'finance_manager', created_at: '2024-01-15' },
-  { id: '3', email: 'treasurer@tsci.org', full_name: 'Bro. Daniel Musa', role: 'finance_manager', created_at: '2024-02-01' },
-  { id: '4', email: 'secretary@tsci.org', full_name: 'Sis. Ruth Nwachukwu', role: 'viewer', created_at: '2024-03-10' },
+  { id: '1', email: 'pastor@tsci.org', full_name: 'Pastor Emmanuel Okafor', role: 'admin', created_at: '2024-01-01', updated_at: '2024-01-01' },
+  { id: '2', email: 'finance@tsci.org', full_name: 'Deacon Grace Adeyemi', role: 'accountant', created_at: '2024-01-15', updated_at: '2024-01-15' },
+  { id: '3', email: 'treasurer@tsci.org', full_name: 'Bro. Daniel Musa', role: 'accountant', created_at: '2024-02-01', updated_at: '2024-02-01' },
+  { id: '4', email: 'secretary@tsci.org', full_name: 'Sis. Ruth Nwachukwu', role: 'viewer', created_at: '2024-03-10', updated_at: '2024-03-10' },
 ]
 
 const ROLE_VARIANT: Record<UserProfile['role'], 'primary' | 'warning' | 'neutral'> = {
   admin: 'primary',
-  finance_manager: 'warning',
+  accountant: 'warning',
   viewer: 'neutral',
 }
 
@@ -49,10 +50,12 @@ const columns: Column<UserProfile>[] = [
     key: 'actions',
     header: '',
     render: () => (
-      <button className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-500 hover:text-primary hover:bg-primary-100 rounded-lg transition-colors">
-        <Pencil className="w-3.5 h-3.5" />
-        Edit Role
-      </button>
+      <AdminOnly>
+        <button className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-500 hover:text-primary hover:bg-primary-100 rounded-lg transition-colors">
+          <Pencil className="w-3.5 h-3.5" />
+          Edit Role
+        </button>
+      </AdminOnly>
     ),
     className: 'text-right',
   },
@@ -66,18 +69,20 @@ export default function UserManagement() {
           <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
           <p className="text-sm text-gray-500 mt-1">Manage user accounts and access roles</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:bg-primary-light transition-colors">
-          <UserPlus className="w-4 h-4" />
-          Invite User
-        </button>
+        <AdminOnly>
+          <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:bg-primary-light transition-colors">
+            <UserPlus className="w-4 h-4" />
+            Invite User
+          </button>
+        </AdminOnly>
       </div>
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: 'Total Users', value: MOCK_USERS.length, icon: Users },
-          { label: 'Admins', value: MOCK_USERS.filter((u) => u.role === 'admin').length, icon: Users },
-          { label: 'Finance Managers', value: MOCK_USERS.filter((u) => u.role === 'finance_manager').length, icon: Users },
+          { label: 'Total Users', value: MOCK_USERS.length },
+          { label: 'Admins', value: MOCK_USERS.filter((u) => u.role === 'admin').length },
+          { label: 'Accountants', value: MOCK_USERS.filter((u) => u.role === 'accountant').length },
         ].map(({ label, value }) => (
           <Card key={label}>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</p>
@@ -87,8 +92,11 @@ export default function UserManagement() {
       </div>
 
       <Card padding={false}>
-        <div className="px-6 py-4 border-b border-gray-100">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-800">All Users</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">{MOCK_USERS.length} members</span>
+          </div>
         </div>
         <DataTable
           columns={columns}

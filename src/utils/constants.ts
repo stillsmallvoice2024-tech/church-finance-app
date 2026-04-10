@@ -2,13 +2,13 @@ import type { UserRole } from '../types'
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',
-  finance_manager: 'Finance Manager',
+  accountant: 'Accountant',
   viewer: 'Viewer',
 }
 
 export const ROLE_BADGE_CLASSES: Record<UserRole, string> = {
   admin: 'bg-primary-100 text-primary',
-  finance_manager: 'bg-accent-light text-accent',
+  accountant: 'bg-accent-light text-accent',
   viewer: 'bg-gray-100 text-gray-600',
 }
 

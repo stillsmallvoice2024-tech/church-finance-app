@@ -53,6 +53,7 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { isAdmin } = useRole()
+  const showAdmin = isAdmin()
 
   return (
     <>
@@ -123,7 +124,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             </NavLink>
           ))}
 
-          {isAdmin && (
+          {showAdmin && (
             <>
               <div className="pt-4 pb-1">
                 <p className="px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
