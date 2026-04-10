@@ -1,0 +1,339 @@
+import { useState, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../store/authStore'
+
+// ── Internal helpers ───────────────────────────────────────────────────────────
+
+function extractMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'message' in err)
+    return String((err as { message: unknown }).message)
+  if (err instanceof Error) return err.message
+  return 'An unexpected error occurred'
+}
+
+/**
+ * Write an audit entry. Fire-and-forget so it never blocks the main operation.
+ * Console-warns on failure but does NOT surface to the user.
+ */
+async function logAudit({
+  userId,
+  action,
+  tableName,
+  recordId,
+  oldData = null,
+  newData = null,
+}: {
+  userId: string
+  action: 'INSERT' | 'UPDATE' | 'DELETE'
+  tableName: string
+  recordId: string
+  oldData?: Record<string, unknown> | null
+  newData?: Record<string, unknown> | null
+}): Promise<void> {
+  const { error } = await supabase.from('audit_log').insert({
+    user_id:    userId,
+    action,
+    table_name: tableName,
+    record_id:  recordId,
+    old_data:   oldData,
+    new_data:   newData,
+  })
+  if (error) console.warn('[audit_log] write failed:', error.message)
+}
+
+// ── Input types ────────────────────────────────────────────────────────────────
+
+export interface AddInflowInput {
+  date: string
+  amount: number
+  description?: string
+  stage_code_1?: string
+  stage_code_2?: string
+  stage_code_3?: string
+  transaction_ref?: string
+  specific_seed_description?: string
+  remark?: string
+}
+
+export interface AddOutflowInput {
+  date: string
+  amount_disbursed: number
+  description?: string
+  bank_description?: string
+  transaction_id?: string
+  amount_refunded?: number
+  transfer_charge?: number
+  actual_amount?: number
+  bank_total?: number
+  stage_code_1?: string
+  stage_code_2?: string
+  remarks?: string
+}
+
+export interface AddIntraFlowInput {
+  date: string
+  account_from: string
+  account_to: string
+  total_amount: number
+  description?: string
+  transaction_ref?: string
+  account_from_stage1?: string
+  account_from_stage2?: string
+  account_to_stage1?: string
+  account_to_stage2?: string
+  remark?: string
+}
+
+export interface UpdateTransactionInput {
+  id: string
+  updates: Record<string, unknown>
+}
+
+// ── Return type shared by all mutation hooks ───────────────────────────────────
+
+export interface MutationHook<TInput, TReturn = void> {
+  mutate: (input: TInput) => Promise<TReturn>
+  loading: boolean
+  error: string | null
+  reset: () => void   // clear error state
+}
+
+// ── useAddInflow ───────────────────────────────────────────────────────────────
+
+export function useAddInflow(): MutationHook<AddInflowInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddInflowInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to add transactions.')
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { data, error: err } = await supabase
+        .from('inflow_transactions')
+        .insert({ ...input, created_by: user.id })
+        .select('id')
+        .single()
+
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned after insert.')
+
+      logAudit({
+        userId:    user.id,
+        action:    'INSERT',
+        tableName: 'inflow_transactions',
+        recordId:  data.id,
+        newData:   input as Record<string, unknown>,
+      })
+
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err)
+      setError(msg)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, []) // stable: reads user from store at call-time
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddOutflow ──────────────────────────────────────────────────────────────
+
+export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddOutflowInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to add transactions.')
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { data, error: err } = await supabase
+        .from('outflow_transactions')
+        .insert({ ...input, created_by: user.id })
+        .select('id')
+        .single()
+
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned after insert.')
+
+      logAudit({
+        userId:    user.id,
+        action:    'INSERT',
+        tableName: 'outflow_transactions',
+        recordId:  data.id,
+        newData:   input as Record<string, unknown>,
+      })
+
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err)
+      setError(msg)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddIntraFlow ────────────────────────────────────────────────────────────
+
+export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddIntraFlowInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to add transfers.')
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { data, error: err } = await supabase
+        .from('intra_flows')
+        .insert({ ...input, created_by: user.id })
+        .select('id')
+        .single()
+
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned after insert.')
+
+      logAudit({
+        userId:    user.id,
+        action:    'INSERT',
+        tableName: 'intra_flows',
+        recordId:  data.id,
+        newData:   input as Record<string, unknown>,
+      })
+
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err)
+      setError(msg)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUpdateTransaction ───────────────────────────────────────────────────────
+
+type UpdatableTable = 'inflow_transactions' | 'outflow_transactions' | 'intra_flows'
+
+export function useUpdateTransaction(table: UpdatableTable): MutationHook<UpdateTransactionInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async ({ id, updates }: UpdateTransactionInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to update records.')
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Snapshot old data for the audit trail
+      const { data: oldData } = await supabase
+        .from(table)
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      // Only inflow_transactions and outflow_transactions have updated_at
+      const withTimestamp = table !== 'intra_flows'
+        ? { ...updates, updated_at: new Date().toISOString() }
+        : updates
+
+      const { error: err } = await supabase
+        .from(table)
+        .update(withTimestamp)
+        .eq('id', id)
+
+      if (err) throw err
+
+      logAudit({
+        userId:    user.id,
+        action:    'UPDATE',
+        tableName: table,
+        recordId:  id,
+        oldData:   (oldData ?? null) as Record<string, unknown> | null,
+        newData:   updates,
+      })
+    } catch (err) {
+      const msg = extractMessage(err)
+      setError(msg)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [table])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useDeleteTransaction ────────────────────────────────────────────────────────
+
+type DeletableTable = 'inflow_transactions' | 'outflow_transactions' | 'intra_flows'
+
+export function useDeleteTransaction(table: DeletableTable): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    const { user, role } = useAuthStore.getState()
+
+    // Client-side guard (DB RLS provides the real enforcement)
+    if (role !== 'admin') throw new Error('Only administrators can delete records.')
+    if (!user?.id)        throw new Error('You must be signed in to delete records.')
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Capture the row before deletion for audit history
+      const { data: oldData } = await supabase
+        .from(table)
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      const { error: err } = await supabase
+        .from(table)
+        .delete()
+        .eq('id', id)
+
+      if (err) throw err
+
+      logAudit({
+        userId:    user.id,
+        action:    'DELETE',
+        tableName: table,
+        recordId:  id,
+        oldData:   (oldData ?? null) as Record<string, unknown> | null,
+        newData:   null,
+      })
+    } catch (err) {
+      const msg = extractMessage(err)
+      setError(msg)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [table])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
