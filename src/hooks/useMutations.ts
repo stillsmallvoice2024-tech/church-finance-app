@@ -337,3 +337,181 @@ export function useDeleteTransaction(table: DeletableTable): MutationHook<string
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
+
+// ── useAddLedgerEntry ──────────────────────────────────────────────────────────
+
+export interface AddLedgerEntryInput {
+  account_id: string
+  date: string
+  description?: string
+  inflow?: number
+  refund_intraflow?: number
+  outflow?: number
+  balance: number                   // caller pre-computes: prev + inflow + refund - outflow
+  special_seed_description?: string
+}
+
+export function useAddLedgerEntry(): MutationHook<AddLedgerEntryInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddLedgerEntryInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('ledger_entries')
+        .insert({ ...input, created_by: user.id })
+        .select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'ledger_entries', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddAccount ──────────────────────────────────────────────────────────────
+
+export interface AddAccountInput {
+  code: string
+  name: string
+  category: 'income' | 'expense' | 'savings' | 'ministry' | 'special' | 'foreign'
+  opening_balance?: number
+}
+
+export function useAddAccount(): MutationHook<AddAccountInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddAccountInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('accounts')
+        .insert({ ...input, is_active: true })
+        .select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'accounts', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddFXTransaction ────────────────────────────────────────────────────────
+
+export interface AddFXTransactionInput {
+  date: string
+  currency: 'USD' | 'GBP' | 'EUR' | 'CNY'
+  deposit?: number
+  withdrawal?: number
+  running_balance: number
+  narration?: string
+  transaction_ref?: string
+}
+
+export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddFXTransactionInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('fx_transactions')
+        .insert({ ...input, created_by: user.id })
+        .select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'fx_transactions', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddSpecialProject ───────────────────────────────────────────────────────
+
+export interface AddSpecialProjectInput {
+  name: string
+  code?: string
+  opening_balance?: number
+}
+
+export function useAddSpecialProject(): MutationHook<AddSpecialProjectInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddSpecialProjectInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('special_projects')
+        .insert({ ...input, is_active: true })
+        .select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'special_projects', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddProjectEntry ─────────────────────────────────────────────────────────
+
+export interface AddProjectEntryInput {
+  project_id: string
+  date: string
+  description?: string
+  inflow?: number
+  outflow?: number
+  balance: number
+}
+
+export function useAddProjectEntry(): MutationHook<AddProjectEntryInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddProjectEntryInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('project_entries')
+        .insert({ ...input, created_by: user.id })
+        .select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'project_entries', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}

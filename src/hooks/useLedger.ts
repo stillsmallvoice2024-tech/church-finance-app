@@ -45,8 +45,8 @@ export interface AccountsResult {
 
 export function useAccounts(): AccountsResult {
   const [accounts, setAccounts] = useState<DbAccount[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [error,   setError]     = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
     setLoading(true)
@@ -58,17 +58,49 @@ export function useAccounts(): AccountsResult {
       .eq('is_active', true)
       .order('code', { ascending: true })
 
-    if (err) {
-      setError(err.message)
-    } else {
-      setAccounts((data ?? []) as DbAccount[])
-    }
+    if (err) setError(err.message)
+    else     setAccounts((data ?? []) as DbAccount[])
     setLoading(false)
   }, [])
 
   useEffect(() => { fetch() }, [fetch])
 
   return { accounts, loading, error, refetch: fetch }
+}
+
+// ── useAccountLatestBalances ───────────────────────────────────────────────────
+// One query fetching the latest ledger balance per account_id (for sidebar display).
+
+export function useAccountLatestBalances(refetchToken = 0): {
+  balances: Map<string, number>
+  loading:  boolean
+} {
+  const [balances, setBalances] = useState<Map<string, number>>(new Map())
+  const [loading,  setLoading]  = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    supabase
+      .from('ledger_entries')
+      .select('account_id, balance')
+      .order('date',       { ascending: false })
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return
+        const map = new Map<string, number>()
+        for (const row of (data ?? []) as { account_id: string; balance: number }[]) {
+          if (!map.has(row.account_id)) map.set(row.account_id, Number(row.balance))
+        }
+        setBalances(map)
+        setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [refetchToken])
+
+  return { balances, loading }
 }
 
 // ── useLedgerEntries ───────────────────────────────────────────────────────────
@@ -84,7 +116,7 @@ export interface LedgerResult {
 export function useLedgerEntries(accountId: string, dateRange?: DateRange): LedgerResult {
   const [entries, setEntries] = useState<LedgerEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error,   setError]   = useState<string | null>(null)
 
   const dateFrom = dateRange?.dateFrom
   const dateTo   = dateRange?.dateTo
@@ -103,19 +135,16 @@ export function useLedgerEntries(accountId: string, dateRange?: DateRange): Ledg
       .from('ledger_entries')
       .select('*')
       .eq('account_id', accountId)
-      .order('date', { ascending: true })
-      .order('created_at', { ascending: true }) // stable tiebreaker
+      .order('date',       { ascending: true })
+      .order('created_at', { ascending: true })
 
     if (dateFrom) query = query.gte('date', dateFrom)
     if (dateTo)   query = query.lte('date', dateTo)
 
     const { data, error: err } = await query
 
-    if (err) {
-      setError(err.message)
-    } else {
-      setEntries((data ?? []) as LedgerEntry[])
-    }
+    if (err) setError(err.message)
+    else     setEntries((data ?? []) as LedgerEntry[])
     setLoading(false)
   }, [accountId, dateFrom, dateTo])
 
