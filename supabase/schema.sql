@@ -292,3 +292,30 @@ create policy "audit_read_own" on public.audit_log
   for select using (user_id = auth.uid());
 create policy "audit_admin_read" on public.audit_log
   for select using (public.is_admin());
+
+-- ============================================================
+-- INVITATIONS
+-- ============================================================
+create table if not exists public.invitations (
+  id          uuid default gen_random_uuid() primary key,
+  email       text not null,
+  role        text not null default 'viewer'
+                check (role in ('accountant', 'viewer')),
+  invited_by  uuid references public.profiles(id),
+  status      text not null default 'pending'
+                check (status in ('pending', 'accepted', 'expired')),
+  token       uuid default gen_random_uuid() unique,
+  created_at  timestamptz default now(),
+  expires_at  timestamptz default now() + interval '7 days'
+);
+alter table public.invitations enable row level security;
+-- Only admins can manage invitations
+create policy "invitations_admin_all" on public.invitations
+  using (exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  ))
+  with check (exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  ));

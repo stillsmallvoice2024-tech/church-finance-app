@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingUp, Plus, Download, Pencil, Trash2,
-  ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw,
+  ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw, FileSpreadsheet,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
+import { ImportModal }             from '../components/modals/ImportModal'
 import { CanWrite }                from '../components/auth/RoleGates'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction }    from '../hooks/useMutations'
@@ -81,6 +82,7 @@ export default function Inflows() {
   const [modalOpen,   setModalOpen]   = useState(false)
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
   const [expandedId,  setExpandedId]  = useState<string | null>(null)
+  const [importOpen,  setImportOpen]  = useState(false)
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
@@ -302,6 +304,18 @@ export default function Inflows() {
         loading={deleting}
         label="this inflow transaction"
       />
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+
+      {/* Floating import button */}
+      <CanWrite>
+        <button
+          onClick={() => setImportOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-accent text-white text-sm font-medium rounded-full shadow-lg hover:bg-accent/90 transition-colors"
+          title="Import from Excel"
+        >
+          <FileSpreadsheet className="w-4 h-4" /> Import Excel
+        </button>
+      </CanWrite>
     </>
   )
 }
