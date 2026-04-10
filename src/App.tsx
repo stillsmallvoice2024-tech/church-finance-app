@@ -1,43 +1,89 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import { useAuthStore } from './store/useAuthStore'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((state) => state.user)
-  if (!user) return <Navigate to="/login" replace />
-  return <>{children}</>
-}
+import { useAuthStore } from './store/authStore'
+import { AuthGuard } from './components/auth/AuthGuard'
+import { Layout } from './components/layout/Layout'
+import LoginPage from './components/auth/LoginPage'
+import Dashboard from './pages/Dashboard'
+import Inflows from './pages/Inflows'
+import Outflows from './pages/Outflows'
+import Accounts from './pages/Accounts'
+import SpecialProjects from './pages/SpecialProjects'
+import ForeignCurrency from './pages/ForeignCurrency'
+import IntraFlow from './pages/IntraFlow'
+import Reports from './pages/Reports'
+import Settings from './pages/Settings'
+import UserManagement from './pages/UserManagement'
+import type { UserRole } from './types'
 
 export default function App() {
-  const setSession = useAuthStore((state) => state.setSession)
+  const { setSession, setRole, setFullName, setLoading } = useAuthStore()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-    })
+    const fetchProfile = async (userId: string) => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', userId)
+        .single()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (data) {
+        setRole(data.role as UserRole)
+        setFullName(data.full_name ?? '')
+      } else {
+        // Fallback while profiles table is being set up
+        setRole('viewer')
+      }
+    }
+
+    const initAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       setSession(session)
+      if (session?.user) await fetchProfile(session.user.id)
+      setLoading(false)
+    }
+
+    initAuth()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session)
+      if (session?.user) {
+        await fetchProfile(session.user.id)
+      } else {
+        setRole(null)
+        setFullName('')
+      }
     })
 
     return () => subscription.unsubscribe()
-  }, [setSession])
+  }, [setSession, setRole, setFullName, setLoading])
 
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
+
+        {/* All protected routes share AuthGuard + Layout */}
+        <Route element={<AuthGuard />}>
+          <Route element={<Layout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="inflows" element={<Inflows />} />
+            <Route path="outflows" element={<Outflows />} />
+            <Route path="accounts" element={<Accounts />} />
+            <Route path="special-projects" element={<SpecialProjects />} />
+            <Route path="foreign-currency" element={<ForeignCurrency />} />
+            <Route path="intra-flow" element={<IntraFlow />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="users" element={<UserManagement />} />
+          </Route>
+        </Route>
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
