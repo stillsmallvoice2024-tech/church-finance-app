@@ -10,6 +10,7 @@ import { Modal }        from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { useAuth }      from '../hooks/useAuth'
 import { useToastStore } from '../store/toastStore'
+import { usePageTitle }  from '../hooks/usePageTitle'
 import { supabase }     from '../lib/supabase'
 import type { UserProfile, UserRole } from '../types'
 
@@ -218,6 +219,8 @@ function EditNameModal({
 export default function UserManagement() {
   const { user, profile } = useAuth()
   const { push: toast }   = useToastStore()
+
+  usePageTitle('User Management')
 
   const [users,          setUsers]          = useState<UserProfile[]>([])
   const [loading,        setLoading]        = useState(true)

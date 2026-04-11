@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Printer, Download, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../hooks/useRole'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccounts, useAccountLatestBalances } from '../hooks/useLedger'
 import { useFXTransactions } from '../hooks/useFX'
 import { useAuditLog } from '../hooks/useAuditLog'
@@ -511,6 +512,8 @@ function AuditLogPanel() {
 export default function Reports() {
   const [tab, setTab] = useState<ReportTab>('annual')
   const { isAdmin }   = useRole()
+
+  usePageTitle('Reports')
 
   const allTabs: { id: ReportTab; label: string; adminOnly?: boolean }[] = [
     { id: 'annual',   label: 'Annual Summary'     },

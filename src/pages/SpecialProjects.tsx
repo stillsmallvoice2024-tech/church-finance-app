@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, ChevronDown, ChevronRight, Download, Building2, Trash2 } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
+import { usePageTitle } from '../hooks/usePageTitle'
 import {
   useSpecialProjects,
   useProjectEntries,
@@ -275,6 +276,8 @@ export default function SpecialProjects() {
 
   const { isAdmin }                         = useRole()
   const { projects, loading, error, refetch } = useSpecialProjects()
+
+  usePageTitle('Special Projects')
 
   const specialProjects = useMemo(() => projects.filter(p => !isUnitCode(p.code)), [projects])
   const deptUnits       = useMemo(() => projects.filter(p => isUnitCode(p.code)), [projects])

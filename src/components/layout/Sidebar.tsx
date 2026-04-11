@@ -69,6 +69,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       {/* Sidebar panel */}
       <aside
         className={`
+          sidebar-panel
           fixed inset-y-0 left-0 z-30 w-64 flex flex-col bg-primary
           transform transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : '-translate-x-full'}

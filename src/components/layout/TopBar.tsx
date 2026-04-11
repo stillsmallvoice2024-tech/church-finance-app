@@ -18,7 +18,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   const roleLabel = role ? ROLE_LABELS[role] : ''
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-4 shadow-sm lg:px-6">
+    <header className="topbar sticky top-0 z-10 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-4 shadow-sm lg:px-6">
 
       {/* Left: hamburger (mobile only) + app title */}
       <div className="flex items-center gap-3">

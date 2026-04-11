@@ -1,3 +1,61 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Toast slide-up animation ─────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Print styles ─────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide chrome */
+  .sidebar-panel,
+  .topbar,
+  .bottom-tab-bar,
+  .no-print,
+  [data-no-print] {
+    display: none !important;
+  }
+
+  /* Remove sidebar offset */
+  .lg\:ml-64 {
+    margin-left: 0 !important;
+  }
+
+  /* Main padding reset */
+  main {
+    padding: 16px !important;
+  }
+
+  /* Church name print header */
+  body::before {
+    content: "The Standing Church International — Finance Report";
+    display: block;
+    text-align: center;
+    font-size: 14pt;
+    font-weight: 700;
+    border-bottom: 2px solid #1E3A8A;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+  }
+
+  /* Full width tables */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 10pt; }
+  thead { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
+
+  /* Page break hints */
+  .page-break-before { page-break-before: always; }
+  .page-break-after  { page-break-after:  always; }
+
+  /* Hide shadows / rounded borders for clean print */
+  * { box-shadow: none !important; }
+  .rounded-xl, .rounded-2xl { border-radius: 0 !important; }
+}

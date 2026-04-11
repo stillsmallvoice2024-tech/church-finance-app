@@ -16,11 +16,25 @@ export function formatCurrency(amount: number, currency: Currency = 'NGN'): stri
   })}`
 }
 
+/** Renders negatives as (₦1,234.56), zero as —, positives normally. */
+export function formatCurrencyNegative(amount: number, currency: Currency = 'NGN'): string {
+  if (amount === 0) return '—'
+  const symbol = CURRENCY_SYMBOLS[currency]
+  const abs = Math.abs(amount).toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return amount < 0 ? `(${symbol}${abs})` : `${symbol}${abs}`
+}
+
 export function formatCurrencyCompact(amount: number, currency: Currency = 'NGN'): string {
   const symbol = CURRENCY_SYMBOLS[currency]
-  if (amount >= 1_000_000) return `${symbol}${(amount / 1_000_000).toFixed(1)}M`
-  if (amount >= 1_000) return `${symbol}${(amount / 1_000).toFixed(0)}K`
-  return `${symbol}${amount.toFixed(0)}`
+  const abs = Math.abs(amount)
+  let formatted: string
+  if (abs >= 1_000_000) formatted = `${symbol}${(abs / 1_000_000).toFixed(1)}M`
+  else if (abs >= 1_000) formatted = `${symbol}${(abs / 1_000).toFixed(0)}K`
+  else formatted = `${symbol}${abs.toFixed(0)}`
+  return amount < 0 ? `(${formatted})` : formatted
 }
 
 export function formatDate(date: string | Date): string {

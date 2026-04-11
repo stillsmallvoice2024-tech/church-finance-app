@@ -17,6 +17,7 @@ import { useAccounts, useAccountLatestBalances, useLedgerEntries } from '../hook
 import { useDeleteTransaction }     from '../hooks/useMutations'
 import { useToastStore }            from '../store/toastStore'
 import { useRole }                  from '../hooks/useRole'
+import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }                from '../utils/csvExport'
 
@@ -44,6 +45,8 @@ export default function AccountsPage() {
 
   const { push: toast }   = useToastStore()
   const { canDelete } = useRole()
+
+  usePageTitle('Accounts')
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const { accounts, loading: acctLoading, refetch: refetchAccounts } = useAccounts()

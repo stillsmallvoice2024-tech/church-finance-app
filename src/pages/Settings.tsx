@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { ROLE_LABELS } from '../utils/constants'
 
 const APP_VERSION = '1.0.0'
@@ -58,6 +59,8 @@ export default function Settings() {
   const { role }          = useRole()
   const { push: toast }   = useToastStore()
   const { status: dbStatus, latency, recheck } = useDbStatus()
+
+  usePageTitle('Settings')
 
   const [fullName,      setFullName]      = useState(profile?.full_name ?? '')
   const [savingName,    setSavingName]    = useState(false)

@@ -13,6 +13,7 @@ import { useIntraFlows, type IntraFlowRow } from '../hooks/useTransactions'
 import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
+import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { ACCOUNT_NAMES, accountLabel } from '../utils/accountNames'
@@ -88,6 +89,8 @@ export default function IntraFlow() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('intra_flows')
+
+  usePageTitle('Internal Transfers')
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: IntraFlowRow) => { setEditRecord(r); setModalOpen(true) }

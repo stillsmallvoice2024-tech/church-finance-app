@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthListener } from './hooks/useAuth'
 import { AuthGuard } from './components/auth/AuthGuard'
 import { Layout } from './components/layout/Layout'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import LoginPage from './components/auth/LoginPage'
 import Dashboard from './pages/Dashboard'
 import Inflows from './pages/Inflows'
@@ -29,16 +30,16 @@ export default function App() {
         {/* Protected — AuthGuard checks auth + provides RoleContext */}
         <Route element={<AuthGuard />}>
           <Route element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="inflows" element={<Inflows />} />
-            <Route path="outflows" element={<Outflows />} />
-            <Route path="accounts" element={<Accounts />} />
-            <Route path="special-projects" element={<SpecialProjects />} />
-            <Route path="foreign-currency" element={<ForeignCurrency />} />
-            <Route path="intra-flow" element={<IntraFlow />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="users" element={<UserManagement />} />
+            <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+            <Route path="inflows" element={<ErrorBoundary><Inflows /></ErrorBoundary>} />
+            <Route path="outflows" element={<ErrorBoundary><Outflows /></ErrorBoundary>} />
+            <Route path="accounts" element={<ErrorBoundary><Accounts /></ErrorBoundary>} />
+            <Route path="special-projects" element={<ErrorBoundary><SpecialProjects /></ErrorBoundary>} />
+            <Route path="foreign-currency" element={<ErrorBoundary><ForeignCurrency /></ErrorBoundary>} />
+            <Route path="intra-flow" element={<ErrorBoundary><IntraFlow /></ErrorBoundary>} />
+            <Route path="reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
+            <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
+            <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
           </Route>
         </Route>
 

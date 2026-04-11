@@ -23,6 +23,7 @@ import { ImportModal }             from '../components/modals/ImportModal'
 import { useDashboardStats }       from '../hooks/useDashboard'
 import { useAccounts }             from '../hooks/useLedger'
 import { useAuth }                 from '../hooks/useAuth'
+import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
 import { formatCurrencyCompact, formatDate } from '../utils/formatters'
 
@@ -73,6 +74,8 @@ export default function Dashboard() {
   const { user, profile } = useAuth()
   const stats    = useDashboardStats(YEAR)
   const { accounts, loading: accountsLoading } = useAccounts()
+
+  usePageTitle('Dashboard')
 
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)

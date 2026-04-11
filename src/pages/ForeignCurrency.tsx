@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, Download, TrendingUp, TrendingDown } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions } from '../hooks/useFX'
 import { AddFXModal } from '../components/modals/AddFXModal'
 import { exportCSV } from '../utils/csvExport'
@@ -31,6 +32,8 @@ export default function ForeignCurrency() {
   const { canWrite }                                = useRole()
   const { transactions, summaries, loading, error, refetch } =
     useFXTransactions(filterCcy || undefined)
+
+  usePageTitle('Foreign Currency')
 
   // Map: currency → summary
   const summaryMap = useMemo(() => {

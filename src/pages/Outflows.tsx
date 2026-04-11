@@ -13,6 +13,7 @@ import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTra
 import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
+import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { ACCOUNT_NAMES, accountLabel } from '../utils/accountNames'
@@ -86,6 +87,8 @@ export default function Outflows() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
+
+  usePageTitle('Outflows')
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: OutflowTransaction) => { setEditRecord(r); setModalOpen(true) }

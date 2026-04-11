@@ -13,6 +13,7 @@ import { useInflowTransactions, type InflowTransaction } from '../hooks/useTrans
 import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
+import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { ACCOUNT_NAMES, accountLabel } from '../utils/accountNames'
@@ -88,8 +89,22 @@ export default function Inflows() {
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('inflow_transactions')
 
+  usePageTitle('Inflows')
+
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: InflowTransaction) => { setEditRecord(r); setModalOpen(true) }
+
+  // Keyboard shortcut: Ctrl+N / Cmd+N opens Add modal
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && canWrite()) {
+        e.preventDefault()
+        openAdd()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [canWrite])
 
   const handleModalSuccess = () => {
     toast(editRecord ? 'Transaction updated' : 'Inflow added successfully', 'success')
