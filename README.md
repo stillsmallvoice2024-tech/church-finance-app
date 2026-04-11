@@ -157,12 +157,70 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ## Deployment (Vercel)
 
-1. Push the repo to GitHub
-2. Import the project in [Vercel](https://vercel.com)
-3. Set the environment variables:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-4. Deploy — Vercel auto-detects Vite and sets the correct build command (`npm run build`) and output directory (`dist`)
+### 1. Push to GitHub
+
+```bash
+git init
+git add .
+git commit -m "Initial commit: Church Finance App"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/church-finance-app.git
+git push -u origin main
+```
+
+### 2. Deploy on Vercel
+
+1. Go to [vercel.com](https://vercel.com) → **New Project** → Import from GitHub → select `church-finance-app`
+2. Framework Preset: **Vite**
+3. Build Command: `npm run build`
+4. Output Directory: `dist`
+5. Add Environment Variables:
+   ```
+   VITE_SUPABASE_URL      = https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY = your-anon-key
+   ```
+6. Click **Deploy**
+
+The included `vercel.json` handles two things automatically:
+- **SPA rewrites** — all paths serve `index.html` so React Router links work correctly
+- **Security headers** — `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`
+
+### 3. Configure Supabase for your live URL
+
+After Vercel gives you a URL (e.g. `https://church-finance-app.vercel.app`):
+
+1. Go to Supabase → **Authentication** → **URL Configuration**
+2. Set **Site URL**: `https://church-finance-app.vercel.app`
+3. Add to **Redirect URLs**: `https://church-finance-app.vercel.app/**`
+
+This is required for password-reset emails and magic links to redirect correctly.
+
+### 4. Create the first admin account
+
+```sql
+-- Run in Supabase SQL Editor after signing up on the live site
+update public.profiles
+set role = 'admin'
+where email = 'your@email.com';
+```
+
+### 5. Deployment checklist
+
+- [ ] Login page loads
+- [ ] Can sign in
+- [ ] Dashboard shows (empty until data is added)
+- [ ] Import modal works
+- [ ] Can add a transaction
+- [ ] User Management visible to admin
+- [ ] Works on mobile browser
+
+### 6. Custom domain (optional, free on Vercel)
+
+If you have a domain (e.g. `finance.standingchurch.org`):
+
+1. Vercel → Project → **Settings** → **Domains** → Add domain
+2. Update DNS records as instructed by Vercel
+3. Update Supabase **Site URL** and **Redirect URLs** to the custom domain
 
 ---
 
