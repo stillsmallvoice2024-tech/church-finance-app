@@ -1,29 +1,158 @@
-import { useState, useRef } from 'react'
-import { Upload, PenLine, FileSpreadsheet } from 'lucide-react'
+import { useState, useRef, useCallback } from 'react'
+import * as XLSX from 'xlsx'
+import {
+  Upload, PenLine, FileSpreadsheet,
+  CheckCircle2, AlertTriangle, Loader2, X,
+} from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ImportModal } from '../components/modals/ImportModal'
+import { supabase } from '../lib/supabase'
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 type Tab = 'file' | 'manual'
+
+interface DupRecord {
+  id: string
+  table: 'inflow_transactions' | 'outflow_transactions'
+}
+
+interface ParseResult {
+  fileName: string
+  rowCount: number
+  txnIdCol: string | null   // which column header was used
+  ids: string[]             // all non-blank transaction IDs found
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const TXN_ID_ALIASES = [
+  'transactionid', 'transaction_id', 'txnid', 'txn_id',
+  'transactionref', 'transaction_ref', 'txnref', 'txn_ref',
+  'reference', 'ref',
+]
+
+function findTxnIdColumn(headers: string[]): { header: string; index: number } | null {
+  for (let i = 0; i < headers.length; i++) {
+    const normalized = headers[i].toLowerCase().replace(/[\s\-().]+/g, '')
+    if (TXN_ID_ALIASES.includes(normalized)) return { header: headers[i], index: i }
+  }
+  return null
+}
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'file',   label: 'File Import',  icon: Upload  },
   { id: 'manual', label: 'Manual Entry', icon: PenLine },
 ]
 
+// ── Page ───────────────────────────────────────────────────────────────────────
+
 export default function Import() {
-  const [activeTab, setActiveTab]   = useState<Tab>('file')
-  const [importOpen, setImportOpen] = useState(false)
-  const [dragging,   setDragging]   = useState(false)
+  const [activeTab, setActiveTab]     = useState<Tab>('file')
+  const [importOpen, setImportOpen]   = useState(false)
+  const [dragging, setDragging]       = useState(false)
+  const [parseResult, setParseResult] = useState<ParseResult | null>(null)
+  const [dupLoading, setDupLoading]   = useState(false)
+  const [duplicates, setDuplicates]   = useState<DupRecord[]>([])
+  const [dupChecked, setDupChecked]   = useState(false)
+  const [parseError, setParseError]   = useState<string | null>(null)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   usePageTitle('Import')
 
-  // Dropping a file directly on the zone auto-opens the modal.
-  // The modal re-accepts the file internally via its own input,
-  // so we just use the drop event to trigger opening.
+  const reset = () => {
+    setParseResult(null)
+    setDuplicates([])
+    setDupChecked(false)
+    setParseError(null)
+    setDupLoading(false)
+  }
+
+  const parseAndCheck = useCallback(async (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      setParseError('Only .xlsx and .xls files are supported.')
+      return
+    }
+
+    reset()
+    setParseError(null)
+
+    // 1. Parse the file
+    let ids: string[] = []
+    let txnIdCol: string | null = null
+    let rowCount = 0
+
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb     = XLSX.read(buffer, { type: 'array' })
+      const ws     = wb.Sheets[wb.SheetNames[0]]
+      const rows   = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][]
+      const headers = (rows[0] ?? []).map(h => String(h ?? '').trim())
+      const dataRows = rows.slice(1).filter(r => (r as unknown[]).some(c => c !== '' && c != null))
+      rowCount = dataRows.length
+
+      const col = findTxnIdColumn(headers)
+      if (col) {
+        txnIdCol = col.header
+        ids = dataRows
+          .map(r => String((r as unknown[])[col.index] ?? '').trim())
+          .filter(id => id.length > 0)
+      }
+
+      setParseResult({ fileName: file.name, rowCount, txnIdCol, ids })
+    } catch {
+      setParseError('Could not read the file. Make sure it is a valid Excel file.')
+      return
+    }
+
+    // 2. Check for duplicates in DB (only if we found a txn ID column)
+    if (ids.length === 0) {
+      setDupChecked(true)
+      return
+    }
+
+    setDupLoading(true)
+    const uniqueIds = [...new Set(ids)]
+
+    const [inflowRes, outflowRes] = await Promise.all([
+      supabase
+        .from('inflow_transactions')
+        .select('transaction_ref')
+        .in('transaction_ref', uniqueIds),
+      supabase
+        .from('outflow_transactions')
+        .select('transaction_id')
+        .in('transaction_id', uniqueIds),
+    ])
+
+    const found: DupRecord[] = []
+    if (inflowRes.data) {
+      for (const r of inflowRes.data) {
+        if (r.transaction_ref) found.push({ id: r.transaction_ref, table: 'inflow_transactions' })
+      }
+    }
+    if (outflowRes.data) {
+      for (const r of outflowRes.data) {
+        if (r.transaction_id) found.push({ id: r.transaction_id, table: 'outflow_transactions' })
+      }
+    }
+
+    setDuplicates(found)
+    setDupChecked(true)
+    setDupLoading(false)
+  }, [])
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
-    if (e.dataTransfer.files.length > 0) setImportOpen(true)
+    const file = e.dataTransfer.files[0]
+    if (file) parseAndCheck(file)
+  }
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) parseAndCheck(file)
+    e.target.value = ''
   }
 
   return (
@@ -57,52 +186,154 @@ export default function Import() {
 
       {/* ── File Import tab ──────────────────────────────────────────────── */}
       {activeTab === 'file' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
+
           {/* Drop zone */}
-          <div
-            onDragOver={e => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => setImportOpen(true)}
-            className={`cursor-pointer border-2 border-dashed rounded-xl p-14 flex flex-col items-center gap-4 transition-colors ${
-              dragging
-                ? 'border-primary bg-primary/5'
-                : 'border-gray-300 bg-gray-50 hover:border-primary hover:bg-primary/5'
-            }`}
-          >
-            <div className={`p-5 rounded-full transition-colors ${dragging ? 'bg-primary/10' : 'bg-white shadow-sm'}`}>
-              <FileSpreadsheet className={`w-8 h-8 ${dragging ? 'text-primary' : 'text-gray-400'}`} />
+          {!parseResult ? (
+            <div
+              onDragOver={e => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`cursor-pointer border-2 border-dashed rounded-xl p-14 flex flex-col items-center gap-4 transition-colors ${
+                dragging
+                  ? 'border-primary bg-primary/5'
+                  : 'border-gray-300 bg-gray-50 hover:border-primary hover:bg-primary/5'
+              }`}
+            >
+              <div className={`p-5 rounded-full transition-colors ${dragging ? 'bg-primary/10' : 'bg-white shadow-sm'}`}>
+                <FileSpreadsheet className={`w-8 h-8 ${dragging ? 'text-primary' : 'text-gray-400'}`} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-gray-700">
+                  Drop your Excel file here, or{' '}
+                  <span className="text-primary underline underline-offset-2">click to browse</span>
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Accepts .xlsx and .xls</p>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-sm font-semibold text-gray-700">
-                Drop your Excel file here, or{' '}
-                <span className="text-primary underline underline-offset-2">click to browse</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1">Accepts .xlsx and .xls — launches the import wizard</p>
-            </div>
-          </div>
-
-          {/* Hidden file input (modal handles its own — this is just UI affordance) */}
-          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" />
-
-          {/* Supported formats */}
-          <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Supported Tables</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {[
-                'Inflow Transactions',
-                'Outflow Transactions',
-                'Intra-Account Flows',
-                'Ledger Entries',
-                'FX Transactions',
-              ].map(label => (
-                <div key={label} className="flex items-center gap-2 text-xs text-gray-600">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                  {label}
+          ) : (
+            /* ── Parsed file card ──────────────────────────────────────── */
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              {/* File info bar */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 truncate">{parseResult.fileName}</span>
+                  <span className="text-xs text-gray-400 shrink-0">· {parseResult.rowCount.toLocaleString()} rows</span>
                 </div>
-              ))}
+                <button
+                  onClick={reset}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors shrink-0"
+                  title="Remove file"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Duplicate detection results */}
+              <div className="px-5 py-4 space-y-3">
+                {/* No txn ID column */}
+                {dupChecked && !parseResult.txnIdCol && (
+                  <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      No transaction ID column detected in this file.
+                      Duplicate checking requires a column named <strong>Transaction ID</strong>, <strong>Txn ID</strong>, or <strong>Reference</strong>.
+                    </span>
+                  </div>
+                )}
+
+                {/* Loading */}
+                {dupLoading && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 py-1">
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    Checking {parseResult.ids.length.toLocaleString()} transaction IDs against the database…
+                  </div>
+                )}
+
+                {/* No duplicates */}
+                {dupChecked && parseResult.txnIdCol && duplicates.length === 0 && !dupLoading && (
+                  <div className="flex items-center gap-3 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>
+                      No duplicates found — all {parseResult.ids.length.toLocaleString()} transaction IDs in column{' '}
+                      <strong>"{parseResult.txnIdCol}"</strong> are new.
+                    </span>
+                  </div>
+                )}
+
+                {/* Duplicates found */}
+                {dupChecked && duplicates.length > 0 && !dupLoading && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-red-100">
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                      <span className="text-sm font-semibold text-red-700">
+                        {duplicates.length} duplicate transaction ID{duplicates.length !== 1 ? 's' : ''} already exist in the database
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-red-100 max-h-48 overflow-y-auto">
+                      {duplicates.map(({ id, table }) => (
+                        <li key={`${table}:${id}`} className="flex items-center justify-between px-4 py-2">
+                          <span className="text-sm font-mono text-red-700">{id}</span>
+                          <span className="text-[10px] font-medium text-red-400 bg-red-100 px-2 py-0.5 rounded">
+                            {table === 'inflow_transactions' ? 'Inflow' : 'Outflow'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Action */}
+                <div className="pt-1">
+                  <button
+                    onClick={() => setImportOpen(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Continue to Import Wizard
+                  </button>
+                  {duplicates.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      The wizard will import all rows. To skip duplicates, deselect them in the mapping step.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Parse error */}
+          {parseError && (
+            <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> {parseError}
+            </div>
+          )}
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleFileInput}
+          />
+
+          {/* Supported tables */}
+          {!parseResult && (
+            <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Supported Tables</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {['Inflow Transactions', 'Outflow Transactions', 'Intra-Account Flows', 'Ledger Entries', 'FX Transactions'].map(label => (
+                  <div key={label} className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
