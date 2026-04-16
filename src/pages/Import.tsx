@@ -7,8 +7,11 @@ import {
 } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ImportModal } from '../components/modals/ImportModal'
+import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useAccountCodesStore } from '../store/accountCodesStore'
+import { useAddInflow, useAddOutflow } from '../hooks/useMutations'
+import { useToastStore } from '../store/toastStore'
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../utils/inflowTypes'
@@ -387,25 +390,36 @@ export default function Import() {
 
 function ManualEntryForm() {
   const { codes: accountCodes } = useAccountCodesStore()
+  const { push: toast }         = useToastStore()
+  const addInflow  = useAddInflow()
+  const addOutflow = useAddOutflow()
 
   // Direction toggle
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
 
   // Inflow-specific state
-  const [inflowType, setInflowType]       = useState<InflowType>('general_giving')
+  const [inflowType, setInflowType]           = useState<InflowType>('general_giving')
   const [typeManuallySet, setTypeManuallySet] = useState(false)
 
   // Outflow-specific state
   const [isPending, setIsPending] = useState(false)
 
-  // Shared controlled field values — reset when direction changes
+  // Form field values
   const [fields, setFields] = useState<Record<string, string>>({
     date: new Date().toISOString().slice(0, 10),
   })
 
+  // Inline validation errors
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Duplicate warning dialog
+  const [dupWarning, setDupWarning]         = useState<{ txnId: string } | null>(null)
+  const [pendingSave, setPendingSave]       = useState<(() => Promise<void>) | null>(null)
+  const [saving, setSaving]                 = useState(false)
+
   const set = (key: string, val: string) => {
     setFields(prev => ({ ...prev, [key]: val }))
-    // Auto-assign inflow type from description
+    if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }))
     if (key === 'description' && direction === 'inflow' && !typeManuallySet) {
       setInflowType(autoAssignInflowType(val))
     }
@@ -414,12 +428,141 @@ function ManualEntryForm() {
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
     setDirection(d)
     setFields({ date: new Date().toISOString().slice(0, 10) })
+    setErrors({})
     setInflowType('general_giving')
     setTypeManuallySet(false)
     setIsPending(false)
+    setDupWarning(null)
+    setPendingSave(null)
   }
 
   const v = (key: string) => fields[key] ?? ''
+
+  // ── Duplicate check helpers ──────────────────────────────────────────────
+
+  async function checkInflowDup(ref: string): Promise<boolean> {
+    const { data } = await supabase
+      .from('inflow_transactions')
+      .select('id')
+      .eq('transaction_ref', ref)
+      .limit(1)
+    return (data?.length ?? 0) > 0
+  }
+
+  async function checkOutflowDup(txnId: string): Promise<boolean> {
+    const { data } = await supabase
+      .from('outflow_transactions')
+      .select('id')
+      .eq('transaction_id', txnId)
+      .limit(1)
+    return (data?.length ?? 0) > 0
+  }
+
+  // ── Save functions ───────────────────────────────────────────────────────
+
+  const doSaveInflow = async () => {
+    setSaving(true)
+    try {
+      await addInflow.mutate({
+        date:                       v('date'),
+        amount:                     parseFloat(v('amount')),
+        inflow_type:                inflowType,
+        description:                v('description')               || undefined,
+        stage_code_1:               v('stage_code_1')              || undefined,
+        stage_code_2:               v('stage_code_2')              || undefined,
+        transaction_ref:            v('transaction_ref')           || undefined,
+        specific_seed_description:  v('specific_seed_description') || undefined,
+        remark:                     v('remark')                    || undefined,
+      })
+      toast('Inflow saved successfully', 'success')
+      setFields({ date: new Date().toISOString().slice(0, 10) })
+      setInflowType('general_giving')
+      setTypeManuallySet(false)
+      setErrors({})
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+      setDupWarning(null)
+      setPendingSave(null)
+    }
+  }
+
+  const doSaveOutflow = async () => {
+    setSaving(true)
+    try {
+      await addOutflow.mutate({
+        date:                 v('date'),
+        amount_disbursed:     parseFloat(v('amount_disbursed')),
+        description:          v('description')      || undefined,
+        bank_description:     v('bank_description') || undefined,
+        transaction_id:       v('transaction_id')   || undefined,
+        stage_code_1:         v('stage_code_1')     || undefined,
+        amount_refunded:      v('amount_refunded')  ? parseFloat(v('amount_refunded'))  : undefined,
+        transfer_charge:      v('transfer_charge')  ? parseFloat(v('transfer_charge'))  : undefined,
+        is_pending_deduction: isPending,
+        remarks:              v('remarks')          || undefined,
+      })
+      toast('Outflow saved successfully', 'success')
+      setFields({ date: new Date().toISOString().slice(0, 10) })
+      setIsPending(false)
+      setErrors({})
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+      setDupWarning(null)
+      setPendingSave(null)
+    }
+  }
+
+  // ── Submit handlers (validate → dup check → save or warn) ───────────────
+
+  const handleSaveInflow = async () => {
+    const errs: Record<string, string> = {}
+    if (!v('date'))   errs.date   = 'Date is required'
+    if (!v('amount') || parseFloat(v('amount')) <= 0) errs.amount = 'Enter a valid amount'
+    if (Object.keys(errs).length) { setErrors(errs); return }
+
+    const ref = v('transaction_ref').trim()
+    if (ref) {
+      const isDup = await checkInflowDup(ref)
+      if (isDup) {
+        setPendingSave(() => doSaveInflow)
+        setDupWarning({ txnId: ref })
+        return
+      }
+    }
+    await doSaveInflow()
+  }
+
+  const handleSaveOutflow = async () => {
+    const errs: Record<string, string> = {}
+    if (!v('date'))            errs.date            = 'Date is required'
+    if (!v('amount_disbursed') || parseFloat(v('amount_disbursed')) <= 0)
+      errs.amount_disbursed = 'Enter a valid amount'
+    if (Object.keys(errs).length) { setErrors(errs); return }
+
+    const txnId = v('transaction_id').trim()
+    if (txnId) {
+      const isDup = await checkOutflowDup(txnId)
+      if (isDup) {
+        setPendingSave(() => doSaveOutflow)
+        setDupWarning({ txnId })
+        return
+      }
+    }
+    await doSaveOutflow()
+  }
+
+  const handleConfirmDup = async () => {
+    if (pendingSave) await pendingSave()
+  }
+
+  const handleCancelDup = () => {
+    setDupWarning(null)
+    setPendingSave(null)
+  }
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -456,10 +599,10 @@ function ManualEntryForm() {
 
           {/* Date + Amount */}
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Date *">
+            <Field label="Date *" error={errors.date}>
               <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
             </Field>
-            <Field label="Amount (₦) *">
+            <Field label="Amount (₦) *" error={errors.amount}>
               <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount')} onChange={e => set('amount', e.target.value)} className={iCls} />
             </Field>
           </div>
@@ -522,8 +665,14 @@ function ManualEntryForm() {
           </Field>
 
           <div className="flex justify-end pt-1">
-            <button type="button" className="px-5 py-2.5 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors">
-              Save Inflow
+            <button
+              type="button"
+              onClick={handleSaveInflow}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60"
+            >
+              {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {saving ? 'Saving…' : 'Save Inflow'}
             </button>
           </div>
         </div>
@@ -535,10 +684,10 @@ function ManualEntryForm() {
 
           {/* Date + Amount Disbursed */}
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Date *">
+            <Field label="Date *" error={errors.date}>
               <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
             </Field>
-            <Field label="Amount Disbursed (₦) *">
+            <Field label="Amount Disbursed (₦) *" error={errors.amount_disbursed}>
               <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount_disbursed')} onChange={e => set('amount_disbursed', e.target.value)} className={iCls} />
             </Field>
           </div>
@@ -598,11 +747,51 @@ function ManualEntryForm() {
           </Field>
 
           <div className="flex justify-end pt-1">
-            <button type="button" className="px-5 py-2.5 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors">
-              Save Outflow
+            <button
+              type="button"
+              onClick={handleSaveOutflow}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60"
+            >
+              {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {saving ? 'Saving…' : 'Save Outflow'}
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── Duplicate warning dialog ──────────────────────────────────── */}
+      {dupWarning && (
+        <Modal open onClose={handleCancelDup} title="Possible Duplicate">
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Transaction ID already exists</p>
+                <p className="mt-0.5">
+                  A transaction with ID <span className="font-mono font-bold">{dupWarning.txnId}</span> already exists in the database.
+                  Do you still want to save this record?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleCancelDup}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDup}
+                disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-60"
+              >
+                {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {saving ? 'Saving…' : 'Save Anyway'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   )
@@ -612,11 +801,12 @@ function ManualEntryForm() {
 
 const iCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white'
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-medium text-gray-600">{label}</label>
       {children}
+      {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   )
 }
