@@ -50,6 +50,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 export default function Import() {
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
+  const [skipDups, setSkipDups]       = useState(false)
   const [dragging, setDragging]       = useState(false)
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
   const [dupLoading, setDupLoading]   = useState(false)
@@ -66,6 +67,12 @@ export default function Import() {
     setDupChecked(false)
     setParseError(null)
     setDupLoading(false)
+    setSkipDups(false)
+  }
+
+  const openWizard = (skip: boolean) => {
+    setSkipDups(skip)
+    setImportOpen(true)
   }
 
   const parseAndCheck = useCallback(async (file: File) => {
@@ -285,21 +292,40 @@ export default function Import() {
                   </div>
                 )}
 
-                {/* Action */}
-                <div className="pt-1">
-                  <button
-                    onClick={() => setImportOpen(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Continue to Import Wizard
-                  </button>
-                  {duplicates.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      The wizard will import all rows. To skip duplicates, deselect them in the mapping step.
-                    </p>
-                  )}
-                </div>
+                {/* Actions */}
+                {dupChecked && !dupLoading && (
+                  <div className="pt-1 flex flex-wrap items-center gap-3">
+                    {duplicates.length > 0 ? (
+                      <>
+                        <button
+                          onClick={() => openWizard(true)}
+                          className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+                        >
+                          <Upload className="w-4 h-4" />
+                          Skip Duplicates &amp; Import
+                        </button>
+                        <button
+                          onClick={() => openWizard(false)}
+                          className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Import Anyway
+                        </button>
+                        <p className="w-full text-xs text-gray-400">
+                          "Skip" removes the {duplicates.length} duplicate row{duplicates.length !== 1 ? 's' : ''} before inserting.
+                          "Import Anyway" includes them all.
+                        </p>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => openWizard(false)}
+                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Continue to Import Wizard
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -347,7 +373,13 @@ export default function Import() {
       )}
 
       {/* Import wizard modal */}
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        skipTxnIds={skipDups && duplicates.length > 0
+          ? new Set(duplicates.map(d => d.id))
+          : undefined}
+      />
     </div>
   )
 }

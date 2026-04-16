@@ -216,8 +216,9 @@ function StepDots({ step }: { step: number }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
-  open:    boolean
-  onClose: () => void
+  open:         boolean
+  onClose:      () => void
+  skipTxnIds?:  Set<string>   // when set, rows matching these IDs are skipped at import
 }
 
 interface ImportResult {
@@ -226,7 +227,7 @@ interface ImportResult {
   errors:   string[]
 }
 
-export function ImportModal({ open, onClose }: Props) {
+export function ImportModal({ open, onClose, skipTxnIds }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
 
@@ -400,10 +401,29 @@ export function ImportModal({ open, onClose }: Props) {
       mappedRows.push(row)
     }
 
+    // Filter out rows whose transaction ID is in the skip list
+    let rowsToInsert = mappedRows
+    if (skipTxnIds && skipTxnIds.size > 0) {
+      const txnField =
+        targetTable === 'inflow_transactions'  ? 'transaction_ref' :
+        targetTable === 'outflow_transactions' ? 'transaction_id'  : null
+      if (txnField) {
+        rowsToInsert = mappedRows.filter(r => {
+          const id = r[txnField] as string | undefined
+          return !id || !skipTxnIds.has(id)
+        })
+        const dupCount = mappedRows.length - rowsToInsert.length
+        if (dupCount > 0) {
+          skipped += dupCount
+          errors.push(`${dupCount} duplicate transaction ID(s) skipped`)
+        }
+      }
+    }
+
     // Batch insert 100 rows at a time
     const BATCH = 100
-    for (let i = 0; i < mappedRows.length; i += BATCH) {
-      const batch = mappedRows.slice(i, i + BATCH)
+    for (let i = 0; i < rowsToInsert.length; i += BATCH) {
+      const batch = rowsToInsert.slice(i, i + BATCH)
       const { error } = await supabase.from(targetTable).insert(batch)
       if (error) {
         const msg = `Batch ${Math.floor(i / BATCH) + 1}: ${error.message}`
@@ -412,12 +432,12 @@ export function ImportModal({ open, onClose }: Props) {
       } else {
         imported += batch.length
       }
-      setProgress(Math.round(((i + batch.length) / mappedRows.length) * 100))
+      setProgress(Math.round(((i + batch.length) / rowsToInsert.length) * 100))
     }
 
     setResult({ imported, skipped, errors })
     setImporting(false)
-  }, [sheet, config, targetTable, mapping, user])
+  }, [sheet, config, targetTable, mapping, user, skipTxnIds])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
