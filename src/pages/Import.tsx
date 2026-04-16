@@ -3,10 +3,15 @@ import * as XLSX from 'xlsx'
 import {
   Upload, PenLine, FileSpreadsheet,
   CheckCircle2, AlertTriangle, Loader2, X,
+  TrendingUp, TrendingDown,
 } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ImportModal } from '../components/modals/ImportModal'
 import { supabase } from '../lib/supabase'
+import { useAccountCodesStore } from '../store/accountCodesStore'
+import {
+  INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
+} from '../utils/inflowTypes'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -364,13 +369,7 @@ export default function Import() {
       )}
 
       {/* ── Manual Entry tab ─────────────────────────────────────────────── */}
-      {activeTab === 'manual' && (
-        <div className="flex flex-col items-center justify-center py-24 gap-3 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-          <PenLine className="w-10 h-10 text-gray-300" />
-          <p className="text-sm font-medium text-gray-500">Manual Entry</p>
-          <p className="text-xs">Coming soon — enter transactions with duplicate checking</p>
-        </div>
-      )}
+      {activeTab === 'manual' && <ManualEntryForm />}
 
       {/* Import wizard modal */}
       <ImportModal
@@ -380,6 +379,244 @@ export default function Import() {
           ? new Set(duplicates.map(d => d.id))
           : undefined}
       />
+    </div>
+  )
+}
+
+// ── Manual Entry Form ──────────────────────────────────────────────────────────
+
+function ManualEntryForm() {
+  const { codes: accountCodes } = useAccountCodesStore()
+
+  // Direction toggle
+  const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
+
+  // Inflow-specific state
+  const [inflowType, setInflowType]       = useState<InflowType>('general_giving')
+  const [typeManuallySet, setTypeManuallySet] = useState(false)
+
+  // Outflow-specific state
+  const [isPending, setIsPending] = useState(false)
+
+  // Shared controlled field values — reset when direction changes
+  const [fields, setFields] = useState<Record<string, string>>({
+    date: new Date().toISOString().slice(0, 10),
+  })
+
+  const set = (key: string, val: string) => {
+    setFields(prev => ({ ...prev, [key]: val }))
+    // Auto-assign inflow type from description
+    if (key === 'description' && direction === 'inflow' && !typeManuallySet) {
+      setInflowType(autoAssignInflowType(val))
+    }
+  }
+
+  const handleDirectionChange = (d: 'inflow' | 'outflow') => {
+    setDirection(d)
+    setFields({ date: new Date().toISOString().slice(0, 10) })
+    setInflowType('general_giving')
+    setTypeManuallySet(false)
+    setIsPending(false)
+  }
+
+  const v = (key: string) => fields[key] ?? ''
+
+  return (
+    <div className="max-w-2xl space-y-5">
+
+      {/* Direction toggle */}
+      <div className="flex gap-2">
+        {(['inflow', 'outflow'] as const).map(d => {
+          const Icon  = d === 'inflow' ? TrendingUp : TrendingDown
+          const label = d === 'inflow' ? 'Inflow' : 'Outflow'
+          const active = direction === d
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => handleDirectionChange(d)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${
+                active
+                  ? d === 'inflow'
+                    ? 'bg-success/10 border-success text-success'
+                    : 'bg-danger/10 border-danger text-danger'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Inflow fields ─────────────────────────────────────────────── */}
+      {direction === 'inflow' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+
+          {/* Date + Amount */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Date *">
+              <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
+            </Field>
+            <Field label="Amount (₦) *">
+              <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount')} onChange={e => set('amount', e.target.value)} className={iCls} />
+            </Field>
+          </div>
+
+          {/* Description */}
+          <Field label="Description">
+            <input type="text" placeholder="e.g. Sunday offering" value={v('description')} onChange={e => set('description', e.target.value)} className={iCls} />
+          </Field>
+
+          {/* Inflow Type */}
+          <Field label="Inflow Type">
+            <div className="grid grid-cols-3 gap-1.5">
+              {INFLOW_TYPES.map(t => (
+                <button
+                  key={t} type="button"
+                  onClick={() => { setInflowType(t); setTypeManuallySet(true) }}
+                  className={`px-2 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                    inflowType === t
+                      ? 'bg-primary text-white border-primary'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {INFLOW_TYPE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+            {!typeManuallySet && v('description') && (
+              <p className="text-[10px] text-gray-400 mt-1">Auto-assigned from description · click to change</p>
+            )}
+          </Field>
+
+          {/* Stage Code 1 + 2 */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Stage Code 1">
+              <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
+                <option value="">— Select —</option>
+                {accountCodes.map(a => (
+                  <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Stage Code 2">
+              <input type="text" placeholder="Optional" value={v('stage_code_2')} onChange={e => set('stage_code_2', e.target.value)} className={iCls} />
+            </Field>
+          </div>
+
+          {/* Transaction Ref */}
+          <Field label="Transaction Ref">
+            <input type="text" placeholder="Ref / cheque no." value={v('transaction_ref')} onChange={e => set('transaction_ref', e.target.value)} className={iCls} />
+          </Field>
+
+          {/* Specific Seed Description */}
+          <Field label="Specific Seed Description">
+            <input type="text" placeholder="For specific seed entries" value={v('specific_seed_description')} onChange={e => set('specific_seed_description', e.target.value)} className={iCls} />
+          </Field>
+
+          {/* Remark */}
+          <Field label="Remark">
+            <textarea rows={2} placeholder="Additional notes…" value={v('remark')} onChange={e => set('remark', e.target.value)} className={`${iCls} resize-none`} />
+          </Field>
+
+          <div className="flex justify-end pt-1">
+            <button type="button" className="px-5 py-2.5 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors">
+              Save Inflow
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Outflow fields ────────────────────────────────────────────── */}
+      {direction === 'outflow' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+
+          {/* Date + Amount Disbursed */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Date *">
+              <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
+            </Field>
+            <Field label="Amount Disbursed (₦) *">
+              <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount_disbursed')} onChange={e => set('amount_disbursed', e.target.value)} className={iCls} />
+            </Field>
+          </div>
+
+          {/* Description */}
+          <Field label="Description">
+            <input type="text" placeholder="e.g. Generator fuel purchase" value={v('description')} onChange={e => set('description', e.target.value)} className={iCls} />
+          </Field>
+
+          {/* Bank Desc + Txn ID */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Bank Description">
+              <input type="text" placeholder="Bank narration" value={v('bank_description')} onChange={e => set('bank_description', e.target.value)} className={iCls} />
+            </Field>
+            <Field label="Transaction ID">
+              <input type="text" placeholder="Bank Txn ID" value={v('transaction_id')} onChange={e => set('transaction_id', e.target.value)} className={iCls} />
+            </Field>
+          </div>
+
+          {/* Stage Code 1 */}
+          <Field label="Stage Code 1">
+            <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
+              <option value="">— Select —</option>
+              {accountCodes.map(a => (
+                <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+              ))}
+            </select>
+          </Field>
+
+          {/* Pending Deduction */}
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isPending}
+              onChange={e => setIsPending(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+            />
+            <span className="text-sm font-medium text-gray-700">Mark as Pending Deduction</span>
+          </label>
+
+          {/* Optional banking extras */}
+          <div className="border border-gray-100 rounded-lg p-4 space-y-4 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Optional Banking Details</p>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Amount Refunded (₦)">
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount_refunded')} onChange={e => set('amount_refunded', e.target.value)} className={iCls} />
+              </Field>
+              <Field label="Transfer Charge (₦)">
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('transfer_charge')} onChange={e => set('transfer_charge', e.target.value)} className={iCls} />
+              </Field>
+            </div>
+          </div>
+
+          {/* Remarks */}
+          <Field label="Remarks">
+            <textarea rows={2} placeholder="Additional notes…" value={v('remarks')} onChange={e => set('remarks', e.target.value)} className={`${iCls} resize-none`} />
+          </Field>
+
+          <div className="flex justify-end pt-1">
+            <button type="button" className="px-5 py-2.5 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors">
+              Save Outflow
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Shared field helpers ───────────────────────────────────────────────────────
+
+const iCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white'
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-medium text-gray-600">{label}</label>
+      {children}
     </div>
   )
 }
