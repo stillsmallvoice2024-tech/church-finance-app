@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
+import { useThemeStore } from '../store/themeStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ROLE_LABELS } from '../utils/constants'
 
@@ -62,11 +63,12 @@ export default function Settings() {
 
   usePageTitle('Settings')
 
+  const { theme, setTheme } = useThemeStore()
+
   const [fullName,      setFullName]      = useState(profile?.full_name ?? '')
   const [savingName,    setSavingName]    = useState(false)
   const [sendingReset,  setSendingReset]  = useState(false)
   const [resetSent,     setResetSent]     = useState(false)
-  const [themeMode,     setThemeMode]     = useState<'light' | 'dark'>('light')
 
   // Sync when profile loads
   useEffect(() => {
@@ -244,28 +246,28 @@ export default function Settings() {
 
       {/* ── Theme ───────────────────────────────────────────────────────── */}
       <Section icon={Palette} title="Theme">
-        <div className="space-y-3">
-          <p className="text-sm text-gray-500">Dark mode is coming soon. This toggle is a placeholder.</p>
-          <div className="flex items-center gap-3">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">Choose your preferred colour scheme. Your preference is saved automatically.</p>
+          <div className="flex gap-3">
             <button
-              onClick={() => setThemeMode('light')}
-              className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
-                themeMode === 'light'
-                  ? 'bg-primary text-white border-primary'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+              onClick={() => setTheme('light')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border-2 transition-colors ${
+                theme === 'light'
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
-              ☀️ Light
+              <Sun className="w-4 h-4" /> Light
             </button>
             <button
-              onClick={() => setThemeMode('dark')}
-              className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
-                themeMode === 'dark'
-                  ? 'bg-gray-900 text-white border-gray-900'
-                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+              onClick={() => setTheme('dark')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border-2 transition-colors ${
+                theme === 'dark'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
-              🌙 Dark <span className="ml-1 text-xs opacity-60">(soon)</span>
+              <Moon className="w-4 h-4" /> Dark
             </button>
           </div>
         </div>

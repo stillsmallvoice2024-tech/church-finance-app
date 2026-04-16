@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddIntraFlow, useUpdateTransaction, type AddIntraFlowInput } from '../../hooks/useMutations'
-import { ACCOUNT_NAMES } from '../../utils/accountNames'
+import { useAccountCodesStore } from '../../store/accountCodesStore'
 import type { IntraFlowRow } from '../../hooks/useTransactions'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ interface Props {
 }
 
 export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Props) {
+  const { codes: accountCodes } = useAccountCodesStore()
   const isEdit = !!editRecord
 
   const addMutation    = useAddIntraFlow()
@@ -152,7 +153,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           <Field label="From Account *" error={errors.account_from?.message}>
             <select {...register('account_from')} className={inputCls(!!errors.account_from)}>
               <option value="">— Select —</option>
-              {ACCOUNT_NAMES.map(a => (
+              {accountCodes.map(a => (
                 <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
               ))}
             </select>
@@ -160,7 +161,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           <Field label="To Account *" error={errors.account_to?.message}>
             <select {...register('account_to')} className={inputCls(!!errors.account_to)}>
               <option value="">— Select —</option>
-              {ACCOUNT_NAMES.map(a => (
+              {accountCodes.map(a => (
                 <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
               ))}
             </select>

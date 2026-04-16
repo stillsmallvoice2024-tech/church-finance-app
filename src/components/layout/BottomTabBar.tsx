@@ -45,8 +45,8 @@ export function BottomTabBar() {
 
       {/* More drawer (slide up) */}
       {moreOpen && (
-        <div className="fixed bottom-16 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl border-t border-gray-100 lg:hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        <div className="fixed bottom-16 left-0 right-0 z-50 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-100 dark:border-gray-700 lg:hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700">
             <span className="text-sm font-semibold text-gray-700">More</span>
             <button
               onClick={() => setMoreOpen(false)}
@@ -78,7 +78,7 @@ export function BottomTabBar() {
       )}
 
       {/* Bottom tab bar */}
-      <nav className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 flex lg:hidden safe-area-inset-bottom">
+      <nav className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex lg:hidden safe-area-inset-bottom">
         {PRIMARY_TABS.map(({ label, path, icon: Icon }) => (
           <NavLink
             key={path}

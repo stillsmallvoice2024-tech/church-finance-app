@@ -1,7 +1,6 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Auth } from '@supabase/auth-ui-react'
-import { ThemeSupa } from '@supabase/auth-ui-shared'
+import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -14,20 +13,52 @@ function ChurchCross() {
   )
 }
 
+const inputCls =
+  'w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none ' +
+  'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors'
+
 export default function LoginPage() {
   const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
 
-  // Redirect once the auth listener confirms the user is signed in
+  const [mode,        setMode]        = useState<'signin' | 'forgot'>('signin')
+  const [email,       setEmail]       = useState('')
+  const [password,    setPassword]    = useState('')
+  const [showPw,      setShowPw]      = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
+  const [resetSent,   setResetSent]   = useState(false)
+
   useEffect(() => {
     if (isAuthenticated) navigate('/', { replace: true })
   }, [isAuthenticated, navigate])
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    setLoading(false)
+    if (err) setError(err.message)
+  }
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setLoading(false)
+    if (err) setError(err.message)
+    else setResetSent(true)
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
 
-        {/* ── Logo & title ── */}
+        {/* Logo & title */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
             <ChurchCross />
@@ -40,81 +71,138 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* ── Auth card ── */}
+        {/* Auth card */}
         <div className="rounded-2xl border border-gray-100 bg-white px-8 py-8 shadow-md">
-          <p className="mb-6 text-center text-sm font-medium text-gray-600">
-            Sign in with your church email
-          </p>
 
-          <Auth
-            supabaseClient={supabase}
-            appearance={{
-              theme: ThemeSupa,
-              variables: {
-                default: {
-                  colors: {
-                    brand: '#1E3A8A',
-                    brandAccent: '#2547A4',
-                    brandButtonText: '#ffffff',
-                    inputBorder: '#E5E7EB',
-                    inputBorderFocus: '#1E3A8A',
-                    inputBorderHover: '#93C5FD',
-                    inputLabelText: '#374151',
-                    inputText: '#111827',
-                    inputPlaceholder: '#9CA3AF',
-                    messageText: '#374151',
-                    anchorTextColor: '#1E3A8A',
-                    anchorTextHoverColor: '#2547A4',
-                  },
-                  radii: {
-                    borderRadiusButton: '0.75rem',
-                    buttonBorderRadius: '0.75rem',
-                    inputBorderRadius: '0.75rem',
-                  },
-                  space: {
-                    inputPadding: '0.75rem 1rem',
-                    buttonPadding: '0.75rem 1rem',
-                  },
-                  fontSizes: {
-                    baseBodySize: '0.875rem',
-                    baseLabelSize: '0.8125rem',
-                  },
-                },
-              },
-              style: {
-                button: {
-                  fontWeight: '600',
-                  letterSpacing: '0.01em',
-                },
-                input: {
-                  boxShadow: 'none',
-                },
-                anchor: {
-                  fontWeight: '500',
-                },
-              },
-            }}
-            providers={[]}
-            onlyThirdPartyProviders={false}
-            localization={{
-              variables: {
-                sign_in: {
-                  email_label: 'Email address',
-                  password_label: 'Password',
-                  button_label: 'Sign in',
-                  link_text: "Don't have an account? Contact your administrator",
-                },
-                sign_up: {
-                  email_label: 'Email address',
-                  password_label: 'Create a password',
-                  button_label: 'Create account',
-                },
-              },
-            }}
-          />
+          {mode === 'signin' ? (
+            <>
+              <p className="mb-6 text-center text-sm font-medium text-gray-600">
+                Sign in with your church email
+              </p>
+
+              {error && (
+                <div className="mb-4 flex items-start gap-2.5 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-danger">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSignIn} className="space-y-4">
+                {/* Email */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Email address</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="you@standingchurch.org"
+                    required
+                    autoComplete="email"
+                    className={inputCls}
+                  />
+                </div>
+
+                {/* Password with show/hide toggle */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPw ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      required
+                      autoComplete="current-password"
+                      className={`${inputCls} pr-10`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      aria-label={showPw ? 'Hide password' : 'Show password'}
+                    >
+                      {showPw
+                        ? <EyeOff className="w-4 h-4" />
+                        : <Eye    className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !email || !password}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {loading ? 'Signing in…' : 'Sign in'}
+                </button>
+              </form>
+
+              <button
+                onClick={() => { setMode('forgot'); setError(null) }}
+                className="mt-4 w-full text-center text-xs text-primary hover:underline"
+              >
+                Forgot your password?
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="mb-2 text-center text-sm font-semibold text-gray-700">Reset your password</p>
+              <p className="mb-6 text-center text-xs text-gray-500">
+                Enter your email and we'll send a reset link.
+              </p>
+
+              {error && (
+                <div className="mb-4 flex items-start gap-2.5 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-danger">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+
+              {resetSent ? (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <CheckCircle2 className="w-10 h-10 text-success" />
+                  <p className="text-sm font-medium text-gray-700">Reset email sent!</p>
+                  <p className="text-xs text-gray-500 text-center">
+                    Check your inbox at <strong>{email}</strong> and click the link to set a new password.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Email address</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@standingchurch.org"
+                      required
+                      autoComplete="email"
+                      className={inputCls}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading || !email}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+                  >
+                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {loading ? 'Sending…' : 'Send reset link'}
+                  </button>
+                </form>
+              )}
+
+              <button
+                onClick={() => { setMode('signin'); setError(null); setResetSent(false) }}
+                className="mt-4 w-full text-center text-xs text-primary hover:underline"
+              >
+                ← Back to sign in
+              </button>
+            </>
+          )}
         </div>
 
-        {/* ── Footer ── */}
+        {/* Footer */}
         <div className="mt-6 space-y-2 text-center">
           <p className="text-xs text-gray-500">
             Need access?{' '}

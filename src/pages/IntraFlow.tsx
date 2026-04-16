@@ -16,7 +16,7 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
-import { ACCOUNT_NAMES, accountLabel } from '../utils/accountNames'
+import { useAccountCodesStore } from '../store/accountCodesStore'
 
 const PAGE_SIZE = 25
 
@@ -89,6 +89,7 @@ export default function IntraFlow() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('intra_flows')
+  const { codes: accountCodes, getLabel: accountLabel } = useAccountCodesStore()
 
   usePageTitle('Internal Transfers')
 
@@ -181,7 +182,7 @@ export default function IntraFlow() {
             <FilterGroup label="From Account" className="min-w-[200px]">
               <select value={accountFrom} onChange={e => setAccountFrom(e.target.value)} className={`${inputCls} bg-white`}>
                 <option value="">All accounts</option>
-                {ACCOUNT_NAMES.map(a => (
+                {accountCodes.map(a => (
                   <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
                 ))}
               </select>
@@ -189,7 +190,7 @@ export default function IntraFlow() {
             <FilterGroup label="To Account" className="min-w-[200px]">
               <select value={accountTo} onChange={e => setAccountTo(e.target.value)} className={`${inputCls} bg-white`}>
                 <option value="">All accounts</option>
-                {ACCOUNT_NAMES.map(a => (
+                {accountCodes.map(a => (
                   <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
                 ))}
               </select>
@@ -258,13 +259,13 @@ export default function IntraFlow() {
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{row.account_from ?? '—'}</span>
-                          {row.account_from && ACCOUNT_NAMES.find(a => a.code === row.account_from)?.name}
+                          {row.account_from && accountCodes.find(a => a.code === row.account_from)?.name}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{row.account_to ?? '—'}</span>
-                          {row.account_to && ACCOUNT_NAMES.find(a => a.code === row.account_to)?.name}
+                          {row.account_to && accountCodes.find(a => a.code === row.account_to)?.name}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(Number(row.total_amount))}</td>

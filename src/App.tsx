@@ -1,5 +1,8 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthListener } from './hooks/useAuth'
+import { useAccountCodesStore } from './store/accountCodesStore'
+import './store/themeStore' // side-effect: applies stored theme class immediately
 import { AuthGuard } from './components/auth/AuthGuard'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
@@ -16,10 +19,10 @@ import Settings from './pages/Settings'
 import UserManagement from './pages/UserManagement'
 
 export default function App() {
-  // Initialize the Supabase auth listener once.
-  // Hydrates authStore from the existing session on load,
-  // then keeps it in sync for sign-in / sign-out / token refresh.
   useAuthListener()
+  const fetchCodes = useAccountCodesStore(s => s.fetch)
+  // Pre-fetch account codes so dropdowns are ready before any form page loads
+  useEffect(() => { fetchCodes() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <BrowserRouter>

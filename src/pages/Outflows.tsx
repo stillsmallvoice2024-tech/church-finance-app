@@ -16,7 +16,7 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
-import { ACCOUNT_NAMES, accountLabel } from '../utils/accountNames'
+import { useAccountCodesStore } from '../store/accountCodesStore'
 
 const PAGE_SIZE = 25
 
@@ -87,6 +87,7 @@ export default function Outflows() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
+  const { codes: accountCodes, getLabel: accountLabel } = useAccountCodesStore()
 
   usePageTitle('Outflows')
 
@@ -174,7 +175,7 @@ export default function Outflows() {
             <FilterGroup label="Stage Code" className="min-w-[200px]">
               <select value={stageCode} onChange={e => setStageCode(e.target.value)} className={`${inputCls} bg-white`}>
                 <option value="">All accounts</option>
-                {ACCOUNT_NAMES.map(a => (
+                {accountCodes.map(a => (
                   <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
                 ))}
               </select>
