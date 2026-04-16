@@ -11,6 +11,8 @@ import {
   Settings,
   Users,
   X,
+  Upload,
+  Clock,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 
@@ -28,8 +30,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Special Projects', path: '/special-projects', icon: Target },
   { label: 'Foreign Currency', path: '/foreign-currency', icon: Globe },
   { label: 'Intra-Account Flows', path: '/intra-flow', icon: ArrowLeftRight },
-  { label: 'Reports', path: '/reports', icon: BarChart3 },
-  { label: 'Settings', path: '/settings', icon: Settings },
+  { label: 'Import',              path: '/import',              icon: Upload },
+  { label: 'Pending Deductions',  path: '/pending-deductions',  icon: Clock  },
+  { label: 'Reports',             path: '/reports',             icon: BarChart3 },
+  { label: 'Settings',            path: '/settings',            icon: Settings },
 ]
 
 const ADMIN_NAV_ITEMS: NavItem[] = [

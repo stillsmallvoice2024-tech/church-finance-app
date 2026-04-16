@@ -17,6 +17,8 @@ import IntraFlow from './pages/IntraFlow'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import UserManagement from './pages/UserManagement'
+import Import from './pages/Import'
+import PendingDeductions from './pages/PendingDeductions'
 
 export default function App() {
   useAuthListener()
@@ -43,6 +45,8 @@ export default function App() {
             <Route path="reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
             <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
+            <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
+            <Route path="pending-deductions" element={<ErrorBoundary><PendingDeductions /></ErrorBoundary>} />
           </Route>
         </Route>
 
