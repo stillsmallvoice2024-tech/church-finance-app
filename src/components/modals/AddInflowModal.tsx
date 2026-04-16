@@ -1,10 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useAccountCodesStore } from '../../store/accountCodesStore'
+import {
+  INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
+} from '../../utils/inflowTypes'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
@@ -12,6 +15,7 @@ import type { InflowTransaction } from '../../hooks/useTransactions'
 const schema = z.object({
   date:                       z.string().min(1, 'Date is required'),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
+  inflow_type:                z.string().optional(),
   description:                z.string().optional(),
   stage_code_1:               z.string().optional(),
   stage_code_2:               z.string().optional(),
@@ -28,7 +32,6 @@ interface Props {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
-  /** When provided the modal operates in edit mode */
   editRecord?: InflowTransaction | null
 }
 
@@ -45,22 +48,47 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const loading = adding || updating
   const error   = addError || updateError
 
+  // Track inflow_type separately so we can auto-update when description changes
+  const [inflowType, setInflowType] = useState<InflowType>('general_giving')
+
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset: resetForm,
+    watch,
+    setValue,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
+
+  const description = watch('description')
+
+  // Auto-assign type when description changes (only if user hasn't manually changed it)
+  const [typeManuallySet, setTypeManuallySet] = useState(false)
+  useEffect(() => {
+    if (!typeManuallySet && description) {
+      setInflowType(autoAssignInflowType(description))
+    }
+  }, [description, typeManuallySet])
+
+  const handleTypeChange = useCallback((t: InflowType) => {
+    setInflowType(t)
+    setTypeManuallySet(true)
+    setValue('inflow_type', t)
+  }, [setValue])
 
   // Populate / clear form when modal opens
   useEffect(() => {
     if (!open) return
     resetAdd()
     resetUpdate()
+    setTypeManuallySet(false)
     if (editRecord) {
+      setInflowType(editRecord.inflow_type ?? 'general_giving')
+      setTypeManuallySet(true)
       resetForm({
         date:                       editRecord.date,
         amount:                     editRecord.amount,
+        inflow_type:                editRecord.inflow_type ?? 'general_giving',
         description:                editRecord.description ?? '',
         stage_code_1:               editRecord.stage_code_1 ?? '',
         stage_code_2:               editRecord.stage_code_2 ?? '',
@@ -69,18 +97,21 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         remark:                     editRecord.remark ?? '',
       })
     } else {
+      setInflowType('general_giving')
       resetForm({ date: new Date().toISOString().slice(0, 10), amount: undefined })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
   const onSubmit = async (values: FormValues) => {
     try {
+      const type = inflowType
       if (isEdit && editRecord) {
         await update({
           id: editRecord.id,
           updates: {
             date:                       values.date,
             amount:                     values.amount,
+            inflow_type:                type,
             description:                values.description  || null,
             stage_code_1:               values.stage_code_1 || null,
             stage_code_2:               values.stage_code_2 || null,
@@ -93,6 +124,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         const input: AddInflowInput = {
           date:                       values.date,
           amount:                     values.amount,
+          inflow_type:                type,
           description:                values.description  || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
@@ -129,24 +161,38 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
           <Field label="Amount (₦) *" error={errors.amount?.message}>
-            <input
-              type="number" min="0" step="0.01" placeholder="0.00"
-              {...register('amount')}
-              className={inputCls(!!errors.amount)}
-            />
+            <input type="number" min="0" step="0.01" placeholder="0.00" {...register('amount')} className={inputCls(!!errors.amount)} />
           </Field>
         </div>
 
-        {/* Description */}
+        {/* Description — auto-assigns type on change */}
         <Field label="Description" error={errors.description?.message}>
-          <input
-            type="text" placeholder="e.g. Sunday offering"
-            {...register('description')}
-            className={inputCls(!!errors.description)}
-          />
+          <input type="text" placeholder="e.g. Sunday offering" {...register('description')} className={inputCls(!!errors.description)} />
         </Field>
 
-        {/* Stage Code 1 (dropdown) + Stage Code 2 */}
+        {/* Inflow Type — shown with auto-assigned label, fully editable */}
+        <Field label="Inflow Type">
+          <div className="grid grid-cols-3 gap-1.5">
+            {INFLOW_TYPES.map(t => (
+              <button
+                key={t} type="button"
+                onClick={() => handleTypeChange(t)}
+                className={`px-2 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                  inflowType === t
+                    ? 'bg-primary text-white border-primary'
+                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {INFLOW_TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          {!typeManuallySet && description && (
+            <p className="text-[10px] text-gray-400 mt-1">Auto-assigned from description · click to change</p>
+          )}
+        </Field>
+
+        {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
             <select {...register('stage_code_1')} className={inputCls(!!errors.stage_code_1)}>
@@ -157,53 +203,31 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             </select>
           </Field>
           <Field label="Stage Code 2" error={errors.stage_code_2?.message}>
-            <input
-              type="text" placeholder="Optional"
-              {...register('stage_code_2')}
-              className={inputCls(!!errors.stage_code_2)}
-            />
+            <input type="text" placeholder="Optional" {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)} />
           </Field>
         </div>
 
         {/* Transaction Ref */}
         <Field label="Transaction Ref" error={errors.transaction_ref?.message}>
-          <input
-            type="text" placeholder="Ref / cheque no."
-            {...register('transaction_ref')}
-            className={inputCls(!!errors.transaction_ref)}
-          />
+          <input type="text" placeholder="Ref / cheque no." {...register('transaction_ref')} className={inputCls(!!errors.transaction_ref)} />
         </Field>
 
         {/* Specific Seed Description */}
         <Field label="Specific Seed Description" error={errors.specific_seed_description?.message}>
-          <input
-            type="text" placeholder="Specific seed description (if any)"
-            {...register('specific_seed_description')}
-            className={inputCls(!!errors.specific_seed_description)}
-          />
+          <input type="text" placeholder="Specific seed description (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
         </Field>
 
         {/* Remark */}
         <Field label="Remark" error={errors.remark?.message}>
-          <textarea
-            rows={2} placeholder="Additional notes…"
-            {...register('remark')}
-            className={`${inputCls(!!errors.remark)} resize-none`}
-          />
+          <textarea rows={2} placeholder="Additional notes…" {...register('remark')} className={`${inputCls(!!errors.remark)} resize-none`} />
         </Field>
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button" onClick={onClose} disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
+          <button type="button" onClick={onClose} disabled={loading} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">
             Cancel
           </button>
-          <button
-            type="submit" disabled={loading}
-            className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-60 flex items-center gap-2"
-          >
+          <button type="submit" disabled={loading} className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-60 flex items-center gap-2">
             {loading && <Spinner />}
             {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Save Inflow'}
           </button>
@@ -212,8 +236,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     </Modal>
   )
 }
-
-// ── Shared tiny helpers (local to this file) ───────────────────────────────────
 
 function inputCls(hasError: boolean) {
   return `w-full px-3 py-2 text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${

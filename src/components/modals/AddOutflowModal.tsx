@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -40,6 +40,7 @@ interface Props {
 export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const { codes: accountCodes } = useAccountCodesStore()
   const isEdit = !!editRecord
+  const [isPending, setIsPending] = useState(false)
 
   const addMutation    = useAddOutflow()
   const updateMutation = useUpdateTransaction('outflow_transactions')
@@ -62,6 +63,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     resetAdd()
     resetUpdate()
     if (editRecord) {
+      setIsPending(editRecord.is_pending_deduction ?? false)
       resetForm({
         date:             editRecord.date,
         amount_disbursed: editRecord.amount_disbursed,
@@ -74,6 +76,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         remarks:          editRecord.remarks           ?? '',
       })
     } else {
+      setIsPending(false)
       resetForm({ date: new Date().toISOString().slice(0, 10), amount_disbursed: undefined })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
@@ -84,28 +87,30 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         await update({
           id: editRecord.id,
           updates: {
-            date:             values.date,
-            amount_disbursed: values.amount_disbursed,
-            description:      values.description      || null,
-            bank_description: values.bank_description || null,
-            transaction_id:   values.transaction_id   || null,
-            stage_code_1:     values.stage_code_1     || null,
-            amount_refunded:  values.amount_refunded  ?? null,
-            transfer_charge:  values.transfer_charge  ?? null,
-            remarks:          values.remarks          || null,
+            date:                  values.date,
+            amount_disbursed:      values.amount_disbursed,
+            description:           values.description      || null,
+            bank_description:      values.bank_description || null,
+            transaction_id:        values.transaction_id   || null,
+            stage_code_1:          values.stage_code_1     || null,
+            amount_refunded:       values.amount_refunded  ?? null,
+            transfer_charge:       values.transfer_charge  ?? null,
+            remarks:               values.remarks          || null,
+            is_pending_deduction:  isPending,
           },
         })
       } else {
         const input: AddOutflowInput = {
-          date:             values.date,
-          amount_disbursed: values.amount_disbursed,
-          description:      values.description      || undefined,
-          bank_description: values.bank_description || undefined,
-          transaction_id:   values.transaction_id   || undefined,
-          stage_code_1:     values.stage_code_1     || undefined,
-          amount_refunded:  typeof values.amount_refunded === 'number' ? values.amount_refunded : undefined,
-          transfer_charge:  typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
-          remarks:          values.remarks          || undefined,
+          date:                  values.date,
+          amount_disbursed:      values.amount_disbursed,
+          is_pending_deduction:  isPending,
+          description:           values.description      || undefined,
+          bank_description:      values.bank_description || undefined,
+          transaction_id:        values.transaction_id   || undefined,
+          stage_code_1:          values.stage_code_1     || undefined,
+          amount_refunded:       typeof values.amount_refunded === 'number' ? values.amount_refunded : undefined,
+          transfer_charge:       typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
+          remarks:               values.remarks          || undefined,
         }
         await add(input)
       }
@@ -180,6 +185,17 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             ))}
           </select>
         </Field>
+
+        {/* Pending Deduction */}
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={isPending}
+            onChange={e => setIsPending(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+          />
+          <span className="text-sm font-medium text-gray-700">Mark as Pending Deduction</span>
+        </label>
 
         {/* Optional banking extras */}
         <div className="border border-gray-100 rounded-lg p-4 space-y-4 bg-gray-50">

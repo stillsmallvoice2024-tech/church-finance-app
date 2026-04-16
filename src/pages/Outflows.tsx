@@ -244,7 +244,16 @@ export default function Outflows() {
                       <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.transaction_id ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px] truncate" title={row.description ?? undefined}>{row.description ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {row.is_pending_deduction && (
+                              <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
+                                Pending
+                              </span>
+                            )}
+                            <span className="truncate" title={row.description ?? undefined}>{row.description ?? '—'}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
                           {Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded)) : '—'}

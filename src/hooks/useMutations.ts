@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import type { InflowType } from '../utils/inflowTypes'
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ async function logAudit({
 export interface AddInflowInput {
   date: string
   amount: number
+  inflow_type?: InflowType
   description?: string
   stage_code_1?: string
   stage_code_2?: string
@@ -58,6 +60,7 @@ export interface AddInflowInput {
 export interface AddOutflowInput {
   date: string
   amount_disbursed: number
+  is_pending_deduction?: boolean
   description?: string
   bank_description?: string
   transaction_id?: string

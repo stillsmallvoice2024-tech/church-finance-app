@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import type { InflowType } from '../utils/inflowTypes'
 
 // ── DB row types (mirror the exact columns in schema.sql) ──────────────────────
 
@@ -8,6 +9,7 @@ export interface InflowTransaction {
   date: string
   description: string | null
   amount: number
+  inflow_type: InflowType
   stage_code_1: string | null
   stage_code_2: string | null
   stage_code_3: string | null
@@ -33,6 +35,7 @@ export interface OutflowTransaction {
   stage_code_1: string | null
   stage_code_2: string | null
   remarks: string | null
+  is_pending_deduction: boolean
   created_by: string | null
   created_at: string
   updated_at: string
@@ -62,6 +65,7 @@ export interface TransactionFilters {
   dateTo?: string
   stageCode?: string   // filters on stage_code_1
   search?: string      // ilike match on description
+  pendingOnly?: boolean // filter outflows by is_pending_deduction = true
   page?: number        // 0-indexed
   pageSize?: number
 }
@@ -138,7 +142,7 @@ export function useInflowTransactions(
 export function useOutflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<OutflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, page = 0, pageSize = 50 } = filters
+  const { dateFrom, dateTo, stageCode, search, pendingOnly, page = 0, pageSize = 50 } = filters
 
   const [data, setData] = useState<OutflowTransaction[]>([])
   const [count, setCount] = useState(0)
@@ -158,10 +162,11 @@ export function useOutflowTransactions(
       .order('date', { ascending: false })
       .range(from, to)
 
-    if (dateFrom)  query = query.gte('date', dateFrom)
-    if (dateTo)    query = query.lte('date', dateTo)
-    if (stageCode) query = query.eq('stage_code_1', stageCode)
-    if (search)    query = query.ilike('description', `%${search}%`)
+    if (dateFrom)    query = query.gte('date', dateFrom)
+    if (dateTo)      query = query.lte('date', dateTo)
+    if (stageCode)   query = query.eq('stage_code_1', stageCode)
+    if (search)      query = query.ilike('description', `%${search}%`)
+    if (pendingOnly) query = query.eq('is_pending_deduction', true)
 
     const { data: rows, count: total, error: err } = await query
 

@@ -319,3 +319,17 @@ create policy "invitations_admin_all" on public.invitations
     select 1 from public.profiles
     where id = auth.uid() and role = 'admin'
   ));
+
+-- ============================================================
+-- INFLOW TYPE + PENDING DEDUCTION (added post-launch)
+-- ============================================================
+
+-- Add inflow_type to categorise each inflow transaction
+alter table public.inflow_transactions
+  add column if not exists inflow_type text
+    check (inflow_type in ('general_giving','specific_seed','tithe','offering','direct_seed','refund'))
+    not null default 'general_giving';
+
+-- Mark outflow transactions that are pending deduction (not yet cleared)
+alter table public.outflow_transactions
+  add column if not exists is_pending_deduction boolean not null default false;
