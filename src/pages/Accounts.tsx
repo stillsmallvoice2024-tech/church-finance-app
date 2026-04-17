@@ -4,7 +4,7 @@ import {
 } from 'recharts'
 import {
   Search, Plus, Download, BookOpen, TrendingUp, TrendingDown,
-  Wallet, PlusCircle, ArrowUp, ArrowDown,
+  Wallet, PlusCircle, ArrowUp, ArrowDown, Pencil, Trash2,
 } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
 import { Badge }                    from '../components/ui/Badge'
@@ -14,7 +14,8 @@ import { AdminOnly }                from '../components/auth/RoleGates'
 import { AddAccountModal }          from '../components/modals/AddAccountModal'
 import { AddLedgerEntryModal }      from '../components/modals/AddLedgerEntryModal'
 import { useAccounts, useAccountLatestBalances, useLedgerEntries } from '../hooks/useLedger'
-import { useDeleteTransaction }     from '../hooks/useMutations'
+import type { DbAccount }           from '../hooks/useLedger'
+import { useDeleteTransaction, useDeleteAccount } from '../hooks/useMutations'
 import { useToastStore }            from '../store/toastStore'
 import { useRole }                  from '../hooks/useRole'
 import { usePageTitle }             from '../hooks/usePageTitle'
@@ -36,12 +37,14 @@ const CATEGORY_BADGE: Record<string, 'success' | 'danger' | 'primary' | 'warning
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function AccountsPage() {
-  const [selectedId,      setSelectedId]      = useState<string | null>(null)
-  const [search,          setSearch]          = useState('')
-  const [addAccountOpen,  setAddAccountOpen]  = useState(false)
-  const [addEntryOpen,    setAddEntryOpen]    = useState(false)
-  const [deleteLedgerId,  setDeleteLedgerId]  = useState<string | null>(null)
-  const [balRefetch,      setBalRefetch]      = useState(0)
+  const [selectedId,        setSelectedId]        = useState<string | null>(null)
+  const [search,            setSearch]            = useState('')
+  const [addAccountOpen,    setAddAccountOpen]    = useState(false)
+  const [editAccountRecord, setEditAccountRecord] = useState<DbAccount | null>(null)
+  const [deleteAccountId,   setDeleteAccountId]   = useState<string | null>(null)
+  const [addEntryOpen,      setAddEntryOpen]      = useState(false)
+  const [deleteLedgerId,    setDeleteLedgerId]    = useState<string | null>(null)
+  const [balRefetch,        setBalRefetch]        = useState(0)
 
   const { push: toast }   = useToastStore()
   const { canDelete } = useRole()
@@ -49,7 +52,7 @@ export default function AccountsPage() {
   usePageTitle('Accounts')
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  const { accounts, loading: acctLoading, refetch: refetchAccounts } = useAccounts()
+  const { accounts, loading: acctLoading, error: acctError, refetch: refetchAccounts } = useAccounts()
   const { balances }                                                  = useAccountLatestBalances(balRefetch)
 
   const selectedAccount = useMemo(
@@ -94,6 +97,22 @@ export default function AccountsPage() {
     outflow:          entries.reduce((s, e) => s + Number(e.outflow), 0),
   }), [entries])
 
+  // ── Delete account ─────────────────────────────────────────────────────────
+  const { mutate: deleteAccount, loading: deletingAccount } = useDeleteAccount()
+
+  const handleDeleteAccount = async () => {
+    if (!deleteAccountId) return
+    try {
+      await deleteAccount(deleteAccountId)
+      toast('Account deleted', 'success')
+      if (selectedId === deleteAccountId) setSelectedId(null)
+      setDeleteAccountId(null)
+      refetchAccounts()
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+    }
+  }
+
   // ── Delete ledger entry ────────────────────────────────────────────────────
   const { loading: deleting } = useDeleteTransaction('inflow_transactions')
   // Note: ledger_entries deletion would need its own hook; for now just use a generic approach
@@ -130,7 +149,8 @@ export default function AccountsPage() {
   }
 
   const handleAccountSuccess = () => {
-    toast('Account created', 'success')
+    toast(editAccountRecord ? 'Account updated' : 'Account created', 'success')
+    setEditAccountRecord(null)
     refetchAccounts()
   }
 
@@ -144,14 +164,14 @@ export default function AccountsPage() {
           <div className="px-4 pt-4 pb-3 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-700">Accounts</h2>
-              <AdminOnly>
+              <CanWrite>
                 <button
                   onClick={() => setAddAccountOpen(true)}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add
                 </button>
-              </AdminOnly>
+              </CanWrite>
             </div>
             {/* Search */}
             <div className="relative">
@@ -174,6 +194,10 @@ export default function AccountsPage() {
                   <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
                 ))}
               </div>
+            ) : acctError ? (
+              <div className="mx-4 mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                {acctError}
+              </div>
             ) : grouped.length === 0 ? (
               <p className="text-center text-sm text-gray-400 mt-8">No accounts found.</p>
             ) : (
@@ -186,10 +210,13 @@ export default function AccountsPage() {
                     const bal        = balances.get(acct.id) ?? Number(acct.opening_balance)
                     const isSelected = acct.id === selectedId
                     return (
-                      <button
+                      <div
                         key={acct.id}
                         onClick={() => setSelectedId(acct.id)}
-                        className={`w-full text-left px-4 py-2.5 transition-colors flex items-center justify-between gap-2 group ${
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => e.key === 'Enter' && setSelectedId(acct.id)}
+                        className={`w-full cursor-pointer px-4 py-2.5 transition-colors flex items-center justify-between gap-2 group ${
                           isSelected
                             ? 'bg-primary text-white'
                             : 'hover:bg-gray-50 text-gray-800'
@@ -203,12 +230,30 @@ export default function AccountsPage() {
                             {acct.code}
                           </span>
                         </div>
-                        <span className={`text-sm font-semibold shrink-0 tabular-nums ${
-                          isSelected ? 'text-white' : bal >= 0 ? 'text-success' : 'text-danger'
-                        }`}>
-                          {formatCurrencyCompact(bal)}
-                        </span>
-                      </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-sm font-semibold tabular-nums ${
+                            isSelected ? 'text-white' : bal >= 0 ? 'text-success' : 'text-danger'
+                          }`}>
+                            {formatCurrencyCompact(bal)}
+                          </span>
+                          <AdminOnly>
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditAccountRecord(acct); setAddAccountOpen(true) }}
+                              className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-200 text-gray-500'}`}
+                              title="Edit account"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); setDeleteAccountId(acct.id) }}
+                              className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-red-50 text-danger'}`}
+                              title="Delete account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </AdminOnly>
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
@@ -381,8 +426,16 @@ export default function AccountsPage() {
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <AddAccountModal
         open={addAccountOpen}
-        onClose={() => setAddAccountOpen(false)}
+        onClose={() => { setAddAccountOpen(false); setEditAccountRecord(null) }}
         onSuccess={handleAccountSuccess}
+        editRecord={editAccountRecord}
+      />
+      <DeleteDialog
+        open={!!deleteAccountId}
+        onClose={() => setDeleteAccountId(null)}
+        onConfirm={handleDeleteAccount}
+        loading={deletingAccount}
+        label="this account"
       />
       <AddLedgerEntryModal
         open={addEntryOpen}

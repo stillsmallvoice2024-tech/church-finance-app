@@ -413,6 +413,61 @@ export function useAddAccount(): MutationHook<AddAccountInput, string> {
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
 
+// ── useUpdateAccount ───────────────────────────────────────────────────────────
+
+export interface UpdateAccountInput {
+  id: string
+  code: string
+  name: string
+  category: 'income' | 'expense' | 'savings' | 'ministry' | 'special' | 'foreign'
+  opening_balance?: number
+}
+
+export function useUpdateAccount(): MutationHook<UpdateAccountInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateAccountInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('accounts')
+        .update({ code: input.code, name: input.name, category: input.category, opening_balance: input.opening_balance ?? 0 })
+        .eq('id', input.id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'accounts', recordId: input.id, newData: input as unknown as Record<string, unknown> })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useDeleteAccount ───────────────────────────────────────────────────────────
+
+export function useDeleteAccount(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase.from('accounts').delete().eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'DELETE', tableName: 'accounts', recordId: id })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
 // ── useAddFXTransaction ────────────────────────────────────────────────────────
 
 export interface AddFXTransactionInput {
