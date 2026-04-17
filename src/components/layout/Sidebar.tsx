@@ -13,8 +13,10 @@ import {
   X,
   Upload,
   Clock,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
+import { useAccountingYearStore } from '../../store/accountingYearStore'
 
 interface NavItem {
   label: string
@@ -32,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Intra-Account Flows', path: '/intra-flow', icon: ArrowLeftRight },
   { label: 'Import',              path: '/import',              icon: Upload },
   { label: 'Pending Deductions',  path: '/pending-deductions',  icon: Clock  },
+  { label: 'Setup',               path: '/setup',               icon: SlidersHorizontal },
   { label: 'Reports',             path: '/reports',             icon: BarChart3 },
   { label: 'Settings',            path: '/settings',            icon: Settings },
 ]
@@ -58,6 +61,7 @@ interface SidebarProps {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { isAdmin } = useRole()
   const showAdmin = isAdmin()
+  const activeYear = useAccountingYearStore(s => s.year)
 
   return (
     <>
@@ -91,7 +95,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 The Standing Church International
               </p>
               <p className="text-accent text-xs font-semibold tracking-widest uppercase mt-0.5">
-                Finance 2024
+                Finance {activeYear}
               </p>
             </div>
           </div>
