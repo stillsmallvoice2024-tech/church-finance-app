@@ -472,6 +472,89 @@ export function useDeleteAccount(): MutationHook<string> {
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
 
+// ── useAddCategory ─────────────────────────────────────────────────────────────
+
+export interface AddCategoryInput {
+  name: string
+  description?: string
+}
+
+export function useAddCategory(): MutationHook<AddCategoryInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddCategoryInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('categories').insert(input).select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'categories', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUpdateCategory ──────────────────────────────────────────────────────────
+
+export interface UpdateCategoryInput {
+  id: string
+  name: string
+  description?: string
+}
+
+export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateCategoryInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('categories')
+        .update({ name: input.name, description: input.description ?? null })
+        .eq('id', input.id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, newData: input as unknown as Record<string, unknown> })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useDeleteCategory ──────────────────────────────────────────────────────────
+
+export function useDeleteCategory(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase.from('categories').delete().eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'DELETE', tableName: 'categories', recordId: id })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
 // ── useAddFXTransaction ────────────────────────────────────────────────────────
 
 export interface AddFXTransactionInput {

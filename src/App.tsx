@@ -10,7 +10,7 @@ import LoginPage from './components/auth/LoginPage'
 import Dashboard from './pages/Dashboard'
 import Inflows from './pages/Inflows'
 import Outflows from './pages/Outflows'
-import Accounts from './pages/Accounts'
+import Categories from './pages/Categories'
 import SpecialProjects from './pages/SpecialProjects'
 import ForeignCurrency from './pages/ForeignCurrency'
 import IntraFlow from './pages/IntraFlow'
@@ -39,7 +39,7 @@ export default function App() {
             <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
             <Route path="inflows" element={<ErrorBoundary><Inflows /></ErrorBoundary>} />
             <Route path="outflows" element={<ErrorBoundary><Outflows /></ErrorBoundary>} />
-            <Route path="accounts" element={<ErrorBoundary><Accounts /></ErrorBoundary>} />
+            <Route path="categories" element={<ErrorBoundary><Categories /></ErrorBoundary>} />
             <Route path="special-projects" element={<ErrorBoundary><SpecialProjects /></ErrorBoundary>} />
             <Route path="foreign-currency" element={<ErrorBoundary><ForeignCurrency /></ErrorBoundary>} />
             <Route path="intra-flow" element={<ErrorBoundary><IntraFlow /></ErrorBoundary>} />

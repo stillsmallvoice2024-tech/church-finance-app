@@ -3,13 +3,12 @@ import { Printer, Download, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { useAccounts, useAccountLatestBalances } from '../hooks/useLedger'
 import { useFXTransactions } from '../hooks/useFX'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { exportCSV } from '../utils/csvExport'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 
-type ReportTab = 'annual' | 'monthly' | 'balances' | 'fx' | 'audit'
+type ReportTab = 'annual' | 'monthly' | 'fx' | 'audit'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS        = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i)
@@ -291,79 +290,6 @@ function MonthlyBreakdownPanel() {
   )
 }
 
-// ── Account Balances ───────────────────────────────────────────────────────────
-
-function AccountBalancesPanel() {
-  const { accounts, loading: accLoading } = useAccounts()
-  const { balances, loading: balLoading } = useAccountLatestBalances()
-  const loading = accLoading || balLoading
-
-  const handleExport = () =>
-    exportCSV(
-      'account_balances',
-      ['Code', 'Name', 'Category', 'Opening Balance (₦)', 'Current Balance (₦)'],
-      accounts.map(a => {
-        const bal = balances.get(a.id) ?? Number(a.opening_balance)
-        return [a.code, a.name, a.category, a.opening_balance, bal]
-      }),
-    )
-
-  const totalBalance = accounts.reduce(
-    (s, a) => s + (balances.get(a.id) ?? Number(a.opening_balance)),
-    0,
-  )
-
-  return (
-    <ReportSection title="Account Balances" onExport={handleExport}>
-      {loading && <Skeleton />}
-      {!loading && accounts.length === 0 && <EmptyState />}
-      {!loading && accounts.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                <th className="px-5 py-3 text-left font-medium">Code</th>
-                <th className="px-5 py-3 text-left font-medium">Account Name</th>
-                <th className="px-5 py-3 text-left font-medium">Category</th>
-                <th className="px-5 py-3 text-right font-medium">Opening</th>
-                <th className="px-5 py-3 text-right font-medium">Current Balance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {accounts.map(a => {
-                const bal = balances.get(a.id) ?? Number(a.opening_balance)
-                return (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-5 py-3 font-mono text-xs text-gray-500">{a.code}</td>
-                    <td className="px-5 py-3 font-medium text-gray-800">{a.name}</td>
-                    <td className="px-5 py-3">
-                      <span className="text-xs capitalize bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
-                        {a.category}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right text-gray-400">
-                      ₦{fmtNGN(Number(a.opening_balance))}
-                    </td>
-                    <td className={`px-5 py-3 text-right font-semibold ${bal >= 0 ? 'text-success' : 'text-danger'}`}>
-                      ₦{fmtNGN(bal)}
-                    </td>
-                  </tr>
-                )
-              })}
-              <tr className="bg-gray-50 font-bold border-t border-gray-200">
-                <td className="px-5 py-3 text-gray-700" colSpan={4}>Total</td>
-                <td className={`px-5 py-3 text-right ${totalBalance >= 0 ? 'text-success' : 'text-danger'}`}>
-                  ₦{fmtNGN(totalBalance)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-    </ReportSection>
-  )
-}
-
 // ── FX Holdings ────────────────────────────────────────────────────────────────
 
 const FX_META = [
@@ -526,7 +452,6 @@ export default function Reports() {
   const allTabs: { id: ReportTab; label: string; adminOnly?: boolean }[] = [
     { id: 'annual',   label: 'Annual Summary'     },
     { id: 'monthly',  label: 'Monthly Breakdown'  },
-    { id: 'balances', label: 'Account Balances'   },
     { id: 'fx',       label: 'FX Holdings'        },
     { id: 'audit',    label: 'Audit Log', adminOnly: true },
   ]
@@ -574,7 +499,6 @@ export default function Reports() {
       <div className="print:space-y-8">
         {tab === 'annual'   && <AnnualSummaryPanel />}
         {tab === 'monthly'  && <MonthlyBreakdownPanel />}
-        {tab === 'balances' && <AccountBalancesPanel />}
         {tab === 'fx'       && <FXHoldingsPanel />}
         {tab === 'audit'    && isAdmin() && <AuditLogPanel />}
       </div>

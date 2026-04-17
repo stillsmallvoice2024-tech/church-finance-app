@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, TrendingUp, TrendingDown, Wallet,
+  LayoutDashboard, TrendingUp, TrendingDown, Layers,
   Target, Globe, ArrowLeftRight, BarChart3,
   Settings, Users, MoreHorizontal, X,
 } from 'lucide-react'
@@ -11,7 +11,7 @@ const PRIMARY_TABS = [
   { label: 'Home',     path: '/',         icon: LayoutDashboard },
   { label: 'Inflows',  path: '/inflows',  icon: TrendingUp      },
   { label: 'Outflows', path: '/outflows', icon: TrendingDown    },
-  { label: 'Accounts', path: '/accounts', icon: Wallet          },
+  { label: 'Categories', path: '/categories', icon: Layers       },
 ]
 
 const MORE_ITEMS = [

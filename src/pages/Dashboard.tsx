@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  AreaChart, Area, BarChart, Bar,
+  AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, Cell,
+  Legend, ResponsiveContainer,
 } from 'recharts'
 import {
-  TrendingUp, TrendingDown, Wallet, BookOpen,
+  TrendingUp, TrendingDown, Layers,
   PlusCircle, MinusCircle, FileSpreadsheet,
-  RefreshCw, AlertCircle,
+  RefreshCw, AlertCircle, Wallet,
 } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -22,7 +22,7 @@ import { ImportModal }             from '../components/modals/ImportModal'
 
 import { useDashboardStats }       from '../hooks/useDashboard'
 import { useAccountingYearStore }  from '../store/accountingYearStore'
-import { useAccounts }             from '../hooks/useLedger'
+import { useCategories }           from '../hooks/useCategories'
 import { useAuth }                 from '../hooks/useAuth'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
@@ -38,8 +38,6 @@ const FX_META = [
   { code: 'EUR', symbol: '€', flag: '🇪🇺' },
   { code: 'CNY', symbol: '¥', flag: '🇨🇳' },
 ]
-
-const BAR_COLORS = ['#1E3A8A','#2547A4','#3B60C4','#5A7BD4','#8099DC','#A8B8E8']
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -73,7 +71,7 @@ export default function Dashboard() {
   const { user, profile } = useAuth()
   const year   = useAccountingYearStore(s => s.year)
   const stats  = useDashboardStats(year)
-  const { accounts, loading: accountsLoading } = useAccounts()
+  const { categories, loading: categoriesLoading } = useCategories()
 
   usePageTitle('Dashboard')
 
@@ -101,21 +99,12 @@ export default function Dashboard() {
     [stats.monthlyTotals],
   )
 
-  const topAccounts = useMemo(
-    () =>
-      [...accounts]
-        .sort((a, b) => b.opening_balance - a.opening_balance)
-        .slice(0, 6)
-        .map(a => ({ name: a.name, balance: a.opening_balance })),
-    [accounts],
-  )
-
   const fxMap = useMemo(
     () => new Map(stats.fxBalances.map(f => [f.currency, f.balance])),
     [stats.fxBalances],
   )
 
-  const isLoading = stats.loading || accountsLoading
+  const isLoading = stats.loading || categoriesLoading
 
   // ── First name ─────────────────────────────────────────────────────────────
   const firstName =
@@ -192,9 +181,9 @@ export default function Dashboard() {
                 iconBgClass="bg-primary-100"
               />
               <StatCard
-                title="Active Accounts"
-                value={String(accounts.length)}
-                icon={<BookOpen className="w-5 h-5 text-accent" />}
+                title="Categories"
+                value={String(categories.length)}
+                icon={<Layers className="w-5 h-5 text-accent" />}
                 iconBgClass="bg-yellow-50"
               />
             </>
@@ -253,99 +242,46 @@ export default function Dashboard() {
           )}
         </Card>
 
-        {/* ── Two-column: top accounts + recent transactions ───────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ── Recent transactions ──────────────────────────────────────────── */}
+        <Card padding={false}>
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-800">Recent Transactions</h2>
+            <span className="text-xs text-gray-400">Last 10 inflows</span>
+          </div>
 
-          {/* Top accounts bar chart */}
-          <Card>
-            <h2 className="text-base font-semibold text-gray-800 mb-4">Top Accounts by Balance</h2>
-            {isLoading ? (
-              <div className="h-52 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : topAccounts.length === 0 ? (
-              <div className="h-52 flex flex-col items-center justify-center gap-2 text-gray-400">
-                <BookOpen className="w-8 h-8" />
-                <p className="text-sm">No accounts found.</p>
-              </div>
-            ) : (
-              <div className="h-52">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={topAccounts}
-                    layout="vertical"
-                    margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F3F4F6" />
-                    <XAxis
-                      type="number"
-                      tickFormatter={v => formatCurrencyCompact(v)}
-                      tick={{ fontSize: 11, fill: '#6B7280' }}
-                      axisLine={false} tickLine={false}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fontSize: 11, fill: '#374151' }}
-                      axisLine={false} tickLine={false}
-                      width={110}
-                    />
-                    <Tooltip
-                      formatter={(v: number) => [formatCurrencyCompact(v), 'Balance']}
-                      contentStyle={{ borderRadius: '0.75rem', border: '1px solid #E5E7EB', fontSize: '13px' }}
-                    />
-                    <Bar dataKey="balance" radius={[0, 4, 4, 0]}>
-                      {topAccounts.map((_, i) => (
-                        <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </Card>
-
-          {/* Recent transactions */}
-          <Card padding={false}>
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-800">Recent Transactions</h2>
-              <span className="text-xs text-gray-400">Last 10 inflows</span>
+          {isLoading ? (
+            <div className="divide-y divide-gray-50">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-6 py-3 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-20 shrink-0" />
+                  <div className="h-4 bg-gray-200 rounded flex-1" />
+                  <div className="h-4 bg-gray-200 rounded w-24 shrink-0" />
+                </div>
+              ))}
             </div>
-
-            {isLoading ? (
-              <div className="divide-y divide-gray-50">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 px-6 py-3 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-20 shrink-0" />
-                    <div className="h-4 bg-gray-200 rounded flex-1" />
-                    <div className="h-4 bg-gray-200 rounded w-24 shrink-0" />
-                  </div>
-                ))}
-              </div>
-            ) : stats.recentTransactions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-12 text-gray-400">
-                <TrendingUp className="w-8 h-8" />
-                <p className="text-sm">No recent transactions.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-50">
-                {stats.recentTransactions.map(tx => (
-                  <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 transition-colors">
-                    <span className="text-xs text-gray-400 whitespace-nowrap w-20 shrink-0">
-                      {formatDate(tx.date)}
-                    </span>
-                    <span className="text-sm text-gray-700 truncate flex-1">
-                      {tx.description ?? '—'}
-                    </span>
-                    <span className="text-sm font-semibold text-success whitespace-nowrap shrink-0">
-                      +{formatCurrencyCompact(tx.amount)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
+          ) : stats.recentTransactions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-gray-400">
+              <TrendingUp className="w-8 h-8" />
+              <p className="text-sm">No recent transactions.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {stats.recentTransactions.map(tx => (
+                <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 transition-colors">
+                  <span className="text-xs text-gray-400 whitespace-nowrap w-20 shrink-0">
+                    {formatDate(tx.date)}
+                  </span>
+                  <span className="text-sm text-gray-700 truncate flex-1">
+                    {tx.description ?? '—'}
+                  </span>
+                  <span className="text-sm font-semibold text-success whitespace-nowrap shrink-0">
+                    +{formatCurrencyCompact(tx.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         {/* ── FX currency strip ────────────────────────────────────────────── */}
         <div>
