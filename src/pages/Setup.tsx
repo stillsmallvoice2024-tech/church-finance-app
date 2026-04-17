@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, FileEdit } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
@@ -7,6 +7,8 @@ import { AddBankModal } from '../components/modals/AddBankModal'
 import { DeleteDialog }  from '../components/ui/DeleteDialog'
 import { useDeleteBank } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
+import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
+import { formatDate } from '../utils/formatters'
 
 const TABS = ['General', 'Banks', 'Allocation'] as const
 type Tab = typeof TABS[number]
@@ -190,6 +192,103 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
+// ── Allocation tab ─────────────────────────────────────────────────────────────
+
+function AllocationTab({ onNew }: { onNew: () => void }) {
+  const { configs, loading, error, fetch } = useAllocationStore()
+
+  useEffect(() => { fetch() }, [fetch])
+
+  const statusBadge = (config: AllocationConfig) => {
+    const isLocked = config.status === 'locked'
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+        isLocked
+          ? 'bg-green-50 text-green-700 border border-green-200'
+          : 'bg-amber-50 text-amber-700 border border-amber-200'
+      }`}>
+        {isLocked ? <Lock className="w-3 h-3" /> : <FileEdit className="w-3 h-3" />}
+        {isLocked ? 'Locked' : 'Draft'}
+      </span>
+    )
+  }
+
+  return (
+    <div className="max-w-2xl space-y-3">
+      <div className="flex justify-end">
+        <button
+          onClick={onNew}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+        >
+          <Plus className="w-4 h-4" /> New Configuration
+        </button>
+      </div>
+
+      {loading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && configs.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
+          <Layers className="w-10 h-10 text-gray-300" />
+          <div>
+            <p className="text-sm font-medium text-gray-600">No allocation configurations yet</p>
+            <p className="text-xs text-gray-400 mt-1">Create a configuration to define how income is split across categories.</p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && configs.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Effective From</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total %</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {configs.map(config => {
+                const total = config.rows.reduce((s, r) => s + r.percentage, 0)
+                const balanced = Math.abs(total - 100) < 0.01
+                return (
+                  <tr key={config.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-gray-900">{config.name}</td>
+                    <td className="px-4 py-3 text-gray-500">{formatDate(config.start_date)}</td>
+                    <td className={`px-4 py-3 text-right font-mono font-semibold ${balanced ? 'text-success' : 'text-danger'}`}>
+                      {total.toFixed(1)}%
+                    </td>
+                    <td className="px-4 py-3">{statusBadge(config)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && configs.length > 0 && (
+        <p className="text-xs text-gray-400">
+          {configs.length} configuration{configs.length !== 1 ? 's' : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
@@ -252,7 +351,7 @@ export default function SetupPage() {
         <div>
           {activeTab === 'General'    && <GeneralTab />}
           {activeTab === 'Banks'      && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Allocation' && <div className="min-h-[300px] flex items-center justify-center text-sm text-gray-400">Allocation settings coming soon.</div>}
+          {activeTab === 'Allocation' && <AllocationTab onNew={() => { /* form coming soon */ }} />}
         </div>
       </div>
 
