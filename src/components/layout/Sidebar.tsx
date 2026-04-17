@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
+import { useAccountingYearStore } from '../../store/accountingYearStore'
 
 interface NavItem {
   label: string
@@ -60,6 +61,7 @@ interface SidebarProps {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { isAdmin } = useRole()
   const showAdmin = isAdmin()
+  const activeYear = useAccountingYearStore(s => s.year)
 
   return (
     <>
@@ -93,7 +95,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 The Standing Church International
               </p>
               <p className="text-accent text-xs font-semibold tracking-widest uppercase mt-0.5">
-                Finance 2024
+                Finance {activeYear}
               </p>
             </div>
           </div>
