@@ -12,7 +12,6 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useToast } from '../store/toastStore'
 import { Modal } from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
-import { CanWrite } from '../components/auth/RoleGates'
 
 // ── Category form modal ────────────────────────────────────────────────────────
 
@@ -162,15 +161,13 @@ export default function Categories() {
             Manage income and allocation categories
           </p>
         </div>
-        <CanWrite>
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Category
-          </button>
-        </CanWrite>
+        <button
+          onClick={openAdd}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Category
+        </button>
       </div>
 
       {/* Error */}
@@ -202,15 +199,13 @@ export default function Categories() {
               Create your first category to use in allocation configurations.
             </p>
           </div>
-          <CanWrite>
-            <button
-              onClick={openAdd}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Category
-            </button>
-          </CanWrite>
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Category
+          </button>
         </div>
       )}
 
@@ -233,24 +228,22 @@ export default function Categories() {
                     {cat.description ?? <span className="text-gray-300 italic">—</span>}
                   </td>
                   <td className="px-5 py-3">
-                    <CanWrite>
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEdit(cat)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(cat)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </CanWrite>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => openEdit(cat)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(cat)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
