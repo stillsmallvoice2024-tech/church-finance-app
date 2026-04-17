@@ -14,6 +14,7 @@ import { AdminOnly }                from '../components/auth/RoleGates'
 import { AddAccountModal }          from '../components/modals/AddAccountModal'
 import { AddLedgerEntryModal }      from '../components/modals/AddLedgerEntryModal'
 import { useAccounts, useAccountLatestBalances, useLedgerEntries } from '../hooks/useLedger'
+import { useYearRange } from '../hooks/useYearRange'
 import type { DbAccount }           from '../hooks/useLedger'
 import { useDeleteTransaction, useDeleteAccount } from '../hooks/useMutations'
 import { useToastStore }            from '../store/toastStore'
@@ -52,6 +53,7 @@ export default function AccountsPage() {
   usePageTitle('Accounts')
 
   // ── Data ───────────────────────────────────────────────────────────────────
+  const { dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
   const { accounts, loading: acctLoading, error: acctError, refetch: refetchAccounts } = useAccounts()
   const { balances }                                                  = useAccountLatestBalances(balRefetch)
 
@@ -61,7 +63,7 @@ export default function AccountsPage() {
   )
 
   const { entries, runningBalance, loading: ledgerLoading, refetch: refetchLedger } =
-    useLedgerEntries(selectedId ?? '')
+    useLedgerEntries(selectedId ?? '', { dateFrom: yearStart, dateTo: yearEnd })
 
   // ── Sidebar groups ─────────────────────────────────────────────────────────
   const filtered = useMemo(

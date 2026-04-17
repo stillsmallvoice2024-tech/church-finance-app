@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useYearRange } from '../hooks/useYearRange'
 import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
 import { Pagination }               from '../components/ui/Pagination'
@@ -14,6 +15,7 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 const PAGE_SIZE = 25
 
 export default function PendingDeductions() {
+  const { dateFrom, dateTo } = useYearRange()
   const [page, setPage] = useState(0)
   const [editRecord, setEditRecord] = useState<OutflowTransaction | null>(null)
   const [modalOpen, setModalOpen]   = useState(false)
@@ -21,6 +23,8 @@ export default function PendingDeductions() {
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
     pendingOnly: true,
+    dateFrom,
+    dateTo,
     page,
     pageSize: PAGE_SIZE,
   })

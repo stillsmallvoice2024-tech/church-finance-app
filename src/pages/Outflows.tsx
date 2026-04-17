@@ -17,6 +17,7 @@ import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { useAccountCodesStore } from '../store/accountCodesStore'
+import { useYearRange }         from '../hooks/useYearRange'
 
 const PAGE_SIZE = 25
 
@@ -48,9 +49,11 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Outflows() {
+  const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
+
   // Filters
-  const [dateFrom,        setDateFrom]        = useState('')
-  const [dateTo,          setDateTo]          = useState('')
+  const [dateFrom,        setDateFrom]        = useState(yearStart)
+  const [dateTo,          setDateTo]          = useState(yearEnd)
   const [stageCode,       setStageCode]       = useState('')
   const [searchInput,     setSearchInput]     = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -62,6 +65,12 @@ export default function Outflows() {
   }, [searchInput])
 
   useEffect(() => { setPage(0) }, [dateFrom, dateTo, stageCode, debouncedSearch])
+
+  useEffect(() => {
+    setDateFrom(`${year}-01-01`)
+    setDateTo(`${year}-12-31`)
+    setPage(0)
+  }, [year])
 
   // Data
   const { data, count, loading, error, refetch } = useOutflowTransactions({

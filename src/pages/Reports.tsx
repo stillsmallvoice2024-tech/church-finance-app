@@ -7,6 +7,7 @@ import { useAccounts, useAccountLatestBalances } from '../hooks/useLedger'
 import { useFXTransactions } from '../hooks/useFX'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { exportCSV } from '../utils/csvExport'
+import { useAccountingYearStore } from '../store/accountingYearStore'
 
 type ReportTab = 'annual' | 'monthly' | 'balances' | 'fx' | 'audit'
 
@@ -80,6 +81,7 @@ function ReportSection({
 interface AnnualRow { year: number; totalInflow: number; totalOutflow: number; net: number }
 
 function AnnualSummaryPanel() {
+  const activeYear = useAccountingYearStore(s => s.year)
   const [rows,    setRows]    = useState<AnnualRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -87,10 +89,13 @@ function AnnualSummaryPanel() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const y = activeYear.toString()
 
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('date, amount'),
-      supabase.from('outflow_transactions').select('date, actual_amount'),
+      supabase.from('inflow_transactions').select('date, amount')
+        .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
+      supabase.from('outflow_transactions').select('date, actual_amount')
+        .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -115,7 +120,7 @@ function AnnualSummaryPanel() {
 
     setRows(Array.from(byYear.values()).sort((a, b) => b.year - a.year))
     setLoading(false)
-  }, [])
+  }, [activeYear])
 
   useEffect(() => { load() }, [load])
 
@@ -166,7 +171,10 @@ function AnnualSummaryPanel() {
 interface MonthlyRow { month: number; totalInflow: number; totalOutflow: number; net: number }
 
 function MonthlyBreakdownPanel() {
-  const [year,    setYear]    = useState(CURRENT_YEAR)
+  const activeYear = useAccountingYearStore(s => s.year)
+  const [year,    setYear]    = useState(activeYear)
+
+  useEffect(() => { setYear(activeYear) }, [activeYear])
   const [rows,    setRows]    = useState<MonthlyRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)

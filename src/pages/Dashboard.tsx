@@ -21,6 +21,7 @@ import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
 import { ImportModal }             from '../components/modals/ImportModal'
 
 import { useDashboardStats }       from '../hooks/useDashboard'
+import { useAccountingYearStore }  from '../store/accountingYearStore'
 import { useAccounts }             from '../hooks/useLedger'
 import { useAuth }                 from '../hooks/useAuth'
 import { usePageTitle }            from '../hooks/usePageTitle'
@@ -68,11 +69,10 @@ function greeting() {
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 
-const YEAR = new Date().getFullYear()
-
 export default function Dashboard() {
   const { user, profile } = useAuth()
-  const stats    = useDashboardStats(YEAR)
+  const year   = useAccountingYearStore(s => s.year)
+  const stats  = useDashboardStats(year)
   const { accounts, loading: accountsLoading } = useAccounts()
 
   usePageTitle('Dashboard')
@@ -97,7 +97,7 @@ export default function Dashboard() {
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const chartData = useMemo(
-    () => fillMonthlyGaps(YEAR, stats.monthlyTotals),
+    () => fillMonthlyGaps(year, stats.monthlyTotals),
     [stats.monthlyTotals],
   )
 
@@ -154,7 +154,7 @@ export default function Dashboard() {
               {greeting()}, {firstName}
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {format(new Date(), 'EEEE, d MMMM yyyy')} &nbsp;·&nbsp; {YEAR} overview
+              {format(new Date(), 'EEEE, d MMMM yyyy')} &nbsp;·&nbsp; {year} overview
             </p>
           </div>
           {profile?.role && (
@@ -174,13 +174,13 @@ export default function Dashboard() {
           ) : (
             <>
               <StatCard
-                title={`Total Inflows (${YEAR})`}
+                title={`Total Inflows (${year})`}
                 value={formatCurrencyCompact(stats.totalInflow)}
                 icon={<TrendingUp className="w-5 h-5 text-success" />}
                 iconBgClass="bg-green-50"
               />
               <StatCard
-                title={`Total Outflows (${YEAR})`}
+                title={`Total Outflows (${year})`}
                 value={formatCurrencyCompact(stats.totalOutflow)}
                 icon={<TrendingDown className="w-5 h-5 text-danger" />}
                 iconBgClass="bg-red-50"
@@ -207,7 +207,7 @@ export default function Dashboard() {
             <h2 className="text-base font-semibold text-gray-800">
               Monthly Inflows vs Outflows
             </h2>
-            <span className="text-xs text-gray-400">{YEAR}</span>
+            <span className="text-xs text-gray-400">{year}</span>
           </div>
 
           {isLoading ? (
@@ -217,7 +217,7 @@ export default function Dashboard() {
           ) : chartData.every(d => d.inflow === 0 && d.outflow === 0) ? (
             <div className="h-72 flex flex-col items-center justify-center gap-2 text-gray-400">
               <TrendingUp className="w-8 h-8" />
-              <p className="text-sm">No transactions recorded for {YEAR} yet.</p>
+              <p className="text-sm">No transactions recorded for {year} yet.</p>
             </div>
           ) : (
             <div className="h-72">
