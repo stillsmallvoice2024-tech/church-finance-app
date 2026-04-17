@@ -4,6 +4,9 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
 import { AddBankModal } from '../components/modals/AddBankModal'
+import { DeleteDialog }  from '../components/ui/DeleteDialog'
+import { useDeleteBank } from '../hooks/useMutations'
+import { useToastStore } from '../store/toastStore'
 
 const TABS = ['General', 'Banks', 'Allocation'] as const
 type Tab = typeof TABS[number]
@@ -194,13 +197,29 @@ export default function SetupPage() {
   const [bankModalOpen,  setBankModalOpen]  = useState(false)
   const [editBankRecord, setEditBankRecord] = useState<DbBank | null>(null)
   const [bankRefetch,    setBankRefetch]    = useState(0)
+  const [deleteBankRecord, setDeleteBankRecord] = useState<DbBank | null>(null)
+
+  const { push: toast } = useToastStore()
+  const { mutate: deleteBank, loading: deletingBank } = useDeleteBank()
 
   usePageTitle('Setup')
 
-  const handleAddBank    = () => { setEditBankRecord(null); setBankModalOpen(true) }
-  const handleEditBank   = (bank: DbBank) => { setEditBankRecord(bank); setBankModalOpen(true) }
-  const handleDeleteBank = (_bank: DbBank) => { /* dialog coming soon */ }
+  const handleAddBank     = () => { setEditBankRecord(null); setBankModalOpen(true) }
+  const handleEditBank    = (bank: DbBank) => { setEditBankRecord(bank); setBankModalOpen(true) }
+  const handleDeleteBank  = (bank: DbBank) => { setDeleteBankRecord(bank) }
   const handleBankSuccess = () => { setBankRefetch(n => n + 1) }
+
+  const confirmDeleteBank = async () => {
+    if (!deleteBankRecord) return
+    try {
+      await deleteBank(deleteBankRecord.id)
+      toast('Bank deleted', 'success')
+      setDeleteBankRecord(null)
+      setBankRefetch(n => n + 1)
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+    }
+  }
 
   return (
     <>
@@ -242,6 +261,13 @@ export default function SetupPage() {
         onClose={() => { setBankModalOpen(false); setEditBankRecord(null) }}
         onSuccess={handleBankSuccess}
         editRecord={editBankRecord}
+      />
+      <DeleteDialog
+        open={!!deleteBankRecord}
+        onClose={() => setDeleteBankRecord(null)}
+        onConfirm={confirmDeleteBank}
+        loading={deletingBank}
+        label={deleteBankRecord ? `"${deleteBankRecord.name}"` : 'this bank'}
       />
     </>
   )
