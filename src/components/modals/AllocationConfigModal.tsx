@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useForm, useFieldArray, useWatch } from 'react-hook-form'
+import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, Trash2 } from 'lucide-react'
@@ -9,6 +9,7 @@ import {
   useUpdateAllocationConfig,
 } from '../../hooks/useMutations'
 import type { AllocationConfig } from '../../store/allocationStore'
+import { useCategories } from '../../hooks/useCategories'
 
 const rowSchema = z.object({
   category_name: z.string().min(1, 'Required'),
@@ -24,15 +25,16 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 interface Props {
-  open:        boolean
-  onClose:     () => void
-  onSuccess?:  () => void
-  editRecord?: AllocationConfig | null
+  open:            boolean
+  onClose:         () => void
+  onSuccess?:      () => void
+  editRecord?:     AllocationConfig | null
+  existingConfigs?: AllocationConfig[]
 }
 
 // ── Live total strip ───────────────────────────────────────────────────────────
 
-function TotalStrip({ control }: { control: ReturnType<typeof useForm<FormValues>>['control'] }) {
+function TotalStrip({ control }: { control: Control<FormValues> }) {
   const rows  = useWatch({ control, name: 'rows' }) ?? []
   const total = rows.reduce((s, r) => s + Number(r?.percentage || 0), 0)
   const diff  = 100 - total
@@ -59,8 +61,10 @@ function TotalStrip({ control }: { control: ReturnType<typeof useForm<FormValues
 
 // ── Modal ──────────────────────────────────────────────────────────────────────
 
-export function AllocationConfigModal({ open, onClose, onSuccess, editRecord }: Props) {
-  const isEdit = !!editRecord
+export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, existingConfigs = [] }: Props) {
+  const isEdit = !!editRecord?.id
+
+  const { categories } = useCategories()
 
   const addMutation    = useAddAllocationConfig()
   const updateMutation = useUpdateAllocationConfig()
@@ -75,6 +79,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord }: 
     register,
     control,
     handleSubmit,
+    setError,
     formState: { errors },
     reset: resetForm,
   } = useForm<FormValues>({
@@ -102,6 +107,13 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord }: 
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
   const onSubmit = async (values: FormValues) => {
+    const clash = existingConfigs.find(
+      c => c.start_date === values.start_date && c.id !== editRecord?.id,
+    )
+    if (clash) {
+      setError('start_date', { message: `Another configuration ("${clash.name}") already uses this date.` })
+      return
+    }
     try {
       if (isEdit && editRecord) {
         await update({ id: editRecord.id, ...values })
@@ -152,15 +164,25 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord }: 
             <span />
           </div>
 
+          {categories.length === 0 && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              No categories found. Create categories on the Categories page first.
+            </p>
+          )}
+
           {fields.map((field, idx) => (
             <div key={field.id} className="grid grid-cols-[1fr_100px_32px] gap-2 items-start">
               <div>
-                <input
-                  type="text"
-                  placeholder="Category name"
+                <select
                   {...register(`rows.${idx}.category_name`)}
                   className={iCls(!!errors.rows?.[idx]?.category_name)}
-                />
+                  disabled={categories.length === 0}
+                >
+                  <option value="">Select category…</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
                 {errors.rows?.[idx]?.category_name && (
                   <p className="mt-0.5 text-xs text-red-500">{errors.rows[idx]!.category_name!.message}</p>
                 )}

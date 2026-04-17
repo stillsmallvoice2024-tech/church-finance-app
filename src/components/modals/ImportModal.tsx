@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
@@ -7,6 +7,8 @@ import {
 import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
+import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
+import { formatDate } from '../../utils/formatters'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -219,6 +221,7 @@ interface Props {
   open:         boolean
   onClose:      () => void
   skipTxnIds?:  Set<string>   // when set, rows matching these IDs are skipped at import
+  bank?:        { id: string; name: string } | null
 }
 
 interface ImportResult {
@@ -227,7 +230,7 @@ interface ImportResult {
   errors:   string[]
 }
 
-export function ImportModal({ open, onClose, skipTxnIds }: Props) {
+export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
 
@@ -256,6 +259,10 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
   const sheet   = useMemo(() => sheets.find(s => s.name === selectedSheet) ?? null, [sheets, selectedSheet])
   const config  = targetTable ? TABLE_CONFIG[targetTable] : null
   const preview = sheet?.rows.slice(0, 5) ?? []
+
+  // Allocation configs — load once so Step 4 and runImport can use them
+  const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: allocLoaded } = useAllocationStore()
+  useEffect(() => { if (!allocLoaded) fetchAllocConfigs() }, [allocLoaded, fetchAllocConfigs])
 
   // ── Reset on open/close ──────────────────────────────────────────────────
 
@@ -401,6 +408,23 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
       mappedRows.push(row)
     }
 
+    // Inject bank_id for inflow/outflow tables if a bank was selected
+    if (bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions')) {
+      for (const row of mappedRows) row.bank_id = bank.id
+    }
+
+    // Inject allocation_config_id per row based on the row's date
+    if (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') {
+      const { configs: latestConfigs } = useAllocationStore.getState()
+      for (const row of mappedRows) {
+        const date = row.date as string | undefined
+        if (date) {
+          const cfg = getConfigForDate(latestConfigs, date)
+          if (cfg) row.allocation_config_id = cfg.id
+        }
+      }
+    }
+
     // Filter out rows whose transaction ID is in the skip list
     let rowsToInsert = mappedRows
     if (skipTxnIds && skipTxnIds.size > 0) {
@@ -437,7 +461,7 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
 
     setResult({ imported, skipped, errors })
     setImporting(false)
-  }, [sheet, config, targetTable, mapping, user, skipTxnIds])
+  }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -654,6 +678,32 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                 <div className="text-xs text-gray-500 mt-0.5">Target table</div>
               </div>
             </div>
+            {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="text-xs font-medium text-gray-500">Bank</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+                  {bank.name}
+                </span>
+                <span className="text-xs text-gray-400">will be applied to all {sheet.rowCount.toLocaleString()} rows</span>
+              </div>
+            )}
+            {/* Allocation config label */}
+            {(targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (() => {
+              const dateHeader = Object.keys(mapping).find(h => mapping[h] === 'date')
+              const dateColIdx = dateHeader !== undefined ? sheet.headers.indexOf(dateHeader) : -1
+              const firstDate  = dateColIdx >= 0 && sheet.rows[0] ? parseDate(sheet.rows[0][dateColIdx]) : null
+              const cfg        = firstDate ? getConfigForDate(allocConfigs, firstDate) : null
+              return cfg ? (
+                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-primary/5 border border-primary/20 text-primary">
+                  Using: <strong>{cfg.name}</strong> — effective {formatDate(cfg.start_date)}
+                  <span className="ml-auto text-gray-400">config applied per row date</span>
+                </div>
+              ) : firstDate ? (
+                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700">
+                  No allocation config found for {formatDate(firstDate)} — rows will be saved without an allocation
+                </div>
+              ) : null
+            })()}
 
             {/* First 3 rows preview mapped */}
             {sheet.rows.slice(0, 3).length > 0 && (
@@ -670,6 +720,9 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                               {f.label}
                             </th>
                           ))}
+                        {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                          <th className="px-3 py-2 text-left font-semibold text-primary whitespace-nowrap">Bank</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -687,6 +740,13 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                                 </td>
                               )
                             })}
+                          {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                                {bank.name}
+                              </span>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -727,6 +787,14 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                 <div className="text-sm space-y-1">
                   <div className="text-success">✓ {result.imported.toLocaleString()} rows imported</div>
                   {result.skipped > 0 && <div className="text-amber-600">⚠ {result.skipped} rows skipped</div>}
+                  {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                    <div className="flex items-center gap-1.5 text-gray-600 pt-1">
+                      <span className="text-xs">Bank:</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+                        {bank.name}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">

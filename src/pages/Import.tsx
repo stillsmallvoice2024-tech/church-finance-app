@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, PenLine, FileSpreadsheet,
   CheckCircle2, AlertTriangle, Loader2, X,
   TrendingUp, TrendingDown,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ImportModal } from '../components/modals/ImportModal'
 import { Modal } from '../components/ui/Modal'
@@ -12,6 +13,9 @@ import { supabase } from '../lib/supabase'
 import { useAccountCodesStore } from '../store/accountCodesStore'
 import { useAddInflow, useAddOutflow } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
+import { useBanks } from '../hooks/useBanks'
+import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
+import { formatDate } from '../utils/formatters'
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../utils/inflowTypes'
@@ -65,7 +69,9 @@ export default function Import() {
   const [duplicates, setDuplicates]   = useState<DupRecord[]>([])
   const [dupChecked, setDupChecked]   = useState(false)
   const [parseError, setParseError]   = useState<string | null>(null)
+  const [selectedBankId, setSelectedBankId] = useState('')
 
+  const { banks } = useBanks()
   const fileInputRef = useRef<HTMLInputElement>(null)
   usePageTitle('Import')
 
@@ -76,6 +82,7 @@ export default function Import() {
     setParseError(null)
     setDupLoading(false)
     setSkipDups(false)
+    setSelectedBankId('')
   }
 
   const openWizard = (skip: boolean) => {
@@ -302,36 +309,61 @@ export default function Import() {
 
                 {/* Actions */}
                 {dupChecked && !dupLoading && (
-                  <div className="pt-1 flex flex-wrap items-center gap-3">
-                    {duplicates.length > 0 ? (
-                      <>
+                  <div className="pt-1 space-y-3">
+                    {/* Bank selector */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs font-medium text-gray-600 shrink-0">Bank</label>
+                      {banks.length === 0 ? (
+                        <p className="text-xs text-gray-400">
+                          No banks configured.{' '}
+                          <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks →</Link>
+                        </p>
+                      ) : (
+                        <select
+                          value={selectedBankId}
+                          onChange={e => setSelectedBankId(e.target.value)}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                        >
+                          <option value="">— No bank —</option>
+                          {banks.map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {duplicates.length > 0 ? (
+                        <>
+                          <button
+                            onClick={() => openWizard(true)}
+                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Skip Duplicates &amp; Import
+                          </button>
+                          <button
+                            onClick={() => openWizard(false)}
+                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            Import Anyway
+                          </button>
+                          <p className="w-full text-xs text-gray-400">
+                            "Skip" removes the {duplicates.length} duplicate row{duplicates.length !== 1 ? 's' : ''} before inserting.
+                            "Import Anyway" includes them all.
+                          </p>
+                        </>
+                      ) : (
                         <button
-                          onClick={() => openWizard(true)}
+                          onClick={() => openWizard(false)}
                           className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
                         >
                           <Upload className="w-4 h-4" />
-                          Skip Duplicates &amp; Import
+                          Continue to Import Wizard
                         </button>
-                        <button
-                          onClick={() => openWizard(false)}
-                          className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          Import Anyway
-                        </button>
-                        <p className="w-full text-xs text-gray-400">
-                          "Skip" removes the {duplicates.length} duplicate row{duplicates.length !== 1 ? 's' : ''} before inserting.
-                          "Import Anyway" includes them all.
-                        </p>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => openWizard(false)}
-                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-                      >
-                        <Upload className="w-4 h-4" />
-                        Continue to Import Wizard
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -381,6 +413,7 @@ export default function Import() {
         skipTxnIds={skipDups && duplicates.length > 0
           ? new Set(duplicates.map(d => d.id))
           : undefined}
+        bank={selectedBankId ? (banks.find(b => b.id === selectedBankId) ?? null) : null}
       />
     </div>
   )
@@ -389,10 +422,14 @@ export default function Import() {
 // ── Manual Entry Form ──────────────────────────────────────────────────────────
 
 function ManualEntryForm() {
-  const { codes: accountCodes } = useAccountCodesStore()
-  const { push: toast }         = useToastStore()
+  const { codes: accountCodes }                        = useAccountCodesStore()
+  const { push: toast }                                = useToastStore()
+  const { banks, loading: banksLoading }               = useBanks()
+  const { configs, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
   const addInflow  = useAddInflow()
   const addOutflow = useAddOutflow()
+
+  useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
   // Direction toggle
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
@@ -468,6 +505,8 @@ function ManualEntryForm() {
         amount:                     parseFloat(v('amount')),
         inflow_type:                inflowType,
         description:                v('description')               || undefined,
+        bank_id:                    v('bank_id')                   || undefined,
+        allocation_config_id:       getConfigForDate(configs, v('date'))?.id,
         stage_code_1:               v('stage_code_1')              || undefined,
         stage_code_2:               v('stage_code_2')              || undefined,
         transaction_ref:            v('transaction_ref')           || undefined,
@@ -495,6 +534,8 @@ function ManualEntryForm() {
         date:                 v('date'),
         amount_disbursed:     parseFloat(v('amount_disbursed')),
         description:          v('description')      || undefined,
+        bank_id:              v('bank_id')          || undefined,
+        allocation_config_id: getConfigForDate(configs, v('date'))?.id,
         bank_description:     v('bank_description') || undefined,
         transaction_id:       v('transaction_id')   || undefined,
         stage_code_1:         v('stage_code_1')     || undefined,
@@ -567,6 +608,20 @@ function ManualEntryForm() {
   return (
     <div className="max-w-2xl space-y-5">
 
+      {/* Allocation config label */}
+      {cfgLoaded && v('date') && (() => {
+        const cfg = getConfigForDate(configs, v('date'))
+        return cfg ? (
+          <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-primary/5 border border-primary/20 text-primary">
+            <span>Using: <strong>{cfg.name}</strong> — effective {formatDate(cfg.start_date)}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700">
+            No allocation config found for {formatDate(v('date'))} — transaction will be saved without an allocation
+          </div>
+        )
+      })()}
+
       {/* Direction toggle */}
       <div className="flex gap-2">
         {(['inflow', 'outflow'] as const).map(d => {
@@ -610,6 +665,28 @@ function ManualEntryForm() {
           {/* Description */}
           <Field label="Description">
             <input type="text" placeholder="e.g. Sunday offering" value={v('description')} onChange={e => set('description', e.target.value)} className={iCls} />
+          </Field>
+
+          {/* Bank */}
+          <Field label="Bank">
+            {!banksLoading && banks.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1">
+                No banks configured.{' '}
+                <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
+              </p>
+            ) : (
+              <select
+                value={v('bank_id')}
+                onChange={e => set('bank_id', e.target.value)}
+                disabled={banksLoading}
+                className={iCls}
+              >
+                <option value="">— None —</option>
+                {banks.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
           </Field>
 
           {/* Inflow Type */}
@@ -695,6 +772,28 @@ function ManualEntryForm() {
           {/* Description */}
           <Field label="Description">
             <input type="text" placeholder="e.g. Generator fuel purchase" value={v('description')} onChange={e => set('description', e.target.value)} className={iCls} />
+          </Field>
+
+          {/* Bank */}
+          <Field label="Bank">
+            {!banksLoading && banks.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1">
+                No banks configured.{' '}
+                <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
+              </p>
+            ) : (
+              <select
+                value={v('bank_id')}
+                onChange={e => set('bank_id', e.target.value)}
+                disabled={banksLoading}
+                className={iCls}
+              >
+                <option value="">— None —</option>
+                {banks.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
           </Field>
 
           {/* Bank Desc + Txn ID */}
