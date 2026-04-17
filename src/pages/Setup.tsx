@@ -1,10 +1,13 @@
 import { useState } from 'react'
-import { CalendarDays, CheckCircle2 } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
+import { useBanks, type DbBank } from '../hooks/useBanks'
 
 const TABS = ['General', 'Banks', 'Allocation'] as const
 type Tab = typeof TABS[number]
+
+// ── General tab ────────────────────────────────────────────────────────────────
 
 function buildYearOptions(): number[] {
   const current = new Date().getFullYear()
@@ -75,10 +78,100 @@ function GeneralTab() {
   )
 }
 
+// ── Banks tab ──────────────────────────────────────────────────────────────────
+
+function BanksTab({ onEdit, onDelete }: {
+  onEdit:   (bank: DbBank) => void
+  onDelete: (bank: DbBank) => void
+}) {
+  const { banks, loading, error } = useBanks()
+
+  if (loading) {
+    return (
+      <div className="max-w-2xl space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-2xl flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+        {error}
+      </div>
+    )
+  }
+
+  if (banks.length === 0) {
+    return (
+      <div className="max-w-2xl flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
+        <Landmark className="w-10 h-10 text-gray-300" />
+        <div>
+          <p className="text-sm font-medium text-gray-600">No banks configured yet</p>
+          <p className="text-xs text-gray-400 mt-1">Add a bank to link it to your transactions and reports.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bank Name</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Number</th>
+              <th className="px-4 py-3 w-24" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {banks.map(bank => (
+              <tr key={bank.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-3 font-medium text-gray-900">{bank.name}</td>
+                <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                  {bank.account_number ?? <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => onEdit(bank)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(bank)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs text-gray-400">{banks.length} bank{banks.length !== 1 ? 's' : ''} configured</p>
+    </div>
+  )
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+
 export default function SetupPage() {
   const [activeTab, setActiveTab] = useState<Tab>('General')
 
   usePageTitle('Setup')
+
+  const handleEdit   = (_bank: DbBank) => { /* form coming soon */ }
+  const handleDelete = (_bank: DbBank) => { /* dialog coming soon */ }
 
   return (
     <div className="space-y-6">
@@ -109,7 +202,7 @@ export default function SetupPage() {
       {/* Tab content */}
       <div>
         {activeTab === 'General'    && <GeneralTab />}
-        {activeTab === 'Banks'      && <div className="min-h-[300px] flex items-center justify-center text-sm text-gray-400">Banks settings coming soon.</div>}
+        {activeTab === 'Banks'      && <BanksTab onEdit={handleEdit} onDelete={handleDelete} />}
         {activeTab === 'Allocation' && <div className="min-h-[300px] flex items-center justify-center text-sm text-gray-400">Allocation settings coming soon.</div>}
       </div>
     </div>
