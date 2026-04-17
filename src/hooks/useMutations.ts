@@ -573,3 +573,66 @@ export function useAddProjectEntry(): MutationHook<AddProjectEntryInput, string>
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
+
+// ── useAddBank ─────────────────────────────────────────────────────────────────
+
+export interface AddBankInput {
+  name:            string
+  account_number?: string
+  account_type?:   string
+}
+
+export function useAddBank(): MutationHook<AddBankInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddBankInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('banks').insert(input).select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'banks', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUpdateBank ──────────────────────────────────────────────────────────────
+
+export interface UpdateBankInput {
+  id:              string
+  name:            string
+  account_number?: string
+  account_type?:   string
+}
+
+export function useUpdateBank(): MutationHook<UpdateBankInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateBankInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('banks')
+        .update({ name: input.name, account_number: input.account_number ?? null, account_type: input.account_type ?? null })
+        .eq('id', input.id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, newData: input as unknown as Record<string, unknown> })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}

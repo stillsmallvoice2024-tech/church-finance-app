@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
 export interface DbBank {
-  id: string
-  name: string
+  id:             string
+  name:           string
   account_number: string | null
-  created_at: string
+  account_type:   string | null
+  created_at:     string
 }
 
 export interface BanksResult {

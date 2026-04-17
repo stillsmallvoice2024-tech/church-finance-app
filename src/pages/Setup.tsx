@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
+import { AddBankModal } from '../components/modals/AddBankModal'
 
 const TABS = ['General', 'Banks', 'Allocation'] as const
 type Tab = typeof TABS[number]
@@ -80,7 +81,8 @@ function GeneralTab() {
 
 // ── Banks tab ──────────────────────────────────────────────────────────────────
 
-function BanksTab({ onEdit, onDelete }: {
+function BanksTab({ onAdd, onEdit, onDelete }: {
+  onAdd:    () => void
   onEdit:   (bank: DbBank) => void
   onDelete: (bank: DbBank) => void
 }) {
@@ -107,24 +109,43 @@ function BanksTab({ onEdit, onDelete }: {
 
   if (banks.length === 0) {
     return (
-      <div className="max-w-2xl flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
-        <Landmark className="w-10 h-10 text-gray-300" />
-        <div>
-          <p className="text-sm font-medium text-gray-600">No banks configured yet</p>
-          <p className="text-xs text-gray-400 mt-1">Add a bank to link it to your transactions and reports.</p>
+      <div className="max-w-2xl space-y-3">
+        <div className="flex justify-end">
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Bank
+          </button>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
+          <Landmark className="w-10 h-10 text-gray-300" />
+          <div>
+            <p className="text-sm font-medium text-gray-600">No banks configured yet</p>
+            <p className="text-xs text-gray-400 mt-1">Add a bank to link it to your transactions and reports.</p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl space-y-3">
+      <div className="flex justify-end">
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Bank
+        </button>
+      </div>
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bank Name</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Number</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
               <th className="px-4 py-3 w-24" />
             </tr>
           </thead>
@@ -134,6 +155,9 @@ function BanksTab({ onEdit, onDelete }: {
                 <td className="px-4 py-3 font-medium text-gray-900">{bank.name}</td>
                 <td className="px-4 py-3 text-gray-500 font-mono text-xs">
                   {bank.account_number ?? <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-gray-500 text-xs">
+                  {bank.account_type ?? <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
@@ -166,45 +190,59 @@ function BanksTab({ onEdit, onDelete }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('General')
+  const [activeTab,      setActiveTab]      = useState<Tab>('General')
+  const [bankModalOpen,  setBankModalOpen]  = useState(false)
+  const [editBankRecord, setEditBankRecord] = useState<DbBank | null>(null)
+  const [bankRefetch,    setBankRefetch]    = useState(0)
 
   usePageTitle('Setup')
 
-  const handleEdit   = (_bank: DbBank) => { /* form coming soon */ }
-  const handleDelete = (_bank: DbBank) => { /* dialog coming soon */ }
+  const handleAddBank    = () => { setEditBankRecord(null); setBankModalOpen(true) }
+  const handleEditBank   = (bank: DbBank) => { setEditBankRecord(bank); setBankModalOpen(true) }
+  const handleDeleteBank = (_bank: DbBank) => { /* dialog coming soon */ }
+  const handleBankSuccess = () => { setBankRefetch(n => n + 1) }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Setup</h1>
-        <p className="text-sm text-gray-500 mt-1">Configure your church finance settings</p>
+    <>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Setup</h1>
+          <p className="text-sm text-gray-500 mt-1">Configure your church finance settings</p>
+        </div>
+
+        {/* Tab bar */}
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex gap-6">
+            {TABS.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === tab
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Tab content */}
+        <div>
+          {activeTab === 'General'    && <GeneralTab />}
+          {activeTab === 'Banks'      && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
+          {activeTab === 'Allocation' && <div className="min-h-[300px] flex items-center justify-center text-sm text-gray-400">Allocation settings coming soon.</div>}
+        </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex gap-6">
-          {TABS.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === tab
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Tab content */}
-      <div>
-        {activeTab === 'General'    && <GeneralTab />}
-        {activeTab === 'Banks'      && <BanksTab onEdit={handleEdit} onDelete={handleDelete} />}
-        {activeTab === 'Allocation' && <div className="min-h-[300px] flex items-center justify-center text-sm text-gray-400">Allocation settings coming soon.</div>}
-      </div>
-    </div>
+      <AddBankModal
+        open={bankModalOpen}
+        onClose={() => { setBankModalOpen(false); setEditBankRecord(null) }}
+        onSuccess={handleBankSuccess}
+        editRecord={editBankRecord}
+      />
+    </>
   )
 }
