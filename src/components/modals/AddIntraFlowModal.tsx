@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddIntraFlow, useUpdateTransaction, type AddIntraFlowInput } from '../../hooks/useMutations'
-import { useAccountCodesStore } from '../../store/accountCodesStore'
+import { useCategories } from '../../hooks/useCategories'
 import type { IntraFlowRow } from '../../hooks/useTransactions'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ interface Props {
 }
 
 export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Props) {
-  const { codes: accountCodes } = useAccountCodesStore()
+  const { categories } = useCategories()
   const isEdit = !!editRecord
 
   const addMutation    = useAddIntraFlow()
@@ -150,19 +150,19 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
 
         {/* From / To accounts */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="From Account *" error={errors.account_from?.message}>
+          <Field label="From Category *" error={errors.account_from?.message}>
             <select {...register('account_from')} className={inputCls(!!errors.account_from)}>
               <option value="">— Select —</option>
-              {accountCodes.map(a => (
-                <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </Field>
-          <Field label="To Account *" error={errors.account_to?.message}>
+          <Field label="To Category *" error={errors.account_to?.message}>
             <select {...register('account_to')} className={inputCls(!!errors.account_to)}>
               <option value="">— Select —</option>
-              {accountCodes.map(a => (
-                <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </Field>
@@ -191,16 +191,28 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Stage Codes (Optional)</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="From Stage 1" error={errors.account_from_stage1?.message}>
-              <input type="text" placeholder="Stage 1" {...register('account_from_stage1')} className={inputCls(!!errors.account_from_stage1)} />
+              <select {...register('account_from_stage1')} className={inputCls(!!errors.account_from_stage1)}>
+                <option value="">— Select —</option>
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
             </Field>
             <Field label="From Stage 2" error={errors.account_from_stage2?.message}>
-              <input type="text" placeholder="Stage 2" {...register('account_from_stage2')} className={inputCls(!!errors.account_from_stage2)} />
+              <select {...register('account_from_stage2')} className={inputCls(!!errors.account_from_stage2)}>
+                <option value="">— Select —</option>
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
             </Field>
             <Field label="To Stage 1" error={errors.account_to_stage1?.message}>
-              <input type="text" placeholder="Stage 1" {...register('account_to_stage1')} className={inputCls(!!errors.account_to_stage1)} />
+              <select {...register('account_to_stage1')} className={inputCls(!!errors.account_to_stage1)}>
+                <option value="">— Select —</option>
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
             </Field>
             <Field label="To Stage 2" error={errors.account_to_stage2?.message}>
-              <input type="text" placeholder="Stage 2" {...register('account_to_stage2')} className={inputCls(!!errors.account_to_stage2)} />
+              <select {...register('account_to_stage2')} className={inputCls(!!errors.account_to_stage2)}>
+                <option value="">— Select —</option>
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
             </Field>
           </div>
         </div>

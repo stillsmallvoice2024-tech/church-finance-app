@@ -10,7 +10,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { ImportModal } from '../components/modals/ImportModal'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
-import { useAccountCodesStore } from '../store/accountCodesStore'
+import { useCategories } from '../hooks/useCategories'
 import { useAddInflow, useAddOutflow } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
@@ -422,7 +422,7 @@ export default function Import() {
 // ── Manual Entry Form ──────────────────────────────────────────────────────────
 
 function ManualEntryForm() {
-  const { codes: accountCodes }                        = useAccountCodesStore()
+  const { categories }                                 = useCategories()
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
   const { configs, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
@@ -716,13 +716,14 @@ function ManualEntryForm() {
             <Field label="Stage Code 1">
               <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
                 <option value="">— Select —</option>
-                {accountCodes.map(a => (
-                  <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
-                ))}
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </Field>
             <Field label="Stage Code 2">
-              <input type="text" placeholder="Optional" value={v('stage_code_2')} onChange={e => set('stage_code_2', e.target.value)} className={iCls} />
+              <select value={v('stage_code_2')} onChange={e => set('stage_code_2', e.target.value)} className={iCls}>
+                <option value="">— Select —</option>
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
             </Field>
           </div>
 
@@ -810,9 +811,7 @@ function ManualEntryForm() {
           <Field label="Stage Code 1">
             <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
               <option value="">— Select —</option>
-              {accountCodes.map(a => (
-                <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
-              ))}
+              {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
           </Field>
 

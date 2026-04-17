@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
-import { useAccountCodesStore } from '../../store/accountCodesStore'
+import { useCategories } from '../../hooks/useCategories'
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../../utils/inflowTypes'
@@ -37,7 +37,7 @@ interface Props {
 
 export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
-  const { codes: accountCodes } = useAccountCodesStore()
+  const { categories } = useCategories()
 
   const addMutation    = useAddInflow()
   const updateMutation = useUpdateTransaction('inflow_transactions')
@@ -197,13 +197,18 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
             <select {...register('stage_code_1')} className={inputCls(!!errors.stage_code_1)}>
               <option value="">— Select —</option>
-              {accountCodes.map(a => (
-                <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </Field>
           <Field label="Stage Code 2" error={errors.stage_code_2?.message}>
-            <input type="text" placeholder="Optional" {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)} />
+            <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
+              <option value="">— Select —</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
           </Field>
         </div>
 

@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
-import { useAccountCodesStore } from '../../store/accountCodesStore'
+import { useCategories } from '../../hooks/useCategories'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ interface Props {
 }
 
 export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props) {
-  const { codes: accountCodes } = useAccountCodesStore()
+  const { categories } = useCategories()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
 
@@ -180,8 +180,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
           <select {...register('stage_code_1')} className={inputCls(!!errors.stage_code_1)}>
             <option value="">— Select —</option>
-            {accountCodes.map(a => (
-              <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.name}>{c.name}</option>
             ))}
           </select>
         </Field>
