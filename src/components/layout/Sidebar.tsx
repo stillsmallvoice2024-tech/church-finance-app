@@ -13,6 +13,7 @@ import {
   X,
   Upload,
   Clock,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 
@@ -32,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Intra-Account Flows', path: '/intra-flow', icon: ArrowLeftRight },
   { label: 'Import',              path: '/import',              icon: Upload },
   { label: 'Pending Deductions',  path: '/pending-deductions',  icon: Clock  },
+  { label: 'Setup',               path: '/setup',               icon: SlidersHorizontal },
   { label: 'Reports',             path: '/reports',             icon: BarChart3 },
   { label: 'Settings',            path: '/settings',            icon: Settings },
 ]

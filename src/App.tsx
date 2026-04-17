@@ -19,6 +19,7 @@ import Settings from './pages/Settings'
 import UserManagement from './pages/UserManagement'
 import Import from './pages/Import'
 import PendingDeductions from './pages/PendingDeductions'
+import Setup from './pages/Setup'
 
 export default function App() {
   useAuthListener()
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
             <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
             <Route path="pending-deductions" element={<ErrorBoundary><PendingDeductions /></ErrorBoundary>} />
+            <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
           </Route>
         </Route>
 
