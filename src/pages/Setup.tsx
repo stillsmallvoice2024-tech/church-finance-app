@@ -8,6 +8,7 @@ import { DeleteDialog }  from '../components/ui/DeleteDialog'
 import { useDeleteBank } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
 import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
+import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
 import { formatDate } from '../utils/formatters'
 
 const TABS = ['General', 'Banks', 'Allocation'] as const
@@ -194,7 +195,7 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
 
 // ── Allocation tab ─────────────────────────────────────────────────────────────
 
-function AllocationTab({ onNew }: { onNew: () => void }) {
+function AllocationTab({ onNew, onEdit }: { onNew: () => void; onEdit: (c: AllocationConfig) => void }) {
   const { configs, loading, error, fetch } = useAllocationStore()
 
   useEffect(() => { fetch() }, [fetch])
@@ -258,11 +259,12 @@ function AllocationTab({ onNew }: { onNew: () => void }) {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Effective From</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total %</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 w-12" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {configs.map(config => {
-                const total = config.rows.reduce((s, r) => s + r.percentage, 0)
+                const total    = config.rows.reduce((s, r) => s + r.percentage, 0)
                 const balanced = Math.abs(total - 100) < 0.01
                 return (
                   <tr key={config.id} className="hover:bg-gray-50 transition-colors">
@@ -272,6 +274,17 @@ function AllocationTab({ onNew }: { onNew: () => void }) {
                       {total.toFixed(1)}%
                     </td>
                     <td className="px-4 py-3">{statusBadge(config)}</td>
+                    <td className="px-4 py-3">
+                      {config.status === 'draft' && (
+                        <button
+                          onClick={() => onEdit(config)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -297,11 +310,18 @@ export default function SetupPage() {
   const [editBankRecord, setEditBankRecord] = useState<DbBank | null>(null)
   const [bankRefetch,    setBankRefetch]    = useState(0)
   const [deleteBankRecord, setDeleteBankRecord] = useState<DbBank | null>(null)
+  const [allocModalOpen,  setAllocModalOpen]  = useState(false)
+  const [editAllocRecord, setEditAllocRecord] = useState<AllocationConfig | null>(null)
+  const { reload: reloadAllocs } = useAllocationStore()
 
   const { push: toast } = useToastStore()
   const { mutate: deleteBank, loading: deletingBank } = useDeleteBank()
 
   usePageTitle('Setup')
+
+  const handleNewAlloc    = () => { setEditAllocRecord(null); setAllocModalOpen(true) }
+  const handleEditAlloc   = (c: AllocationConfig) => { setEditAllocRecord(c); setAllocModalOpen(true) }
+  const handleAllocSuccess = () => { reloadAllocs() }
 
   const handleAddBank     = () => { setEditBankRecord(null); setBankModalOpen(true) }
   const handleEditBank    = (bank: DbBank) => { setEditBankRecord(bank); setBankModalOpen(true) }
@@ -351,10 +371,16 @@ export default function SetupPage() {
         <div>
           {activeTab === 'General'    && <GeneralTab />}
           {activeTab === 'Banks'      && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Allocation' && <AllocationTab onNew={() => { /* form coming soon */ }} />}
+          {activeTab === 'Allocation' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} />}
         </div>
       </div>
 
+      <AllocationConfigModal
+        open={allocModalOpen}
+        onClose={() => { setAllocModalOpen(false); setEditAllocRecord(null) }}
+        onSuccess={handleAllocSuccess}
+        editRecord={editAllocRecord}
+      />
       <AddBankModal
         open={bankModalOpen}
         onClose={() => { setBankModalOpen(false); setEditBankRecord(null) }}
