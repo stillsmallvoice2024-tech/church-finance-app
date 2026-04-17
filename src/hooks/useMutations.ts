@@ -636,3 +636,25 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
+
+// ── useDeleteBank ──────────────────────────────────────────────────────────────
+
+export function useDeleteBank(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase.from('banks').delete().eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'DELETE', tableName: 'banks', recordId: id })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
