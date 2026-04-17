@@ -4,13 +4,12 @@ import {
 } from 'recharts'
 import {
   Search, Plus, Download, BookOpen, TrendingUp, TrendingDown,
-  Wallet, PlusCircle, ArrowUp, ArrowDown, Pencil, Trash2,
+  Wallet, PlusCircle, ArrowUp, ArrowDown, Pencil, Trash2, LockOpen,
 } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
 import { Badge }                    from '../components/ui/Badge'
 import { DeleteDialog }             from '../components/ui/DeleteDialog'
-import { CanWrite }                 from '../components/auth/RoleGates'
-import { AdminOnly }                from '../components/auth/RoleGates'
+import { Modal }                    from '../components/ui/Modal'
 import { AddAccountModal }          from '../components/modals/AddAccountModal'
 import { AddLedgerEntryModal }      from '../components/modals/AddLedgerEntryModal'
 import { useAccounts, useAccountLatestBalances, useLedgerEntries } from '../hooks/useLedger'
@@ -18,10 +17,10 @@ import { useYearRange } from '../hooks/useYearRange'
 import type { DbAccount }           from '../hooks/useLedger'
 import { useDeleteTransaction, useDeleteAccount } from '../hooks/useMutations'
 import { useToastStore }            from '../store/toastStore'
-import { useRole }                  from '../hooks/useRole'
 import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }                from '../utils/csvExport'
+import { supabase }                 from '../lib/supabase'
 
 // ── Category config ────────────────────────────────────────────────────────────
 
@@ -48,7 +47,50 @@ export default function AccountsPage() {
   const [balRefetch,        setBalRefetch]        = useState(0)
 
   const { push: toast }   = useToastStore()
-  const { canDelete } = useRole()
+
+  // ── Edit-mode password gate ────────────────────────────────────────────────
+  const [editUnlocked,     setEditUnlocked]     = useState(false)
+  const [passwordOpen,     setPasswordOpen]     = useState(false)
+  const [passwordInput,    setPasswordInput]    = useState('')
+  const [passwordError,    setPasswordError]    = useState<string | null>(null)
+  const [passwordChecking, setPasswordChecking] = useState(false)
+  const [pendingAction,    setPendingAction]    = useState<(() => void) | null>(null)
+
+  const withAuth = (action: () => void) => {
+    if (editUnlocked) { action(); return }
+    setPendingAction(() => action)
+    setPasswordOpen(true)
+  }
+
+  const closePasswordModal = () => {
+    setPasswordOpen(false)
+    setPasswordInput('')
+    setPasswordError(null)
+    setPendingAction(null)
+  }
+
+  const handlePasswordSubmit = async () => {
+    if (!passwordInput) return
+    setPasswordChecking(true)
+    setPasswordError(null)
+    try {
+      const { data, error } = await supabase.rpc('verify_edit_password', { input_password: passwordInput })
+      if (error) throw error
+      if (data === true) {
+        setEditUnlocked(true)
+        setPasswordOpen(false)
+        setPasswordInput('')
+        pendingAction?.()
+        setPendingAction(null)
+      } else {
+        setPasswordError('Incorrect password. Please try again.')
+      }
+    } catch (e: unknown) {
+      setPasswordError(e instanceof Error ? e.message : 'Verification failed')
+    } finally {
+      setPasswordChecking(false)
+    }
+  }
 
   usePageTitle('Accounts')
 
@@ -166,14 +208,23 @@ export default function AccountsPage() {
           <div className="px-4 pt-4 pb-3 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-700">Accounts</h2>
-              <CanWrite>
+              <div className="flex items-center gap-1.5">
+                {editUnlocked && (
+                  <button
+                    onClick={() => setEditUnlocked(false)}
+                    title="Click to lock"
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                  >
+                    <LockOpen className="w-3 h-3" /> Editing
+                  </button>
+                )}
                 <button
-                  onClick={() => setAddAccountOpen(true)}
+                  onClick={() => withAuth(() => setAddAccountOpen(true))}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add
                 </button>
-              </CanWrite>
+              </div>
             </div>
             {/* Search */}
             <div className="relative">
@@ -238,22 +289,20 @@ export default function AccountsPage() {
                           }`}>
                             {formatCurrencyCompact(bal)}
                           </span>
-                          <AdminOnly>
-                            <button
-                              onClick={e => { e.stopPropagation(); setEditAccountRecord(acct); setAddAccountOpen(true) }}
-                              className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-200 text-gray-500'}`}
-                              title="Edit account"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); setDeleteAccountId(acct.id) }}
-                              className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-red-50 text-danger'}`}
-                              title="Delete account"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </AdminOnly>
+                          <button
+                            onClick={e => { e.stopPropagation(); withAuth(() => { setEditAccountRecord(acct); setAddAccountOpen(true) }) }}
+                            className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-200 text-gray-500'}`}
+                            title="Edit account"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); withAuth(() => setDeleteAccountId(acct.id)) }}
+                            className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-red-50 text-danger'}`}
+                            title="Delete account"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
                     )
@@ -291,14 +340,12 @@ export default function AccountsPage() {
                     >
                       <Download className="w-3.5 h-3.5" /> Export CSV
                     </button>
-                    <CanWrite>
-                      <button
-                        onClick={() => setAddEntryOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" /> Add Entry
-                      </button>
-                    </CanWrite>
+                    <button
+                      onClick={() => withAuth(() => setAddEntryOpen(true))}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" /> Add Entry
+                    </button>
                   </div>
                 </div>
 
@@ -395,11 +442,9 @@ export default function AccountsPage() {
                               {formatCurrency(Number(e.balance))}
                             </td>
                             <td className="px-4 py-3">
-                              {canDelete() && (
-                                <button onClick={() => setDeleteLedgerId(e.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
-                                  <span className="text-xs font-medium">Del</span>
-                                </button>
-                              )}
+                              <button onClick={() => withAuth(() => setDeleteLedgerId(e.id))} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                                <span className="text-xs font-medium">Del</span>
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -453,6 +498,50 @@ export default function AccountsPage() {
         loading={deleting}
         label="this ledger entry"
       />
+
+      {/* ── Password gate ──────────────────────────────────────────────────── */}
+      <Modal open={passwordOpen} onClose={closePasswordModal} title="Edit Access" size="max-w-sm">
+        <form
+          onSubmit={e => { e.preventDefault(); handlePasswordSubmit() }}
+          className="space-y-4"
+        >
+          <p className="text-sm text-gray-600">
+            Enter the edit password to make changes to accounts and ledger entries.
+          </p>
+          <div className="space-y-1">
+            <input
+              type="password"
+              autoFocus
+              placeholder="Password"
+              value={passwordInput}
+              onChange={e => { setPasswordInput(e.target.value); setPasswordError(null) }}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            {passwordError && <p className="text-xs text-red-500">{passwordError}</p>}
+          </div>
+          <p className="text-xs text-gray-400">
+            Once unlocked, you can make multiple edits without re-entering the password.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={closePasswordModal}
+              disabled={passwordChecking}
+              className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={passwordChecking || !passwordInput}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-60"
+            >
+              {passwordChecking && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {passwordChecking ? 'Checking…' : 'Unlock'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </>
   )
 }
