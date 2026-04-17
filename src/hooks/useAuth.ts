@@ -4,7 +4,6 @@ import { useAuthStore } from '../store/authStore'
 import type { UserProfile } from '../types'
 
 // ── Internal helper ────────────────────────────────────────────────────────────
-// Called outside React render; uses getState() to avoid stale closures
 async function fetchAndSetProfile(userId: string): Promise<void> {
   const { setProfile } = useAuthStore.getState()
   const { data, error } = await supabase
@@ -18,32 +17,14 @@ async function fetchAndSetProfile(userId: string): Promise<void> {
   }
 }
 
-// ── useAuthListener ─────────────────────────────────────────────────────────
+// ── useAuthListener ────────────────────────────────────────────────────────────
 // Call ONCE at the root of the app (App.tsx).
-// Sets up the Supabase auth subscription and hydrates the store.
+// Relies solely on onAuthStateChange — including INITIAL_SESSION — so there is
+// no race condition with a parallel getSession() call.
 export function useAuthListener(): void {
   useEffect(() => {
     let mounted = true
 
-    // 1. Hydrate from existing session (page reload / tab focus)
-    const init = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!mounted) return
-
-      if (session?.user) {
-        useAuthStore.getState().setUser(session.user)
-        await fetchAndSetProfile(session.user.id)
-      }
-
-      useAuthStore.getState().setLoading(false)
-    }
-
-    init()
-
-    // 2. Subscribe to future changes (login, logout, token refresh)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -51,15 +32,18 @@ export function useAuthListener(): void {
 
       if (
         session?.user &&
-        (event === 'SIGNED_IN' ||
+        (event === 'INITIAL_SESSION' ||
+          event === 'SIGNED_IN' ||
           event === 'TOKEN_REFRESHED' ||
           event === 'USER_UPDATED')
       ) {
+        // Authenticated — hydrate the store
         useAuthStore.getState().setUser(session.user)
         await fetchAndSetProfile(session.user.id)
-        useAuthStore.getState().setLoading(false)
-      } else if (event === 'SIGNED_OUT') {
-        useAuthStore.getState().clearAuth()
+        if (mounted) useAuthStore.getState().setLoading(false)
+      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+        // No session on first load, or explicit sign-out
+        if (mounted) useAuthStore.getState().clearAuth()
       }
     })
 
@@ -70,15 +54,16 @@ export function useAuthListener(): void {
   }, []) // intentionally empty — runs once on mount
 }
 
-// ── useAuth ─────────────────────────────────────────────────────────────────
-// Read-only hook — safe to call in any component.
-// Returns auth state from the store plus a signOut helper.
+// ── useAuth ────────────────────────────────────────────────────────────────────
 export function useAuth() {
   const { user, profile, role, loading } = useAuthStore()
 
   const signOut = async (): Promise<void> => {
-    // Supabase fires SIGNED_OUT which clears the store via the listener
-    await supabase.auth.signOut()
+    // Clear the store immediately so AuthGuard redirects to /login right away,
+    // regardless of whether the Supabase network call succeeds.
+    useAuthStore.getState().clearAuth()
+    // Best-effort server-side session invalidation — errors are intentionally ignored.
+    await supabase.auth.signOut().catch(() => {})
   }
 
   return {
