@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
@@ -7,6 +7,8 @@ import {
 import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
+import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
+import { formatDate } from '../../utils/formatters'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -258,6 +260,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
   const config  = targetTable ? TABLE_CONFIG[targetTable] : null
   const preview = sheet?.rows.slice(0, 5) ?? []
 
+  // Allocation configs — load once so Step 4 and runImport can use them
+  const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: allocLoaded } = useAllocationStore()
+  useEffect(() => { if (!allocLoaded) fetchAllocConfigs() }, [allocLoaded, fetchAllocConfigs])
+
   // ── Reset on open/close ──────────────────────────────────────────────────
 
   const reset = useCallback(() => {
@@ -405,6 +411,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
     // Inject bank_id for inflow/outflow tables if a bank was selected
     if (bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions')) {
       for (const row of mappedRows) row.bank_id = bank.id
+    }
+
+    // Inject allocation_config_id per row based on the row's date
+    if (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') {
+      const { configs: latestConfigs } = useAllocationStore.getState()
+      for (const row of mappedRows) {
+        const date = row.date as string | undefined
+        if (date) {
+          const cfg = getConfigForDate(latestConfigs, date)
+          if (cfg) row.allocation_config_id = cfg.id
+        }
+      }
     }
 
     // Filter out rows whose transaction ID is in the skip list
@@ -669,6 +687,23 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
                 <span className="text-xs text-gray-400">will be applied to all {sheet.rowCount.toLocaleString()} rows</span>
               </div>
             )}
+            {/* Allocation config label */}
+            {(targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (() => {
+              const dateHeader = Object.keys(mapping).find(h => mapping[h] === 'date')
+              const dateColIdx = dateHeader !== undefined ? sheet.headers.indexOf(dateHeader) : -1
+              const firstDate  = dateColIdx >= 0 && sheet.rows[0] ? parseDate(sheet.rows[0][dateColIdx]) : null
+              const cfg        = firstDate ? getConfigForDate(allocConfigs, firstDate) : null
+              return cfg ? (
+                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-primary/5 border border-primary/20 text-primary">
+                  Using: <strong>{cfg.name}</strong> — effective {formatDate(cfg.start_date)}
+                  <span className="ml-auto text-gray-400">config applied per row date</span>
+                </div>
+              ) : firstDate ? (
+                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700">
+                  No allocation config found for {formatDate(firstDate)} — rows will be saved without an allocation
+                </div>
+              ) : null
+            })()}
 
             {/* First 3 rows preview mapped */}
             {sheet.rows.slice(0, 3).length > 0 && (
