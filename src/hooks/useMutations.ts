@@ -658,3 +658,73 @@ export function useDeleteBank(): MutationHook<string> {
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
+
+// ── useAddAllocationConfig ─────────────────────────────────────────────────────
+
+export interface AllocationRowInput {
+  category_name: string
+  percentage:    number
+}
+
+export interface AddAllocationConfigInput {
+  name:       string
+  start_date: string
+  rows:       AllocationRowInput[]
+}
+
+export function useAddAllocationConfig(): MutationHook<AddAllocationConfigInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: AddAllocationConfigInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('allocation_configs')
+        .insert({ name: input.name, start_date: input.start_date, status: 'draft', rows: input.rows })
+        .select('id').single()
+      if (err) throw err
+      if (!data?.id) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'allocation_configs', recordId: data.id, newData: input as unknown as Record<string, unknown> })
+      return data.id
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUpdateAllocationConfig ──────────────────────────────────────────────────
+
+export interface UpdateAllocationConfigInput {
+  id:         string
+  name:       string
+  start_date: string
+  rows:       AllocationRowInput[]
+}
+
+export function useUpdateAllocationConfig(): MutationHook<UpdateAllocationConfigInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateAllocationConfigInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('allocation_configs')
+        .update({ name: input.name, start_date: input.start_date, rows: input.rows })
+        .eq('id', input.id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: input.id, newData: input as unknown as Record<string, unknown> })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}

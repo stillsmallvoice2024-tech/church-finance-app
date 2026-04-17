@@ -45,6 +45,8 @@ interface AllocationState {
   error:    string | null
   loaded:   boolean
   fetch:    () => Promise<void>
+  /** Force a fresh fetch even if already loaded. */
+  reload:   () => Promise<void>
   /** Convenience wrapper around the exported getConfigForDate helper. */
   forDate:  (date: string) => AllocationConfig | null
 }
@@ -67,12 +69,13 @@ export const useAllocationStore = create<AllocationState>((set, get) => ({
     if (error) {
       set({ error: error.message, loading: false })
     } else {
-      set({
-        configs: (data ?? []) as AllocationConfig[],
-        loading: false,
-        loaded:  true,
-      })
+      set({ configs: (data ?? []) as AllocationConfig[], loading: false, loaded: true })
     }
+  },
+
+  reload: async () => {
+    set({ loaded: false })
+    await get().fetch()
   },
 
   forDate: (date) => getConfigForDate(get().configs, date),
