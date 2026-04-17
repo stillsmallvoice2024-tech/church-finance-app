@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, FileEdit } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
@@ -9,6 +9,11 @@ import { useDeleteBank } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
 import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
 import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
+import {
+  useLockAllocationConfig,
+  useUnlockAllocationConfig,
+} from '../hooks/useMutations'
+import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 
 const TABS = ['General', 'Banks', 'Allocation'] as const
@@ -195,7 +200,12 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
 
 // ── Allocation tab ─────────────────────────────────────────────────────────────
 
-function AllocationTab({ onNew, onEdit }: { onNew: () => void; onEdit: (c: AllocationConfig) => void }) {
+function AllocationTab({ onNew, onEdit, onLock, onEditLocked }: {
+  onNew:       () => void
+  onEdit:      (c: AllocationConfig) => void
+  onLock:      (c: AllocationConfig) => void
+  onEditLocked:(c: AllocationConfig) => void
+}) {
   const { configs, loading, error, fetch } = useAllocationStore()
 
   useEffect(() => { fetch() }, [fetch])
@@ -259,7 +269,7 @@ function AllocationTab({ onNew, onEdit }: { onNew: () => void; onEdit: (c: Alloc
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Effective From</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total %</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 w-12" />
+                <th className="px-4 py-3 w-28" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -275,15 +285,34 @@ function AllocationTab({ onNew, onEdit }: { onNew: () => void; onEdit: (c: Alloc
                     </td>
                     <td className="px-4 py-3">{statusBadge(config)}</td>
                     <td className="px-4 py-3">
-                      {config.status === 'draft' && (
-                        <button
-                          onClick={() => onEdit(config)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-1">
+                        {config.status === 'draft' ? (
+                          <>
+                            <button
+                              onClick={() => onLock(config)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                              title="Approve & Lock"
+                            >
+                              <Lock className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => onEdit(config)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => onEditLocked(config)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                            title="Edit locked config"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -312,16 +341,64 @@ export default function SetupPage() {
   const [deleteBankRecord, setDeleteBankRecord] = useState<DbBank | null>(null)
   const [allocModalOpen,  setAllocModalOpen]  = useState(false)
   const [editAllocRecord, setEditAllocRecord] = useState<AllocationConfig | null>(null)
-  const { reload: reloadAllocs } = useAllocationStore()
+  const [lockTarget,      setLockTarget]      = useState<AllocationConfig | null>(null)
+  const [editLockedTarget, setEditLockedTarget] = useState<AllocationConfig | null>(null)
+  const { configs, reload: reloadAllocs } = useAllocationStore()
 
   const { push: toast } = useToastStore()
   const { mutate: deleteBank, loading: deletingBank } = useDeleteBank()
+  const { mutate: lockConfig,   loading: locking   } = useLockAllocationConfig()
+  const { mutate: unlockConfig, loading: unlocking } = useUnlockAllocationConfig()
 
   usePageTitle('Setup')
 
   const handleNewAlloc    = () => { setEditAllocRecord(null); setAllocModalOpen(true) }
   const handleEditAlloc   = (c: AllocationConfig) => { setEditAllocRecord(c); setAllocModalOpen(true) }
   const handleAllocSuccess = () => { reloadAllocs() }
+
+  const handleLock       = (c: AllocationConfig) => setLockTarget(c)
+  const handleEditLocked = (c: AllocationConfig) => setEditLockedTarget(c)
+
+  const confirmLock = async () => {
+    if (!lockTarget) return
+    try {
+      await lockConfig(lockTarget.id)
+      toast(`"${lockTarget.name}" approved and locked`, 'success')
+      setLockTarget(null)
+      reloadAllocs()
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Lock failed', 'error')
+    }
+  }
+
+  const handleUnlockAndEdit = async () => {
+    if (!editLockedTarget) return
+    try {
+      await unlockConfig(editLockedTarget.id)
+      toast(`"${editLockedTarget.name}" unlocked`, 'success')
+      const target = editLockedTarget
+      setEditLockedTarget(null)
+      setEditAllocRecord(target)
+      setAllocModalOpen(true)
+      reloadAllocs()
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Unlock failed', 'error')
+    }
+  }
+
+  const handleCreateCopy = () => {
+    if (!editLockedTarget) return
+    const source = editLockedTarget
+    setEditLockedTarget(null)
+    setEditAllocRecord({
+      ...source,
+      id:         '',
+      name:       `${source.name} (copy)`,
+      status:     'draft',
+      created_at: '',
+    })
+    setAllocModalOpen(true)
+  }
 
   const handleAddBank     = () => { setEditBankRecord(null); setBankModalOpen(true) }
   const handleEditBank    = (bank: DbBank) => { setEditBankRecord(bank); setBankModalOpen(true) }
@@ -371,7 +448,7 @@ export default function SetupPage() {
         <div>
           {activeTab === 'General'    && <GeneralTab />}
           {activeTab === 'Banks'      && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Allocation' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} />}
+          {activeTab === 'Allocation' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} />}
         </div>
       </div>
 
@@ -380,7 +457,85 @@ export default function SetupPage() {
         onClose={() => { setAllocModalOpen(false); setEditAllocRecord(null) }}
         onSuccess={handleAllocSuccess}
         editRecord={editAllocRecord}
+        existingConfigs={configs}
       />
+
+      {/* Lock confirmation dialog */}
+      <Modal
+        open={!!lockTarget}
+        onClose={() => setLockTarget(null)}
+        title="Approve & Lock Configuration"
+        size="max-w-sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Lock <span className="font-semibold">"{lockTarget?.name}"</span>? Locked configurations are read-only and cannot be edited directly.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setLockTarget(null)}
+              disabled={locking}
+              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmLock}
+              disabled={locking}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60"
+            >
+              {locking && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              Approve & Lock
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit-locked choice dialog */}
+      <Modal
+        open={!!editLockedTarget}
+        onClose={() => setEditLockedTarget(null)}
+        title="Edit Locked Configuration"
+        size="max-w-sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            <span className="font-semibold">"{editLockedTarget?.name}"</span> is locked. How would you like to proceed?
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={handleUnlockAndEdit}
+              disabled={unlocking}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-60"
+            >
+              <LockOpen className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Unlock &amp; Edit</p>
+                <p className="text-xs text-gray-500">Reverts status to draft so you can make changes.</p>
+              </div>
+              {unlocking && <span className="ml-auto w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />}
+            </button>
+            <button
+              onClick={handleCreateCopy}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Copy className="w-5 h-5 text-gray-500 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Create a Copy</p>
+                <p className="text-xs text-gray-500">Opens a new draft pre-filled with this config's data.</p>
+              </div>
+            </button>
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={() => setEditLockedTarget(null)}
+              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
       <AddBankModal
         open={bankModalOpen}
         onClose={() => { setBankModalOpen(false); setEditBankRecord(null) }}

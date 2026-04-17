@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useForm, useFieldArray, useWatch } from 'react-hook-form'
+import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, Trash2 } from 'lucide-react'
@@ -24,15 +24,16 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 interface Props {
-  open:        boolean
-  onClose:     () => void
-  onSuccess?:  () => void
-  editRecord?: AllocationConfig | null
+  open:            boolean
+  onClose:         () => void
+  onSuccess?:      () => void
+  editRecord?:     AllocationConfig | null
+  existingConfigs?: AllocationConfig[]
 }
 
 // ── Live total strip ───────────────────────────────────────────────────────────
 
-function TotalStrip({ control }: { control: ReturnType<typeof useForm<FormValues>>['control'] }) {
+function TotalStrip({ control }: { control: Control<FormValues> }) {
   const rows  = useWatch({ control, name: 'rows' }) ?? []
   const total = rows.reduce((s, r) => s + Number(r?.percentage || 0), 0)
   const diff  = 100 - total
@@ -59,8 +60,8 @@ function TotalStrip({ control }: { control: ReturnType<typeof useForm<FormValues
 
 // ── Modal ──────────────────────────────────────────────────────────────────────
 
-export function AllocationConfigModal({ open, onClose, onSuccess, editRecord }: Props) {
-  const isEdit = !!editRecord
+export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, existingConfigs = [] }: Props) {
+  const isEdit = !!editRecord?.id
 
   const addMutation    = useAddAllocationConfig()
   const updateMutation = useUpdateAllocationConfig()
@@ -75,6 +76,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord }: 
     register,
     control,
     handleSubmit,
+    setError,
     formState: { errors },
     reset: resetForm,
   } = useForm<FormValues>({
@@ -102,6 +104,13 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord }: 
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
   const onSubmit = async (values: FormValues) => {
+    const clash = existingConfigs.find(
+      c => c.start_date === values.start_date && c.id !== editRecord?.id,
+    )
+    if (clash) {
+      setError('start_date', { message: `Another configuration ("${clash.name}") already uses this date.` })
+      return
+    }
     try {
       if (isEdit && editRecord) {
         await update({ id: editRecord.id, ...values })
