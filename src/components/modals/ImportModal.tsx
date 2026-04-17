@@ -219,6 +219,7 @@ interface Props {
   open:         boolean
   onClose:      () => void
   skipTxnIds?:  Set<string>   // when set, rows matching these IDs are skipped at import
+  bank?:        { id: string; name: string } | null
 }
 
 interface ImportResult {
@@ -227,7 +228,7 @@ interface ImportResult {
   errors:   string[]
 }
 
-export function ImportModal({ open, onClose, skipTxnIds }: Props) {
+export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
 
@@ -401,6 +402,11 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
       mappedRows.push(row)
     }
 
+    // Inject bank_id for inflow/outflow tables if a bank was selected
+    if (bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions')) {
+      for (const row of mappedRows) row.bank_id = bank.id
+    }
+
     // Filter out rows whose transaction ID is in the skip list
     let rowsToInsert = mappedRows
     if (skipTxnIds && skipTxnIds.size > 0) {
@@ -437,7 +443,7 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
 
     setResult({ imported, skipped, errors })
     setImporting(false)
-  }, [sheet, config, targetTable, mapping, user, skipTxnIds])
+  }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -654,6 +660,15 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                 <div className="text-xs text-gray-500 mt-0.5">Target table</div>
               </div>
             </div>
+            {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="text-xs font-medium text-gray-500">Bank</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+                  {bank.name}
+                </span>
+                <span className="text-xs text-gray-400">will be applied to all {sheet.rowCount.toLocaleString()} rows</span>
+              </div>
+            )}
 
             {/* First 3 rows preview mapped */}
             {sheet.rows.slice(0, 3).length > 0 && (
@@ -670,6 +685,9 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                               {f.label}
                             </th>
                           ))}
+                        {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                          <th className="px-3 py-2 text-left font-semibold text-primary whitespace-nowrap">Bank</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -687,6 +705,13 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                                 </td>
                               )
                             })}
+                          {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                                {bank.name}
+                              </span>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -727,6 +752,14 @@ export function ImportModal({ open, onClose, skipTxnIds }: Props) {
                 <div className="text-sm space-y-1">
                   <div className="text-success">✓ {result.imported.toLocaleString()} rows imported</div>
                   {result.skipped > 0 && <div className="text-amber-600">⚠ {result.skipped} rows skipped</div>}
+                  {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                    <div className="flex items-center gap-1.5 text-gray-600 pt-1">
+                      <span className="text-xs">Bank:</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+                        {bank.name}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
