@@ -190,28 +190,32 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
         <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Stage Codes (Optional)</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="From Stage 1" error={errors.account_from_stage1?.message}>
+            <Field label="From Stage 1 (Category)" error={errors.account_from_stage1?.message}>
               <select {...register('account_from_stage1')} className={inputCls(!!errors.account_from_stage1)}>
                 <option value="">— Select —</option>
                 {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </Field>
-            <Field label="From Stage 2" error={errors.account_from_stage2?.message}>
+            <Field label="From Stage 2 (Portion)" error={errors.account_from_stage2?.message}>
               <select {...register('account_from_stage2')} className={inputCls(!!errors.account_from_stage2)}>
                 <option value="">— Select —</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                <option value="Percentage Allocation">Percentage Allocation</option>
+                <option value="Specific Seed">Specific Seed</option>
+                <option value="Savings">Savings</option>
               </select>
             </Field>
-            <Field label="To Stage 1" error={errors.account_to_stage1?.message}>
+            <Field label="To Stage 1 (Category)" error={errors.account_to_stage1?.message}>
               <select {...register('account_to_stage1')} className={inputCls(!!errors.account_to_stage1)}>
                 <option value="">— Select —</option>
                 {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </Field>
-            <Field label="To Stage 2" error={errors.account_to_stage2?.message}>
+            <Field label="To Stage 2 (Portion)" error={errors.account_to_stage2?.message}>
               <select {...register('account_to_stage2')} className={inputCls(!!errors.account_to_stage2)}>
                 <option value="">— Select —</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                <option value="Percentage Allocation">Percentage Allocation</option>
+                <option value="Specific Seed">Specific Seed</option>
+                <option value="Savings">Savings</option>
               </select>
             </Field>
           </div>

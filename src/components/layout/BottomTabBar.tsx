@@ -4,6 +4,7 @@ import {
   LayoutDashboard, TrendingUp, TrendingDown, Layers,
   Target, Globe, ArrowLeftRight, BarChart3,
   Settings, Users, MoreHorizontal, X,
+  Percent, Gift, Archive,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 
@@ -15,11 +16,14 @@ const PRIMARY_TABS = [
 ]
 
 const MORE_ITEMS = [
-  { label: 'Special Projects',    path: '/special-projects',  icon: Target        },
-  { label: 'Foreign Currency',    path: '/foreign-currency',  icon: Globe         },
-  { label: 'Intra-Account Flows', path: '/intra-flow',        icon: ArrowLeftRight},
-  { label: 'Reports',             path: '/reports',           icon: BarChart3     },
-  { label: 'Settings',            path: '/settings',          icon: Settings      },
+  { label: 'Special Projects',      path: '/special-projects',      icon: Target         },
+  { label: 'Foreign Currency',      path: '/foreign-currency',      icon: Globe          },
+  { label: 'Intra-Account Flows',   path: '/intra-flow',            icon: ArrowLeftRight },
+  { label: '% Allocations',         path: '/percentage-allocations',icon: Percent        },
+  { label: 'Specific Givings',      path: '/specific-givings',      icon: Gift           },
+  { label: 'Savings Portions',      path: '/savings-portions',      icon: Archive        },
+  { label: 'Reports',               path: '/reports',               icon: BarChart3      },
+  { label: 'Settings',              path: '/settings',              icon: Settings       },
 ]
 
 const ADMIN_MORE = [

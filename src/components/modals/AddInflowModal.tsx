@@ -202,12 +202,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
               ))}
             </select>
           </Field>
-          <Field label="Stage Code 2" error={errors.stage_code_2?.message}>
+          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}>
             <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
               <option value="">— Select —</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
+              <option value="Percentage Allocation">Percentage Allocation</option>
+              <option value="Specific Seed">Specific Seed</option>
+              <option value="Savings">Savings</option>
             </select>
           </Field>
         </div>

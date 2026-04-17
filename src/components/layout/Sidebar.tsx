@@ -14,6 +14,9 @@ import {
   Upload,
   Clock,
   SlidersHorizontal,
+  Percent,
+  Gift,
+  Archive,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -25,18 +28,24 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { label: 'Inflows', path: '/inflows', icon: TrendingUp },
-  { label: 'Outflows', path: '/outflows', icon: TrendingDown },
-  { label: 'Categories', path: '/categories', icon: Layers },
-  { label: 'Special Projects', path: '/special-projects', icon: Target },
-  { label: 'Foreign Currency', path: '/foreign-currency', icon: Globe },
-  { label: 'Intra-Account Flows', path: '/intra-flow', icon: ArrowLeftRight },
-  { label: 'Import',              path: '/import',              icon: Upload },
-  { label: 'Pending Deductions',  path: '/pending-deductions',  icon: Clock  },
-  { label: 'Setup',               path: '/setup',               icon: SlidersHorizontal },
-  { label: 'Reports',             path: '/reports',             icon: BarChart3 },
-  { label: 'Settings',            path: '/settings',            icon: Settings },
+  { label: 'Dashboard',             path: '/',                      icon: LayoutDashboard  },
+  { label: 'Inflows',               path: '/inflows',               icon: TrendingUp       },
+  { label: 'Outflows',              path: '/outflows',              icon: TrendingDown     },
+  { label: 'Categories',            path: '/categories',            icon: Layers           },
+  { label: 'Special Projects',      path: '/special-projects',      icon: Target           },
+  { label: 'Foreign Currency',      path: '/foreign-currency',      icon: Globe            },
+  { label: 'Intra-Account Flows',   path: '/intra-flow',            icon: ArrowLeftRight   },
+  { label: 'Import',                path: '/import',                icon: Upload           },
+  { label: 'Pending Deductions',    path: '/pending-deductions',    icon: Clock            },
+  { label: 'Setup',                 path: '/setup',                 icon: SlidersHorizontal},
+  { label: 'Reports',               path: '/reports',               icon: BarChart3        },
+  { label: 'Settings',              path: '/settings',              icon: Settings         },
+]
+
+const BUDGET_NAV_ITEMS: NavItem[] = [
+  { label: 'Percentage Allocations', path: '/percentage-allocations', icon: Percent },
+  { label: 'Specific Givings',       path: '/specific-givings',       icon: Gift    },
+  { label: 'Savings Portions',       path: '/savings-portions',       icon: Archive },
 ]
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
@@ -119,6 +128,30 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               key={path}
               to={path}
               end={path === '/'}
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-white/15 text-white border-l-2 border-accent pl-[10px]'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span className="truncate">{label}</span>
+            </NavLink>
+          ))}
+
+          {/* Budget section */}
+          <div className="pt-4 pb-1">
+            <p className="px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
+              Budget Portions
+            </p>
+          </div>
+          {BUDGET_NAV_ITEMS.map(({ label, path, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
               onClick={onClose}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${

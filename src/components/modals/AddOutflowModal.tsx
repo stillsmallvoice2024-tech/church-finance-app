@@ -21,6 +21,7 @@ const schema = z.object({
   bank_description: z.string().optional(),
   transaction_id:   z.string().optional(),
   stage_code_1:     z.string().optional(),
+  stage_code_2:     z.string().optional(),
   amount_refunded:  optNum,
   transfer_charge:  optNum,
   remarks:          z.string().optional(),
@@ -71,6 +72,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         bank_description: editRecord.bank_description  ?? '',
         transaction_id:   editRecord.transaction_id    ?? '',
         stage_code_1:     editRecord.stage_code_1      ?? '',
+        stage_code_2:     editRecord.stage_code_2      ?? '',
         amount_refunded:  editRecord.amount_refunded   ?? '',
         transfer_charge:  editRecord.transfer_charge   ?? '',
         remarks:          editRecord.remarks           ?? '',
@@ -93,6 +95,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             bank_description:      values.bank_description || null,
             transaction_id:        values.transaction_id   || null,
             stage_code_1:          values.stage_code_1     || null,
+            stage_code_2:          values.stage_code_2     || null,
             amount_refunded:       values.amount_refunded  ?? null,
             transfer_charge:       values.transfer_charge  ?? null,
             remarks:               values.remarks          || null,
@@ -108,6 +111,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           bank_description:      values.bank_description || undefined,
           transaction_id:        values.transaction_id   || undefined,
           stage_code_1:          values.stage_code_1     || undefined,
+          stage_code_2:          values.stage_code_2     || undefined,
           amount_refunded:       typeof values.amount_refunded === 'number' ? values.amount_refunded : undefined,
           transfer_charge:       typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
           remarks:               values.remarks          || undefined,
@@ -176,15 +180,25 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           </Field>
         </div>
 
-        {/* Stage Code 1 */}
-        <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
-          <select {...register('stage_code_1')} className={inputCls(!!errors.stage_code_1)}>
-            <option value="">— Select —</option>
-            {categories.map(c => (
-              <option key={c.id} value={c.name}>{c.name}</option>
-            ))}
-          </select>
-        </Field>
+        {/* Stage Code 1 + 2 */}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
+            <select {...register('stage_code_1')} className={inputCls(!!errors.stage_code_1)}>
+              <option value="">— Select —</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}>
+            <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
+              <option value="">— Select —</option>
+              <option value="Percentage Allocation">Percentage Allocation</option>
+              <option value="Specific Seed">Specific Seed</option>
+              <option value="Savings">Savings</option>
+            </select>
+          </Field>
+        </div>
 
         {/* Pending Deduction */}
         <label className="flex items-center gap-3 cursor-pointer select-none">

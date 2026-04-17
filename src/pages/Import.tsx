@@ -539,6 +539,7 @@ function ManualEntryForm() {
         bank_description:     v('bank_description') || undefined,
         transaction_id:       v('transaction_id')   || undefined,
         stage_code_1:         v('stage_code_1')     || undefined,
+        stage_code_2:         v('stage_code_2')     || undefined,
         amount_refunded:      v('amount_refunded')  ? parseFloat(v('amount_refunded'))  : undefined,
         transfer_charge:      v('transfer_charge')  ? parseFloat(v('transfer_charge'))  : undefined,
         is_pending_deduction: isPending,
@@ -719,10 +720,12 @@ function ManualEntryForm() {
                 {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </Field>
-            <Field label="Stage Code 2">
+            <Field label="Stage Code 2 (Portion Type)">
               <select value={v('stage_code_2')} onChange={e => set('stage_code_2', e.target.value)} className={iCls}>
                 <option value="">— Select —</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                <option value="Percentage Allocation">Percentage Allocation</option>
+                <option value="Specific Seed">Specific Seed</option>
+                <option value="Savings">Savings</option>
               </select>
             </Field>
           </div>
@@ -807,13 +810,23 @@ function ManualEntryForm() {
             </Field>
           </div>
 
-          {/* Stage Code 1 */}
-          <Field label="Stage Code 1">
-            <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
-              <option value="">— Select —</option>
-              {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-            </select>
-          </Field>
+          {/* Stage Code 1 + 2 */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Stage Code 1">
+              <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
+                <option value="">— Select —</option>
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Stage Code 2 (Portion Type)">
+              <select value={v('stage_code_2')} onChange={e => set('stage_code_2', e.target.value)} className={iCls}>
+                <option value="">— Select —</option>
+                <option value="Percentage Allocation">Percentage Allocation</option>
+                <option value="Specific Seed">Specific Seed</option>
+                <option value="Savings">Savings</option>
+              </select>
+            </Field>
+          </div>
 
           {/* Pending Deduction */}
           <label className="flex items-center gap-3 cursor-pointer select-none">
