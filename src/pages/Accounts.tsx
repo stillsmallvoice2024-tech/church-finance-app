@@ -52,7 +52,7 @@ export default function AccountsPage() {
   usePageTitle('Accounts')
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  const { accounts, loading: acctLoading, refetch: refetchAccounts } = useAccounts()
+  const { accounts, loading: acctLoading, error: acctError, refetch: refetchAccounts } = useAccounts()
   const { balances }                                                  = useAccountLatestBalances(balRefetch)
 
   const selectedAccount = useMemo(
@@ -164,14 +164,14 @@ export default function AccountsPage() {
           <div className="px-4 pt-4 pb-3 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-700">Accounts</h2>
-              <AdminOnly>
+              <CanWrite>
                 <button
                   onClick={() => setAddAccountOpen(true)}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add
                 </button>
-              </AdminOnly>
+              </CanWrite>
             </div>
             {/* Search */}
             <div className="relative">
@@ -193,6 +193,10 @@ export default function AccountsPage() {
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
                 ))}
+              </div>
+            ) : acctError ? (
+              <div className="mx-4 mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                {acctError}
               </div>
             ) : grouped.length === 0 ? (
               <p className="text-center text-sm text-gray-400 mt-8">No accounts found.</p>
