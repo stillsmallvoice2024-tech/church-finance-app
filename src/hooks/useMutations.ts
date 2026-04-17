@@ -728,3 +728,49 @@ export function useUpdateAllocationConfig(): MutationHook<UpdateAllocationConfig
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
+
+// ── useLockAllocationConfig ────────────────────────────────────────────────────
+
+export function useLockAllocationConfig(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('allocation_configs').update({ status: 'locked' }).eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: id, newData: { status: 'locked' } })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUnlockAllocationConfig ──────────────────────────────────────────────────
+
+export function useUnlockAllocationConfig(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('allocation_configs').update({ status: 'draft' }).eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: id, newData: { status: 'draft' } })
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
