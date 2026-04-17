@@ -17,6 +17,7 @@ import {
   Percent,
   Gift,
   Archive,
+  LayoutList,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -43,9 +44,10 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 const BUDGET_NAV_ITEMS: NavItem[] = [
-  { label: 'Percentage Allocations', path: '/percentage-allocations', icon: Percent },
-  { label: 'Specific Givings',       path: '/specific-givings',       icon: Gift    },
-  { label: 'Savings Portions',       path: '/savings-portions',       icon: Archive },
+  { label: 'Category Ledger',        path: '/category-ledger',        icon: LayoutList },
+  { label: 'Percentage Allocations', path: '/percentage-allocations', icon: Percent    },
+  { label: 'Specific Givings',       path: '/specific-givings',       icon: Gift       },
+  { label: 'Savings Portions',       path: '/savings-portions',       icon: Archive    },
 ]
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
