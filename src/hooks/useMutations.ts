@@ -49,6 +49,7 @@ export interface AddInflowInput {
   amount: number
   inflow_type?: InflowType
   description?: string
+  bank_id?: string
   stage_code_1?: string
   stage_code_2?: string
   stage_code_3?: string
@@ -62,6 +63,7 @@ export interface AddOutflowInput {
   amount_disbursed: number
   is_pending_deduction?: boolean
   description?: string
+  bank_id?: string
   bank_description?: string
   transaction_id?: string
   amount_refunded?: number

@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertTriangle, Loader2, X,
   TrendingUp, TrendingDown,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ImportModal } from '../components/modals/ImportModal'
 import { Modal } from '../components/ui/Modal'
@@ -12,6 +13,7 @@ import { supabase } from '../lib/supabase'
 import { useAccountCodesStore } from '../store/accountCodesStore'
 import { useAddInflow, useAddOutflow } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
+import { useBanks } from '../hooks/useBanks'
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../utils/inflowTypes'
@@ -389,8 +391,9 @@ export default function Import() {
 // ── Manual Entry Form ──────────────────────────────────────────────────────────
 
 function ManualEntryForm() {
-  const { codes: accountCodes } = useAccountCodesStore()
-  const { push: toast }         = useToastStore()
+  const { codes: accountCodes }       = useAccountCodesStore()
+  const { push: toast }               = useToastStore()
+  const { banks, loading: banksLoading } = useBanks()
   const addInflow  = useAddInflow()
   const addOutflow = useAddOutflow()
 
@@ -468,6 +471,7 @@ function ManualEntryForm() {
         amount:                     parseFloat(v('amount')),
         inflow_type:                inflowType,
         description:                v('description')               || undefined,
+        bank_id:                    v('bank_id')                   || undefined,
         stage_code_1:               v('stage_code_1')              || undefined,
         stage_code_2:               v('stage_code_2')              || undefined,
         transaction_ref:            v('transaction_ref')           || undefined,
@@ -495,6 +499,7 @@ function ManualEntryForm() {
         date:                 v('date'),
         amount_disbursed:     parseFloat(v('amount_disbursed')),
         description:          v('description')      || undefined,
+        bank_id:              v('bank_id')          || undefined,
         bank_description:     v('bank_description') || undefined,
         transaction_id:       v('transaction_id')   || undefined,
         stage_code_1:         v('stage_code_1')     || undefined,
@@ -612,6 +617,28 @@ function ManualEntryForm() {
             <input type="text" placeholder="e.g. Sunday offering" value={v('description')} onChange={e => set('description', e.target.value)} className={iCls} />
           </Field>
 
+          {/* Bank */}
+          <Field label="Bank">
+            {!banksLoading && banks.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1">
+                No banks configured.{' '}
+                <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
+              </p>
+            ) : (
+              <select
+                value={v('bank_id')}
+                onChange={e => set('bank_id', e.target.value)}
+                disabled={banksLoading}
+                className={iCls}
+              >
+                <option value="">— None —</option>
+                {banks.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
+          </Field>
+
           {/* Inflow Type */}
           <Field label="Inflow Type">
             <div className="grid grid-cols-3 gap-1.5">
@@ -695,6 +722,28 @@ function ManualEntryForm() {
           {/* Description */}
           <Field label="Description">
             <input type="text" placeholder="e.g. Generator fuel purchase" value={v('description')} onChange={e => set('description', e.target.value)} className={iCls} />
+          </Field>
+
+          {/* Bank */}
+          <Field label="Bank">
+            {!banksLoading && banks.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1">
+                No banks configured.{' '}
+                <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
+              </p>
+            ) : (
+              <select
+                value={v('bank_id')}
+                onChange={e => set('bank_id', e.target.value)}
+                disabled={banksLoading}
+                className={iCls}
+              >
+                <option value="">— None —</option>
+                {banks.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
           </Field>
 
           {/* Bank Desc + Txn ID */}
