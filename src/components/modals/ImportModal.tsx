@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
-  CheckCircle2, AlertTriangle, RefreshCw,
+  CheckCircle2, AlertTriangle, RefreshCw, FileText,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
@@ -218,10 +218,11 @@ function StepDots({ step }: { step: number }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
-  open:         boolean
-  onClose:      () => void
-  skipTxnIds?:  Set<string>   // when set, rows matching these IDs are skipped at import
-  bank?:        { id: string; name: string } | null
+  open:            boolean
+  onClose:         () => void
+  skipTxnIds?:     Set<string>
+  bank?:           { id: string; name: string } | null
+  preloadedFile?:  File | null
 }
 
 interface ImportResult {
@@ -230,16 +231,17 @@ interface ImportResult {
   errors:   string[]
 }
 
-export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
+export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
 
   // Step state
-  const [step,    setStep]   = useState(1)
+  const [step,     setStep]    = useState(1)
   const [dragging, setDragging] = useState(false)
+  const [parsing,  setParsing] = useState(false)
 
   // Step 1
-  const [sheets,  setSheets]  = useState<ParsedSheet[]>([])
+  const [sheets,   setSheets]   = useState<ParsedSheet[]>([])
   const [parseErr, setParseErr] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>('')
 
@@ -277,43 +279,56 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
     setProgress(0)
     setResult(null)
     setImporting(false)
+    setParsing(false)
   }, [])
 
   const handleClose = () => { reset(); onClose() }
 
   // ── File parsing ─────────────────────────────────────────────────────────
 
-  const parseFile = useCallback((file: File) => {
+  const parseFile = useCallback(async (file: File) => {
     setParseErr(null)
-    if (!file.name.match(/\.(xlsx|xls)$/i)) {
-      setParseErr('Only .xlsx and .xls files are supported.')
-      return
-    }
+    setParsing(true)
     setFileName(file.name)
-    const reader = new FileReader()
-    reader.onload = e => {
-      try {
-        const data = e.target?.result
-        if (!data) throw new Error('Could not read file')
-        const wb = XLSX.read(data, { type: 'array', cellDates: false })
-        const parsed: ParsedSheet[] = wb.SheetNames.map(name => {
-          const ws   = wb.Sheets[name]
-          const rows = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
-          const headers = (rows[0] ?? []).map(h => String(h ?? '').trim())
+    try {
+      let parsed: ParsedSheet[]
+
+      if (file.name.match(/\.pdf$/i)) {
+        const { parsePDF } = await import('../../utils/pdfParser')
+        parsed = await parsePDF(file)
+        if (parsed.length === 0) throw new Error('No tabular data detected in this PDF. Ensure it contains a statement table.')
+      } else if (file.name.match(/\.(xlsx|xls)$/i)) {
+        const data = await file.arrayBuffer()
+        const wb   = XLSX.read(data, { type: 'array', cellDates: false })
+        parsed = wb.SheetNames.map(name => {
+          const ws      = wb.Sheets[name]
+          const rows    = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
+          const headers  = (rows[0] ?? []).map(h => String(h ?? '').trim())
           const dataRows = rows.slice(1).filter(r => r.some(c => c !== '' && c != null))
           return { name, headers, rows: dataRows, rowCount: dataRows.length }
         })
-        setSheets(parsed)
-        if (parsed.length > 0) {
-          setSelectedSheet(parsed[0].name)
-          setStep(2)
-        }
-      } catch (err) {
-        setParseErr(err instanceof Error ? err.message : 'Failed to parse file')
+      } else {
+        throw new Error('Only .xlsx, .xls, and .pdf files are supported.')
       }
+
+      setSheets(parsed)
+      if (parsed.length > 0) {
+        setSelectedSheet(parsed[0].name)
+        setStep(2)
+      }
+    } catch (err) {
+      setParseErr(err instanceof Error ? err.message : 'Failed to parse file')
+    } finally {
+      setParsing(false)
     }
-    reader.readAsArrayBuffer(file)
   }, [])
+
+  // Auto-parse pre-loaded file when modal opens — skips the upload step
+  useEffect(() => {
+    if (open && preloadedFile && sheets.length === 0 && !parsing) {
+      parseFile(preloadedFile)
+    }
+  }, [open, preloadedFile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -466,7 +481,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <Modal open={open} onClose={handleClose} title="Import from Excel" size="max-w-3xl">
+    <Modal open={open} onClose={handleClose} title="Import Transactions" size="max-w-3xl">
       <div className="space-y-5">
         <StepDots step={step} />
 
@@ -477,27 +492,35 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
               onDragOver={e => { e.preventDefault(); setDragging(true) }}
               onDragLeave={() => setDragging(false)}
               onDrop={handleDrop}
-              onClick={() => inputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
-                dragging
-                  ? 'border-primary bg-primary/5'
-                  : 'border-gray-300 hover:border-primary hover:bg-gray-50'
+              onClick={() => !parsing && inputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 transition-colors ${
+                parsing
+                  ? 'border-primary bg-primary/5 cursor-wait'
+                  : dragging
+                    ? 'border-primary bg-primary/5 cursor-pointer'
+                    : 'border-gray-300 hover:border-primary hover:bg-gray-50 cursor-pointer'
               }`}
             >
-              <div className={`p-4 rounded-full transition-colors ${dragging ? 'bg-primary/10' : 'bg-gray-100'}`}>
-                <Upload className={`w-7 h-7 ${dragging ? 'text-primary' : 'text-gray-400'}`} />
+              <div className={`p-4 rounded-full transition-colors ${dragging || parsing ? 'bg-primary/10' : 'bg-gray-100'}`}>
+                {parsing
+                  ? <span className="block w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  : <Upload className={`w-7 h-7 ${dragging ? 'text-primary' : 'text-gray-400'}`} />
+                }
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-gray-700">
-                  Drop your Excel file here, or <span className="text-primary underline">browse</span>
+                  {parsing
+                    ? 'Parsing file…'
+                    : <>Drop your file here, or <span className="text-primary underline">browse</span></>
+                  }
                 </p>
-                <p className="text-xs text-gray-400 mt-1">Accepts .xlsx and .xls — max 20 MB</p>
+                <p className="text-xs text-gray-400 mt-1">Accepts .xlsx, .xls, and .pdf — max 20 MB</p>
               </div>
             </div>
             <input
               ref={inputRef}
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx,.xls,.pdf"
               className="hidden"
               onChange={handleFileInput}
             />
@@ -509,11 +532,22 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
           </div>
         )}
 
+        {/* Parsing spinner when preloaded file is being parsed at step 2 */}
+        {step === 2 && parsing && (
+          <div className="flex flex-col items-center gap-3 py-12">
+            <span className="block w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-gray-500">Parsing {fileName}…</p>
+          </div>
+        )}
+
         {/* ─────────────────────── STEP 2: Sheet + Target ──────────────── */}
-        {step === 2 && (
+        {step === 2 && !parsing && sheets.length > 0 && (
           <div className="space-y-5">
             <div className="flex items-center gap-2 text-sm text-gray-500">
-              <FileSpreadsheet className="w-4 h-4 text-primary" />
+              {fileName.match(/\.pdf$/i)
+                ? <FileText className="w-4 h-4 text-red-500" />
+                : <FileSpreadsheet className="w-4 h-4 text-primary" />
+              }
               <span className="font-medium text-gray-700">{fileName}</span>
               <span>·</span>
               <span>{sheets.length} sheet{sheets.length !== 1 ? 's' : ''} detected</span>
@@ -589,7 +623,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank }: Props) {
 
             <NavButtons
               step={step}
-              onBack={() => { setStep(1); setSheets([]); setFileName('') }}
+              onBack={preloadedFile ? undefined : () => { setStep(1); setSheets([]); setFileName('') }}
               onNext={proceedToMapping}
               nextDisabled={!targetTable || !selectedSheet}
               nextLabel="Map Columns"

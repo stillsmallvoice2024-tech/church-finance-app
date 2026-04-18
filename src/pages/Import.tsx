@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
-  Upload, PenLine, FileSpreadsheet,
+  Upload, PenLine, FileSpreadsheet, FileText,
   CheckCircle2, AlertTriangle, Loader2, X,
   TrendingUp, TrendingDown,
 } from 'lucide-react'
@@ -70,6 +70,7 @@ export default function Import() {
   const [dupChecked, setDupChecked]   = useState(false)
   const [parseError, setParseError]   = useState<string | null>(null)
   const [selectedBankId, setSelectedBankId] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const { banks } = useBanks()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -83,6 +84,7 @@ export default function Import() {
     setDupLoading(false)
     setSkipDups(false)
     setSelectedBankId('')
+    setSelectedFile(null)
   }
 
   const openWizard = (skip: boolean) => {
@@ -91,15 +93,23 @@ export default function Import() {
   }
 
   const parseAndCheck = useCallback(async (file: File) => {
-    if (!file.name.match(/\.(xlsx|xls)$/i)) {
-      setParseError('Only .xlsx and .xls files are supported.')
+    if (!file.name.match(/\.(xlsx|xls|pdf)$/i)) {
+      setParseError('Only .xlsx, .xls, and .pdf files are supported.')
       return
     }
 
     reset()
+    setSelectedFile(file)
     setParseError(null)
 
-    // 1. Parse the file
+    // PDF: skip duplicate ID check — can't easily extract txn IDs from PDF text
+    if (file.name.match(/\.pdf$/i)) {
+      setParseResult({ fileName: file.name, rowCount: 0, txnIdCol: null, ids: [] })
+      setDupChecked(true)
+      return
+    }
+
+    // 1. Parse the Excel file
     let ids: string[] = []
     let txnIdCol: string | null = null
     let rowCount = 0
@@ -228,10 +238,10 @@ export default function Import() {
               </div>
               <div className="text-center">
                 <p className="text-sm font-semibold text-gray-700">
-                  Drop your Excel file here, or{' '}
+                  Drop your file here, or{' '}
                   <span className="text-primary underline underline-offset-2">click to browse</span>
                 </p>
-                <p className="text-xs text-gray-400 mt-1">Accepts .xlsx and .xls</p>
+                <p className="text-xs text-gray-400 mt-1">Accepts .xlsx, .xls, and .pdf</p>
               </div>
             </div>
           ) : (
@@ -240,9 +250,14 @@ export default function Import() {
               {/* File info bar */}
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-gray-50">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
+                  {parseResult.fileName.match(/\.pdf$/i)
+                    ? <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                    : <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
+                  }
                   <span className="text-sm font-medium text-gray-700 truncate">{parseResult.fileName}</span>
-                  <span className="text-xs text-gray-400 shrink-0">· {parseResult.rowCount.toLocaleString()} rows</span>
+                  {parseResult.rowCount > 0 && (
+                    <span className="text-xs text-gray-400 shrink-0">· {parseResult.rowCount.toLocaleString()} rows</span>
+                  )}
                 </div>
                 <button
                   onClick={reset}
@@ -255,8 +270,18 @@ export default function Import() {
 
               {/* Duplicate detection results */}
               <div className="px-5 py-4 space-y-3">
+                {/* PDF — no dup check */}
+                {dupChecked && parseResult.fileName.match(/\.pdf$/i) && (
+                  <div className="flex items-start gap-3 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+                    <FileText className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      PDF detected — duplicate checking is skipped for PDFs. The import wizard will parse and map the columns for you.
+                    </span>
+                  </div>
+                )}
+
                 {/* No txn ID column */}
-                {dupChecked && !parseResult.txnIdCol && (
+                {dupChecked && !parseResult.txnIdCol && !parseResult.fileName.match(/\.pdf$/i) && (
                   <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>
@@ -381,7 +406,7 @@ export default function Import() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.pdf"
             className="hidden"
             onChange={handleFileInput}
           />
@@ -414,6 +439,7 @@ export default function Import() {
           ? new Set(duplicates.map(d => d.id))
           : undefined}
         bank={selectedBankId ? (banks.find(b => b.id === selectedBankId) ?? null) : null}
+        preloadedFile={selectedFile}
       />
     </div>
   )
