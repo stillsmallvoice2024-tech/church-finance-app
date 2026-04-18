@@ -13,6 +13,7 @@ import { formatDate } from '../../utils/formatters'
 // ── Target table definitions ───────────────────────────────────────────────────
 
 type TargetTable =
+  | 'bank_statement'
   | 'inflow_transactions'
   | 'outflow_transactions'
   | 'intra_flows'
@@ -22,15 +23,26 @@ type TargetTable =
 interface FieldDef { key: string; label: string; required?: boolean }
 
 const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> = {
+  bank_statement: {
+    label: 'Bank Statement (auto-split → Inflow / Outflow)',
+    fields: [
+      { key: 'date',        label: 'Date',                  required: true },
+      { key: 'description', label: 'Description'                           },
+      { key: 'credit',      label: 'Credit (Inflow Amount)'                },
+      { key: 'debit',       label: 'Debit (Outflow Amount)'                },
+      { key: 'balance',     label: 'Balance (info only)'                   },
+      { key: 'reference',   label: 'Reference / Txn ID'                    },
+    ],
+  },
   inflow_transactions: {
     label: 'Inflow Transactions',
     fields: [
       { key: 'date',                      label: 'Date',                    required: true },
       { key: 'amount',                    label: 'Amount',                  required: true },
+      { key: 'inflow_type',               label: 'Inflow Type'                            },
       { key: 'description',               label: 'Description'                            },
       { key: 'stage_code_1',              label: 'Stage Code 1'                           },
       { key: 'stage_code_2',              label: 'Stage Code 2'                           },
-      { key: 'stage_code_3',              label: 'Stage Code 3'                           },
       { key: 'transaction_ref',           label: 'Transaction Ref'                        },
       { key: 'specific_seed_description', label: 'Seed Description'                       },
       { key: 'remark',                    label: 'Remark'                                 },
@@ -138,22 +150,27 @@ function parseNumber(raw: unknown): number {
 // ── Auto-mapping ───────────────────────────────────────────────────────────────
 
 const ALIAS_MAP: Record<string, string[]> = {
-  date:             ['date', 'dt', 'transdate', 'valuedate', 'entrydate', 'txndate'],
-  amount:           ['amount', 'amt', 'sum', 'value', 'credit', 'debit'],
+  date:             ['date', 'dt', 'transdate', 'valuedate', 'entrydate', 'txndate', 'valuedate'],
+  amount:           ['amount', 'amt', 'sum', 'value'],
   amount_disbursed: ['amount', 'disbursed', 'amtdisbursed'],
   total_amount:     ['total', 'totalamount', 'amount'],
-  description:      ['description', 'desc', 'narration', 'details', 'particulars', 'memo'],
+  description:      ['description', 'desc', 'narration', 'details', 'particulars', 'memo', 'remarks'],
   stage_code_1:     ['stage', 'stagecode', 'stagecode1', 'code1', 'account'],
-  transaction_ref:  ['ref', 'reference', 'txnref', 'transref'],
+  transaction_ref:  ['ref', 'reference', 'txnref', 'transref', 'transactionid', 'txnid'],
   currency:         ['currency', 'ccy', 'curr'],
+  // bank_statement virtual fields
+  credit:           ['credit', 'cr', 'deposit', 'deposits', 'inflow', 'in', 'creditamt'],
+  debit:            ['debit', 'dr', 'withdrawal', 'withdrawals', 'outflow', 'out', 'debitamt'],
+  reference:        ['reference', 'ref', 'txnref', 'transref', 'transactionid', 'txnid', 'sessionid'],
+  balance:          ['balance', 'runningbalance', 'closingbalance', 'closingbal', 'runningbal'],
   deposit:          ['deposit', 'credit', 'inflow', 'in'],
   withdrawal:       ['withdrawal', 'debit', 'outflow', 'out'],
   running_balance:  ['balance', 'runningbalance', 'closingbalance'],
   inflow:           ['inflow', 'credit', 'in'],
   outflow:          ['outflow', 'debit', 'out'],
-  balance:          ['balance', 'closingbal', 'runningbal'],
   remark:           ['remark', 'remarks', 'note', 'notes', 'comment'],
   narration:        ['narration', 'description', 'desc', 'memo'],
+  inflow_type:      ['inflowtype', 'type', 'category'],
 }
 
 function autoMapColumn(header: string, fields: FieldDef[]): string {
@@ -364,21 +381,93 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setResult(null)
 
     const userId = user?.id ?? null
+    let imported = 0
+    let skipped  = 0
+    const errors: string[] = []
+
+    // ── Bank statement split mode ─────────────────────────────────────────────
+    if (targetTable === 'bank_statement') {
+      const colIdx = (field: string) => {
+        const h = Object.keys(mapping).find(k => mapping[k] === field)
+        return h !== undefined ? sheet.headers.indexOf(h) : -1
+      }
+      const dateIdx  = colIdx('date')
+      const descIdx  = colIdx('description')
+      const creditIdx = colIdx('credit')
+      const debitIdx  = colIdx('debit')
+      const refIdx    = colIdx('reference')
+
+      const { configs: latestConfigs } = useAllocationStore.getState()
+      const inflowRows:  Record<string, unknown>[] = []
+      const outflowRows: Record<string, unknown>[] = []
+
+      for (let ri = 0; ri < sheet.rows.length; ri++) {
+        const raw  = sheet.rows[ri] as unknown[]
+        const date = dateIdx >= 0 ? parseDate(raw[dateIdx]) : null
+        if (!date) { skipped++; continue }
+
+        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
+        const debit  = debitIdx  >= 0 ? parseNumber(raw[debitIdx])  : 0
+        // Description follows non-empty amount column
+        const desc   = descIdx   >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
+                         ? String(raw[descIdx]).trim() : null
+        const ref    = refIdx    >= 0 && raw[refIdx]  != null && raw[refIdx]  !== ''
+                         ? String(raw[refIdx]).trim()  : null
+
+        const cfg = getConfigForDate(latestConfigs, date)
+
+        if (credit > 0) {
+          const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
+          if (userId) row.created_by = userId
+          if (bank)   row.bank_id   = bank.id
+          if (cfg)    row.allocation_config_id = cfg.id
+          inflowRows.push(row)
+        }
+        if (debit > 0) {
+          const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
+          if (userId) row.created_by = userId
+          if (bank)   row.bank_id   = bank.id
+          if (cfg)    row.allocation_config_id = cfg.id
+          outflowRows.push(row)
+        }
+        if (credit === 0 && debit === 0) skipped++
+      }
+
+      const total = inflowRows.length + outflowRows.length
+      const BATCH = 100
+      for (let i = 0; i < inflowRows.length; i += BATCH) {
+        const batch = inflowRows.slice(i, i + BATCH)
+        const { error: err } = await supabase.from('inflow_transactions').insert(batch)
+        if (err) { errors.push(`Inflow batch: ${err.message}`); skipped += batch.length }
+        else imported += batch.length
+        setProgress(total > 0 ? Math.round(((i + batch.length) / total) * 50) : 50)
+      }
+      for (let i = 0; i < outflowRows.length; i += BATCH) {
+        const batch = outflowRows.slice(i, i + BATCH)
+        const { error: err } = await supabase.from('outflow_transactions').insert(batch)
+        if (err) { errors.push(`Outflow batch: ${err.message}`); skipped += batch.length }
+        else imported += batch.length
+        setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
+      }
+
+      setResult({ imported, skipped, errors })
+      setImporting(false)
+      return
+    }
+
+    // ── Standard single-table mode ────────────────────────────────────────────
+
     const numericFields = new Set(
       config.fields
         .filter(f => !['date', 'description', 'currency', 'transaction_ref',
                        'narration', 'remark', 'remarks', 'bank_description',
-                       'stage_code_1', 'stage_code_2', 'stage_code_3',
+                       'stage_code_1', 'stage_code_2', 'inflow_type',
                        'account_from', 'account_to', 'transaction_id',
                        'specific_seed_description', 'account_id',
                        'account_from_stage1', 'account_from_stage2',
                        'account_to_stage1', 'account_to_stage2'].includes(f.key))
         .map(f => f.key),
     )
-
-    let imported = 0
-    let skipped  = 0
-    const errors: string[] = []
 
     // Build rows
     const mappedRows: Record<string, unknown>[] = []
@@ -708,10 +797,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <div className="text-xs text-gray-500 mt-0.5">Columns mapped</div>
               </div>
               <div className="rounded-lg bg-gray-50 px-3 py-3">
-                <div className="text-2xl font-bold text-gray-900">{TABLE_CONFIG[targetTable as TargetTable]?.label.split(' ')[0]}</div>
-                <div className="text-xs text-gray-500 mt-0.5">Target table</div>
+                <div className="text-lg font-bold text-gray-900">
+                  {targetTable === 'bank_statement' ? 'Split' : TABLE_CONFIG[targetTable as TargetTable]?.label.split(' ')[0]}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {targetTable === 'bank_statement' ? 'Inflow + Outflow' : 'Target table'}
+                </div>
               </div>
             </div>
+
+            {targetTable === 'bank_statement' && (
+              <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-3 text-xs text-primary space-y-1">
+                <p className="font-semibold">Bank Statement Split Rules</p>
+                <p>Credit &gt; 0 → <strong>Inflow</strong> table &nbsp;·&nbsp; Debit &gt; 0 → <strong>Outflow</strong> table</p>
+                <p className="text-gray-500">Description follows the non-empty amount column into the correct table.</p>
+                {bank && <p>Bank: <strong>{bank.name}</strong> will be tagged on all rows.</p>}
+              </div>
+            )}
+
             {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <span className="text-xs font-medium text-gray-500">Bank</span>

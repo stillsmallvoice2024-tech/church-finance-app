@@ -16,8 +16,8 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
-import { useAccountCodesStore } from '../store/accountCodesStore'
-import { useYearRange }         from '../hooks/useYearRange'
+import { useCategories }           from '../hooks/useCategories'
+import { useYearRange }            from '../hooks/useYearRange'
 import { INFLOW_TYPE_LABELS, INFLOW_TYPE_BADGE } from '../utils/inflowTypes'
 
 const PAGE_SIZE = 25
@@ -99,7 +99,7 @@ export default function Inflows() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('inflow_transactions')
-  const { codes: accountCodes, getLabel: accountLabel } = useAccountCodesStore()
+  const { categories } = useCategories()
 
   usePageTitle('Inflows')
 
@@ -194,11 +194,11 @@ export default function Inflows() {
             <FilterGroup label="To">
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
             </FilterGroup>
-            <FilterGroup label="Stage Code" className="min-w-[200px]">
+            <FilterGroup label="Stage Code 1" className="min-w-[180px]">
               <select value={stageCode} onChange={e => setStageCode(e.target.value)} className={`${inputCls} bg-white`}>
-                <option value="">All accounts</option>
-                {accountCodes.map(a => (
-                  <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+                <option value="">All categories</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </FilterGroup>
@@ -283,7 +283,7 @@ export default function Inflows() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate">{row.description ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ? accountLabel(row.stage_code_1) : '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.stage_code_2 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px] truncate">{row.specific_seed_description ?? '—'}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-success whitespace-nowrap">{formatCurrency(Number(row.amount))}</td>

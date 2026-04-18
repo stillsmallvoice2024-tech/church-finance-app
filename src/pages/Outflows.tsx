@@ -16,8 +16,8 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
-import { useAccountCodesStore } from '../store/accountCodesStore'
-import { useYearRange }         from '../hooks/useYearRange'
+import { useCategories }           from '../hooks/useCategories'
+import { useYearRange }            from '../hooks/useYearRange'
 
 const PAGE_SIZE = 25
 
@@ -96,7 +96,7 @@ export default function Outflows() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
-  const { codes: accountCodes, getLabel: accountLabel } = useAccountCodesStore()
+  const { categories } = useCategories()
 
   usePageTitle('Outflows')
 
@@ -181,11 +181,11 @@ export default function Outflows() {
             <FilterGroup label="To">
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
             </FilterGroup>
-            <FilterGroup label="Stage Code" className="min-w-[200px]">
+            <FilterGroup label="Stage Code 1" className="min-w-[180px]">
               <select value={stageCode} onChange={e => setStageCode(e.target.value)} className={`${inputCls} bg-white`}>
-                <option value="">All accounts</option>
-                {accountCodes.map(a => (
-                  <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+                <option value="">All categories</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </FilterGroup>
@@ -271,7 +271,7 @@ export default function Outflows() {
                           {Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ? accountLabel(row.stage_code_1) : '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
