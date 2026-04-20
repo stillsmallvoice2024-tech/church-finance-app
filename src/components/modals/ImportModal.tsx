@@ -756,6 +756,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <Modal open={open} onClose={handleClose} title="Import Transactions" size="max-w-3xl">
       <div className="space-y-5">
         <StepDots step={step} />
@@ -1335,6 +1336,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         setCreateConfigOpen(false)
       }}
     />
+    </>
   )
 }
 

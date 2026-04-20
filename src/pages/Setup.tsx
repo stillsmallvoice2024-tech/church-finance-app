@@ -276,7 +276,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked }: {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {configs.map(config => {
-                const total    = config.rows.reduce((s, r) => s + r.percentage, 0)
+                const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
                 const balanced = Math.abs(total - 100) < 0.01
                 return (
                   <tr key={config.id} className="hover:bg-gray-50 transition-colors">
