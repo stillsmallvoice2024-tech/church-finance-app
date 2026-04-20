@@ -722,7 +722,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     const BATCH = 100
     for (let i = 0; i < rowsToInsert.length; i += BATCH) {
       const batch = rowsToInsert.slice(i, i + BATCH)
-      const { error } = await supabase.from(targetTable).insert(batch)
+      let { error } = await supabase.from(targetTable).insert(batch)
+      if (error?.message.includes("allocation_config_id")) {
+        // Column doesn't exist in DB yet — strip and retry, log warning once
+        const stripped = batch.map(({ allocation_config_id: _, ...rest }) => rest)
+        const { error: retryErr } = await supabase.from(targetTable).insert(stripped)
+        error = retryErr ?? null
+        if (!errors.some(e => e.includes('allocation_config_id'))) {
+          errors.push('⚠ allocation_config_id column missing — run: ALTER TABLE inflow_transactions ADD COLUMN IF NOT EXISTS allocation_config_id uuid REFERENCES allocation_configs(id);')
+        }
+      }
       if (error) {
         let msg = `Batch ${Math.floor(i / BATCH) + 1}: ${error.message}`
         if (error.message.includes('invalid input syntax for type uuid')) {
