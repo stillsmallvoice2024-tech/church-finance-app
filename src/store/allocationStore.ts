@@ -4,9 +4,10 @@ import { supabase } from '../lib/supabase'
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface AllocationRow {
-  category_name: string
-  percentage?:   number
-  amount?:       number
+  category_name:  string
+  budget_portion?: string  // 'Percentage' | 'Specific Seed' | 'Savings'
+  percentage?:    number
+  amount?:        number
 }
 
 export interface AllocationConfig {

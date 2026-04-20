@@ -11,18 +11,38 @@ import {
 import type { AllocationConfig } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 
+const BUDGET_PORTIONS = ['Percentage', 'Specific Seed', 'Savings'] as const
+type BudgetPortion = typeof BUDGET_PORTIONS[number]
+
 const rowSchema = z.object({
-  category_name: z.string().min(1, 'Required'),
-  percentage:    z.coerce.number().min(0, 'Min 0').max(100, 'Max 100'),
+  category_name:  z.string().min(1, 'Required'),
+  budget_portion: z.enum(BUDGET_PORTIONS, { errorMap: () => ({ message: 'Required' }) }),
+  percentage:     z.coerce.number().min(0, 'Min 0').max(100, 'Max 100'),
 })
 
 const schema = z.object({
   name:       z.string().min(1, 'Name is required'),
   start_date: z.string().min(1, 'Start date is required'),
-  rows:       z.array(rowSchema).min(1, 'Add at least one category row'),
+  rows:       z.array(rowSchema).min(1, 'Add at least one category row')
+    .superRefine((rows, ctx) => {
+      const seen = new Set<string>()
+      rows.forEach((r, i) => {
+        const key = `${r.category_name}||${r.budget_portion}`
+        if (seen.has(key)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [i, 'budget_portion'],
+            message: 'Duplicate category + portion combination',
+          })
+        }
+        seen.add(key)
+      })
+    }),
 })
 
 type FormValues = z.infer<typeof schema>
+
+const EMPTY_ROW = { category_name: '', budget_portion: '' as BudgetPortion, percentage: 0 }
 
 interface Props {
   open:            boolean
@@ -84,7 +104,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
     reset: resetForm,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', start_date: '', rows: [{ category_name: '', percentage: 0 }] },
+    defaultValues: { name: '', start_date: '', rows: [{ ...EMPTY_ROW }] },
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'rows' })
@@ -98,11 +118,15 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
         name:       editRecord.name,
         start_date: editRecord.start_date,
         rows:       editRecord.rows.length > 0
-          ? editRecord.rows
-          : [{ category_name: '', percentage: 0 }],
+          ? editRecord.rows.map(r => ({
+              category_name:  r.category_name,
+              budget_portion: (r.budget_portion ?? '') as BudgetPortion,
+              percentage:     r.percentage ?? 0,
+            }))
+          : [{ ...EMPTY_ROW }],
       })
     } else {
-      resetForm({ name: '', start_date: '', rows: [{ category_name: '', percentage: 0 }] })
+      resetForm({ name: '', start_date: '', rows: [{ ...EMPTY_ROW }] })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
@@ -130,7 +154,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Configuration' : 'New Configuration'}
-      size="max-w-xl"
+      size="max-w-2xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
         {error && (
@@ -158,8 +182,9 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
 
         {/* Category rows */}
         <div className="space-y-2">
-          <div className="grid grid-cols-[1fr_100px_32px] gap-2 px-0.5">
+          <div className="grid grid-cols-[1fr_140px_100px_32px] gap-2 px-0.5">
             <span className="text-xs font-medium text-gray-600">Category</span>
+            <span className="text-xs font-medium text-gray-600">Budget Portion</span>
             <span className="text-xs font-medium text-gray-600 text-right">Percentage</span>
             <span />
           </div>
@@ -171,7 +196,8 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
           )}
 
           {fields.map((field, idx) => (
-            <div key={field.id} className="grid grid-cols-[1fr_100px_32px] gap-2 items-start">
+            <div key={field.id} className="grid grid-cols-[1fr_140px_100px_32px] gap-2 items-start">
+              {/* Category */}
               <div>
                 <select
                   {...register(`rows.${idx}.category_name`)}
@@ -187,6 +213,24 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                   <p className="mt-0.5 text-xs text-red-500">{errors.rows[idx]!.category_name!.message}</p>
                 )}
               </div>
+
+              {/* Budget portion */}
+              <div>
+                <select
+                  {...register(`rows.${idx}.budget_portion`)}
+                  className={iCls(!!errors.rows?.[idx]?.budget_portion)}
+                >
+                  <option value="">— Portion —</option>
+                  {BUDGET_PORTIONS.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                {errors.rows?.[idx]?.budget_portion && (
+                  <p className="mt-0.5 text-xs text-red-500">{errors.rows[idx]!.budget_portion!.message}</p>
+                )}
+              </div>
+
+              {/* Percentage */}
               <div>
                 <div className="relative">
                   <input
@@ -204,6 +248,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                   <p className="mt-0.5 text-xs text-red-500">{errors.rows[idx]!.percentage!.message}</p>
                 )}
               </div>
+
               <button
                 type="button"
                 onClick={() => remove(idx)}
@@ -221,7 +266,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
 
           <button
             type="button"
-            onClick={() => append({ category_name: '', percentage: 0 })}
+            onClick={() => append({ ...EMPTY_ROW })}
             className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary-light transition-colors pt-1"
           >
             <Plus className="w-3.5 h-3.5" /> Add row
