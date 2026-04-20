@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
+import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
@@ -1034,6 +1035,108 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               ) : null
             })()}
 
+            {/* D11: Per-row special config assignment — inflow_transactions only */}
+            {targetTable === 'inflow_transactions' && sheet.rows.length > 0 && (() => {
+              const dateColIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
+              const amtColIdx  = sheet.headers.findIndex(h => mapping[h] === 'amount')
+              return (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config per Row</span>
+                    <button
+                      type="button"
+                      onClick={() => setCreateConfigOpen(true)}
+                      className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium"
+                    >
+                      + Create Special Config
+                    </button>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto divide-y divide-gray-100">
+                    {sheet.rows.map((row, ri) => {
+                      const rawArr = row as unknown[]
+                      const date   = dateColIdx >= 0 ? (parseDate(rawArr[dateColIdx]) ?? '') : ''
+                      const amt    = amtColIdx  >= 0 ? parseNumber(rawArr[amtColIdx])        : 0
+                      const selId  = rowConfigs[ri] ?? ''
+                      return (
+                        <div key={ri} className="grid grid-cols-[36px_1fr_1fr_180px] items-center px-3 py-1.5 gap-2 text-xs">
+                          <span className="text-gray-400 font-mono">{ri + 1}</span>
+                          <span className="text-gray-600 truncate">{date}</span>
+                          <span className="text-gray-700 font-medium">₦{amt.toLocaleString()}</span>
+                          <select
+                            value={selId}
+                            onChange={e => setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))}
+                            className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                          >
+                            <option value="">General (date-based)</option>
+                            {specialConfigs.map(c => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* D12: In-wizard dup check results */}
+            {wizardDupLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                Checking transaction IDs for duplicates…
+              </div>
+            )}
+            {!wizardDupLoading && wizardDupsFound.length > 0 && (() => {
+              const schemaErrInflow  = wizardDupsFound.some(d => d.id === '__schema_error_inflow__')
+              const schemaErrOutflow = wizardDupsFound.some(d => d.id === '__schema_error_outflow__')
+              const realDups = wizardDupsFound.filter(d => !d.id.startsWith('__schema_error'))
+              return (
+                <div className="space-y-2">
+                  {schemaErrInflow && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>Inflow dup check unavailable — run: <code className="font-mono bg-amber-100 px-1 rounded">ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;</code></span>
+                    </div>
+                  )}
+                  {schemaErrOutflow && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>Outflow dup check unavailable — run: <code className="font-mono bg-amber-100 px-1 rounded">ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;</code></span>
+                    </div>
+                  )}
+                  {realDups.length > 0 && (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-amber-100">
+                        <span className="text-xs font-semibold text-amber-700">
+                          {realDups.length} duplicate{realDups.length !== 1 ? 's' : ''} found in database
+                        </span>
+                        <label className="flex items-center gap-1.5 text-xs text-amber-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={skipWizardDups}
+                            onChange={e => setSkipWizardDups(e.target.checked)}
+                            className="rounded border-amber-300 text-amber-600 focus:ring-amber-400/30"
+                          />
+                          Skip duplicates
+                        </label>
+                      </div>
+                      <ul className="divide-y divide-amber-100 max-h-32 overflow-y-auto">
+                        {realDups.map(d => (
+                          <li key={`${d.table}:${d.id}`} className="flex items-center justify-between px-3 py-1.5">
+                            <span className="font-mono text-xs text-amber-800">{d.id}</span>
+                            <span className="text-[10px] font-medium text-amber-500 bg-amber-100 px-1.5 py-0.5 rounded">
+                              {d.table === 'inflow_transactions' ? 'Inflow' : 'Outflow'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
             {/* First 3 rows preview mapped */}
             {sheet.rows.slice(0, 3).length > 0 && (
               <div>
@@ -1139,9 +1242,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 step={step}
                 onBack={() => setStep(3)}
                 onNext={runImport}
-                nextDisabled={importing}
+                nextDisabled={importing || wizardDupLoading}
                 nextLabel={importing ? 'Importing…' : 'Start Import'}
-                nextLoading={importing}
+                nextLoading={importing || wizardDupLoading}
               />
             ) : (
               <div className="flex justify-end gap-3">
@@ -1163,6 +1266,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         )}
       </div>
     </Modal>
+
+    <CreateSpecialConfigModal
+      open={createConfigOpen}
+      onClose={() => setCreateConfigOpen(false)}
+      onSaved={cfg => {
+        setSpecialConfigs(prev => [...prev, cfg])
+        setCreateConfigOpen(false)
+      }}
+    />
   )
 }
 
