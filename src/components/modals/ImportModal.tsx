@@ -893,6 +893,64 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               ) : null
             })()}
 
+            {/* Batch Defaults panel — stage codes + pending deduction */}
+            {STAGE_CODE_TABLES.has(targetTable as TargetTable) && (
+              <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Defaults — Stage Codes</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Default Stage Code 1</label>
+                    <select
+                      value={defaultStageCode1}
+                      onChange={e => { setDefaultStageCode1(e.target.value); setStageCodeErrors(prev => ({ ...prev, code1: undefined })) }}
+                      className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    >
+                      <option value="">— None (use mapped column) —</option>
+                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                    {stageCodeErrors.code1 && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> {stageCodeErrors.code1}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Default Stage Code 2</label>
+                    <select
+                      value={defaultStageCode2}
+                      onChange={e => { setDefaultStageCode2(e.target.value); setStageCodeErrors(prev => ({ ...prev, code2: undefined })) }}
+                      className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    >
+                      <option value="">— None (use mapped column) —</option>
+                      <option value="Percentage Allocation">Percentage Allocation</option>
+                      <option value="Specific Seed">Specific Seed</option>
+                      <option value="Savings">Savings</option>
+                    </select>
+                    {stageCodeErrors.code2 && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> {stageCodeErrors.code2}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {(targetTable === 'outflow_transactions' || targetTable === 'bank_statement') && (
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
+                    <input
+                      type="checkbox"
+                      checked={batchPendingDeduction}
+                      onChange={e => { setBatchPendingDeduction(e.target.checked); setStageCodeErrors({}) }}
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Mark all outflow rows as <strong>Pending Deduction</strong>
+                      <span className="text-gray-400 text-xs ml-1">(stage codes not required)</span>
+                    </span>
+                  </label>
+                )}
+              </div>
+            )}
+
             <NavButtons
               step={step}
               onBack={() => setStep(2)}
