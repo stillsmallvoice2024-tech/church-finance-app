@@ -9,14 +9,16 @@ import { useDeleteBank } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
 import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
 import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
+import { CreateSpecialConfigModal } from '../components/modals/CreateSpecialConfigModal'
 import {
   useLockAllocationConfig,
   useUnlockAllocationConfig,
 } from '../hooks/useMutations'
 import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
+import { supabase } from '../lib/supabase'
 
-const TABS = ['General', 'Banks', 'Allocation'] as const
+const TABS = ['General', 'Banks', 'Allocation', 'Special Configs'] as const
 type Tab = typeof TABS[number]
 
 // ── General tab ────────────────────────────────────────────────────────────────
@@ -331,6 +333,126 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked }: {
   )
 }
 
+// ── Special Configs tab ────────────────────────────────────────────────────────
+
+function SpecialConfigsTab({ onNew, onEdit, onDelete }: {
+  onNew:    () => void
+  onEdit:   (c: AllocationConfig) => void
+  onDelete: (c: AllocationConfig) => void
+}) {
+  const [configs,  setConfigs]  = useState<AllocationConfig[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [err,      setErr]      = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('allocation_configs')
+      .select('*')
+      .eq('is_special', true)
+      .order('created_at', { ascending: false })
+    if (error) setErr(error.message)
+    else setConfigs((data ?? []) as AllocationConfig[])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return (
+    <div className="max-w-2xl space-y-2">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+      ))}
+    </div>
+  )
+
+  if (err) return (
+    <div className="max-w-2xl flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+      <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />{err}
+    </div>
+  )
+
+  return (
+    <div className="max-w-2xl space-y-3">
+      <div className="flex justify-end">
+        <button
+          onClick={onNew}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Create Special Config
+        </button>
+      </div>
+
+      {configs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
+          <Layers className="w-10 h-10 text-gray-300" />
+          <div>
+            <p className="text-sm font-medium text-gray-600">No special configurations yet</p>
+            <p className="text-xs text-gray-400 mt-1">Create a special config to override the regular allocation for specific transactions.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Rows</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
+                <th className="px-4 py-3 w-20" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {configs.map(c => {
+                const isAmt = c.allocation_type === 'amount'
+                const total = c.rows.reduce((s, r) => s + (isAmt ? (r.amount ?? 0) : (r.percentage ?? 0)), 0)
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        isAmt ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-purple-50 text-purple-700 border border-purple-200'
+                      }`}>
+                        {isAmt ? 'Amount ₦' : 'Percentage %'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-gray-700">
+                      {isAmt ? `₦${total.toLocaleString()}` : `${total.toFixed(1)}%`}
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-500">{c.rows.length}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(c.created_at?.slice(0, 10) ?? '')}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => onEdit(c)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onDelete(c)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-xs text-gray-400">{configs.length} special config{configs.length !== 1 ? 's' : ''}</p>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
@@ -343,6 +465,10 @@ export default function SetupPage() {
   const [editAllocRecord, setEditAllocRecord] = useState<AllocationConfig | null>(null)
   const [lockTarget,      setLockTarget]      = useState<AllocationConfig | null>(null)
   const [editLockedTarget, setEditLockedTarget] = useState<AllocationConfig | null>(null)
+  const [specialModalOpen,  setSpecialModalOpen]  = useState(false)
+  const [editSpecialRecord, setEditSpecialRecord] = useState<AllocationConfig | null>(null)
+  const [deleteSpecialTarget, setDeleteSpecialTarget] = useState<AllocationConfig | null>(null)
+  const [specialRefetch, setSpecialRefetch] = useState(0)
   const { configs, reload: reloadAllocs } = useAllocationStore()
 
   const { push: toast } = useToastStore()
@@ -446,9 +572,17 @@ export default function SetupPage() {
 
         {/* Tab content */}
         <div>
-          {activeTab === 'General'    && <GeneralTab />}
-          {activeTab === 'Banks'      && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Allocation' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} />}
+          {activeTab === 'General'        && <GeneralTab />}
+          {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
+          {activeTab === 'Allocation'     && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} />}
+          {activeTab === 'Special Configs' && (
+            <SpecialConfigsTab
+              key={specialRefetch}
+              onNew={() => { setEditSpecialRecord(null); setSpecialModalOpen(true) }}
+              onEdit={c => { setEditSpecialRecord(c); setSpecialModalOpen(true) }}
+              onDelete={c => setDeleteSpecialTarget(c)}
+            />
+          )}
         </div>
       </div>
 
@@ -548,6 +682,24 @@ export default function SetupPage() {
         onConfirm={confirmDeleteBank}
         loading={deletingBank}
         label={deleteBankRecord ? `"${deleteBankRecord.name}"` : 'this bank'}
+      />
+      <CreateSpecialConfigModal
+        open={specialModalOpen}
+        onClose={() => { setSpecialModalOpen(false); setEditSpecialRecord(null) }}
+        onSaved={() => { setSpecialModalOpen(false); setEditSpecialRecord(null); setSpecialRefetch(n => n + 1) }}
+        editRecord={editSpecialRecord}
+      />
+      <DeleteDialog
+        open={!!deleteSpecialTarget}
+        onClose={() => setDeleteSpecialTarget(null)}
+        onConfirm={async () => {
+          if (!deleteSpecialTarget) return
+          await supabase.from('allocation_configs').delete().eq('id', deleteSpecialTarget.id)
+          setDeleteSpecialTarget(null)
+          setSpecialRefetch(n => n + 1)
+        }}
+        loading={false}
+        label={deleteSpecialTarget ? `"${deleteSpecialTarget.name}"` : 'this config'}
       />
     </>
   )

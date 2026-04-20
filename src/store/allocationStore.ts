@@ -5,16 +5,20 @@ import { supabase } from '../lib/supabase'
 
 export interface AllocationRow {
   category_name: string
-  percentage:    number
+  percentage?:   number
+  amount?:       number
 }
 
 export interface AllocationConfig {
-  id:         string
-  name:       string
-  start_date: string            // ISO date — "effective from"
-  status:     'draft' | 'locked'
-  rows:       AllocationRow[]
-  created_at: string
+  id:              string
+  name:            string
+  start_date:      string
+  status:          'draft' | 'locked'
+  is_special?:     boolean
+  allocation_type?: 'percentage' | 'amount'
+  total_amount?:   number
+  rows:            AllocationRow[]
+  created_at:      string
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────────

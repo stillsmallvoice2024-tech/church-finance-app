@@ -2,12 +2,13 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
-  CheckCircle2, AlertTriangle, RefreshCw, FileText,
+  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
+import { useCategories } from '../../hooks/useCategories'
 import { formatDate } from '../../utils/formatters'
 
 // ── Target table definitions ───────────────────────────────────────────────────

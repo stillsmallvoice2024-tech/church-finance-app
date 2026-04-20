@@ -158,12 +158,12 @@ export default function Import() {
     ])
 
     const found: DupRecord[] = []
-    if (inflowRes.data) {
+    if (!inflowRes.error && inflowRes.data) {
       for (const r of inflowRes.data) {
         if (r.transaction_ref) found.push({ id: r.transaction_ref, table: 'inflow_transactions' })
       }
     }
-    if (outflowRes.data) {
+    if (!outflowRes.error && outflowRes.data) {
       for (const r of outflowRes.data) {
         if (r.transaction_id) found.push({ id: r.transaction_id, table: 'outflow_transactions' })
       }
