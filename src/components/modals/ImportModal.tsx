@@ -416,6 +416,87 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setStep(3)
   }
 
+  // ── Step 3 → 4: validate + dup check ─────────────────────────────────────
+
+  const [stageCodeErrors, setStageCodeErrors] = useState<{ code1?: string; code2?: string }>({})
+
+  const proceedToImport = useCallback(async () => {
+    if (!sheet || !config || !targetTable) return
+
+    // Outflow stage code validation
+    if ((targetTable === 'outflow_transactions' || targetTable === 'bank_statement') && !batchPendingDeduction) {
+      const mappedFields = new Set(Object.values(mapping))
+      const errs: { code1?: string; code2?: string } = {}
+      if (!mappedFields.has('stage_code_1') && !defaultStageCode1) errs.code1 = 'Stage Code 1 required'
+      if (!mappedFields.has('stage_code_2') && !defaultStageCode2) errs.code2 = 'Stage Code 2 required'
+      if (errs.code1 || errs.code2) { setStageCodeErrors(errs); return }
+    }
+    setStageCodeErrors({})
+    setStep(4)
+
+    // Dup check — only for tables with a reference field
+    if (!STAGE_CODE_TABLES.has(targetTable)) return
+
+    const refFieldKey =
+      targetTable === 'inflow_transactions'  ? 'transaction_ref' :
+      targetTable === 'outflow_transactions' ? 'transaction_id'  : 'reference'
+
+    const refHeader = Object.keys(mapping).find(h => mapping[h] === refFieldKey)
+    if (!refHeader) return
+
+    const refColIdx = sheet.headers.indexOf(refHeader)
+    if (refColIdx < 0) return
+
+    const ids = sheet.rows
+      .map(r => String((r as unknown[])[refColIdx] ?? '').trim())
+      .filter(id => id.length > 0)
+    if (ids.length === 0) return
+
+    setWizardDupLoading(true)
+    setWizardDupsFound([])
+    const uniqueIds = [...new Set(ids)]
+
+    try {
+      const results: Array<{ id: string; table: string }> = []
+
+      if (targetTable === 'inflow_transactions' || targetTable === 'bank_statement') {
+        const { data, error } = await supabase
+          .from('inflow_transactions')
+          .select('transaction_ref')
+          .in('transaction_ref', uniqueIds)
+        if (error) {
+          if (error.message.includes('invalid input syntax for type uuid')) {
+            results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
+          }
+        } else {
+          for (const r of data ?? []) {
+            if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
+          }
+        }
+      }
+
+      if (targetTable === 'outflow_transactions' || targetTable === 'bank_statement') {
+        const { data, error } = await supabase
+          .from('outflow_transactions')
+          .select('transaction_id')
+          .in('transaction_id', uniqueIds)
+        if (error) {
+          if (error.message.includes('invalid input syntax for type uuid')) {
+            results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
+          }
+        } else {
+          for (const r of data ?? []) {
+            if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
+          }
+        }
+      }
+
+      setWizardDupsFound(results)
+    } finally {
+      setWizardDupLoading(false)
+    }
+  }, [sheet, config, targetTable, mapping, batchPendingDeduction, defaultStageCode1, defaultStageCode2])
+
   // ── Step 4: Import ────────────────────────────────────────────────────────
 
   const runImport = useCallback(async () => {
@@ -815,10 +896,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             <NavButtons
               step={step}
               onBack={() => setStep(2)}
-              onNext={() => setStep(4)}
+              onNext={proceedToImport}
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
-                return config.fields.some(f => f.required && !mappedFields.has(f.key))
+                if (config.fields.some(f => f.required && !mappedFields.has(f.key))) return true
+                if (
+                  STAGE_CODE_TABLES.has(targetTable as TargetTable) &&
+                  targetTable !== 'inflow_transactions' &&
+                  !batchPendingDeduction
+                ) {
+                  if (!mappedFields.has('stage_code_1') && !defaultStageCode1) return true
+                  if (!mappedFields.has('stage_code_2') && !defaultStageCode2) return true
+                }
+                return false
               })()}
               nextLabel={`Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
             />
