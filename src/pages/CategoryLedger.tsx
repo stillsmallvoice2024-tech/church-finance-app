@@ -31,11 +31,11 @@ export default function CategoryLedger() {
     setError(null)
 
     const [seedRes, savInRes, savOutRes] = await Promise.all([
-      // Specific seed inflows: inflow_type = 'specific_seed' OR stage_code_2 = 'Specific Seed'
+      // Specific seed inflows: stage_code_2 = 'Specific Seed'
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
-        .or("stage_code_2.eq.Specific Seed,inflow_type.eq.specific_seed"),
+        .eq('stage_code_2', 'Specific Seed'),
 
       // Savings inflows
       supabase
