@@ -511,19 +511,26 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     let skipped  = 0
     const errors: string[] = []
 
+    const { configs: latestConfigs } = useAllocationStore.getState()
+
+    // Combined dup skip set (pre-import Excel dups + in-wizard dups)
+    const wizardSkipIds = skipWizardDups
+      ? new Set(wizardDupsFound.filter(d => !d.id.startsWith('__schema_error')).map(d => d.id))
+      : new Set<string>()
+    const allSkipIds = new Set([...(skipTxnIds ?? []), ...wizardSkipIds])
+
     // ── Bank statement split mode ─────────────────────────────────────────────
     if (targetTable === 'bank_statement') {
       const colIdx = (field: string) => {
         const h = Object.keys(mapping).find(k => mapping[k] === field)
         return h !== undefined ? sheet.headers.indexOf(h) : -1
       }
-      const dateIdx  = colIdx('date')
-      const descIdx  = colIdx('description')
+      const dateIdx   = colIdx('date')
+      const descIdx   = colIdx('description')
       const creditIdx = colIdx('credit')
       const debitIdx  = colIdx('debit')
       const refIdx    = colIdx('reference')
 
-      const { configs: latestConfigs } = useAllocationStore.getState()
       const inflowRows:  Record<string, unknown>[] = []
       const outflowRows: Record<string, unknown>[] = []
 
@@ -534,11 +541,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
         const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
         const debit  = debitIdx  >= 0 ? parseNumber(raw[debitIdx])  : 0
-        // Description follows non-empty amount column
-        const desc   = descIdx   >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
+        const desc   = descIdx >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
                          ? String(raw[descIdx]).trim() : null
-        const ref    = refIdx    >= 0 && raw[refIdx]  != null && raw[refIdx]  !== ''
-                         ? String(raw[refIdx]).trim()  : null
+        const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
+                         ? String(raw[refIdx]).trim() : null
 
         const cfg = getConfigForDate(latestConfigs, date)
 
@@ -547,6 +553,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (userId) row.created_by = userId
           if (bank)   row.bank_id   = bank.id
           if (cfg)    row.allocation_config_id = cfg.id
+          if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
+          if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
           inflowRows.push(row)
         }
         if (debit > 0) {
@@ -554,25 +562,47 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (userId) row.created_by = userId
           if (bank)   row.bank_id   = bank.id
           if (cfg)    row.allocation_config_id = cfg.id
+          if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
+          if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
+          if (batchPendingDeduction) row.is_pending_deduction = true
           outflowRows.push(row)
         }
         if (credit === 0 && debit === 0) skipped++
       }
 
-      const total = inflowRows.length + outflowRows.length
+      // Apply dup skip filter
+      const inflowToInsert  = allSkipIds.size > 0
+        ? inflowRows.filter(r => { const id = r.transaction_ref as string | undefined; return !id || !allSkipIds.has(id) })
+        : inflowRows
+      const outflowToInsert = allSkipIds.size > 0
+        ? outflowRows.filter(r => { const id = r.transaction_id as string | undefined; return !id || !allSkipIds.has(id) })
+        : outflowRows
+      const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
+      if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
+
+      const total = inflowToInsert.length + outflowToInsert.length
       const BATCH = 100
-      for (let i = 0; i < inflowRows.length; i += BATCH) {
-        const batch = inflowRows.slice(i, i + BATCH)
+
+      for (let i = 0; i < inflowToInsert.length; i += BATCH) {
+        const batch = inflowToInsert.slice(i, i + BATCH)
         const { error: err } = await supabase.from('inflow_transactions').insert(batch)
-        if (err) { errors.push(`Inflow batch: ${err.message}`); skipped += batch.length }
-        else imported += batch.length
+        if (err) {
+          const msg = err.message.includes('invalid input syntax for type uuid')
+            ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
+            : `Inflow batch: ${err.message}`
+          errors.push(msg); skipped += batch.length
+        } else imported += batch.length
         setProgress(total > 0 ? Math.round(((i + batch.length) / total) * 50) : 50)
       }
-      for (let i = 0; i < outflowRows.length; i += BATCH) {
-        const batch = outflowRows.slice(i, i + BATCH)
+      for (let i = 0; i < outflowToInsert.length; i += BATCH) {
+        const batch = outflowToInsert.slice(i, i + BATCH)
         const { error: err } = await supabase.from('outflow_transactions').insert(batch)
-        if (err) { errors.push(`Outflow batch: ${err.message}`); skipped += batch.length }
-        else imported += batch.length
+        if (err) {
+          const msg = err.message.includes('invalid input syntax for type uuid')
+            ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
+            : `Outflow batch: ${err.message}`
+          errors.push(msg); skipped += batch.length
+        } else imported += batch.length
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
       }
 
@@ -583,16 +613,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
     // ── Standard single-table mode ────────────────────────────────────────────
 
+    const nonTextFields = ['date', 'description', 'currency', 'transaction_ref',
+      'narration', 'remark', 'remarks', 'bank_description', 'stage_code_1', 'stage_code_2',
+      'inflow_type', 'account_from', 'account_to', 'transaction_id', 'specific_seed_description',
+      'account_id', 'account_from_stage1', 'account_from_stage2', 'account_to_stage1',
+      'account_to_stage2', 'is_pending_deduction', 'allocation_config_name']
+
     const numericFields = new Set(
-      config.fields
-        .filter(f => !['date', 'description', 'currency', 'transaction_ref',
-                       'narration', 'remark', 'remarks', 'bank_description',
-                       'stage_code_1', 'stage_code_2', 'inflow_type',
-                       'account_from', 'account_to', 'transaction_id',
-                       'specific_seed_description', 'account_id',
-                       'account_from_stage1', 'account_from_stage2',
-                       'account_to_stage1', 'account_to_stage2'].includes(f.key))
-        .map(f => f.key),
+      config.fields.filter(f => !nonTextFields.includes(f.key)).map(f => f.key),
     )
 
     // Build rows
@@ -611,6 +639,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const d = parseDate(val)
           if (!d) { errors.push(`Row ${ri + 2}: invalid date "${val}"`); continue }
           row[field] = d
+        } else if (field === 'is_pending_deduction') {
+          row[field] = String(val).trim().toLowerCase() === 'true' || val === true || val === 1
         } else if (numericFields.has(field)) {
           row[field] = parseNumber(val)
         } else {
@@ -619,9 +649,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
 
       // Check required fields
-      const missing = config.fields
-        .filter(f => f.required && !row[f.key])
-        .map(f => f.label)
+      const missing = config.fields.filter(f => f.required && !row[f.key]).map(f => f.label)
       if (missing.length > 0) {
         skipped++
         if (errors.length < 20) errors.push(`Row ${ri + 2}: missing required fields: ${missing.join(', ')}`)
@@ -629,58 +657,79 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
 
       // Skip all-empty rows
-      if (Object.values(row).every(v => v == null || v === '' || v === 0)) {
-        skipped++
-        continue
-      }
+      if (Object.values(row).every(v => v == null || v === '' || v === 0)) { skipped++; continue }
+
+      // Stage code defaults
+      if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
+      if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
+
+      // Pending deduction batch flag (outflow only)
+      if (targetTable === 'outflow_transactions' && batchPendingDeduction) row.is_pending_deduction = true
 
       if (userId) row.created_by = userId
       mappedRows.push(row)
     }
 
-    // Inject bank_id for inflow/outflow tables if a bank was selected
+    // Inject bank_id
     if (bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions')) {
       for (const row of mappedRows) row.bank_id = bank.id
     }
 
-    // Inject allocation_config_id per row based on the row's date
+    // Inject allocation_config_id per row
     if (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') {
-      const { configs: latestConfigs } = useAllocationStore.getState()
-      for (const row of mappedRows) {
+      for (let ri = 0; ri < mappedRows.length; ri++) {
+        const row  = mappedRows[ri]
         const date = row.date as string | undefined
-        if (date) {
+        if (!date) continue
+
+        if (targetTable === 'inflow_transactions') {
+          const rowCfgId = rowConfigs[ri]
+          if (rowCfgId) {
+            row.allocation_config_id = rowCfgId
+          } else if (row.allocation_config_name) {
+            const named = latestConfigs.find(c => c.name === row.allocation_config_name)
+            if (named) row.allocation_config_id = named.id
+            delete row.allocation_config_name
+          } else {
+            const cfg = getConfigForDate(latestConfigs, date)
+            if (cfg) row.allocation_config_id = cfg.id
+          }
+        } else {
           const cfg = getConfigForDate(latestConfigs, date)
           if (cfg) row.allocation_config_id = cfg.id
         }
+        // Remove virtual field if not deleted above
+        delete row.allocation_config_name
       }
     }
 
-    // Filter out rows whose transaction ID is in the skip list
+    // Apply dup skip filter
+    const txnField =
+      targetTable === 'inflow_transactions'  ? 'transaction_ref' :
+      targetTable === 'outflow_transactions' ? 'transaction_id'  : null
+
     let rowsToInsert = mappedRows
-    if (skipTxnIds && skipTxnIds.size > 0) {
-      const txnField =
-        targetTable === 'inflow_transactions'  ? 'transaction_ref' :
-        targetTable === 'outflow_transactions' ? 'transaction_id'  : null
-      if (txnField) {
-        rowsToInsert = mappedRows.filter(r => {
-          const id = r[txnField] as string | undefined
-          return !id || !skipTxnIds.has(id)
-        })
-        const dupCount = mappedRows.length - rowsToInsert.length
-        if (dupCount > 0) {
-          skipped += dupCount
-          errors.push(`${dupCount} duplicate transaction ID(s) skipped`)
-        }
-      }
+    if (allSkipIds.size > 0 && txnField) {
+      rowsToInsert = mappedRows.filter(r => {
+        const id = r[txnField] as string | undefined
+        return !id || !allSkipIds.has(id)
+      })
+      const dupCount = mappedRows.length - rowsToInsert.length
+      if (dupCount > 0) { skipped += dupCount; errors.push(`${dupCount} duplicate transaction ID(s) skipped`) }
     }
 
-    // Batch insert 100 rows at a time
+    // Batch insert
     const BATCH = 100
     for (let i = 0; i < rowsToInsert.length; i += BATCH) {
       const batch = rowsToInsert.slice(i, i + BATCH)
       const { error } = await supabase.from(targetTable).insert(batch)
       if (error) {
-        const msg = `Batch ${Math.floor(i / BATCH) + 1}: ${error.message}`
+        let msg = `Batch ${Math.floor(i / BATCH) + 1}: ${error.message}`
+        if (error.message.includes('invalid input syntax for type uuid')) {
+          msg = targetTable === 'inflow_transactions'
+            ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
+            : 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
+        }
         errors.push(msg)
         skipped += batch.length
       } else {
@@ -691,7 +740,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
     setResult({ imported, skipped, errors })
     setImporting(false)
-  }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank])
+  }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank,
+      defaultStageCode1, defaultStageCode2, batchPendingDeduction,
+      rowConfigs, skipWizardDups, wizardDupsFound])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
