@@ -47,23 +47,25 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
       { key: 'transaction_ref',           label: 'Transaction Ref'                        },
       { key: 'specific_seed_description', label: 'Seed Description'                       },
       { key: 'remark',                    label: 'Remark'                                 },
+      { key: 'allocation_config_name',    label: 'Allocation Config (by name)'            },
     ],
   },
   outflow_transactions: {
     label: 'Outflow Transactions',
     fields: [
-      { key: 'date',             label: 'Date',             required: true },
-      { key: 'amount_disbursed', label: 'Amount Disbursed', required: true },
-      { key: 'description',      label: 'Description'                      },
-      { key: 'amount_refunded',  label: 'Amount Refunded'                  },
-      { key: 'transfer_charge',  label: 'Transfer Charge'                  },
-      { key: 'actual_amount',    label: 'Actual Amount'                    },
-      { key: 'bank_total',       label: 'Bank Total'                       },
-      { key: 'stage_code_1',     label: 'Stage Code 1'                     },
-      { key: 'stage_code_2',     label: 'Stage Code 2'                     },
-      { key: 'transaction_id',   label: 'Transaction ID'                   },
-      { key: 'bank_description', label: 'Bank Description'                 },
-      { key: 'remarks',          label: 'Remarks'                          },
+      { key: 'date',                 label: 'Date',             required: true },
+      { key: 'amount_disbursed',     label: 'Amount Disbursed', required: true },
+      { key: 'description',          label: 'Description'                      },
+      { key: 'amount_refunded',      label: 'Amount Refunded'                  },
+      { key: 'transfer_charge',      label: 'Transfer Charge'                  },
+      { key: 'actual_amount',        label: 'Actual Amount'                    },
+      { key: 'bank_total',           label: 'Bank Total'                       },
+      { key: 'stage_code_1',         label: 'Stage Code 1'                     },
+      { key: 'stage_code_2',         label: 'Stage Code 2'                     },
+      { key: 'transaction_id',       label: 'Transaction ID'                   },
+      { key: 'bank_description',     label: 'Bank Description'                 },
+      { key: 'remarks',              label: 'Remarks'                          },
+      { key: 'is_pending_deduction', label: 'Pending Deduction'                },
     ],
   },
   intra_flows: {
@@ -109,6 +111,10 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
 }
 
 const SKIP = '__skip__'
+
+const STAGE_CODE_TABLES = new Set<TargetTable>([
+  'inflow_transactions', 'outflow_transactions', 'bank_statement',
+])
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
 
