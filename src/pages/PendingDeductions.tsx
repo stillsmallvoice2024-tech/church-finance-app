@@ -9,7 +9,6 @@ import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTra
 import { useUpdateTransaction }     from '../hooks/useMutations'
 import { useToastStore }            from '../store/toastStore'
 import { usePageTitle }             from '../hooks/usePageTitle'
-import { useAccountCodesStore }     from '../store/accountCodesStore'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 
 const PAGE_SIZE = 25
@@ -33,7 +32,6 @@ export default function PendingDeductions() {
   const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount_disbursed))) : 0, [data])
 
   const { push: toast } = useToastStore()
-  const { getLabel: accountLabel } = useAccountCodesStore()
   const updateMutation = useUpdateTransaction('outflow_transactions')
 
   usePageTitle('Pending Deductions')
@@ -152,7 +150,7 @@ export default function PendingDeductions() {
                           {Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ? accountLabel(row.stage_code_1) : '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">

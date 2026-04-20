@@ -16,8 +16,8 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
-import { useAccountCodesStore } from '../store/accountCodesStore'
-import { useYearRange }         from '../hooks/useYearRange'
+import { useCategories }  from '../hooks/useCategories'
+import { useYearRange }   from '../hooks/useYearRange'
 
 const PAGE_SIZE = 25
 
@@ -98,7 +98,7 @@ export default function IntraFlow() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('intra_flows')
-  const { codes: accountCodes, getLabel: accountLabel } = useAccountCodesStore()
+  const { categories } = useCategories()
 
   usePageTitle('Internal Transfers')
 
@@ -125,11 +125,11 @@ export default function IntraFlow() {
   const handleExport = () => {
     exportCSV(
       `intra-flows-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Date', 'From Account', 'To Account', 'Amount (₦)', 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark'],
+      ['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark'],
       data.map(r => [
         r.date,
-        r.account_from ? accountLabel(r.account_from) : '',
-        r.account_to   ? accountLabel(r.account_to)   : '',
+        r.account_from ?? '',
+        r.account_to   ?? '',
         r.total_amount,
         r.account_from_stage1, r.account_from_stage2,
         r.account_to_stage1,   r.account_to_stage2,
@@ -188,19 +188,19 @@ export default function IntraFlow() {
             <FilterGroup label="To">
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
             </FilterGroup>
-            <FilterGroup label="From Account" className="min-w-[200px]">
+            <FilterGroup label="From Category" className="min-w-[180px]">
               <select value={accountFrom} onChange={e => setAccountFrom(e.target.value)} className={`${inputCls} bg-white`}>
-                <option value="">All accounts</option>
-                {accountCodes.map(a => (
-                  <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+                <option value="">All categories</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </FilterGroup>
-            <FilterGroup label="To Account" className="min-w-[200px]">
+            <FilterGroup label="To Category" className="min-w-[180px]">
               <select value={accountTo} onChange={e => setAccountTo(e.target.value)} className={`${inputCls} bg-white`}>
-                <option value="">All accounts</option>
-                {accountCodes.map(a => (
-                  <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+                <option value="">All categories</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </FilterGroup>
@@ -234,7 +234,7 @@ export default function IntraFlow() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'From Account', 'To Account', 'Amount (₦)', 'From Stage', 'To Stage', 'Remark', 'Actions'].map(h => (
+                  {['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage', 'To Stage', 'Remark', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -265,18 +265,8 @@ export default function IntraFlow() {
                   data.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{row.account_from ?? '—'}</span>
-                          {row.account_from && accountCodes.find(a => a.code === row.account_from)?.name}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{row.account_to ?? '—'}</span>
-                          {row.account_to && accountCodes.find(a => a.code === row.account_to)?.name}
-                        </span>
-                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(Number(row.total_amount))}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>

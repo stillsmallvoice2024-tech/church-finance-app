@@ -20,6 +20,10 @@ import UserManagement from './pages/UserManagement'
 import Import from './pages/Import'
 import PendingDeductions from './pages/PendingDeductions'
 import Setup from './pages/Setup'
+import PercentageAllocations from './pages/PercentageAllocations'
+import SpecificGivings from './pages/SpecificGivings'
+import SavingsPortions from './pages/SavingsPortions'
+import CategoryLedger from './pages/CategoryLedger'
 
 export default function App() {
   useAuthListener()
@@ -49,6 +53,10 @@ export default function App() {
             <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
             <Route path="pending-deductions" element={<ErrorBoundary><PendingDeductions /></ErrorBoundary>} />
             <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
+            <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
+            <Route path="specific-givings" element={<ErrorBoundary><SpecificGivings /></ErrorBoundary>} />
+            <Route path="savings-portions" element={<ErrorBoundary><SavingsPortions /></ErrorBoundary>} />
+            <Route path="category-ledger" element={<ErrorBoundary><CategoryLedger /></ErrorBoundary>} />
           </Route>
         </Route>
 
