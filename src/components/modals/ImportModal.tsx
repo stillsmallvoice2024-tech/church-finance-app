@@ -290,6 +290,36 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: allocLoaded } = useAllocationStore()
   useEffect(() => { if (!allocLoaded) fetchAllocConfigs() }, [allocLoaded, fetchAllocConfigs])
 
+  // Categories for stage code dropdowns
+  const { categories } = useCategories()
+
+  // Stage code defaults
+  const [defaultStageCode1,     setDefaultStageCode1]     = useState('')
+  const [defaultStageCode2,     setDefaultStageCode2]     = useState('')
+  const [batchPendingDeduction, setBatchPendingDeduction] = useState(false)
+
+  // Per-row special config assignment (rowIndex → configId)
+  const [rowConfigs, setRowConfigs] = useState<Record<number, string>>({})
+
+  // In-wizard dup check
+  const [wizardDupLoading, setWizardDupLoading] = useState(false)
+  const [wizardDupsFound,  setWizardDupsFound]  = useState<Array<{ id: string; table: string }>>([])
+  const [skipWizardDups,   setSkipWizardDups]   = useState(false)
+
+  // Special configs (is_special = true) loaded when modal opens
+  const [specialConfigs,   setSpecialConfigs]   = useState<typeof allocConfigs>([])
+  const [createConfigOpen, setCreateConfigOpen] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      supabase
+        .from('allocation_configs')
+        .select('*')
+        .eq('is_special', true)
+        .then(({ data }) => setSpecialConfigs((data ?? []) as typeof allocConfigs))
+    }
+  }, [open])
+
   // ── Reset on open/close ──────────────────────────────────────────────────
 
   const reset = useCallback(() => {
@@ -304,6 +334,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setResult(null)
     setImporting(false)
     setParsing(false)
+    setDefaultStageCode1('')
+    setDefaultStageCode2('')
+    setBatchPendingDeduction(false)
+    setRowConfigs({})
+    setWizardDupLoading(false)
+    setWizardDupsFound([])
+    setSkipWizardDups(false)
   }, [])
 
   const handleClose = () => { reset(); onClose() }
