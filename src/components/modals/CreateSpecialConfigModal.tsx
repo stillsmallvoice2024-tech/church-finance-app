@@ -10,7 +10,11 @@ const MIGRATION_SQL =
   ADD COLUMN IF NOT EXISTS is_special       boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS allocation_type  text    NOT NULL DEFAULT 'percentage'
     CHECK (allocation_type IN ('percentage', 'amount')),
-  ADD COLUMN IF NOT EXISTS total_amount     numeric(15,2);`
+  ADD COLUMN IF NOT EXISTS total_amount     numeric(15,2);
+
+-- Allow multiple configs to share a start_date (required for special configs)
+ALTER TABLE allocation_configs
+  DROP CONSTRAINT IF EXISTS allocation_configs_start_date_key;`
 
 interface Props {
   open:    boolean
@@ -255,7 +259,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }:
 
         {/* Error */}
         {error && (() => {
-          const isMigration = /is_special|allocation_type|total_amount|Could not find/.test(error)
+          const isMigration = /is_special|allocation_type|total_amount|Could not find|allocation_configs_start_date_key/.test(error)
           return (
             <div className="space-y-2">
               <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
