@@ -10,17 +10,10 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
-import { formatDate } from '../../utils/formatters'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
-type TargetTable =
-  | 'bank_statement'
-  | 'inflow_transactions'
-  | 'outflow_transactions'
-  | 'intra_flows'
-  | 'ledger_entries'
-  | 'fx_transactions'
+type TargetTable = 'bank_statement' | 'fx_transactions'
 
 interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -34,69 +27,6 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
       { key: 'debit',       label: 'Debit (Outflow Amount)'                },
       { key: 'balance',     label: 'Balance (info only)'                   },
       { key: 'reference',   label: 'Reference / Txn ID'                    },
-    ],
-  },
-  inflow_transactions: {
-    label: 'Inflow Transactions',
-    fields: [
-      { key: 'date',                      label: 'Date',                    required: true },
-      { key: 'amount',                    label: 'Amount',                  required: true },
-      { key: 'inflow_type',               label: 'Inflow Type'                            },
-      { key: 'description',               label: 'Description'                            },
-      { key: 'stage_code_1',              label: 'Stage Code 1'                           },
-      { key: 'stage_code_2',              label: 'Stage Code 2'                           },
-      { key: 'transaction_ref',           label: 'Transaction Ref'                        },
-      { key: 'bank_id',                   label: 'Bank Transaction ID'                    },
-      { key: 'specific_seed_description', label: 'Seed Description'                       },
-      { key: 'remark',                    label: 'Remark'                                 },
-      { key: 'allocation_config_name',    label: 'Allocation Config (by name)'            },
-    ],
-  },
-  outflow_transactions: {
-    label: 'Outflow Transactions',
-    fields: [
-      { key: 'date',                 label: 'Date',             required: true },
-      { key: 'amount_disbursed',     label: 'Amount Disbursed', required: true },
-      { key: 'description',          label: 'Description'                      },
-      { key: 'amount_refunded',      label: 'Amount Refunded'                  },
-      { key: 'transfer_charge',      label: 'Transfer Charge'                  },
-      { key: 'actual_amount',        label: 'Actual Amount'                    },
-      { key: 'bank_total',           label: 'Bank Total'                       },
-      { key: 'stage_code_1',         label: 'Stage Code 1'                     },
-      { key: 'stage_code_2',         label: 'Stage Code 2'                     },
-      { key: 'transaction_id',       label: 'Transaction ID'                   },
-      { key: 'bank_id',              label: 'Bank Transaction ID'              },
-      { key: 'bank_description',     label: 'Bank Description'                 },
-      { key: 'remarks',              label: 'Remarks'                          },
-      { key: 'is_pending_deduction', label: 'Pending Deduction'                },
-    ],
-  },
-  intra_flows: {
-    label: 'Intra-Account Flows',
-    fields: [
-      { key: 'date',                label: 'Date',         required: true },
-      { key: 'total_amount',        label: 'Total Amount', required: true },
-      { key: 'account_from',        label: 'Account From'                 },
-      { key: 'account_to',          label: 'Account To'                   },
-      { key: 'description',         label: 'Description'                  },
-      { key: 'transaction_ref',     label: 'Transaction Ref'              },
-      { key: 'account_from_stage1', label: 'From Stage 1'                 },
-      { key: 'account_from_stage2', label: 'From Stage 2'                 },
-      { key: 'account_to_stage1',   label: 'To Stage 1'                   },
-      { key: 'account_to_stage2',   label: 'To Stage 2'                   },
-      { key: 'remark',              label: 'Remark'                       },
-    ],
-  },
-  ledger_entries: {
-    label: 'Ledger Entries',
-    fields: [
-      { key: 'account_id',   label: 'Account ID',   required: true },
-      { key: 'date',         label: 'Date',         required: true },
-      { key: 'inflow',       label: 'Inflow'                       },
-      { key: 'outflow',      label: 'Outflow'                      },
-      { key: 'balance',      label: 'Balance'                      },
-      { key: 'description',  label: 'Description'                  },
-      { key: 'refund_intraflow', label: 'Refund/Intraflow'         },
     ],
   },
   fx_transactions: {
@@ -114,10 +44,6 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
 }
 
 const SKIP = '__skip__'
-
-const STAGE_CODE_TABLES = new Set<TargetTable>([
-  'inflow_transactions', 'outflow_transactions', 'bank_statement',
-])
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
 
@@ -427,8 +353,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const proceedToImport = useCallback(async () => {
     if (!sheet || !config || !targetTable) return
 
-    // Outflow stage code validation
-    if ((targetTable === 'outflow_transactions' || targetTable === 'bank_statement') && !batchPendingDeduction) {
+    // Stage code validation for bank_statement outflow rows
+    if (targetTable === 'bank_statement' && !batchPendingDeduction) {
       const mappedFields = new Set(Object.values(mapping))
       const errs: { code1?: string; code2?: string } = {}
       if (!mappedFields.has('stage_code_1') && !defaultStageCode1) errs.code1 = 'Stage Code 1 required'
@@ -438,14 +364,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setStageCodeErrors({})
     setStep(4)
 
-    // Dup check — only for tables with a reference field
-    if (!STAGE_CODE_TABLES.has(targetTable)) return
+    // Dup check — bank_statement only (checks both inflow + outflow reference columns)
+    if (targetTable !== 'bank_statement') return
 
-    const refFieldKey =
-      targetTable === 'inflow_transactions'  ? 'transaction_ref' :
-      targetTable === 'outflow_transactions' ? 'transaction_id'  : 'reference'
-
-    const refHeader = Object.keys(mapping).find(h => mapping[h] === refFieldKey)
+    const refHeader = Object.keys(mapping).find(h => mapping[h] === 'reference')
     if (!refHeader) return
 
     const refColIdx = sheet.headers.indexOf(refHeader)
@@ -463,35 +385,31 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     try {
       const results: Array<{ id: string; table: string }> = []
 
-      if (targetTable === 'inflow_transactions' || targetTable === 'bank_statement') {
-        const { data, error } = await supabase
-          .from('inflow_transactions')
-          .select('transaction_ref')
-          .in('transaction_ref', uniqueIds)
-        if (error) {
-          if (error.message.includes('invalid input syntax for type uuid')) {
-            results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
-          }
-        } else {
-          for (const r of data ?? []) {
-            if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
-          }
+      const { data: inflowData, error: inflowErr } = await supabase
+        .from('inflow_transactions')
+        .select('transaction_ref')
+        .in('transaction_ref', uniqueIds)
+      if (inflowErr) {
+        if (inflowErr.message.includes('invalid input syntax for type uuid')) {
+          results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
+        }
+      } else {
+        for (const r of inflowData ?? []) {
+          if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
         }
       }
 
-      if (targetTable === 'outflow_transactions' || targetTable === 'bank_statement') {
-        const { data, error } = await supabase
-          .from('outflow_transactions')
-          .select('transaction_id')
-          .in('transaction_id', uniqueIds)
-        if (error) {
-          if (error.message.includes('invalid input syntax for type uuid')) {
-            results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
-          }
-        } else {
-          for (const r of data ?? []) {
-            if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
-          }
+      const { data: outflowData, error: outflowErr } = await supabase
+        .from('outflow_transactions')
+        .select('transaction_id')
+        .in('transaction_id', uniqueIds)
+      if (outflowErr) {
+        if (outflowErr.message.includes('invalid input syntax for type uuid')) {
+          results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
+        }
+      } else {
+        for (const r of outflowData ?? []) {
+          if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
         }
       }
 
@@ -627,145 +545,56 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       setResult({ imported, skipped, errors })
       setImporting(false)
-      return
     }
 
-    // ── Standard single-table mode ────────────────────────────────────────────
+    // ── FX transactions ───────────────────────────────────────────────────────
+    if (targetTable === 'fx_transactions') {
+      const colIdx = (field: string) => {
+        const h = Object.keys(mapping).find(k => mapping[k] === field)
+        return h !== undefined ? sheet.headers.indexOf(h) : -1
+      }
+      const dateIdx    = colIdx('date')
+      const currIdx    = colIdx('currency')
+      const depIdx     = colIdx('deposit')
+      const wdIdx      = colIdx('withdrawal')
+      const balIdx     = colIdx('running_balance')
+      const narrIdx    = colIdx('narration')
+      const refIdx     = colIdx('transaction_ref')
 
-    const nonTextFields = ['date', 'description', 'currency', 'transaction_ref',
-      'narration', 'remark', 'remarks', 'bank_description', 'stage_code_1', 'stage_code_2',
-      'inflow_type', 'account_from', 'account_to', 'transaction_id', 'specific_seed_description',
-      'account_id', 'account_from_stage1', 'account_from_stage2', 'account_to_stage1',
-      'account_to_stage2', 'is_pending_deduction', 'allocation_config_name', 'bank_id']
+      const fxRows: Record<string, unknown>[] = []
+      for (let ri = 0; ri < sheet.rows.length; ri++) {
+        const raw  = sheet.rows[ri] as unknown[]
+        const date = dateIdx >= 0 ? parseDate(raw[dateIdx]) : null
+        if (!date) { skipped++; continue }
+        const currency = currIdx >= 0 && raw[currIdx] != null && raw[currIdx] !== ''
+          ? String(raw[currIdx]).trim() : null
+        if (!currency) { skipped++; continue }
+        const row: Record<string, unknown> = { date, currency }
+        if (depIdx  >= 0) row.deposit          = parseNumber(raw[depIdx])
+        if (wdIdx   >= 0) row.withdrawal        = parseNumber(raw[wdIdx])
+        if (balIdx  >= 0) row.running_balance   = parseNumber(raw[balIdx])
+        if (narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '') row.narration = String(raw[narrIdx]).trim()
+        if (refIdx  >= 0 && raw[refIdx]  != null && raw[refIdx]  !== '') row.transaction_ref = String(raw[refIdx]).trim()
+        if (userId) row.created_by = userId
+        fxRows.push(row)
+      }
 
-    const numericFields = new Set(
-      config.fields.filter(f => !nonTextFields.includes(f.key)).map(f => f.key),
-    )
-
-    // Build rows
-    const mappedRows: Record<string, unknown>[] = []
-    for (let ri = 0; ri < sheet.rows.length; ri++) {
-      const raw = sheet.rows[ri]
-      const row: Record<string, unknown> = {}
-
-      for (let ci = 0; ci < sheet.headers.length; ci++) {
-        const header = sheet.headers[ci]
-        const field  = mapping[header]
-        if (!field || field === SKIP) continue
-        const val = raw[ci]
-
-        if (field === 'date') {
-          const d = parseDate(val)
-          if (!d) { errors.push(`Row ${ri + 2}: invalid date "${val}"`); continue }
-          row[field] = d
-        } else if (field === 'is_pending_deduction') {
-          row[field] = String(val).trim().toLowerCase() === 'true' || val === true || val === 1
-        } else if (numericFields.has(field)) {
-          row[field] = parseNumber(val)
+      const BATCH = 100
+      for (let i = 0; i < fxRows.length; i += BATCH) {
+        const batch = fxRows.slice(i, i + BATCH)
+        const { error: err } = await supabase.from('fx_transactions').insert(batch)
+        if (err) {
+          errors.push(`FX batch: ${err.message}`); skipped += batch.length
         } else {
-          row[field] = val != null && val !== '' ? String(val).trim() : null
+          imported += batch.length
         }
+        setProgress(Math.round(((i + batch.length) / fxRows.length) * 100))
       }
 
-      // Check required fields
-      const missing = config.fields.filter(f => f.required && !row[f.key]).map(f => f.label)
-      if (missing.length > 0) {
-        skipped++
-        if (errors.length < 20) errors.push(`Row ${ri + 2}: missing required fields: ${missing.join(', ')}`)
-        continue
-      }
-
-      // Skip all-empty rows
-      if (Object.values(row).every(v => v == null || v === '' || v === 0)) { skipped++; continue }
-
-      // Stage code defaults
-      if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
-      if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
-
-      // Pending deduction batch flag (outflow only)
-      if (targetTable === 'outflow_transactions' && batchPendingDeduction) row.is_pending_deduction = true
-
-      if (userId) row.created_by = userId
-      mappedRows.push(row)
+      setResult({ imported, skipped, errors })
+      setImporting(false)
     }
-
-    // Inject allocation_config_id per row
-    if (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') {
-      for (let ri = 0; ri < mappedRows.length; ri++) {
-        const row  = mappedRows[ri]
-        const date = row.date as string | undefined
-        if (!date) continue
-
-        if (targetTable === 'inflow_transactions') {
-          const rowCfgId = rowConfigs[ri]
-          if (rowCfgId) {
-            row.allocation_config_id = rowCfgId
-          } else if (row.allocation_config_name) {
-            const named = latestConfigs.find(c => c.name === row.allocation_config_name)
-            if (named) row.allocation_config_id = named.id
-            delete row.allocation_config_name
-          } else {
-            const cfg = getConfigForDate(latestConfigs, date)
-            if (cfg) row.allocation_config_id = cfg.id
-          }
-        } else {
-          const cfg = getConfigForDate(latestConfigs, date)
-          if (cfg) row.allocation_config_id = cfg.id
-        }
-        // Remove virtual field if not deleted above
-        delete row.allocation_config_name
-      }
-    }
-
-    // Apply dup skip filter
-    const txnField =
-      targetTable === 'inflow_transactions'  ? 'transaction_ref' :
-      targetTable === 'outflow_transactions' ? 'transaction_id'  : null
-
-    let rowsToInsert = mappedRows
-    if (allSkipIds.size > 0 && txnField) {
-      rowsToInsert = mappedRows.filter(r => {
-        const id = r[txnField] as string | undefined
-        return !id || !allSkipIds.has(id)
-      })
-      const dupCount = mappedRows.length - rowsToInsert.length
-      if (dupCount > 0) { skipped += dupCount; errors.push(`${dupCount} duplicate transaction ID(s) skipped`) }
-    }
-
-    // Batch insert
-    const BATCH = 100
-    for (let i = 0; i < rowsToInsert.length; i += BATCH) {
-      const batch = rowsToInsert.slice(i, i + BATCH)
-      let { error } = await supabase.from(targetTable).insert(batch)
-      // Handle missing column errors generically — strip the column and retry
-      const missingCol = error?.message.match(/Could not find the '(\w+)' column/)?.[1]
-        ?? (error?.message.includes('allocation_config_id') ? 'allocation_config_id' : null)
-      if (missingCol) {
-        const stripped = batch.map(row => { const r = { ...row }; delete r[missingCol]; return r })
-        const { error: retryErr } = await supabase.from(targetTable).insert(stripped)
-        error = retryErr ?? null
-        if (!errors.some(e => e.includes(missingCol))) {
-          errors.push(`⚠ ${missingCol} column missing — run DB migration to add this column`)
-        }
-      }
-      if (error) {
-        let msg = `Batch ${Math.floor(i / BATCH) + 1}: ${error.message}`
-        if (error.message.includes('invalid input syntax for type uuid')) {
-          msg = targetTable === 'inflow_transactions'
-            ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
-            : 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
-        }
-        errors.push(msg)
-        skipped += batch.length
-      } else {
-        imported += batch.length
-      }
-      setProgress(Math.round(((i + batch.length) / rowsToInsert.length) * 100))
-    }
-
-    setResult({ imported, skipped, errors })
-    setImporting(false)
-  }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank,
+  }, [sheet, config, targetTable, mapping, user, skipTxnIds,
       defaultStageCode1, defaultStageCode2, batchPendingDeduction,
       rowConfigs, skipWizardDups, wizardDupsFound])
 
@@ -972,7 +801,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             })()}
 
             {/* Batch Defaults panel — stage codes + pending deduction */}
-            {STAGE_CODE_TABLES.has(targetTable as TargetTable) && (
+            {targetTable === 'bank_statement' && (
               <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Defaults — Stage Codes</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -1012,20 +841,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                   </div>
                 </div>
 
-                {(targetTable === 'outflow_transactions' || targetTable === 'bank_statement') && (
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
-                    <input
-                      type="checkbox"
-                      checked={batchPendingDeduction}
-                      onChange={e => { setBatchPendingDeduction(e.target.checked); setStageCodeErrors({}) }}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
-                    />
-                    <span className="text-sm text-gray-700">
-                      Mark all outflow rows as <strong>Pending Deduction</strong>
-                      <span className="text-gray-400 text-xs ml-1">(stage codes not required)</span>
-                    </span>
-                  </label>
-                )}
+                <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
+                  <input
+                    type="checkbox"
+                    checked={batchPendingDeduction}
+                    onChange={e => { setBatchPendingDeduction(e.target.checked); setStageCodeErrors({}) }}
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Mark all outflow rows as <strong>Pending Deduction</strong>
+                    <span className="text-gray-400 text-xs ml-1">(stage codes not required)</span>
+                  </span>
+                </label>
               </div>
             )}
 
@@ -1036,11 +863,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
                 if (config.fields.some(f => f.required && !mappedFields.has(f.key))) return true
-                if (
-                  STAGE_CODE_TABLES.has(targetTable as TargetTable) &&
-                  targetTable !== 'inflow_transactions' &&
-                  !batchPendingDeduction
-                ) {
+                if (targetTable === 'bank_statement' && !batchPendingDeduction) {
                   if (!mappedFields.has('stage_code_1') && !defaultStageCode1) return true
                   if (!mappedFields.has('stage_code_2') && !defaultStageCode2) return true
                 }
@@ -1084,78 +907,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 {bank && <p>Bank: <strong>{bank.name}</strong> will be tagged on all rows.</p>}
               </div>
             )}
-
-            {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="text-xs font-medium text-gray-500">Bank</span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-                  {bank.name}
-                </span>
-                <span className="text-xs text-gray-400">will be applied to all {sheet.rowCount.toLocaleString()} rows</span>
-              </div>
-            )}
-            {/* Allocation config label */}
-            {(targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (() => {
-              const dateHeader = Object.keys(mapping).find(h => mapping[h] === 'date')
-              const dateColIdx = dateHeader !== undefined ? sheet.headers.indexOf(dateHeader) : -1
-              const firstDate  = dateColIdx >= 0 && sheet.rows[0] ? parseDate(sheet.rows[0][dateColIdx]) : null
-              const cfg        = firstDate ? getConfigForDate(allocConfigs, firstDate) : null
-              return cfg ? (
-                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-primary/5 border border-primary/20 text-primary">
-                  Using: <strong>{cfg.name}</strong> — effective {formatDate(cfg.start_date)}
-                  <span className="ml-auto text-gray-400">config applied per row date</span>
-                </div>
-              ) : firstDate ? (
-                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700">
-                  No allocation config found for {formatDate(firstDate)} — rows will be saved without an allocation
-                </div>
-              ) : null
-            })()}
-
-            {/* D11: Per-row special config assignment — inflow_transactions only */}
-            {targetTable === 'inflow_transactions' && sheet.rows.length > 0 && (() => {
-              const dateColIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
-              const amtColIdx  = sheet.headers.findIndex(h => mapping[h] === 'amount')
-              return (
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config per Row</span>
-                    <button
-                      type="button"
-                      onClick={() => setCreateConfigOpen(true)}
-                      className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium"
-                    >
-                      + Create Special Config
-                    </button>
-                  </div>
-                  <div className="max-h-52 overflow-y-auto divide-y divide-gray-100">
-                    {sheet.rows.map((row, ri) => {
-                      const rawArr = row as unknown[]
-                      const date   = dateColIdx >= 0 ? (parseDate(rawArr[dateColIdx]) ?? '') : ''
-                      const amt    = amtColIdx  >= 0 ? parseNumber(rawArr[amtColIdx])        : 0
-                      const selId  = rowConfigs[ri] ?? ''
-                      return (
-                        <div key={ri} className="grid grid-cols-[36px_1fr_1fr_180px] items-center px-3 py-1.5 gap-2 text-xs">
-                          <span className="text-gray-400 font-mono">{ri + 1}</span>
-                          <span className="text-gray-600 truncate">{date}</span>
-                          <span className="text-gray-700 font-medium">₦{amt.toLocaleString()}</span>
-                          <select
-                            value={selId}
-                            onChange={e => setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))}
-                            className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                          >
-                            <option value="">General (date-based)</option>
-                            {specialConfigs.map(c => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })()}
 
             {/* D12: In-wizard dup check results */}
             {wizardDupLoading && (
@@ -1229,9 +980,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               {f.label}
                             </th>
                           ))}
-                        {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-                          <th className="px-3 py-2 text-left font-semibold text-primary whitespace-nowrap">Bank</th>
-                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1249,13 +997,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 </td>
                               )
                             })}
-                          {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-                            <td className="px-3 py-1.5 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
-                                {bank.name}
-                              </span>
-                            </td>
-                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1296,14 +1037,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <div className="text-sm space-y-1">
                   <div className="text-success">✓ {result.imported.toLocaleString()} rows imported</div>
                   {result.skipped > 0 && <div className="text-amber-600">⚠ {result.skipped} rows skipped</div>}
-                  {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-                    <div className="flex items-center gap-1.5 text-gray-600 pt-1">
-                      <span className="text-xs">Bank:</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-                        {bank.name}
-                      </span>
-                    </div>
-                  )}
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
