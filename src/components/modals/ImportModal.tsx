@@ -46,6 +46,7 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
       { key: 'stage_code_1',              label: 'Stage Code 1'                           },
       { key: 'stage_code_2',              label: 'Stage Code 2'                           },
       { key: 'transaction_ref',           label: 'Transaction Ref'                        },
+      { key: 'bank_id',                   label: 'Bank Transaction ID'                    },
       { key: 'specific_seed_description', label: 'Seed Description'                       },
       { key: 'remark',                    label: 'Remark'                                 },
       { key: 'allocation_config_name',    label: 'Allocation Config (by name)'            },
@@ -64,6 +65,7 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
       { key: 'stage_code_1',         label: 'Stage Code 1'                     },
       { key: 'stage_code_2',         label: 'Stage Code 2'                     },
       { key: 'transaction_id',       label: 'Transaction ID'                   },
+      { key: 'bank_id',              label: 'Bank Transaction ID'              },
       { key: 'bank_description',     label: 'Bank Description'                 },
       { key: 'remarks',              label: 'Remarks'                          },
       { key: 'is_pending_deduction', label: 'Pending Deduction'                },
@@ -179,6 +181,7 @@ const ALIAS_MAP: Record<string, string[]> = {
   remark:           ['remark', 'remarks', 'note', 'notes', 'comment'],
   narration:        ['narration', 'description', 'desc', 'memo'],
   inflow_type:      ['inflowtype', 'type', 'category'],
+  bank_id:          ['bankid', 'banktxnid', 'banktransactionid', 'bankref', 'bankreference', 'banksessionid'],
 }
 
 function autoMapColumn(header: string, fields: FieldDef[]): string {
@@ -551,7 +554,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
-          if (bank)   row.bank_id   = bank.id
           if (cfg)    row.allocation_config_id = cfg.id
           if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
           if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
@@ -560,7 +562,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (debit > 0) {
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
           if (userId) row.created_by = userId
-          if (bank)   row.bank_id   = bank.id
           if (cfg)    row.allocation_config_id = cfg.id
           if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
           if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
@@ -635,7 +636,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       'narration', 'remark', 'remarks', 'bank_description', 'stage_code_1', 'stage_code_2',
       'inflow_type', 'account_from', 'account_to', 'transaction_id', 'specific_seed_description',
       'account_id', 'account_from_stage1', 'account_from_stage2', 'account_to_stage1',
-      'account_to_stage2', 'is_pending_deduction', 'allocation_config_name']
+      'account_to_stage2', 'is_pending_deduction', 'allocation_config_name', 'bank_id']
 
     const numericFields = new Set(
       config.fields.filter(f => !nonTextFields.includes(f.key)).map(f => f.key),
@@ -686,11 +687,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       if (userId) row.created_by = userId
       mappedRows.push(row)
-    }
-
-    // Inject bank_id
-    if (bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions')) {
-      for (const row of mappedRows) row.bank_id = bank.id
     }
 
     // Inject allocation_config_id per row
