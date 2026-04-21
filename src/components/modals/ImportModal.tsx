@@ -139,7 +139,7 @@ interface ParsedSheet {
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
 function StepDots({ step }: { step: number }) {
-  const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Import']
+  const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Configure Rows', 'Import']
   return (
     <div className="flex items-center gap-0 mb-5">
       {STEPS.map((label, i) => {
@@ -236,6 +236,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   // Per-row special config assignment (rowIndex → configId)
   const [rowConfigs, setRowConfigs] = useState<Record<number, string>>({})
 
+  // Step 4 — Configure Rows
+  const [rowStageCodes, setRowStageCodes] = useState<Record<number, { s1: string; s2: string }>>({})
+  const [bsConfigTab,   setBsConfigTab]   = useState<'inflow' | 'outflow'>('inflow')
+
   // In-wizard dup check
   const [wizardDupLoading, setWizardDupLoading] = useState(false)
   const [wizardDupsFound,  setWizardDupsFound]  = useState<Array<{ id: string; table: string }>>([])
@@ -273,6 +277,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setDefaultStageCode2('')
     setBatchPendingDeduction(false)
     setRowConfigs({})
+    setRowStageCodes({})
+    setBsConfigTab('inflow')
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
@@ -352,15 +358,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setStep(3)
   }
 
-  // ── Step 3 → 4: validate + dup check ─────────────────────────────────────
+  // ── Step 3 → 4 (bank_statement) or Step 3 → 5 (fx_transactions) ─────────
 
   const [stageCodeErrors, setStageCodeErrors] = useState<{ code1?: string; code2?: string }>({})
 
-  const proceedToImport = useCallback(async () => {
-    if (!sheet || !config || !targetTable) return
+  // bank_statement: validate stage codes, pre-populate rowStageCodes, go to step 4
+  const proceedToRowConfig = useCallback(() => {
+    if (!sheet || !config || targetTable !== 'bank_statement') return
 
-    // Stage code validation for bank_statement outflow rows
-    if (targetTable === 'bank_statement' && !batchPendingDeduction) {
+    if (!batchPendingDeduction) {
       const mappedFields = new Set(Object.values(mapping))
       const errs: { code1?: string; code2?: string } = {}
       if (!mappedFields.has('stage_code_1') && !defaultStageCode1) errs.code1 = 'Stage Code 1 required'
@@ -368,9 +374,34 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       if (errs.code1 || errs.code2) { setStageCodeErrors(errs); return }
     }
     setStageCodeErrors({})
-    setStep(4)
 
-    // Dup check — bank_statement only (checks both inflow + outflow reference columns)
+    // Pre-populate rowStageCodes from mapped columns + batch defaults
+    const s1ColIdx = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
+    const s2ColIdx = sheet.headers.findIndex(h => mapping[h] === 'stage_code_2')
+    const debitIdx = sheet.headers.findIndex(h => mapping[h] === 'debit')
+
+    const initial: Record<number, { s1: string; s2: string }> = {}
+    for (let ri = 0; ri < sheet.rows.length; ri++) {
+      const raw   = sheet.rows[ri] as unknown[]
+      const debit = debitIdx >= 0 ? parseNumber(raw[debitIdx]) : 0
+      if (debit <= 0) continue
+      const s1 = s1ColIdx >= 0 && raw[s1ColIdx] != null && raw[s1ColIdx] !== ''
+        ? String(raw[s1ColIdx]).trim() : defaultStageCode1
+      const s2 = s2ColIdx >= 0 && raw[s2ColIdx] != null && raw[s2ColIdx] !== ''
+        ? String(raw[s2ColIdx]).trim() : defaultStageCode2
+      initial[ri] = { s1, s2 }
+    }
+    setRowStageCodes(initial)
+    setStep(4)
+  }, [sheet, config, targetTable, mapping, batchPendingDeduction, defaultStageCode1, defaultStageCode2])
+
+  // fx_transactions (and any future non-bank_statement): skip step 4, go straight to step 5 + dup check
+  const proceedToImport = useCallback(async () => {
+    if (!sheet || !config || !targetTable) return
+    setStageCodeErrors({})
+    setStep(5)
+
+    // Dup check for bank_statement only
     if (targetTable !== 'bank_statement') return
 
     const refHeader = Object.keys(mapping).find(h => mapping[h] === 'reference')
@@ -423,7 +454,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     } finally {
       setWizardDupLoading(false)
     }
-  }, [sheet, config, targetTable, mapping, batchPendingDeduction, defaultStageCode1, defaultStageCode2])
+  }, [sheet, config, targetTable, mapping])
 
   // ── Step 4: Import ────────────────────────────────────────────────────────
 
@@ -908,7 +939,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             <NavButtons
               step={step}
               onBack={() => setStep(2)}
-              onNext={proceedToImport}
+              onNext={targetTable === 'bank_statement' ? proceedToRowConfig : proceedToImport}
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
                 if (config.fields.some(f => f.required && !mappedFields.has(f.key))) return true
@@ -918,13 +949,54 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 }
                 return false
               })()}
+              nextLabel={targetTable === 'bank_statement'
+                ? `Configure Rows (${sheet.rowCount.toLocaleString()})`
+                : `Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
+            />
+          </div>
+        )}
+
+        {/* ─────────────────────── STEP 4: Configure Rows ─────────────── */}
+        {step === 4 && sheet && config && targetTable === 'bank_statement' && (
+          <div className="space-y-5">
+
+            {/* Persistent bank bar */}
+            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-400'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              {internalBank && (
+                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
+              )}
+            </div>
+
+            {/* Placeholder — Step 4 full UI added in Phase 4 */}
+            <div className="text-sm text-gray-500 text-center py-8 border border-dashed border-gray-200 rounded-xl">
+              Configure Rows — coming in next phase
+            </div>
+
+            <NavButtons
+              step={step}
+              onBack={() => setStep(3)}
+              onNext={proceedToImport}
               nextLabel={`Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
             />
           </div>
         )}
 
-        {/* ─────────────────────── STEP 4: Preview & Import ────────────── */}
-        {step === 4 && sheet && config && (
+        {/* ─────────────────────── STEP 5: Preview & Import ────────────── */}
+        {step === 5 && sheet && config && (
           <div className="space-y-5">
 
             {/* Persistent bank bar */}
@@ -1129,7 +1201,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             {!result ? (
               <NavButtons
                 step={step}
-                onBack={() => setStep(3)}
+                onBack={() => setStep(targetTable === 'bank_statement' ? 4 : 3)}
                 onNext={runImport}
                 nextDisabled={importing || wizardDupLoading || !internalBank}
                 nextLabel={importing ? 'Importing…' : 'Start Import'}
