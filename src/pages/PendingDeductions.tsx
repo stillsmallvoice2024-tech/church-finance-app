@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useYearRange } from '../hooks/useYearRange'
-import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw } from 'lucide-react'
+import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
 import { Pagination }               from '../components/ui/Pagination'
 import { AddOutflowModal }          from '../components/modals/AddOutflowModal'
@@ -59,16 +59,48 @@ export default function PendingDeductions() {
     refetch()
   }
 
-  if (error) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-      <AlertCircle className="w-10 h-10 text-danger" />
-      <p className="font-semibold text-gray-800">Failed to load pending deductions</p>
-      <p className="text-sm text-gray-500">{error}</p>
-      <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
-        <RefreshCw className="w-4 h-4" /> Retry
-      </button>
-    </div>
-  )
+  if (error) {
+    const isMissingCol = error.includes('is_pending_deduction') || error.includes('column')
+    return (
+      <div className="space-y-4 max-w-2xl">
+        <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            {isMissingCol ? (
+              <>
+                <p className="font-semibold">Database migration required</p>
+                <p className="mt-0.5 text-amber-700">
+                  The <code className="font-mono bg-amber-100 px-1 rounded">is_pending_deduction</code> column
+                  is missing from <code className="font-mono bg-amber-100 px-1 rounded">outflow_transactions</code>.
+                  Run the SQL below in your Supabase SQL Editor, then click Retry.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">Failed to load pending deductions</p>
+                <p className="mt-0.5 text-amber-700">{error}</p>
+              </>
+            )}
+          </div>
+        </div>
+        {isMissingCol && (
+          <div className="rounded-xl border border-gray-200 bg-gray-900 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
+              <Terminal className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs text-gray-400 font-mono">Supabase SQL Editor</span>
+            </div>
+            <pre className="px-4 py-4 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{
+`ALTER TABLE outflow_transactions
+  ADD COLUMN IF NOT EXISTS is_pending_deduction boolean NOT NULL DEFAULT false;`
+            }</pre>
+          </div>
+        )}
+        <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+          <RefreshCw className="w-4 h-4" /> Retry
+        </button>
+      </div>
+    )
+  }
 
   return (
     <>
