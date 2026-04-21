@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
+import { useBanks } from '../../hooks/useBanks'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -223,6 +224,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   // Categories for stage code dropdowns
   const { categories } = useCategories()
 
+  // Bank selector inside wizard
+  const { banks: bankList } = useBanks()
+  const [internalBank, setInternalBank] = useState<{ id: string; name: string } | null>(bank ?? null)
+
   // Stage code defaults
   const [defaultStageCode1,     setDefaultStageCode1]     = useState('')
   const [defaultStageCode2,     setDefaultStageCode2]     = useState('')
@@ -271,7 +276,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
-  }, [])
+    setInternalBank(bank ?? null)
+  }, [bank])
 
   const handleClose = () => { reset(); onClose() }
 
@@ -473,6 +479,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
           if (cfg)    row.allocation_config_id = cfg.id
+          if (internalBank) row.bank_name = internalBank.name
           if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
           if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
           inflowRows.push(row)
@@ -481,6 +488,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
           if (userId) row.created_by = userId
           if (cfg)    row.allocation_config_id = cfg.id
+          if (internalBank) row.bank_name = internalBank.name
           if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
           if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
           if (batchPendingDeduction) row.is_pending_deduction = true
@@ -576,6 +584,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '') row.narration = String(raw[narrIdx]).trim()
         if (refIdx  >= 0 && raw[refIdx]  != null && raw[refIdx]  !== '') row.transaction_ref = String(raw[refIdx]).trim()
         if (userId) row.created_by = userId
+        if (internalBank) row.bank_name = internalBank.name
         fxRows.push(row)
       }
 
@@ -596,7 +605,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
       defaultStageCode1, defaultStageCode2, batchPendingDeduction,
-      rowConfigs, skipWizardDups, wizardDupsFound])
+      rowConfigs, skipWizardDups, wizardDupsFound, internalBank])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -709,6 +718,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               </div>
             </div>
 
+            {/* Bank selector — required for all import types */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-600">Bank *</label>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-300'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+
             {/* Preview table */}
             {sheet && (
               <div>
@@ -746,7 +773,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               step={step}
               onBack={preloadedFile ? undefined : () => { setStep(1); setSheets([]); setFileName('') }}
               onNext={proceedToMapping}
-              nextDisabled={!targetTable || !selectedSheet}
+              nextDisabled={!targetTable || !selectedSheet || !internalBank}
               nextLabel="Map Columns"
             />
           </div>
@@ -755,6 +782,28 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         {/* ─────────────────────── STEP 3: Column Mapping ──────────────── */}
         {step === 3 && sheet && config && (
           <div className="space-y-4">
+
+            {/* Persistent bank bar */}
+            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-400'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              {internalBank && (
+                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
+              )}
+            </div>
+
             <p className="text-sm text-gray-600">
               Map each spreadsheet column to an app field.
               Smart defaults have been applied where column names match.
@@ -877,6 +926,36 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         {/* ─────────────────────── STEP 4: Preview & Import ────────────── */}
         {step === 4 && sheet && config && (
           <div className="space-y-5">
+
+            {/* Persistent bank bar */}
+            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-400'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              {internalBank && (
+                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
+              )}
+            </div>
+
+            {/* No-bank warning */}
+            {!internalBank && (
+              <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Select a bank before importing.
+              </div>
+            )}
+
             {/* Summary */}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-lg bg-gray-50 px-3 py-3">
@@ -904,7 +983,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <p className="font-semibold">Bank Statement Split Rules</p>
                 <p>Credit &gt; 0 → <strong>Inflow</strong> table &nbsp;·&nbsp; Debit &gt; 0 → <strong>Outflow</strong> table</p>
                 <p className="text-gray-500">Description follows the non-empty amount column into the correct table.</p>
-                {bank && <p>Bank: <strong>{bank.name}</strong> will be tagged on all rows.</p>}
+                {internalBank && <p>Bank: <strong>{internalBank.name}</strong> will be tagged on all rows.</p>}
               </div>
             )}
 
@@ -1052,7 +1131,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 step={step}
                 onBack={() => setStep(3)}
                 onNext={runImport}
-                nextDisabled={importing || wizardDupLoading}
+                nextDisabled={importing || wizardDupLoading || !internalBank}
                 nextLabel={importing ? 'Importing…' : 'Start Import'}
                 nextLoading={importing || wizardDupLoading}
               />
