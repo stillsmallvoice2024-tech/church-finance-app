@@ -585,7 +585,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       for (let i = 0; i < inflowToInsert.length; i += BATCH) {
         const batch = inflowToInsert.slice(i, i + BATCH)
-        const { error: err } = await supabase.from('inflow_transactions').insert(batch)
+        let { error: err } = await supabase.from('inflow_transactions').insert(batch)
+        const missingInflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
+        if (missingInflow) {
+          const stripped = batch.map(row => { const r = { ...row }; delete r[missingInflow]; return r })
+          const { error: retryErr } = await supabase.from('inflow_transactions').insert(stripped)
+          err = retryErr ?? null
+          if (!errors.some(e => e.includes(missingInflow))) {
+            errors.push(`⚠ ${missingInflow} column missing — run DB migration to add this column`)
+          }
+        }
         if (err) {
           const msg = err.message.includes('invalid input syntax for type uuid')
             ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
@@ -596,7 +605,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
       for (let i = 0; i < outflowToInsert.length; i += BATCH) {
         const batch = outflowToInsert.slice(i, i + BATCH)
-        const { error: err } = await supabase.from('outflow_transactions').insert(batch)
+        let { error: err } = await supabase.from('outflow_transactions').insert(batch)
+        const missingOutflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
+        if (missingOutflow) {
+          const stripped = batch.map(row => { const r = { ...row }; delete r[missingOutflow]; return r })
+          const { error: retryErr } = await supabase.from('outflow_transactions').insert(stripped)
+          err = retryErr ?? null
+          if (!errors.some(e => e.includes(missingOutflow))) {
+            errors.push(`⚠ ${missingOutflow} column missing — run DB migration to add this column`)
+          }
+        }
         if (err) {
           const msg = err.message.includes('invalid input syntax for type uuid')
             ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
@@ -723,13 +741,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     for (let i = 0; i < rowsToInsert.length; i += BATCH) {
       const batch = rowsToInsert.slice(i, i + BATCH)
       let { error } = await supabase.from(targetTable).insert(batch)
-      if (error?.message.includes("allocation_config_id")) {
-        // Column doesn't exist in DB yet — strip and retry, log warning once
-        const stripped = batch.map(({ allocation_config_id: _, ...rest }) => rest)
+      // Handle missing column errors generically — strip the column and retry
+      const missingCol = error?.message.match(/Could not find the '(\w+)' column/)?.[1]
+        ?? (error?.message.includes('allocation_config_id') ? 'allocation_config_id' : null)
+      if (missingCol) {
+        const stripped = batch.map(row => { const r = { ...row }; delete r[missingCol]; return r })
         const { error: retryErr } = await supabase.from(targetTable).insert(stripped)
         error = retryErr ?? null
-        if (!errors.some(e => e.includes('allocation_config_id'))) {
-          errors.push('⚠ allocation_config_id column missing — run: ALTER TABLE inflow_transactions ADD COLUMN IF NOT EXISTS allocation_config_id uuid REFERENCES allocation_configs(id);')
+        if (!errors.some(e => e.includes(missingCol))) {
+          errors.push(`⚠ ${missingCol} column missing — run DB migration to add this column`)
         }
       }
       if (error) {
