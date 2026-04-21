@@ -69,6 +69,7 @@ export const useAllocationStore = create<AllocationState>((set, get) => ({
     const { data, error } = await supabase
       .from('allocation_configs')
       .select('*')
+      .or('is_special.eq.false,is_special.is.null')
       .order('start_date', { ascending: true })
 
     if (error) {
