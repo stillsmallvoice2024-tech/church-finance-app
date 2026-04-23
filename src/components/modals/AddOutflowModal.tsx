@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
@@ -25,6 +26,9 @@ const schema = z.object({
   amount_refunded:  optNum,
   transfer_charge:  optNum,
   remarks:          z.string().optional(),
+  fx_currency:      z.string().optional(),
+  fx_amount:        optNum,
+  fx_rate:          optNum,
 })
 
 type FormValues = z.infer<typeof schema>
@@ -42,6 +46,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { categories } = useCategories()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
+  const [fxOpen,    setFxOpen]    = useState(false)
 
   const addMutation    = useAddOutflow()
   const updateMutation = useUpdateTransaction('outflow_transactions')
@@ -63,6 +68,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     if (!open) return
     resetAdd()
     resetUpdate()
+    setFxOpen(false)
     if (editRecord) {
       setIsPending(editRecord.is_pending_deduction ?? false)
       resetForm({
@@ -76,6 +82,9 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         amount_refunded:  editRecord.amount_refunded   ?? '',
         transfer_charge:  editRecord.transfer_charge   ?? '',
         remarks:          editRecord.remarks           ?? '',
+        fx_currency:      (editRecord as Record<string, unknown>).fx_currency as string ?? '',
+        fx_amount:        (editRecord as Record<string, unknown>).fx_amount   as string ?? '',
+        fx_rate:          (editRecord as Record<string, unknown>).fx_rate     as string ?? '',
       })
     } else {
       setIsPending(false)
@@ -115,6 +124,9 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           amount_refunded:       typeof values.amount_refunded === 'number' ? values.amount_refunded : undefined,
           transfer_charge:       typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
           remarks:               values.remarks          || undefined,
+          fx_currency:           values.fx_currency      || undefined,
+          fx_amount:             typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
+          fx_rate:               typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
         }
         await add(input)
       }
@@ -242,6 +254,33 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             className={`${inputCls(!!errors.remarks)} resize-none`}
           />
         </Field>
+
+        {/* FX Details (collapsible) */}
+        <div className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFxOpen(v => !v)}
+            className="flex items-center gap-2 w-full px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-100 transition-colors"
+          >
+            {fxOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            FX Details
+          </button>
+          {fxOpen && (
+            <div className="px-4 pb-4 space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Currency" error={errors.fx_currency?.message}>
+                  <input type="text" placeholder="USD" {...register('fx_currency')} className={inputCls(!!errors.fx_currency)} />
+                </Field>
+                <Field label="FX Amount" error={errors.fx_amount?.message}>
+                  <input type="number" min="0" step="0.0001" placeholder="0.00" {...register('fx_amount')} className={inputCls(!!errors.fx_amount)} />
+                </Field>
+                <Field label="Exchange Rate" error={errors.fx_rate?.message}>
+                  <input type="number" min="0" step="0.000001" placeholder="0.00" {...register('fx_rate')} className={inputCls(!!errors.fx_rate)} />
+                </Field>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-2">
