@@ -240,6 +240,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [rowStageCodes, setRowStageCodes] = useState<Record<number, { s1: string; s2: string }>>({})
   const [bsConfigTab,   setBsConfigTab]   = useState<'inflow' | 'outflow'>('inflow')
 
+  // Step 4 — filter bars
+  const [inflowFilter,  setInflowFilter]  = useState({ desc: '', amtFrom: '', amtTo: '' })
+  const [outflowFilter, setOutflowFilter] = useState({ desc: '', amtFrom: '', amtTo: '' })
+
+  // Step 4 — apply bar selections
+  const [applyInflowConfig, setApplyInflowConfig] = useState('')
+  const [applyS1,           setApplyS1]           = useState('')
+  const [applyS2,           setApplyS2]           = useState('')
+
   // In-wizard dup check
   const [wizardDupLoading, setWizardDupLoading] = useState(false)
   const [wizardDupsFound,  setWizardDupsFound]  = useState<Array<{ id: string; table: string }>>([])
@@ -279,6 +288,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowConfigs({})
     setRowStageCodes({})
     setBsConfigTab('inflow')
+    setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })
+    setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })
+    setApplyInflowConfig('')
+    setApplyS1('')
+    setApplyS2('')
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
@@ -509,7 +523,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
-          if (cfg)    row.allocation_config_id = cfg.id
+          // Per-row config override from Step 4; fall back to date-based config
+          const overrideCfgId = rowConfigs[ri]
+          if (overrideCfgId) {
+            row.allocation_config_id = overrideCfgId
+          } else if (cfg) {
+            row.allocation_config_id = cfg.id
+          }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
           if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
@@ -520,8 +540,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (userId) row.created_by = userId
           if (cfg)    row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
-          if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
-          if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
+          // Per-row stage codes from Step 4; fall back to batch defaults
+          const sc = rowStageCodes[ri]
+          if (sc) {
+            if (sc.s1) row.stage_code_1 = sc.s1
+            if (sc.s2) row.stage_code_2 = sc.s2
+          } else {
+            if (defaultStageCode1) row.stage_code_1 = defaultStageCode1
+            if (defaultStageCode2) row.stage_code_2 = defaultStageCode2
+          }
           if (batchPendingDeduction) row.is_pending_deduction = true
           outflowRows.push(row)
         }
@@ -636,7 +663,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
       defaultStageCode1, defaultStageCode2, batchPendingDeduction,
-      rowConfigs, skipWizardDups, wizardDupsFound, internalBank])
+      rowConfigs, rowStageCodes, skipWizardDups, wizardDupsFound, internalBank])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -981,10 +1008,269 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               )}
             </div>
 
-            {/* Placeholder — Step 4 full UI added in Phase 4 */}
-            <div className="text-sm text-gray-500 text-center py-8 border border-dashed border-gray-200 rounded-xl">
-              Configure Rows — coming in next phase
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200">
+              {(['inflow', 'outflow'] as const).map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setBsConfigTab(tab)}
+                  className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    bsConfigTab === tab
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab === 'inflow' ? 'Credit (Inflow)' : 'Debit (Outflow)'}
+                </button>
+              ))}
             </div>
+
+            {(() => {
+              const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
+              const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
+              const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
+              const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
+
+              const allRows = sheet.rows.map((raw, ri) => {
+                const r = raw as unknown[]
+                return {
+                  ri,
+                  raw: r,
+                  credit: creditIdx >= 0 ? parseNumber(r[creditIdx]) : 0,
+                  debit:  debitIdx  >= 0 ? parseNumber(r[debitIdx])  : 0,
+                }
+              })
+              const creditRows = allRows.filter(r => r.credit > 0)
+              const debitRows  = allRows.filter(r => r.debit  > 0)
+
+              // ── Inflow tab ───────────────────────────────────────────────
+              if (bsConfigTab === 'inflow') {
+                const f = inflowFilter
+                const filtered = creditRows.filter(({ raw, credit }) => {
+                  const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
+                  if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
+                  if (f.amtFrom && credit < parseFloat(f.amtFrom))       return false
+                  if (f.amtTo   && credit > parseFloat(f.amtTo))         return false
+                  return true
+                })
+                const isFiltered = filtered.length < creditRows.length
+
+                return (
+                  <div className="space-y-3">
+                    {/* Filter bar */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Search description…"
+                        value={f.desc}
+                        onChange={e => setInflowFilter(p => ({ ...p, desc: e.target.value }))}
+                        className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      />
+                      <span className="text-xs text-gray-400">Amount</span>
+                      <input type="number" placeholder="from" value={f.amtFrom}
+                        onChange={e => setInflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
+                        className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      />
+                      <input type="number" placeholder="to" value={f.amtTo}
+                        onChange={e => setInflowFilter(p => ({ ...p, amtTo: e.target.value }))}
+                        className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      />
+                      <button type="button" onClick={() => setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
+                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
+                        Clear
+                      </button>
+                      <span className="text-xs text-gray-400 ml-auto">
+                        {filtered.length} / {creditRows.length} rows
+                      </span>
+                    </div>
+
+                    {/* Apply bar */}
+                    <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+                        Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
+                      </span>
+                      <select value={applyInflowConfig} onChange={e => setApplyInflowConfig(e.target.value)}
+                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                        <option value="">— Allocation Config —</option>
+                        <option value="__general__">General (date-based)</option>
+                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!applyInflowConfig}
+                        onClick={() => {
+                          if (!applyInflowConfig) return
+                          setRowConfigs(prev => {
+                            const next = { ...prev }
+                            for (const { ri } of filtered)
+                              next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
+                            return next
+                          })
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
+                      >
+                        Apply
+                      </button>
+                    </div>
+
+                    {/* Row table */}
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="grid grid-cols-[40px_1fr_100px_190px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span>
+                      </div>
+                      <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
+                        {filtered.length === 0
+                          ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
+                          : filtered.map(({ ri, raw, credit }) => {
+                              const date  = dateIdx >= 0 ? (parseDate(raw[dateIdx]) ?? '') : ''
+                              const desc  = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+                              const selId = rowConfigs[ri] ?? ''
+                              return (
+                                <div key={ri} className="grid grid-cols-[40px_1fr_100px_190px] items-center px-3 py-2 gap-2 text-xs">
+                                  <span className="text-gray-400 font-mono">{ri + 1}</span>
+                                  <div className="min-w-0">
+                                    <div className="text-gray-700 truncate">{desc || '—'}</div>
+                                    <div className="text-gray-400">{date}</div>
+                                  </div>
+                                  <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
+                                  <select value={selId}
+                                    onChange={e => setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))}
+                                    className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                    <option value="">General (date-based)</option>
+                                    {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                  </select>
+                                </div>
+                              )
+                            })
+                        }
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              // ── Outflow tab ──────────────────────────────────────────────
+              const f = outflowFilter
+              const filtered = debitRows.filter(({ raw, debit }) => {
+                const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
+                if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
+                if (f.amtFrom && debit < parseFloat(f.amtFrom))        return false
+                if (f.amtTo   && debit > parseFloat(f.amtTo))          return false
+                return true
+              })
+              const isFiltered = filtered.length < debitRows.length
+
+              return (
+                <div className="space-y-3">
+                  {/* Filter bar */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Search description…"
+                      value={f.desc}
+                      onChange={e => setOutflowFilter(p => ({ ...p, desc: e.target.value }))}
+                      className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    />
+                    <span className="text-xs text-gray-400">Amount</span>
+                    <input type="number" placeholder="from" value={f.amtFrom}
+                      onChange={e => setOutflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
+                      className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    />
+                    <input type="number" placeholder="to" value={f.amtTo}
+                      onChange={e => setOutflowFilter(p => ({ ...p, amtTo: e.target.value }))}
+                      className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    />
+                    <button type="button" onClick={() => setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
+                      className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
+                      Clear
+                    </button>
+                    <span className="text-xs text-gray-400 ml-auto">
+                      {filtered.length} / {debitRows.length} rows
+                    </span>
+                  </div>
+
+                  {/* Apply bar */}
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+                      Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
+                    </span>
+                    <select value={applyS1} onChange={e => setApplyS1(e.target.value)}
+                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      <option value="">Stage Code 1</option>
+                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                    <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
+                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      <option value="">Stage Code 2</option>
+                      <option value="Percentage Allocation">Percentage Allocation</option>
+                      <option value="Specific Seed">Specific Seed</option>
+                      <option value="Savings">Savings</option>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!applyS1 && !applyS2}
+                      onClick={() => {
+                        if (!applyS1 && !applyS2) return
+                        setRowStageCodes(prev => {
+                          const next = { ...prev }
+                          for (const { ri } of filtered)
+                            next[ri] = {
+                              s1: applyS1 || (prev[ri]?.s1 ?? defaultStageCode1),
+                              s2: applyS2 || (prev[ri]?.s2 ?? defaultStageCode2),
+                            }
+                          return next
+                        })
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </div>
+
+                  {/* Row table */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="grid grid-cols-[40px_1fr_100px_130px_130px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span>
+                    </div>
+                    <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
+                      {filtered.length === 0
+                        ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
+                        : filtered.map(({ ri, raw, debit }) => {
+                            const date = dateIdx >= 0 ? (parseDate(raw[dateIdx]) ?? '') : ''
+                            const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+                            const sc   = rowStageCodes[ri] ?? { s1: defaultStageCode1, s2: defaultStageCode2 }
+                            return (
+                              <div key={ri} className="grid grid-cols-[40px_1fr_100px_130px_130px] items-center px-3 py-2 gap-2 text-xs">
+                                <span className="text-gray-400 font-mono">{ri + 1}</span>
+                                <div className="min-w-0">
+                                  <div className="text-gray-700 truncate">{desc || '—'}</div>
+                                  <div className="text-gray-400">{date}</div>
+                                </div>
+                                <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
+                                <select value={sc.s1}
+                                  onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: e.target.value, s2: prev[ri]?.s2 ?? defaultStageCode2 } }))}
+                                  className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                  <option value="">— None —</option>
+                                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </select>
+                                <select value={sc.s2}
+                                  onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? defaultStageCode1, s2: e.target.value } }))}
+                                  className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                  <option value="">— None —</option>
+                                  <option value="Percentage Allocation">Percentage Allocation</option>
+                                  <option value="Specific Seed">Specific Seed</option>
+                                  <option value="Savings">Savings</option>
+                                </select>
+                              </div>
+                            )
+                          })
+                      }
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             <NavButtons
               step={step}
