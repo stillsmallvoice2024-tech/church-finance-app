@@ -119,9 +119,11 @@ const STAGE_CODE_TABLES = new Set<TargetTable>([
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
 
-function parseDate(raw: unknown): string | null {
+type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
+
+function parseDate(raw: unknown, format: DateFormat = 'DD/MM/YYYY'): string | null {
   if (raw == null || raw === '') return null
-  // Excel serial number
+  // Excel serial number — format irrelevant
   if (typeof raw === 'number') {
     const d = XLSX.SSF.parse_date_code(raw)
     if (d) {
@@ -133,15 +135,19 @@ function parseDate(raw: unknown): string | null {
     return null
   }
   const s = String(raw).trim()
-  // YYYY-MM-DD
+  // YYYY-MM-DD always accepted regardless of declared format
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  // DD/MM/YYYY or D/M/YYYY
-  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`
-  // MM/DD/YYYY
-  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (mdy) return `${mdy[3]}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`
-  // Try native Date parse
+  // Slash-separated: interpret according to declared format
+  const parts = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (parts) {
+    const [, g1, g2, g3] = parts
+    if (format === 'MM/DD/YYYY') {
+      return `${g3}-${g1.padStart(2, '0')}-${g2.padStart(2, '0')}`
+    }
+    // DD/MM/YYYY (default)
+    return `${g3}-${g2.padStart(2, '0')}-${g1.padStart(2, '0')}`
+  }
+  // Try native Date parse as last resort
   const parsed = new Date(s)
   if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
   return null
@@ -311,6 +317,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [specialConfigs,   setSpecialConfigs]   = useState<typeof allocConfigs>([])
   const [createConfigOpen, setCreateConfigOpen] = useState(false)
 
+  // Date format selection + conflict resolution
+  const [dateFormat,         setDateFormat]         = useState<DateFormat>('DD/MM/YYYY')
+  const [pendingConflicts,   setPendingConflicts]   = useState<Array<{ rowIndex: number; rawValue: string }>>([])
+  const [conflictResolution, setConflictResolution] = useState<'all' | 'row' | 'skip'>('all')
+  const [perRowDateFormat,   setPerRowDateFormat]   = useState<Record<number, string>>({}) // '__skip__' or 'MM/DD/YYYY'
+
   useEffect(() => {
     if (open) {
       supabase
@@ -342,6 +354,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
+    setDateFormat('DD/MM/YYYY')
+    setPendingConflicts([])
+    setConflictResolution('all')
+    setPerRowDateFormat({})
   }, [])
 
   const handleClose = () => { reset(); onClose() }
@@ -535,8 +551,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const outflowRows: Record<string, unknown>[] = []
 
       for (let ri = 0; ri < sheet.rows.length; ri++) {
-        const raw  = sheet.rows[ri] as unknown[]
-        const date = dateIdx >= 0 ? parseDate(raw[dateIdx]) : null
+        const raw      = sheet.rows[ri] as unknown[]
+        const rowFmt   = perRowDateFormat[ri]
+        if (rowFmt === '__skip__') { skipped++; continue }
+        const effectiveFmt = (rowFmt as DateFormat | undefined) ?? dateFormat
+        const date = dateIdx >= 0 ? parseDate(raw[dateIdx], effectiveFmt) : null
         if (!date) { skipped++; continue }
 
         const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
@@ -636,7 +655,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const val = raw[ci]
 
         if (field === 'date') {
-          const d = parseDate(val)
+          const rowFmtG = perRowDateFormat[ri]
+          if (rowFmtG === '__skip__') { skipped++; break }
+          const effectiveFmtG = (rowFmtG as DateFormat | undefined) ?? dateFormat
+          const d = parseDate(val, effectiveFmtG)
           if (!d) { errors.push(`Row ${ri + 2}: invalid date "${val}"`); continue }
           row[field] = d
         } else if (field === 'is_pending_deduction') {
@@ -742,11 +764,56 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setImporting(false)
   }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank,
       defaultStageCode1, defaultStageCode2, batchPendingDeduction,
-      rowConfigs, skipWizardDups, wizardDupsFound])
+      rowConfigs, skipWizardDups, wizardDupsFound,
+      dateFormat, perRowDateFormat])
+
+  // ── Date conflict handling ────────────────────────────────────────────────
+
+  const handleStartImport = useCallback(() => {
+    if (!sheet) return
+    if (dateFormat === 'DD/MM/YYYY') {
+      const dateColH   = Object.keys(mapping).find(k => mapping[k] === 'date')
+      const dateColIdx = dateColH !== undefined ? sheet.headers.indexOf(dateColH) : -1
+      if (dateColIdx >= 0) {
+        const conflicts: Array<{ rowIndex: number; rawValue: string }> = []
+        for (let ri = 0; ri < sheet.rows.length; ri++) {
+          if (perRowDateFormat[ri]) continue
+          const raw = (sheet.rows[ri] as unknown[])[dateColIdx]
+          if (typeof raw === 'string') {
+            const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+            if (m && parseInt(m[2], 10) > 12) conflicts.push({ rowIndex: ri, rawValue: raw.trim() })
+          }
+        }
+        if (conflicts.length > 0) {
+          setPendingConflicts(conflicts)
+          setConflictResolution('all')
+          return
+        }
+      }
+    }
+    setPendingConflicts([])
+    runImport()
+  }, [sheet, mapping, dateFormat, perRowDateFormat, runImport])
+
+  const handleConflictApply = useCallback(() => {
+    const current = pendingConflicts[0]
+    if (!current) return
+    if (conflictResolution === 'all') {
+      setDateFormat('MM/DD/YYYY')
+      setPendingConflicts([])
+    } else if (conflictResolution === 'row') {
+      setPerRowDateFormat(prev => ({ ...prev, [current.rowIndex]: 'MM/DD/YYYY' }))
+      setPendingConflicts(prev => prev.slice(1))
+    } else {
+      setPerRowDateFormat(prev => ({ ...prev, [current.rowIndex]: '__skip__' }))
+      setPendingConflicts(prev => prev.slice(1))
+    }
+  }, [pendingConflicts, conflictResolution])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <Modal open={open} onClose={handleClose} title="Import Transactions" size="max-w-3xl">
       <div className="space-y-5">
         <StepDots step={step} />
@@ -851,6 +918,26 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     ),
                   )}
                 </select>
+              </div>
+            </div>
+
+            {/* Date format selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-600">Date format in this file</label>
+              <div className="flex items-center gap-5">
+                {(['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'] as DateFormat[]).map(fmt => (
+                  <label key={fmt} className="flex items-center gap-1.5 cursor-pointer select-none text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      name="dateFormat"
+                      value={fmt}
+                      checked={dateFormat === fmt}
+                      onChange={() => setDateFormat(fmt)}
+                      className="accent-primary"
+                    />
+                    {fmt}
+                  </label>
+                ))}
               </div>
             </div>
 
@@ -1188,6 +1275,54 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               )
             })()}
 
+            {/* Date conflict resolution */}
+            {pendingConflicts.length > 0 && (() => {
+              const conflict = pendingConflicts[0]
+              return (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800">Date format conflict on row {conflict.rowIndex + 1}</p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Declared format is <strong>DD/MM/YYYY</strong>, but <code className="font-mono bg-amber-100 px-1 rounded">{conflict.rawValue}</code> has{' '}
+                        <strong>{conflict.rawValue.split('/')[1]}</strong> in the month position — not a valid month.
+                        {pendingConflicts.length > 1 && ` (${pendingConflicts.length} conflicts remaining)`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 pl-6">
+                    {([
+                      { value: 'all',  label: 'Switch to MM/DD/YYYY for all rows' },
+                      { value: 'row',  label: `Treat row ${conflict.rowIndex + 1} alone as MM/DD/YYYY` },
+                      { value: 'skip', label: `Skip row ${conflict.rowIndex + 1}` },
+                    ] as const).map(opt => (
+                      <label key={opt.value} className="flex items-center gap-2 cursor-pointer select-none text-sm text-amber-800">
+                        <input
+                          type="radio"
+                          name="conflictResolution"
+                          value={opt.value}
+                          checked={conflictResolution === opt.value}
+                          onChange={() => setConflictResolution(opt.value)}
+                          className="accent-amber-600"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleConflictApply}
+                      className="px-4 py-1.5 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* First 3 rows preview mapped */}
             {sheet.rows.slice(0, 3).length > 0 && (
               <div>
@@ -1216,7 +1351,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             .map(f => {
                               const colIdx = sheet.headers.findIndex(h => mapping[h] === f.key)
                               const val = colIdx >= 0 ? row[colIdx] : ''
-                              const display = f.key === 'date' ? (parseDate(val) ?? String(val)) : String(val ?? '')
+                              const display = f.key === 'date' ? (parseDate(val, dateFormat) ?? String(val)) : String(val ?? '')
                               return (
                                 <td key={f.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap border-r border-gray-50 last:border-0 max-w-[120px] truncate">
                                   {display}
@@ -1292,8 +1427,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               <NavButtons
                 step={step}
                 onBack={() => setStep(3)}
-                onNext={runImport}
-                nextDisabled={importing || wizardDupLoading}
+                onNext={handleStartImport}
+                nextDisabled={importing || wizardDupLoading || pendingConflicts.length > 0}
                 nextLabel={importing ? 'Importing…' : 'Start Import'}
                 nextLoading={importing || wizardDupLoading}
               />
@@ -1326,6 +1461,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         setCreateConfigOpen(false)
       }}
     />
+    </>
   )
 }
 

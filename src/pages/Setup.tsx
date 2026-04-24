@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
@@ -18,7 +18,7 @@ import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs'] as const
+const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Database'] as const
 type Tab = typeof TABS[number]
 
 // ── General tab ────────────────────────────────────────────────────────────────
@@ -276,7 +276,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked }: {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {configs.map(config => {
-                const total    = config.rows.reduce((s, r) => s + r.percentage, 0)
+                const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
                 const balanced = Math.abs(total - 100) < 0.01
                 return (
                   <tr key={config.id} className="hover:bg-gray-50 transition-colors">
@@ -453,6 +453,110 @@ function SpecialConfigsTab({ onNew, onEdit, onDelete }: {
   )
 }
 
+// ── Database tab ───────────────────────────────────────────────────────────────
+
+const MIGRATION_SQL = `-- Add bank_name to inflow/outflow
+ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS bank_name text;
+ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS bank_name text;
+
+-- FX fields
+ALTER TABLE inflow_transactions
+  ADD COLUMN IF NOT EXISTS fx_currency text,
+  ADD COLUMN IF NOT EXISTS fx_amount   numeric(15,4),
+  ADD COLUMN IF NOT EXISTS fx_rate     numeric(15,6);
+
+ALTER TABLE outflow_transactions
+  ADD COLUMN IF NOT EXISTS fx_currency text,
+  ADD COLUMN IF NOT EXISTS fx_amount   numeric(15,4),
+  ADD COLUMN IF NOT EXISTS fx_rate     numeric(15,6);
+
+-- Transaction type + original reference
+ALTER TABLE inflow_transactions
+  ADD COLUMN IF NOT EXISTS transaction_type          text,
+  ADD COLUMN IF NOT EXISTS original_transaction_id   text;
+
+ALTER TABLE outflow_transactions
+  ADD COLUMN IF NOT EXISTS transaction_type          text,
+  ADD COLUMN IF NOT EXISTS original_transaction_id   text;
+
+-- Bank deposits table
+CREATE TABLE IF NOT EXISTS bank_deposits (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  date                date NOT NULL,
+  bank_id             uuid REFERENCES banks(id),
+  bank_name           text,
+  amount              numeric(15,2) NOT NULL,
+  description         text,
+  transaction_ref     text,
+  remarks             text,
+  created_at          timestamptz DEFAULT now()
+);
+
+-- Intrabank transfers table
+CREATE TABLE IF NOT EXISTS intrabank_transfers (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  date                date NOT NULL,
+  from_bank_id        uuid REFERENCES banks(id),
+  from_bank_name      text,
+  to_bank_id          uuid REFERENCES banks(id),
+  to_bank_name        text,
+  amount              numeric(15,2) NOT NULL,
+  description         text,
+  transaction_ref     text,
+  remarks             text,
+  created_at          timestamptz DEFAULT now()
+);`
+
+function DatabaseTab() {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(MIGRATION_SQL)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-gray-900">Database Migration</h2>
+        </div>
+        <p className="text-sm text-gray-500">
+          Run the following SQL in your Supabase SQL editor to add the columns and tables required for new features.
+          All statements use <code className="font-mono text-xs bg-gray-100 px-1 rounded">IF NOT EXISTS</code> — safe to run multiple times.
+        </p>
+
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {MIGRATION_SQL}
+          </pre>
+        </div>
+
+        <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            After running this migration, enable Row Level Security on the new tables if your project uses RLS.
+            Go to <strong>Supabase → Table Editor → bank_deposits / intrabank_transfers → RLS</strong> and add appropriate policies.
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
@@ -583,6 +687,7 @@ export default function SetupPage() {
               onDelete={c => setDeleteSpecialTarget(c)}
             />
           )}
+          {activeTab === 'Database'       && <DatabaseTab />}
         </div>
       </div>
 
