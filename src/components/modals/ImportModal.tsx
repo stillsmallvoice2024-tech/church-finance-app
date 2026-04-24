@@ -9,7 +9,6 @@ import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
-import { useCategories } from '../../hooks/useCategories'
 import { formatDate } from '../../utils/formatters'
 
 // ── Target table definitions ───────────────────────────────────────────────────
@@ -101,7 +100,6 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
     label: 'FX Transactions',
     fields: [
       { key: 'date',            label: 'Date',            required: true },
-      { key: 'currency',        label: 'Currency',        required: true },
       { key: 'deposit',         label: 'Deposit'                         },
       { key: 'withdrawal',      label: 'Withdrawal'                      },
       { key: 'running_balance', label: 'Running Balance'                 },
@@ -185,6 +183,21 @@ const ALIAS_MAP: Record<string, string[]> = {
   remark:           ['remark', 'remarks', 'note', 'notes', 'comment'],
   narration:        ['narration', 'description', 'desc', 'memo'],
   inflow_type:      ['inflowtype', 'type', 'category'],
+}
+
+// B4: Score rows to find the real header (skips pre-header filler rows)
+function detectHeaderRow(rows: unknown[][]): number {
+  const allAliases = new Set(Object.values(ALIAS_MAP).flat())
+  const scan = Math.min(15, rows.length)
+  let bestScore = 0, bestIdx = 0
+  for (let i = 0; i < scan; i++) {
+    const score = (rows[i] as unknown[]).filter(c => {
+      const v = String(c ?? '').toLowerCase().replace(/[\s_\-()\[\]]+/g, '')
+      return v.length > 0 && allAliases.has(v)
+    }).length
+    if (score > bestScore) { bestScore = score; bestIdx = i }
+  }
+  return bestScore >= 2 ? bestIdx : 0
 }
 
 function autoMapColumn(header: string, fields: FieldDef[]): string {
@@ -297,13 +310,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: allocLoaded } = useAllocationStore()
   useEffect(() => { if (!allocLoaded) fetchAllocConfigs() }, [allocLoaded, fetchAllocConfigs])
 
-  // Categories for stage code dropdowns
-  const { categories } = useCategories()
+  // Pending deduction — batch toggle + per-row overrides
+  const [batchPendingDeduction, setBatchPendingDeduction]   = useState(false)
+  const [rowPendingDeductions,  setRowPendingDeductions]    = useState<Record<number, boolean>>({})
 
-  // Stage code defaults
-  const [defaultStageCode1,     setDefaultStageCode1]     = useState('')
-  const [defaultStageCode2,     setDefaultStageCode2]     = useState('')
-  const [batchPendingDeduction, setBatchPendingDeduction] = useState(false)
+  // FX currency (standalone selector, not a mapped column)
+  const [fxCurrency, setFxCurrency] = useState('')
 
   // Per-row special config assignment (rowIndex → configId)
   const [rowConfigs, setRowConfigs] = useState<Record<number, string>>({})
@@ -347,9 +359,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setResult(null)
     setImporting(false)
     setParsing(false)
-    setDefaultStageCode1('')
-    setDefaultStageCode2('')
     setBatchPendingDeduction(false)
+    setRowPendingDeductions({})
+    setFxCurrency('')
     setRowConfigs({})
     setWizardDupLoading(false)
     setWizardDupsFound([])
@@ -379,10 +391,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const data = await file.arrayBuffer()
         const wb   = XLSX.read(data, { type: 'array', cellDates: false })
         parsed = wb.SheetNames.map(name => {
-          const ws      = wb.Sheets[name]
-          const rows    = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
-          const headers  = (rows[0] ?? []).map(h => String(h ?? '').trim())
-          const dataRows = rows.slice(1).filter(r => r.some(c => c !== '' && c != null))
+          const ws       = wb.Sheets[name]
+          const allRows  = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
+          const hdrIdx   = detectHeaderRow(allRows)
+          const headers  = (allRows[hdrIdx] ?? []).map(h => String(h ?? '').trim())
+          const dataRows = allRows.slice(hdrIdx + 1).filter(r => r.some(c => c !== '' && c != null))
           return { name, headers, rows: dataRows, rowCount: dataRows.length }
         })
       } else {
@@ -433,22 +446,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setStep(3)
   }
 
-  // ── Step 3 → 4: validate + dup check ─────────────────────────────────────
-
-  const [stageCodeErrors, setStageCodeErrors] = useState<{ code1?: string; code2?: string }>({})
+  // ── Step 3 → 4: dup check ────────────────────────────────────────────────
 
   const proceedToImport = useCallback(async () => {
     if (!sheet || !config || !targetTable) return
-
-    // Outflow stage code validation
-    if ((targetTable === 'outflow_transactions' || targetTable === 'bank_statement') && !batchPendingDeduction) {
-      const mappedFields = new Set(Object.values(mapping))
-      const errs: { code1?: string; code2?: string } = {}
-      if (!mappedFields.has('stage_code_1') && !defaultStageCode1) errs.code1 = 'Stage Code 1 required'
-      if (!mappedFields.has('stage_code_2') && !defaultStageCode2) errs.code2 = 'Stage Code 2 required'
-      if (errs.code1 || errs.code2) { setStageCodeErrors(errs); return }
-    }
-    setStageCodeErrors({})
     setStep(4)
 
     // Dup check — only for tables with a reference field
@@ -512,7 +513,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     } finally {
       setWizardDupLoading(false)
     }
-  }, [sheet, config, targetTable, mapping, batchPendingDeduction, defaultStageCode1, defaultStageCode2])
+  }, [sheet, config, targetTable, mapping])
 
   // ── Step 4: Import ────────────────────────────────────────────────────────
 
@@ -572,8 +573,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (userId) row.created_by = userId
           if (bank)   row.bank_id   = bank.id
           if (cfg)    row.allocation_config_id = cfg.id
-          if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
-          if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
           inflowRows.push(row)
         }
         if (debit > 0) {
@@ -581,9 +580,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (userId) row.created_by = userId
           if (bank)   row.bank_id   = bank.id
           if (cfg)    row.allocation_config_id = cfg.id
-          if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
-          if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
-          if (batchPendingDeduction) row.is_pending_deduction = true
+          if (rowPendingDeductions[ri] ?? batchPendingDeduction) row.is_pending_deduction = true
           outflowRows.push(row)
         }
         if (credit === 0 && debit === 0) skipped++
@@ -681,12 +678,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       // Skip all-empty rows
       if (Object.values(row).every(v => v == null || v === '' || v === 0)) { skipped++; continue }
 
-      // Stage code defaults
-      if (!row.stage_code_1 && defaultStageCode1) row.stage_code_1 = defaultStageCode1
-      if (!row.stage_code_2 && defaultStageCode2) row.stage_code_2 = defaultStageCode2
+      // Pending deduction — per-row overrides batch setting
+      if (targetTable === 'outflow_transactions') {
+        if (rowPendingDeductions[ri] ?? batchPendingDeduction) row.is_pending_deduction = true
+      }
 
-      // Pending deduction batch flag (outflow only)
-      if (targetTable === 'outflow_transactions' && batchPendingDeduction) row.is_pending_deduction = true
+      // FX currency stamp
+      if (targetTable === 'fx_transactions' && fxCurrency) row.currency = fxCurrency
 
       if (userId) row.created_by = userId
       mappedRows.push(row)
@@ -763,7 +761,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setResult({ imported, skipped, errors })
     setImporting(false)
   }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank,
-      defaultStageCode1, defaultStageCode2, batchPendingDeduction,
+      batchPendingDeduction, rowPendingDeductions, fxCurrency,
       rowConfigs, skipWizardDups, wizardDupsFound,
       dateFormat, perRowDateFormat])
 
@@ -816,7 +814,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     <>
     <Modal open={open} onClose={handleClose} title="Import Transactions" size="max-w-3xl">
       <div className="space-y-5">
-        <StepDots step={step} />
+        <div className="flex items-start justify-between">
+          <StepDots step={step} />
+          {step > 1 && !result && (
+            <button
+              type="button"
+              onClick={reset}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors shrink-0 mt-1"
+            >
+              <RefreshCw className="w-3 h-3" /> Start Over
+            </button>
+          )}
+        </div>
 
         {/* ────────────────────────── STEP 1: Upload ───────────────────── */}
         {step === 1 && (
@@ -920,6 +929,23 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 </select>
               </div>
             </div>
+
+            {/* FX currency selector (B5) */}
+            {targetTable === 'fx_transactions' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-600">FX Currency <span className="text-red-500">*</span></label>
+                <select
+                  value={fxCurrency}
+                  onChange={e => setFxCurrency(e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${fxCurrency ? 'border-gray-300' : 'border-amber-300'}`}
+                >
+                  <option value="">— Select currency —</option>
+                  {['USD — US Dollar','GBP — British Pound','EUR — Euro','CNY — Chinese Yuan','AED — UAE Dirham','CAD — Canadian Dollar','CHF — Swiss Franc','ZAR — South African Rand'].map(c => (
+                    <option key={c} value={c.split(' ')[0]}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Date format selector */}
             <div className="space-y-1.5">
@@ -1032,64 +1058,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               ) : null
             })()}
 
-            {/* Batch Defaults panel — stage codes + pending deduction */}
-            {STAGE_CODE_TABLES.has(targetTable as TargetTable) && (
-              <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Defaults — Stage Codes</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Default Stage Code 1</label>
-                    <select
-                      value={defaultStageCode1}
-                      onChange={e => { setDefaultStageCode1(e.target.value); setStageCodeErrors(prev => ({ ...prev, code1: undefined })) }}
-                      className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                    >
-                      <option value="">— None (use mapped column) —</option>
-                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
-                    {stageCodeErrors.code1 && (
-                      <p className="text-xs text-red-500 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> {stageCodeErrors.code1}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Default Stage Code 2</label>
-                    <select
-                      value={defaultStageCode2}
-                      onChange={e => { setDefaultStageCode2(e.target.value); setStageCodeErrors(prev => ({ ...prev, code2: undefined })) }}
-                      className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                    >
-                      <option value="">— None (use mapped column) —</option>
-                      <option value="Percentage Allocation">Percentage Allocation</option>
-                      <option value="Specific Seed">Specific Seed</option>
-                      <option value="Savings">Savings</option>
-                    </select>
-                    {stageCodeErrors.code2 && (
-                      <p className="text-xs text-red-500 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> {stageCodeErrors.code2}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {(targetTable === 'outflow_transactions' || targetTable === 'bank_statement') && (
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
-                    <input
-                      type="checkbox"
-                      checked={batchPendingDeduction}
-                      onChange={e => { setBatchPendingDeduction(e.target.checked); setStageCodeErrors({}) }}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
-                    />
-                    <span className="text-sm text-gray-700">
-                      Mark all outflow rows as <strong>Pending Deduction</strong>
-                      <span className="text-gray-400 text-xs ml-1">(stage codes not required)</span>
-                    </span>
-                  </label>
-                )}
-              </div>
-            )}
-
             <NavButtons
               step={step}
               onBack={() => setStep(2)}
@@ -1097,14 +1065,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
                 if (config.fields.some(f => f.required && !mappedFields.has(f.key))) return true
-                if (
-                  STAGE_CODE_TABLES.has(targetTable as TargetTable) &&
-                  targetTable !== 'inflow_transactions' &&
-                  !batchPendingDeduction
-                ) {
-                  if (!mappedFields.has('stage_code_1') && !defaultStageCode1) return true
-                  if (!mappedFields.has('stage_code_2') && !defaultStageCode2) return true
-                }
+                if (targetTable === 'fx_transactions' && !fxCurrency) return true
                 return false
               })()}
               nextLabel={`Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
@@ -1155,6 +1116,94 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <span className="text-xs text-gray-400">will be applied to all {sheet.rowCount.toLocaleString()} rows</span>
               </div>
             )}
+
+            {/* FX currency bar */}
+            {targetTable === 'fx_transactions' && fxCurrency && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="text-xs font-medium text-gray-500">Currency</span>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+                  {fxCurrency}
+                </span>
+                <span className="text-xs text-gray-400">will be stamped on all rows</span>
+              </div>
+            )}
+            {targetTable === 'fx_transactions' && !fxCurrency && (
+              <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Go back to Step 2 and select an FX currency before importing.
+              </div>
+            )}
+
+            {/* Pending deduction — batch + per-row (B2) */}
+            {(targetTable === 'bank_statement' || targetTable === 'outflow_transactions') && (() => {
+              // Compute debit rows for display
+              const colIdx = (field: string) => {
+                const h = Object.keys(mapping).find(k => mapping[k] === field)
+                return h !== undefined ? sheet.headers.indexOf(h) : -1
+              }
+              const debitIdx = targetTable === 'bank_statement' ? colIdx('debit') : colIdx('amount_disbursed')
+              const dateIdx  = colIdx('date')
+              const descIdx  = targetTable === 'bank_statement' ? colIdx('description') : colIdx('description')
+              const debitRows = sheet.rows.map((r, ri) => {
+                const raw = r as unknown[]
+                const amt = debitIdx >= 0 ? parseNumber(raw[debitIdx]) : 0
+                if (targetTable === 'bank_statement' && amt <= 0) return null
+                return { ri, amt, date: dateIdx >= 0 ? String(raw[dateIdx] ?? '') : '', desc: descIdx >= 0 ? String(raw[descIdx] ?? '') : '' }
+              }).filter(Boolean) as Array<{ ri: number; amt: number; date: string; desc: string }>
+
+              if (debitRows.length === 0) return null
+              return (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Outflow / Debit Rows — Pending Deduction
+                    </span>
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={batchPendingDeduction}
+                        onChange={e => {
+                          setBatchPendingDeduction(e.target.checked)
+                          setRowPendingDeductions({})
+                        }}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+                      />
+                      Mark all as pending
+                    </label>
+                  </div>
+                  <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                    {debitRows.map(({ ri, amt, date, desc }) => {
+                      const effective = rowPendingDeductions[ri] ?? batchPendingDeduction
+                      return (
+                        <label key={ri} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={effective}
+                            onChange={e => {
+                              const val = e.target.checked
+                              setRowPendingDeductions(prev => {
+                                const next = { ...prev }
+                                if (val === batchPendingDeduction) {
+                                  delete next[ri]
+                                } else {
+                                  next[ri] = val
+                                }
+                                return next
+                              })
+                            }}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 shrink-0"
+                          />
+                          <span className="text-xs text-gray-500 w-24 shrink-0 truncate">{date}</span>
+                          <span className="text-xs text-gray-700 flex-1 truncate">{desc || <span className="text-gray-300 italic">no description</span>}</span>
+                          <span className="text-xs font-medium text-gray-700 shrink-0">₦{parseNumber(amt).toLocaleString()}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* Allocation config label */}
             {(targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (() => {
               const dateHeader = Object.keys(mapping).find(h => mapping[h] === 'date')
@@ -1428,7 +1477,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 step={step}
                 onBack={() => setStep(3)}
                 onNext={handleStartImport}
-                nextDisabled={importing || wizardDupLoading || pendingConflicts.length > 0}
+                nextDisabled={importing || wizardDupLoading || pendingConflicts.length > 0 || (targetTable === 'fx_transactions' && !fxCurrency)}
                 nextLabel={importing ? 'Importing…' : 'Start Import'}
                 nextLoading={importing || wizardDupLoading}
               />
