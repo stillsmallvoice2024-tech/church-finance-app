@@ -115,6 +115,14 @@ const STAGE_CODE_TABLES = new Set<TargetTable>([
   'inflow_transactions', 'outflow_transactions', 'bank_statement',
 ])
 
+const TXN_TYPE_OPTIONS = [
+  { value: '',                   label: 'Normal' },
+  { value: 'refund',             label: 'Refund' },
+  { value: 'reversal',           label: 'Reversal' },
+  { value: 'bank_deposit',       label: 'Bank Deposit' },
+  { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
+]
+
 // ── Date / number parsing ──────────────────────────────────────────────────────
 
 type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
@@ -326,8 +334,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [skipWizardDups,   setSkipWizardDups]   = useState(false)
 
   // Special configs (is_special = true) loaded when modal opens
-  const [specialConfigs,   setSpecialConfigs]   = useState<typeof allocConfigs>([])
-  const [createConfigOpen, setCreateConfigOpen] = useState(false)
+  const [specialConfigs,         setSpecialConfigs]         = useState<typeof allocConfigs>([])
+  const [createConfigOpen,       setCreateConfigOpen]       = useState(false)
+  const [createConfigPendingRow, setCreateConfigPendingRow] = useState<number | null>(null)
+
+  // Per-row transaction type + original txn ID (C1)
+  const [batchTxnType,  setBatchTxnType]  = useState('')
+  const [rowTxnTypes,   setRowTxnTypes]   = useState<Record<number, string>>({})
+  const [rowOrigTxnIds, setRowOrigTxnIds] = useState<Record<number, string>>({})
 
   // Date format selection + conflict resolution
   const [dateFormat,         setDateFormat]         = useState<DateFormat>('DD/MM/YYYY')
@@ -370,6 +384,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setPendingConflicts([])
     setConflictResolution('all')
     setPerRowDateFormat({})
+    setBatchTxnType('')
+    setRowTxnTypes({})
+    setRowOrigTxnIds({})
+    setCreateConfigPendingRow(null)
   }, [])
 
   const handleClose = () => { reset(); onClose() }
@@ -548,8 +566,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const debitIdx  = colIdx('debit')
       const refIdx    = colIdx('reference')
 
-      const inflowRows:  Record<string, unknown>[] = []
-      const outflowRows: Record<string, unknown>[] = []
+      const inflowRows:         Record<string, unknown>[] = []
+      const outflowRows:        Record<string, unknown>[] = []
+      const bankDepositBSRows:  Record<string, unknown>[] = []
+      const intraBankBSRows:    Record<string, unknown>[] = []
 
       for (let ri = 0; ri < sheet.rows.length; ri++) {
         const raw      = sheet.rows[ri] as unknown[]
@@ -566,22 +586,39 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
                          ? String(raw[refIdx]).trim() : null
 
-        const cfg = getConfigForDate(latestConfigs, date)
+        const cfg     = getConfigForDate(latestConfigs, date)
+        const txnType = rowTxnTypes[ri] ?? batchTxnType
 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
-          if (userId) row.created_by = userId
-          if (bank)   row.bank_id   = bank.id
-          if (cfg)    row.allocation_config_id = cfg.id
+          if (userId)   row.created_by = userId
+          if (bank)     row.bank_id   = bank.id
+          if (cfg)      row.allocation_config_id = cfg.id
+          if (txnType)  row.transaction_type = txnType
+          if ((txnType === 'refund' || txnType === 'reversal') && rowOrigTxnIds[ri]) {
+            row.original_transaction_id = rowOrigTxnIds[ri]
+          }
           inflowRows.push(row)
+          if (txnType === 'bank_deposit') {
+            bankDepositBSRows.push({ date, bank_id: bank?.id ?? null, bank_name: bank?.name ?? null, amount: credit, description: desc, transaction_ref: ref })
+          } else if (txnType === 'intrabank_transfer') {
+            intraBankBSRows.push({ date, to_bank_id: bank?.id ?? null, to_bank_name: bank?.name ?? null, amount: credit, description: desc, transaction_ref: ref })
+          }
         }
         if (debit > 0) {
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
-          if (userId) row.created_by = userId
-          if (bank)   row.bank_id   = bank.id
-          if (cfg)    row.allocation_config_id = cfg.id
+          if (userId)   row.created_by = userId
+          if (bank)     row.bank_id   = bank.id
+          if (cfg)      row.allocation_config_id = cfg.id
           if (rowPendingDeductions[ri] ?? batchPendingDeduction) row.is_pending_deduction = true
+          if (txnType)  row.transaction_type = txnType
+          if ((txnType === 'refund' || txnType === 'reversal') && rowOrigTxnIds[ri]) {
+            row.original_transaction_id = rowOrigTxnIds[ri]
+          }
           outflowRows.push(row)
+          if (txnType === 'intrabank_transfer') {
+            intraBankBSRows.push({ date, from_bank_id: bank?.id ?? null, from_bank_name: bank?.name ?? null, amount: debit, description: desc, transaction_ref: ref })
+          }
         }
         if (credit === 0 && debit === 0) skipped++
       }
@@ -622,6 +659,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
       }
 
+      // Extra inserts for tagged row types
+      if (bankDepositBSRows.length > 0) {
+        await supabase.from('bank_deposits').insert(bankDepositBSRows)
+      }
+      if (intraBankBSRows.length > 0) {
+        await supabase.from('intrabank_transfers').insert(intraBankBSRows)
+      }
+
       setResult({ imported, skipped, errors })
       setImporting(false)
       return
@@ -640,7 +685,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     )
 
     // Build rows
-    const mappedRows: Record<string, unknown>[] = []
+    const mappedRows:         Record<string, unknown>[] = []
+    const bankDepositExtraRows: Record<string, unknown>[] = []
+    const intraBankExtraRows:   Record<string, unknown>[] = []
     for (let ri = 0; ri < sheet.rows.length; ri++) {
       const raw = sheet.rows[ri]
       const row: Record<string, unknown> = {}
@@ -687,6 +734,31 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       if (targetTable === 'fx_transactions' && fxCurrency) row.currency = fxCurrency
 
       if (userId) row.created_by = userId
+
+      // Transaction type + original ref (C1)
+      const txnType = rowTxnTypes[ri] ?? batchTxnType
+      if (txnType) row.transaction_type = txnType
+      if ((txnType === 'refund' || txnType === 'reversal') && rowOrigTxnIds[ri]) {
+        row.original_transaction_id = rowOrigTxnIds[ri]
+      }
+      // Collect extra table rows for special types
+      if (txnType === 'bank_deposit' && targetTable === 'inflow_transactions') {
+        bankDepositExtraRows.push({
+          date: row.date, bank_id: bank?.id ?? null, bank_name: bank?.name ?? null,
+          amount: row.amount, description: row.description, transaction_ref: row.transaction_ref,
+        })
+      } else if (txnType === 'intrabank_transfer') {
+        intraBankExtraRows.push({
+          date: row.date,
+          ...(targetTable === 'inflow_transactions'
+            ? { to_bank_id: bank?.id ?? null, to_bank_name: bank?.name ?? null }
+            : { from_bank_id: bank?.id ?? null, from_bank_name: bank?.name ?? null }),
+          amount: (row.amount ?? row.amount_disbursed) as number,
+          description: row.description,
+          transaction_ref: (row.transaction_ref ?? row.transaction_id) as string | null,
+        })
+      }
+
       mappedRows.push(row)
     }
 
@@ -758,12 +830,21 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       setProgress(Math.round(((i + batch.length) / rowsToInsert.length) * 100))
     }
 
+    // Extra inserts for tagged row types (C1)
+    if (bankDepositExtraRows.length > 0) {
+      await supabase.from('bank_deposits').insert(bankDepositExtraRows)
+    }
+    if (intraBankExtraRows.length > 0) {
+      await supabase.from('intrabank_transfers').insert(intraBankExtraRows)
+    }
+
     setResult({ imported, skipped, errors })
     setImporting(false)
   }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank,
       batchPendingDeduction, rowPendingDeductions, fxCurrency,
       rowConfigs, skipWizardDups, wizardDupsFound,
-      dateFormat, perRowDateFormat])
+      dateFormat, perRowDateFormat,
+      batchTxnType, rowTxnTypes, rowOrigTxnIds])
 
   // ── Date conflict handling ────────────────────────────────────────────────
 
@@ -1134,16 +1215,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               </div>
             )}
 
-            {/* Pending deduction — batch + per-row (B2) */}
+            {/* Pending deduction + transaction type — batch + per-row (B2/C1) */}
             {(targetTable === 'bank_statement' || targetTable === 'outflow_transactions') && (() => {
-              // Compute debit rows for display
               const colIdx = (field: string) => {
                 const h = Object.keys(mapping).find(k => mapping[k] === field)
                 return h !== undefined ? sheet.headers.indexOf(h) : -1
               }
               const debitIdx = targetTable === 'bank_statement' ? colIdx('debit') : colIdx('amount_disbursed')
               const dateIdx  = colIdx('date')
-              const descIdx  = targetTable === 'bank_statement' ? colIdx('description') : colIdx('description')
+              const descIdx  = colIdx('description')
               const debitRows = sheet.rows.map((r, ri) => {
                 const raw = r as unknown[]
                 const amt = debitIdx >= 0 ? parseNumber(raw[debitIdx]) : 0
@@ -1156,47 +1236,92 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
                     <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Outflow / Debit Rows — Pending Deduction
+                      Outflow / Debit Rows
                     </span>
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={batchPendingDeduction}
-                        onChange={e => {
-                          setBatchPendingDeduction(e.target.checked)
-                          setRowPendingDeductions({})
-                        }}
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
-                      />
-                      Mark all as pending
-                    </label>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-gray-500">All type:</span>
+                        <select
+                          value={batchTxnType}
+                          onChange={e => { setBatchTxnType(e.target.value); setRowTxnTypes({}) }}
+                          className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                        >
+                          {TXN_TYPE_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={batchPendingDeduction}
+                          onChange={e => {
+                            setBatchPendingDeduction(e.target.checked)
+                            setRowPendingDeductions({})
+                          }}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+                        />
+                        Mark all pending
+                      </label>
+                    </div>
                   </div>
-                  <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                  <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
                     {debitRows.map(({ ri, amt, date, desc }) => {
-                      const effective = rowPendingDeductions[ri] ?? batchPendingDeduction
+                      const effective     = rowPendingDeductions[ri] ?? batchPendingDeduction
+                      const effectiveType = rowTxnTypes[ri] ?? batchTxnType
                       return (
-                        <label key={ri} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={effective}
-                            onChange={e => {
-                              const val = e.target.checked
-                              setRowPendingDeductions(prev => {
-                                const next = { ...prev }
-                                if (val === batchPendingDeduction) {
-                                  delete next[ri]
-                                } else {
-                                  next[ri] = val
-                                }
-                                return next
-                              })
-                            }}
-                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 shrink-0"
-                          />
-                          <span className="text-xs text-gray-500 w-24 shrink-0 truncate">{date}</span>
-                          <span className="text-xs text-gray-700 flex-1 truncate">{desc || <span className="text-gray-300 italic">no description</span>}</span>
-                          <span className="text-xs font-medium text-gray-700 shrink-0">₦{parseNumber(amt).toLocaleString()}</span>
-                        </label>
+                        <div key={ri}>
+                          <div className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50">
+                            <input
+                              type="checkbox"
+                              checked={effective}
+                              onChange={e => {
+                                const val = e.target.checked
+                                setRowPendingDeductions(prev => {
+                                  const next = { ...prev }
+                                  if (val === batchPendingDeduction) { delete next[ri] } else { next[ri] = val }
+                                  return next
+                                })
+                              }}
+                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 shrink-0 cursor-pointer"
+                            />
+                            <span className="text-xs text-gray-500 w-20 shrink-0 truncate">{date}</span>
+                            <span className="text-xs text-gray-700 flex-1 truncate min-w-0">
+                              {desc || <span className="text-gray-300 italic">no description</span>}
+                            </span>
+                            <span className="text-xs font-medium text-gray-700 shrink-0 w-20 text-right">
+                              ₦{parseNumber(amt).toLocaleString()}
+                            </span>
+                            <select
+                              value={effectiveType}
+                              onChange={e => {
+                                const val = e.target.value
+                                setRowTxnTypes(prev => {
+                                  const next = { ...prev }
+                                  if (val === batchTxnType) { delete next[ri] } else { next[ri] = val }
+                                  return next
+                                })
+                              }}
+                              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white shrink-0"
+                            >
+                              {TXN_TYPE_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {(effectiveType === 'refund' || effectiveType === 'reversal') && (
+                            <div className="px-4 pb-1.5 pt-0.5 flex items-center gap-2 text-xs bg-amber-50/50">
+                              <span className="text-gray-500 shrink-0">Original Txn ID:</span>
+                              <input
+                                type="text"
+                                value={rowOrigTxnIds[ri] ?? ''}
+                                onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
+                                placeholder="Enter original transaction ID…"
+                                className="flex-1 text-xs px-2 py-0.5 border border-amber-200 rounded outline-none focus:ring-2 focus:ring-amber-300/50 bg-white"
+                              />
+                            </div>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -1229,36 +1354,88 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               return (
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config per Row</span>
-                    <button
-                      type="button"
-                      onClick={() => setCreateConfigOpen(true)}
-                      className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium"
-                    >
-                      + Create Special Config
-                    </button>
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Inflow Rows — Type & Config</span>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-500 shrink-0">All:</label>
+                      <select
+                        value={batchTxnType}
+                        onChange={e => { setBatchTxnType(e.target.value); setRowTxnTypes({}) }}
+                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      >
+                        {TXN_TYPE_OPTIONS.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => { setCreateConfigPendingRow(null); setCreateConfigOpen(true) }}
+                        className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium shrink-0"
+                      >
+                        + Create Config
+                      </button>
+                    </div>
                   </div>
-                  <div className="max-h-52 overflow-y-auto divide-y divide-gray-100">
+                  <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
                     {sheet.rows.map((row, ri) => {
-                      const rawArr = row as unknown[]
-                      const date   = dateColIdx >= 0 ? (parseDate(rawArr[dateColIdx]) ?? '') : ''
-                      const amt    = amtColIdx  >= 0 ? parseNumber(rawArr[amtColIdx])        : 0
-                      const selId  = rowConfigs[ri] ?? ''
+                      const rawArr       = row as unknown[]
+                      const date         = dateColIdx >= 0 ? (parseDate(rawArr[dateColIdx]) ?? '') : ''
+                      const amt          = amtColIdx  >= 0 ? parseNumber(rawArr[amtColIdx])        : 0
+                      const selId        = rowConfigs[ri] ?? ''
+                      const effectiveType = rowTxnTypes[ri] ?? batchTxnType
                       return (
-                        <div key={ri} className="grid grid-cols-[36px_1fr_1fr_180px] items-center px-3 py-1.5 gap-2 text-xs">
-                          <span className="text-gray-400 font-mono">{ri + 1}</span>
-                          <span className="text-gray-600 truncate">{date}</span>
-                          <span className="text-gray-700 font-medium">₦{amt.toLocaleString()}</span>
-                          <select
-                            value={selId}
-                            onChange={e => setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))}
-                            className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                          >
-                            <option value="">General (date-based)</option>
-                            {specialConfigs.map(c => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
+                        <div key={ri} className="divide-y divide-gray-50">
+                          <div className="grid grid-cols-[24px_1fr_76px_100px_140px] items-center px-3 py-1.5 gap-2 text-xs">
+                            <span className="text-gray-400 font-mono text-right">{ri + 1}</span>
+                            <span className="text-gray-600 truncate">{date}</span>
+                            <span className="text-gray-700 font-medium text-right">₦{amt.toLocaleString()}</span>
+                            <select
+                              value={effectiveType}
+                              onChange={e => {
+                                const val = e.target.value
+                                setRowTxnTypes(prev => {
+                                  const next = { ...prev }
+                                  if (val === batchTxnType) { delete next[ri] } else { next[ri] = val }
+                                  return next
+                                })
+                              }}
+                              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                            >
+                              {TXN_TYPE_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={selId}
+                              onChange={e => {
+                                if (e.target.value === '__create_new__') {
+                                  setCreateConfigPendingRow(ri)
+                                  setCreateConfigOpen(true)
+                                } else {
+                                  setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                }
+                              }}
+                              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                            >
+                              <option value="">General (date-based)</option>
+                              {specialConfigs.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                              <option value="__create_new__">＋ Create New Config…</option>
+                            </select>
+                          </div>
+                          {(effectiveType === 'refund' || effectiveType === 'reversal') && (
+                            <div className="px-3 pb-1.5 pt-0.5 flex items-center gap-2 text-xs bg-amber-50/50">
+                              <span className="w-6 shrink-0" />
+                              <span className="text-gray-500 shrink-0">Original Txn ID:</span>
+                              <input
+                                type="text"
+                                value={rowOrigTxnIds[ri] ?? ''}
+                                onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
+                                placeholder="Enter original transaction ID…"
+                                className="flex-1 text-xs px-2 py-0.5 border border-amber-200 rounded outline-none focus:ring-2 focus:ring-amber-300/50 bg-white"
+                              />
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -1507,6 +1684,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       onClose={() => setCreateConfigOpen(false)}
       onSaved={cfg => {
         setSpecialConfigs(prev => [...prev, cfg])
+        if (createConfigPendingRow !== null) {
+          setRowConfigs(prev => ({ ...prev, [createConfigPendingRow]: cfg.id }))
+          setCreateConfigPendingRow(null)
+        }
         setCreateConfigOpen(false)
       }}
     />
