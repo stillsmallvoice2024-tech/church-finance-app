@@ -23,7 +23,12 @@ import Setup from './pages/Setup'
 import PercentageAllocations from './pages/PercentageAllocations'
 import SpecificGivings from './pages/SpecificGivings'
 import SavingsPortions from './pages/SavingsPortions'
-import CategoryLedger from './pages/CategoryLedger'
+import CategoryLedger       from './pages/CategoryLedger'
+import BankLedger           from './pages/BankLedger'
+import BankDeposits         from './pages/BankDeposits'
+import IntraBankTransfers   from './pages/IntraBankTransfers'
+import RefundTransactions   from './pages/RefundTransactions'
+import ReversalTransactions from './pages/ReversalTransactions'
 
 export default function App() {
   useAuthListener()
@@ -56,7 +61,12 @@ export default function App() {
             <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
             <Route path="specific-givings" element={<ErrorBoundary><SpecificGivings /></ErrorBoundary>} />
             <Route path="savings-portions" element={<ErrorBoundary><SavingsPortions /></ErrorBoundary>} />
-            <Route path="category-ledger" element={<ErrorBoundary><CategoryLedger /></ErrorBoundary>} />
+            <Route path="category-ledger"      element={<ErrorBoundary><CategoryLedger /></ErrorBoundary>} />
+            <Route path="bank-ledger"          element={<ErrorBoundary><BankLedger /></ErrorBoundary>} />
+            <Route path="bank-deposits"        element={<ErrorBoundary><BankDeposits /></ErrorBoundary>} />
+            <Route path="intrabank-transfers"  element={<ErrorBoundary><IntraBankTransfers /></ErrorBoundary>} />
+            <Route path="refunds"              element={<ErrorBoundary><RefundTransactions /></ErrorBoundary>} />
+            <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
           </Route>
         </Route>
 

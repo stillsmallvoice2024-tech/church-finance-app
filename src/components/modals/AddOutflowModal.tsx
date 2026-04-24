@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
+
+const FX_CURRENCIES = ['USD', 'GBP', 'EUR', 'CNY', 'AED', 'CAD', 'CHF', 'ZAR']
+
+const TXN_TYPES = [
+  { value: '',                   label: 'Normal' },
+  { value: 'refund',             label: 'Refund' },
+  { value: 'reversal',           label: 'Reversal' },
+  { value: 'bank_deposit',       label: 'Bank Deposit' },
+  { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
+]
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
 
@@ -16,19 +25,19 @@ const optNum = z.union([
 ]).optional()
 
 const schema = z.object({
-  date:             z.string().min(1, 'Date is required'),
-  amount_disbursed: z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
-  description:      z.string().optional(),
-  bank_description: z.string().optional(),
-  transaction_id:   z.string().optional(),
-  stage_code_1:     z.string().optional(),
-  stage_code_2:     z.string().optional(),
-  amount_refunded:  optNum,
-  transfer_charge:  optNum,
-  remarks:          z.string().optional(),
-  fx_currency:      z.string().optional(),
-  fx_amount:        optNum,
-  fx_rate:          optNum,
+  date:                    z.string().min(1, 'Date is required'),
+  amount_disbursed:        z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
+  description:             z.string().optional(),
+  bank_description:        z.string().optional(),
+  transaction_id:          z.string().optional(),
+  stage_code_1:            z.string().optional(),
+  stage_code_2:            z.string().optional(),
+  amount_refunded:         optNum,
+  transfer_charge:         optNum,
+  remarks:                 z.string().optional(),
+  fx_currency:             z.string().optional(),
+  transaction_type:        z.string().optional(),
+  original_transaction_id: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -46,7 +55,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { categories } = useCategories()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
-  const [fxOpen,    setFxOpen]    = useState(false)
 
   const addMutation    = useAddOutflow()
   const updateMutation = useUpdateTransaction('outflow_transactions')
@@ -62,29 +70,31 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     handleSubmit,
     formState: { errors },
     reset: resetForm,
+    control,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
+
+  const transactionType = useWatch({ control, name: 'transaction_type' })
 
   useEffect(() => {
     if (!open) return
     resetAdd()
     resetUpdate()
-    setFxOpen(false)
     if (editRecord) {
       setIsPending(editRecord.is_pending_deduction ?? false)
       resetForm({
-        date:             editRecord.date,
-        amount_disbursed: editRecord.amount_disbursed,
-        description:      editRecord.description       ?? '',
-        bank_description: editRecord.bank_description  ?? '',
-        transaction_id:   editRecord.transaction_id    ?? '',
-        stage_code_1:     editRecord.stage_code_1      ?? '',
-        stage_code_2:     editRecord.stage_code_2      ?? '',
-        amount_refunded:  editRecord.amount_refunded   ?? '',
-        transfer_charge:  editRecord.transfer_charge   ?? '',
-        remarks:          editRecord.remarks           ?? '',
-        fx_currency:      (editRecord as Record<string, unknown>).fx_currency as string ?? '',
-        fx_amount:        (editRecord as Record<string, unknown>).fx_amount   as string ?? '',
-        fx_rate:          (editRecord as Record<string, unknown>).fx_rate     as string ?? '',
+        date:                    editRecord.date,
+        amount_disbursed:        editRecord.amount_disbursed,
+        description:             editRecord.description       ?? '',
+        bank_description:        editRecord.bank_description  ?? '',
+        transaction_id:          editRecord.transaction_id    ?? '',
+        stage_code_1:            editRecord.stage_code_1      ?? '',
+        stage_code_2:            editRecord.stage_code_2      ?? '',
+        amount_refunded:         editRecord.amount_refunded   ?? '',
+        transfer_charge:         editRecord.transfer_charge   ?? '',
+        remarks:                 editRecord.remarks           ?? '',
+        fx_currency:             editRecord.fx_currency             ?? '',
+        transaction_type:        editRecord.transaction_type        ?? '',
+        original_transaction_id: editRecord.original_transaction_id ?? '',
       })
     } else {
       setIsPending(false)
@@ -98,35 +108,38 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         await update({
           id: editRecord.id,
           updates: {
-            date:                  values.date,
-            amount_disbursed:      values.amount_disbursed,
-            description:           values.description      || null,
-            bank_description:      values.bank_description || null,
-            transaction_id:        values.transaction_id   || null,
-            stage_code_1:          values.stage_code_1     || null,
-            stage_code_2:          values.stage_code_2     || null,
-            amount_refunded:       values.amount_refunded  ?? null,
-            transfer_charge:       values.transfer_charge  ?? null,
-            remarks:               values.remarks          || null,
-            is_pending_deduction:  isPending,
+            date:                    values.date,
+            amount_disbursed:        values.amount_disbursed,
+            description:             values.description      || null,
+            bank_description:        values.bank_description || null,
+            transaction_id:          values.transaction_id   || null,
+            stage_code_1:            values.stage_code_1     || null,
+            stage_code_2:            values.stage_code_2     || null,
+            amount_refunded:         values.amount_refunded  ?? null,
+            transfer_charge:         values.transfer_charge  ?? null,
+            remarks:                 values.remarks          || null,
+            is_pending_deduction:    isPending,
+            fx_currency:             values.fx_currency             || null,
+            transaction_type:        values.transaction_type        || null,
+            original_transaction_id: values.original_transaction_id || null,
           },
         })
       } else {
         const input: AddOutflowInput = {
-          date:                  values.date,
-          amount_disbursed:      values.amount_disbursed,
-          is_pending_deduction:  isPending,
-          description:           values.description      || undefined,
-          bank_description:      values.bank_description || undefined,
-          transaction_id:        values.transaction_id   || undefined,
-          stage_code_1:          values.stage_code_1     || undefined,
-          stage_code_2:          values.stage_code_2     || undefined,
-          amount_refunded:       typeof values.amount_refunded === 'number' ? values.amount_refunded : undefined,
-          transfer_charge:       typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
-          remarks:               values.remarks          || undefined,
-          fx_currency:           values.fx_currency      || undefined,
-          fx_amount:             typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
-          fx_rate:               typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
+          date:                    values.date,
+          amount_disbursed:        values.amount_disbursed,
+          is_pending_deduction:    isPending,
+          description:             values.description      || undefined,
+          bank_description:        values.bank_description || undefined,
+          transaction_id:          values.transaction_id   || undefined,
+          stage_code_1:            values.stage_code_1     || undefined,
+          stage_code_2:            values.stage_code_2     || undefined,
+          amount_refunded:         typeof values.amount_refunded === 'number' ? values.amount_refunded : undefined,
+          transfer_charge:         typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
+          remarks:                 values.remarks          || undefined,
+          fx_currency:             values.fx_currency             || undefined,
+          transaction_type:        values.transaction_type        || undefined,
+          original_transaction_id: values.original_transaction_id || undefined,
         }
         await add(input)
       }
@@ -173,6 +186,27 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             className={inputCls(!!errors.description)}
           />
         </Field>
+
+        {/* Transaction Type */}
+        <Field label="Transaction Type" error={errors.transaction_type?.message}>
+          <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
+            {TXN_TYPES.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </Field>
+
+        {/* Original Txn ID — only for refund/reversal */}
+        {(transactionType === 'refund' || transactionType === 'reversal') && (
+          <Field label="Original Transaction ID" error={errors.original_transaction_id?.message}>
+            <input
+              type="text"
+              placeholder="ID of the transaction being refunded/reversed"
+              {...register('original_transaction_id')}
+              className={inputCls(!!errors.original_transaction_id)}
+            />
+          </Field>
+        )}
 
         {/* Bank Desc + Txn ID */}
         <div className="grid grid-cols-2 gap-4">
@@ -244,6 +278,14 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
               />
             </Field>
           </div>
+          <Field label="FX Currency (if applicable)" error={errors.fx_currency?.message}>
+            <select {...register('fx_currency')} className={inputCls(!!errors.fx_currency)}>
+              <option value="">— None —</option>
+              {FX_CURRENCIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </Field>
         </div>
 
         {/* Remarks */}
@@ -254,33 +296,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             className={`${inputCls(!!errors.remarks)} resize-none`}
           />
         </Field>
-
-        {/* FX Details (collapsible) */}
-        <div className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setFxOpen(v => !v)}
-            className="flex items-center gap-2 w-full px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-100 transition-colors"
-          >
-            {fxOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-            FX Details
-          </button>
-          {fxOpen && (
-            <div className="px-4 pb-4 space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Currency" error={errors.fx_currency?.message}>
-                  <input type="text" placeholder="USD" {...register('fx_currency')} className={inputCls(!!errors.fx_currency)} />
-                </Field>
-                <Field label="FX Amount" error={errors.fx_amount?.message}>
-                  <input type="number" min="0" step="0.0001" placeholder="0.00" {...register('fx_amount')} className={inputCls(!!errors.fx_amount)} />
-                </Field>
-                <Field label="Exchange Rate" error={errors.fx_rate?.message}>
-                  <input type="number" min="0" step="0.000001" placeholder="0.00" {...register('fx_rate')} className={inputCls(!!errors.fx_rate)} />
-                </Field>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-2">

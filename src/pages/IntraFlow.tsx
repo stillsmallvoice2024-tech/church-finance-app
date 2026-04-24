@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   ArrowLeftRight, Plus, Download, Pencil, Trash2,
   Search, AlertCircle, RefreshCw, FileSpreadsheet,
+  LayoutGrid, LayoutList,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
@@ -90,10 +91,11 @@ export default function IntraFlow() {
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
 
   // UI state
-  const [editRecord,  setEditRecord]  = useState<IntraFlowRow | null>(null)
-  const [modalOpen,   setModalOpen]   = useState(false)
-  const [deleteId,    setDeleteId]    = useState<string | null>(null)
-  const [importOpen,  setImportOpen]  = useState(false)
+  const [editRecord,   setEditRecord]   = useState<IntraFlowRow | null>(null)
+  const [modalOpen,    setModalOpen]    = useState(false)
+  const [deleteId,     setDeleteId]     = useState<string | null>(null)
+  const [importOpen,   setImportOpen]   = useState(false)
+  const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
@@ -162,6 +164,17 @@ export default function IntraFlow() {
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* View toggle */}
+            <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
+              <button onClick={() => setDisplayMode('table')} title="Table view"
+                className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button onClick={() => setDisplayMode('cards')} title="Card view"
+                className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
             <button
               onClick={handleExport} disabled={data.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
@@ -228,69 +241,118 @@ export default function IntraFlow() {
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
-        {/* Table */}
+        {/* Table / Card view */}
         <Card padding={false}>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage', 'To Stage', 'Remark', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {loading ? (
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className="h-4 bg-gray-200 rounded animate-pulse" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : data.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2 text-gray-400">
-                        <ArrowLeftRight className="w-10 h-10 text-gray-200" />
-                        <p className="text-sm">No internal transfers match your filters.</p>
+          {displayMode === 'cards' ? (
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-2/3" />
+                    <div className="h-6 bg-gray-200 rounded w-1/2" />
+                    <div className="h-4 bg-gray-200 rounded" />
+                  </div>
+                ))
+              ) : data.length === 0 ? (
+                <div className="col-span-full py-16 text-center text-gray-400">
+                  <ArrowLeftRight className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm">No internal transfers match your filters.</p>
+                </div>
+              ) : (
+                data.map(row => (
+                  <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-3 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+                      <span className="text-base font-bold text-primary">{formatCurrency(Number(row.total_amount))}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <span className="font-medium truncate max-w-[100px]">{row.account_from ?? '—'}</span>
+                      <ArrowLeftRight className="w-3 h-3 text-gray-400 shrink-0" />
+                      <span className="font-medium truncate max-w-[100px]">{row.account_to ?? '—'}</span>
+                    </div>
+                    {row.description && <p className="text-xs text-gray-500 truncate">{row.description}</p>}
+                    {row.remark     && <p className="text-xs text-gray-400 italic truncate">{row.remark}</p>}
+                    {(canWrite() || canDelete()) && (
+                      <div className="flex gap-1 pt-1 border-t border-gray-50">
+                        {canWrite() && (
+                          <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete() && (
+                          <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
-                    </td>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage', 'To Stage', 'Remark', 'Actions'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ) : (
-                  data.map(row => (
-                    <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(Number(row.total_amount))}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remark ?? undefined}>{row.remark ?? '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          {canWrite() && (
-                            <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canDelete() && (
-                            <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loading ? (
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i}>
+                        {Array.from({ length: 8 }).map((_, j) => (
+                          <td key={j} className="px-4 py-3">
+                            <div className="h-4 bg-gray-200 rounded animate-pulse" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : data.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-16 text-center">
+                        <div className="flex flex-col items-center gap-2 text-gray-400">
+                          <ArrowLeftRight className="w-10 h-10 text-gray-200" />
+                          <p className="text-sm">No internal transfers match your filters.</p>
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    data.map(row => (
+                      <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(Number(row.total_amount))}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remark ?? undefined}>{row.remark ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            {canWrite() && (
+                              <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canDelete() && (
+                              <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
           <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
         </Card>
       </div>

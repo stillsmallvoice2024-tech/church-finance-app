@@ -58,8 +58,8 @@ export interface AddInflowInput {
   specific_seed_description?: string
   remark?: string
   fx_currency?: string
-  fx_amount?: number
-  fx_rate?: number
+  transaction_type?: string
+  original_transaction_id?: string
 }
 
 export interface AddOutflowInput {
@@ -79,8 +79,8 @@ export interface AddOutflowInput {
   stage_code_2?: string
   remarks?: string
   fx_currency?: string
-  fx_amount?: number
-  fx_rate?: number
+  transaction_type?: string
+  original_transaction_id?: string
 }
 
 export interface AddIntraFlowInput {
