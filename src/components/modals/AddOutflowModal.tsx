@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -36,6 +37,8 @@ const schema = z.object({
   transfer_charge:         optNum,
   remarks:                 z.string().optional(),
   fx_currency:             z.string().optional(),
+  fx_amount:               optNum,
+  fx_rate:                 optNum,
   transaction_type:        z.string().optional(),
   original_transaction_id: z.string().optional(),
 })
@@ -55,6 +58,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { categories } = useCategories()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
+  const [fxOpen,    setFxOpen]    = useState(false)
 
   const addMutation    = useAddOutflow()
   const updateMutation = useUpdateTransaction('outflow_transactions')
@@ -79,6 +83,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     if (!open) return
     resetAdd()
     resetUpdate()
+    setFxOpen(false)
     if (editRecord) {
       setIsPending(editRecord.is_pending_deduction ?? false)
       resetForm({
@@ -93,6 +98,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         transfer_charge:         editRecord.transfer_charge   ?? '',
         remarks:                 editRecord.remarks           ?? '',
         fx_currency:             editRecord.fx_currency             ?? '',
+        fx_amount:               (editRecord as Record<string, unknown>).fx_amount as number ?? '',
+        fx_rate:                 (editRecord as Record<string, unknown>).fx_rate   as number ?? '',
         transaction_type:        editRecord.transaction_type        ?? '',
         original_transaction_id: editRecord.original_transaction_id ?? '',
       })
@@ -120,6 +127,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             remarks:                 values.remarks          || null,
             is_pending_deduction:    isPending,
             fx_currency:             values.fx_currency             || null,
+            fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : null,
+            fx_rate:                 typeof values.fx_rate   === 'number' ? values.fx_rate   : null,
             transaction_type:        values.transaction_type        || null,
             original_transaction_id: values.original_transaction_id || null,
           },
@@ -138,6 +147,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           transfer_charge:         typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
           remarks:                 values.remarks          || undefined,
           fx_currency:             values.fx_currency             || undefined,
+          fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
+          fx_rate:                 typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
           transaction_type:        values.transaction_type        || undefined,
           original_transaction_id: values.original_transaction_id || undefined,
         }
@@ -286,6 +297,32 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
               ))}
             </select>
           </Field>
+        </div>
+
+        {/* FX Details collapsible */}
+        <div className="border border-gray-100 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFxOpen(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 hover:bg-gray-100 transition-colors"
+          >
+            FX Details (amount &amp; rate)
+            {fxOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+          {fxOpen && (
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="FX Amount" error={errors.fx_amount?.message}>
+                  <input type="number" min="0" step="0.0001" placeholder="0.0000"
+                    {...register('fx_amount')} className={inputCls(!!errors.fx_amount)} />
+                </Field>
+                <Field label="FX Rate" error={errors.fx_rate?.message}>
+                  <input type="number" min="0" step="0.000001" placeholder="0.000000"
+                    {...register('fx_rate')} className={inputCls(!!errors.fx_rate)} />
+                </Field>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Remarks */}

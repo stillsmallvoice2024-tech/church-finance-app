@@ -2,9 +2,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
+import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../../utils/inflowTypes'
@@ -13,6 +15,11 @@ import type { InflowTransaction } from '../../hooks/useTransactions'
 // ── Zod schema ─────────────────────────────────────────────────────────────────
 
 const FX_CURRENCIES = ['USD', 'GBP', 'EUR', 'CNY', 'AED', 'CAD', 'CHF', 'ZAR']
+
+const optNum = z.union([
+  z.coerce.number().min(0),
+  z.literal('').transform(() => undefined),
+]).optional()
 
 const TXN_TYPES = [
   { value: '',                   label: 'Normal' },
@@ -33,6 +40,8 @@ const schema = z.object({
   specific_seed_description:  z.string().optional(),
   remark:                     z.string().optional(),
   fx_currency:                z.string().optional(),
+  fx_amount:                  optNum,
+  fx_rate:                    optNum,
   transaction_type:           z.string().optional(),
   original_transaction_id:    z.string().optional(),
 })
@@ -51,6 +60,9 @@ interface Props {
 export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
   const { categories } = useCategories()
+  const { configs: allocConfigs, fetch: fetchAllocConfigs } = useAllocationStore()
+  useEffect(() => { fetchAllocConfigs() }, [fetchAllocConfigs])
+  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
 
   const addMutation    = useAddInflow()
   const updateMutation = useUpdateTransaction('inflow_transactions')
@@ -63,6 +75,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   // Track inflow_type separately so we can auto-update when description changes
   const [inflowType, setInflowType] = useState<InflowType>('general_giving')
+  const [selectedConfigId,  setSelectedConfigId]  = useState('')
+  const [configManuallySet, setConfigManuallySet] = useState(false)
+  const [fxOpen,            setFxOpen]            = useState(false)
 
   const {
     register,
@@ -73,8 +88,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setValue,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  const description    = watch('description')
+  const description     = watch('description')
   const transactionType = watch('transaction_type')
+  const watchedDate     = watch('date')
 
   // Auto-assign type when description changes (only if user hasn't manually changed it)
   const [typeManuallySet, setTypeManuallySet] = useState(false)
@@ -83,6 +99,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       setInflowType(autoAssignInflowType(description))
     }
   }, [description, typeManuallySet])
+
+  // Auto-select allocation config by date (unless manually overridden)
+  useEffect(() => {
+    if (configManuallySet || !watchedDate) return
+    const cfg = getConfigForDate(lockedConfigs, watchedDate)
+    setSelectedConfigId(cfg?.id ?? '')
+  }, [watchedDate, lockedConfigs, configManuallySet])
 
   const handleTypeChange = useCallback((t: InflowType) => {
     setInflowType(t)
@@ -96,9 +119,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     resetAdd()
     resetUpdate()
     setTypeManuallySet(false)
+    setConfigManuallySet(false)
+    setFxOpen(false)
     if (editRecord) {
       setInflowType(editRecord.inflow_type ?? 'general_giving')
       setTypeManuallySet(true)
+      setSelectedConfigId((editRecord as Record<string, unknown>).allocation_config_id as string ?? '')
+      setConfigManuallySet(true)
       resetForm({
         date:                       editRecord.date,
         amount:                     editRecord.amount,
@@ -110,11 +137,14 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         specific_seed_description:  editRecord.specific_seed_description ?? '',
         remark:                     editRecord.remark ?? '',
         fx_currency:                editRecord.fx_currency ?? '',
+        fx_amount:                  (editRecord as Record<string, unknown>).fx_amount as number ?? '',
+        fx_rate:                    (editRecord as Record<string, unknown>).fx_rate   as number ?? '',
         transaction_type:           editRecord.transaction_type ?? '',
         original_transaction_id:    editRecord.original_transaction_id ?? '',
       })
     } else {
       setInflowType('general_giving')
+      setSelectedConfigId('')
       resetForm({ date: new Date().toISOString().slice(0, 10), amount: undefined })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
@@ -130,12 +160,15 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             amount:                     values.amount,
             inflow_type:                type,
             description:                values.description  || null,
+            allocation_config_id:       selectedConfigId   || null,
             stage_code_1:               values.stage_code_1 || null,
             stage_code_2:               values.stage_code_2 || null,
             transaction_ref:            values.transaction_ref           || null,
             specific_seed_description:  values.specific_seed_description || null,
             remark:                     values.remark || null,
             fx_currency:                values.fx_currency             || null,
+            fx_amount:                  typeof values.fx_amount === 'number' ? values.fx_amount : null,
+            fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : null,
             transaction_type:           values.transaction_type        || null,
             original_transaction_id:    values.original_transaction_id || null,
           },
@@ -146,12 +179,15 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           amount:                     values.amount,
           inflow_type:                type,
           description:                values.description  || undefined,
+          allocation_config_id:       selectedConfigId   || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
           transaction_ref:            values.transaction_ref           || undefined,
           specific_seed_description:  values.specific_seed_description || undefined,
           remark:                     values.remark || undefined,
           fx_currency:                values.fx_currency             || undefined,
+          fx_amount:                  typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
+          fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
           transaction_type:           values.transaction_type        || undefined,
           original_transaction_id:    values.original_transaction_id || undefined,
         }
@@ -236,6 +272,25 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           )}
         </Field>
 
+        {/* Allocation Config */}
+        <Field label="Allocation Config">
+          <select
+            value={selectedConfigId}
+            onChange={e => { setSelectedConfigId(e.target.value); setConfigManuallySet(true) }}
+            className={inputCls(false)}
+          >
+            <option value="">Date-based (auto)</option>
+            {lockedConfigs.map(c => (
+              <option key={c.id} value={c.id}>{c.name} — effective {c.start_date}</option>
+            ))}
+          </select>
+          {!selectedConfigId && watchedDate && (
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              Auto: {getConfigForDate(lockedConfigs, watchedDate)?.name ?? 'no config found for this date'}
+            </p>
+          )}
+        </Field>
+
         {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
@@ -275,6 +330,32 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             ))}
           </select>
         </Field>
+
+        {/* FX Details collapsible */}
+        <div className="border border-gray-100 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFxOpen(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 hover:bg-gray-100 transition-colors"
+          >
+            FX Details (amount &amp; rate)
+            {fxOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+          {fxOpen && (
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="FX Amount" error={errors.fx_amount?.message}>
+                  <input type="number" min="0" step="0.0001" placeholder="0.0000"
+                    {...register('fx_amount')} className={inputCls(!!errors.fx_amount)} />
+                </Field>
+                <Field label="FX Rate" error={errors.fx_rate?.message}>
+                  <input type="number" min="0" step="0.000001" placeholder="0.000000"
+                    {...register('fx_rate')} className={inputCls(!!errors.fx_rate)} />
+                </Field>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Remark */}
         <Field label="Remark" error={errors.remark?.message}>
