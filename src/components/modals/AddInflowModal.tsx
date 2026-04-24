@@ -12,6 +12,16 @@ import type { InflowTransaction } from '../../hooks/useTransactions'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
 
+const FX_CURRENCIES = ['USD', 'GBP', 'EUR', 'CNY', 'AED', 'CAD', 'CHF', 'ZAR']
+
+const TXN_TYPES = [
+  { value: '',                   label: 'Normal' },
+  { value: 'refund',             label: 'Refund' },
+  { value: 'reversal',           label: 'Reversal' },
+  { value: 'bank_deposit',       label: 'Bank Deposit' },
+  { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
+]
+
 const schema = z.object({
   date:                       z.string().min(1, 'Date is required'),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
@@ -22,6 +32,9 @@ const schema = z.object({
   transaction_ref:            z.string().optional(),
   specific_seed_description:  z.string().optional(),
   remark:                     z.string().optional(),
+  fx_currency:                z.string().optional(),
+  transaction_type:           z.string().optional(),
+  original_transaction_id:    z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -60,7 +73,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setValue,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  const description = watch('description')
+  const description    = watch('description')
+  const transactionType = watch('transaction_type')
 
   // Auto-assign type when description changes (only if user hasn't manually changed it)
   const [typeManuallySet, setTypeManuallySet] = useState(false)
@@ -95,6 +109,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         transaction_ref:            editRecord.transaction_ref ?? '',
         specific_seed_description:  editRecord.specific_seed_description ?? '',
         remark:                     editRecord.remark ?? '',
+        fx_currency:                editRecord.fx_currency ?? '',
+        transaction_type:           editRecord.transaction_type ?? '',
+        original_transaction_id:    editRecord.original_transaction_id ?? '',
       })
     } else {
       setInflowType('general_giving')
@@ -118,6 +135,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             transaction_ref:            values.transaction_ref           || null,
             specific_seed_description:  values.specific_seed_description || null,
             remark:                     values.remark || null,
+            fx_currency:                values.fx_currency             || null,
+            transaction_type:           values.transaction_type        || null,
+            original_transaction_id:    values.original_transaction_id || null,
           },
         })
       } else {
@@ -131,6 +151,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           transaction_ref:            values.transaction_ref           || undefined,
           specific_seed_description:  values.specific_seed_description || undefined,
           remark:                     values.remark || undefined,
+          fx_currency:                values.fx_currency             || undefined,
+          transaction_type:           values.transaction_type        || undefined,
+          original_transaction_id:    values.original_transaction_id || undefined,
         }
         await add(input)
       }
@@ -169,6 +192,27 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         <Field label="Description" error={errors.description?.message}>
           <input type="text" placeholder="e.g. Sunday offering" {...register('description')} className={inputCls(!!errors.description)} />
         </Field>
+
+        {/* Transaction Type */}
+        <Field label="Transaction Type" error={errors.transaction_type?.message}>
+          <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
+            {TXN_TYPES.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </Field>
+
+        {/* Original Txn ID — only for refund/reversal */}
+        {(transactionType === 'refund' || transactionType === 'reversal') && (
+          <Field label="Original Transaction ID" error={errors.original_transaction_id?.message}>
+            <input
+              type="text"
+              placeholder="ID of the transaction being refunded/reversed"
+              {...register('original_transaction_id')}
+              className={inputCls(!!errors.original_transaction_id)}
+            />
+          </Field>
+        )}
 
         {/* Inflow Type — shown with auto-assigned label, fully editable */}
         <Field label="Inflow Type">
@@ -220,6 +264,16 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         {/* Specific Seed Description */}
         <Field label="Specific Seed Description" error={errors.specific_seed_description?.message}>
           <input type="text" placeholder="Specific seed description (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
+        </Field>
+
+        {/* FX Currency (optional) */}
+        <Field label="FX Currency (if applicable)" error={errors.fx_currency?.message}>
+          <select {...register('fx_currency')} className={inputCls(!!errors.fx_currency)}>
+            <option value="">— None —</option>
+            {FX_CURRENCIES.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </Field>
 
         {/* Remark */}

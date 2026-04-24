@@ -16,6 +16,9 @@ export interface InflowTransaction {
   transaction_ref: string | null
   specific_seed_description: string | null
   remark: string | null
+  fx_currency: string | null
+  transaction_type: string | null
+  original_transaction_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -36,6 +39,9 @@ export interface OutflowTransaction {
   stage_code_2: string | null
   remarks: string | null
   is_pending_deduction: boolean
+  fx_currency: string | null
+  transaction_type: string | null
+  original_transaction_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
