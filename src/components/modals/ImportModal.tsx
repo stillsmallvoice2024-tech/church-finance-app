@@ -13,7 +13,13 @@ import { formatDate } from '../../utils/formatters'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
-type TargetTable = 'bank_statement' | 'fx_transactions'
+type TargetTable =
+  | 'bank_statement'
+  | 'inflow_transactions'
+  | 'outflow_transactions'
+  | 'intra_flows'
+  | 'ledger_entries'
+  | 'fx_transactions'
 
 interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -27,6 +33,67 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
       { key: 'debit',       label: 'Debit (Outflow Amount)'                },
       { key: 'balance',     label: 'Balance (info only)'                   },
       { key: 'reference',   label: 'Reference / Txn ID'                    },
+    ],
+  },
+  inflow_transactions: {
+    label: 'Inflow Transactions',
+    fields: [
+      { key: 'date',                      label: 'Date',                    required: true },
+      { key: 'amount',                    label: 'Amount',                  required: true },
+      { key: 'inflow_type',               label: 'Inflow Type'                            },
+      { key: 'description',               label: 'Description'                            },
+      { key: 'stage_code_1',              label: 'Stage Code 1'                           },
+      { key: 'stage_code_2',              label: 'Stage Code 2'                           },
+      { key: 'transaction_ref',           label: 'Transaction Ref'                        },
+      { key: 'specific_seed_description', label: 'Seed Description'                       },
+      { key: 'remark',                    label: 'Remark'                                 },
+      { key: 'allocation_config_name',    label: 'Allocation Config (by name)'            },
+    ],
+  },
+  outflow_transactions: {
+    label: 'Outflow Transactions',
+    fields: [
+      { key: 'date',                 label: 'Date',             required: true },
+      { key: 'amount_disbursed',     label: 'Amount Disbursed', required: true },
+      { key: 'description',          label: 'Description'                      },
+      { key: 'amount_refunded',      label: 'Amount Refunded'                  },
+      { key: 'transfer_charge',      label: 'Transfer Charge'                  },
+      { key: 'actual_amount',        label: 'Actual Amount'                    },
+      { key: 'bank_total',           label: 'Bank Total'                       },
+      { key: 'stage_code_1',         label: 'Stage Code 1'                     },
+      { key: 'stage_code_2',         label: 'Stage Code 2'                     },
+      { key: 'transaction_id',       label: 'Transaction ID'                   },
+      { key: 'bank_description',     label: 'Bank Description'                 },
+      { key: 'remarks',              label: 'Remarks'                          },
+      { key: 'is_pending_deduction', label: 'Pending Deduction'                },
+    ],
+  },
+  intra_flows: {
+    label: 'Intra-Account Flows',
+    fields: [
+      { key: 'date',                label: 'Date',         required: true },
+      { key: 'total_amount',        label: 'Total Amount', required: true },
+      { key: 'account_from',        label: 'Account From'                 },
+      { key: 'account_to',          label: 'Account To'                   },
+      { key: 'description',         label: 'Description'                  },
+      { key: 'transaction_ref',     label: 'Transaction Ref'              },
+      { key: 'account_from_stage1', label: 'From Stage 1'                 },
+      { key: 'account_from_stage2', label: 'From Stage 2'                 },
+      { key: 'account_to_stage1',   label: 'To Stage 1'                   },
+      { key: 'account_to_stage2',   label: 'To Stage 2'                   },
+      { key: 'remark',              label: 'Remark'                       },
+    ],
+  },
+  ledger_entries: {
+    label: 'Ledger Entries',
+    fields: [
+      { key: 'account_id',   label: 'Account ID',   required: true },
+      { key: 'date',         label: 'Date',         required: true },
+      { key: 'inflow',       label: 'Inflow'                       },
+      { key: 'outflow',      label: 'Outflow'                      },
+      { key: 'balance',      label: 'Balance'                      },
+      { key: 'description',  label: 'Description'                  },
+      { key: 'refund_intraflow', label: 'Refund/Intraflow'         },
     ],
   },
   fx_transactions: {
@@ -43,6 +110,10 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
 }
 
 const SKIP = '__skip__'
+
+const STAGE_CODE_TABLES = new Set<TargetTable>([
+  'inflow_transactions', 'outflow_transactions', 'bank_statement',
+])
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
 
@@ -112,7 +183,6 @@ const ALIAS_MAP: Record<string, string[]> = {
   remark:           ['remark', 'remarks', 'note', 'notes', 'comment'],
   narration:        ['narration', 'description', 'desc', 'memo'],
   inflow_type:      ['inflowtype', 'type', 'category'],
-  bank_id:          ['bankid', 'banktxnid', 'banktransactionid', 'bankref', 'bankreference', 'banksessionid'],
 }
 
 // B4: Score rows to find the real header (skips pre-header filler rows)
@@ -158,7 +228,7 @@ interface ParsedSheet {
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
 function StepDots({ step }: { step: number }) {
-  const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Configure Rows', 'Import']
+  const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Import']
   return (
     <div className="flex items-center gap-0 mb-5">
       {STEPS.map((label, i) => {
@@ -250,19 +320,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   // Per-row special config assignment (rowIndex → configId)
   const [rowConfigs, setRowConfigs] = useState<Record<number, string>>({})
 
-  // Step 4 — Configure Rows
-  const [rowStageCodes, setRowStageCodes] = useState<Record<number, { s1: string; s2: string }>>({})
-  const [bsConfigTab,   setBsConfigTab]   = useState<'inflow' | 'outflow'>('inflow')
-
-  // Step 4 — filter bars
-  const [inflowFilter,  setInflowFilter]  = useState({ desc: '', amtFrom: '', amtTo: '' })
-  const [outflowFilter, setOutflowFilter] = useState({ desc: '', amtFrom: '', amtTo: '' })
-
-  // Step 4 — apply bar selections
-  const [applyInflowConfig, setApplyInflowConfig] = useState('')
-  const [applyS1,           setApplyS1]           = useState('')
-  const [applyS2,           setApplyS2]           = useState('')
-
   // In-wizard dup check
   const [wizardDupLoading, setWizardDupLoading] = useState(false)
   const [wizardDupsFound,  setWizardDupsFound]  = useState<Array<{ id: string; table: string }>>([])
@@ -306,13 +363,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowPendingDeductions({})
     setFxCurrency('')
     setRowConfigs({})
-    setRowStageCodes({})
-    setBsConfigTab('inflow')
-    setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })
-    setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })
-    setApplyInflowConfig('')
-    setApplyS1('')
-    setApplyS2('')
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
@@ -401,18 +451,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const proceedToImport = useCallback(async () => {
     if (!sheet || !config || !targetTable) return
     setStep(4)
-  }, [sheet, config, targetTable, mapping, batchPendingDeduction, defaultStageCode1, defaultStageCode2])
 
-  // fx_transactions (and any future non-bank_statement): skip step 4, go straight to step 5 + dup check
-  const proceedToImport = useCallback(async () => {
-    if (!sheet || !config || !targetTable) return
-    setStageCodeErrors({})
-    setStep(5)
+    // Dup check — only for tables with a reference field
+    if (!STAGE_CODE_TABLES.has(targetTable)) return
 
-    // Dup check for bank_statement only
-    if (targetTable !== 'bank_statement') return
+    const refFieldKey =
+      targetTable === 'inflow_transactions'  ? 'transaction_ref' :
+      targetTable === 'outflow_transactions' ? 'transaction_id'  : 'reference'
 
-    const refHeader = Object.keys(mapping).find(h => mapping[h] === 'reference')
+    const refHeader = Object.keys(mapping).find(h => mapping[h] === refFieldKey)
     if (!refHeader) return
 
     const refColIdx = sheet.headers.indexOf(refHeader)
@@ -430,31 +477,35 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     try {
       const results: Array<{ id: string; table: string }> = []
 
-      const { data: inflowData, error: inflowErr } = await supabase
-        .from('inflow_transactions')
-        .select('transaction_ref')
-        .in('transaction_ref', uniqueIds)
-      if (inflowErr) {
-        if (inflowErr.message.includes('invalid input syntax for type uuid')) {
-          results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
-        }
-      } else {
-        for (const r of inflowData ?? []) {
-          if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
+      if (targetTable === 'inflow_transactions' || targetTable === 'bank_statement') {
+        const { data, error } = await supabase
+          .from('inflow_transactions')
+          .select('transaction_ref')
+          .in('transaction_ref', uniqueIds)
+        if (error) {
+          if (error.message.includes('invalid input syntax for type uuid')) {
+            results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
+          }
+        } else {
+          for (const r of data ?? []) {
+            if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
+          }
         }
       }
 
-      const { data: outflowData, error: outflowErr } = await supabase
-        .from('outflow_transactions')
-        .select('transaction_id')
-        .in('transaction_id', uniqueIds)
-      if (outflowErr) {
-        if (outflowErr.message.includes('invalid input syntax for type uuid')) {
-          results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
-        }
-      } else {
-        for (const r of outflowData ?? []) {
-          if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
+      if (targetTable === 'outflow_transactions' || targetTable === 'bank_statement') {
+        const { data, error } = await supabase
+          .from('outflow_transactions')
+          .select('transaction_id')
+          .in('transaction_id', uniqueIds)
+        if (error) {
+          if (error.message.includes('invalid input syntax for type uuid')) {
+            results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
+          }
+        } else {
+          for (const r of data ?? []) {
+            if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
+          }
         }
       }
 
@@ -527,6 +578,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (debit > 0) {
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
           if (userId) row.created_by = userId
+          if (bank)   row.bank_id   = bank.id
           if (cfg)    row.allocation_config_id = cfg.id
           if (rowPendingDeductions[ri] ?? batchPendingDeduction) row.is_pending_deduction = true
           outflowRows.push(row)
@@ -549,16 +601,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       for (let i = 0; i < inflowToInsert.length; i += BATCH) {
         const batch = inflowToInsert.slice(i, i + BATCH)
-        let { error: err } = await supabase.from('inflow_transactions').insert(batch)
-        const missingInflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
-        if (missingInflow) {
-          const stripped = batch.map(row => { const r = { ...row }; delete r[missingInflow]; return r })
-          const { error: retryErr } = await supabase.from('inflow_transactions').insert(stripped)
-          err = retryErr ?? null
-          if (!errors.some(e => e.includes(missingInflow))) {
-            errors.push(`⚠ ${missingInflow} column missing — run DB migration to add this column`)
-          }
-        }
+        const { error: err } = await supabase.from('inflow_transactions').insert(batch)
         if (err) {
           const msg = err.message.includes('invalid input syntax for type uuid')
             ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
@@ -569,16 +612,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
       for (let i = 0; i < outflowToInsert.length; i += BATCH) {
         const batch = outflowToInsert.slice(i, i + BATCH)
-        let { error: err } = await supabase.from('outflow_transactions').insert(batch)
-        const missingOutflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
-        if (missingOutflow) {
-          const stripped = batch.map(row => { const r = { ...row }; delete r[missingOutflow]; return r })
-          const { error: retryErr } = await supabase.from('outflow_transactions').insert(stripped)
-          err = retryErr ?? null
-          if (!errors.some(e => e.includes(missingOutflow))) {
-            errors.push(`⚠ ${missingOutflow} column missing — run DB migration to add this column`)
-          }
-        }
+        const { error: err } = await supabase.from('outflow_transactions').insert(batch)
         if (err) {
           const msg = err.message.includes('invalid input syntax for type uuid')
             ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
@@ -590,40 +624,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       setResult({ imported, skipped, errors })
       setImporting(false)
+      return
     }
 
-    // ── FX transactions ───────────────────────────────────────────────────────
-    if (targetTable === 'fx_transactions') {
-      const colIdx = (field: string) => {
-        const h = Object.keys(mapping).find(k => mapping[k] === field)
-        return h !== undefined ? sheet.headers.indexOf(h) : -1
-      }
-      const dateIdx    = colIdx('date')
-      const currIdx    = colIdx('currency')
-      const depIdx     = colIdx('deposit')
-      const wdIdx      = colIdx('withdrawal')
-      const balIdx     = colIdx('running_balance')
-      const narrIdx    = colIdx('narration')
-      const refIdx     = colIdx('transaction_ref')
+    // ── Standard single-table mode ────────────────────────────────────────────
 
-      const fxRows: Record<string, unknown>[] = []
-      for (let ri = 0; ri < sheet.rows.length; ri++) {
-        const raw  = sheet.rows[ri] as unknown[]
-        const date = dateIdx >= 0 ? parseDate(raw[dateIdx]) : null
-        if (!date) { skipped++; continue }
-        const currency = currIdx >= 0 && raw[currIdx] != null && raw[currIdx] !== ''
-          ? String(raw[currIdx]).trim() : null
-        if (!currency) { skipped++; continue }
-        const row: Record<string, unknown> = { date, currency }
-        if (depIdx  >= 0) row.deposit          = parseNumber(raw[depIdx])
-        if (wdIdx   >= 0) row.withdrawal        = parseNumber(raw[wdIdx])
-        if (balIdx  >= 0) row.running_balance   = parseNumber(raw[balIdx])
-        if (narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '') row.narration = String(raw[narrIdx]).trim()
-        if (refIdx  >= 0 && raw[refIdx]  != null && raw[refIdx]  !== '') row.transaction_ref = String(raw[refIdx]).trim()
-        if (userId) row.created_by = userId
-        if (internalBank) row.bank_name = internalBank.name
-        fxRows.push(row)
-      }
+    const nonTextFields = ['date', 'description', 'currency', 'transaction_ref',
+      'narration', 'remark', 'remarks', 'bank_description', 'stage_code_1', 'stage_code_2',
+      'inflow_type', 'account_from', 'account_to', 'transaction_id', 'specific_seed_description',
+      'account_id', 'account_from_stage1', 'account_from_stage2', 'account_to_stage1',
+      'account_to_stage2', 'is_pending_deduction', 'allocation_config_name']
 
     const numericFields = new Set(
       config.fields.filter(f => !nonTextFields.includes(f.key)).map(f => f.key),
@@ -653,9 +663,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         } else if (numericFields.has(field)) {
           row[field] = parseNumber(val)
         } else {
-          imported += batch.length
+          row[field] = val != null && val !== '' ? String(val).trim() : null
         }
-        setProgress(Math.round(((i + batch.length) / fxRows.length) * 100))
       }
 
       // Check required fields
@@ -995,7 +1004,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               step={step}
               onBack={preloadedFile ? undefined : () => { setStep(1); setSheets([]); setFileName('') }}
               onNext={proceedToMapping}
-              nextDisabled={!targetTable || !selectedSheet || !internalBank}
+              nextDisabled={!targetTable || !selectedSheet}
               nextLabel="Map Columns"
             />
           </div>
@@ -1004,28 +1013,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         {/* ─────────────────────── STEP 3: Column Mapping ──────────────── */}
         {step === 3 && sheet && config && (
           <div className="space-y-4">
-
-            {/* Persistent bank bar */}
-            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
-              <select
-                value={internalBank?.id ?? ''}
-                onChange={e => {
-                  const found = bankList.find(b => b.id === e.target.value)
-                  setInternalBank(found ? { id: found.id, name: found.name } : null)
-                }}
-                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
-                  internalBank ? 'border-gray-300' : 'border-amber-400'
-                }`}
-              >
-                <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              {internalBank && (
-                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
-              )}
-            </div>
-
             <p className="text-sm text-gray-600">
               Map each spreadsheet column to an app field.
               Smart defaults have been applied where column names match.
@@ -1074,351 +1061,21 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             <NavButtons
               step={step}
               onBack={() => setStep(2)}
-              onNext={targetTable === 'bank_statement' ? proceedToRowConfig : proceedToImport}
+              onNext={proceedToImport}
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
                 if (config.fields.some(f => f.required && !mappedFields.has(f.key))) return true
                 if (targetTable === 'fx_transactions' && !fxCurrency) return true
                 return false
               })()}
-              nextLabel={targetTable === 'bank_statement'
-                ? `Configure Rows (${sheet.rowCount.toLocaleString()})`
-                : `Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
-            />
-          </div>
-        )}
-
-        {/* ─────────────────────── STEP 4: Configure Rows ─────────────── */}
-        {step === 4 && sheet && config && targetTable === 'bank_statement' && (
-          <div className="space-y-5">
-
-            {/* Persistent bank bar */}
-            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
-              <select
-                value={internalBank?.id ?? ''}
-                onChange={e => {
-                  const found = bankList.find(b => b.id === e.target.value)
-                  setInternalBank(found ? { id: found.id, name: found.name } : null)
-                }}
-                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
-                  internalBank ? 'border-gray-300' : 'border-amber-400'
-                }`}
-              >
-                <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              {internalBank && (
-                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
-              )}
-            </div>
-
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200">
-              {(['inflow', 'outflow'] as const).map(tab => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setBsConfigTab(tab)}
-                  className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                    bsConfigTab === tab
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {tab === 'inflow' ? 'Credit (Inflow)' : 'Debit (Outflow)'}
-                </button>
-              ))}
-            </div>
-
-            {(() => {
-              const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
-              const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
-              const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
-              const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
-
-              const allRows = sheet.rows.map((raw, ri) => {
-                const r = raw as unknown[]
-                return {
-                  ri,
-                  raw: r,
-                  credit: creditIdx >= 0 ? parseNumber(r[creditIdx]) : 0,
-                  debit:  debitIdx  >= 0 ? parseNumber(r[debitIdx])  : 0,
-                }
-              })
-              const creditRows = allRows.filter(r => r.credit > 0)
-              const debitRows  = allRows.filter(r => r.debit  > 0)
-
-              // ── Inflow tab ───────────────────────────────────────────────
-              if (bsConfigTab === 'inflow') {
-                const f = inflowFilter
-                const filtered = creditRows.filter(({ raw, credit }) => {
-                  const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
-                  if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
-                  if (f.amtFrom && credit < parseFloat(f.amtFrom))       return false
-                  if (f.amtTo   && credit > parseFloat(f.amtTo))         return false
-                  return true
-                })
-                const isFiltered = filtered.length < creditRows.length
-
-                return (
-                  <div className="space-y-3">
-                    {/* Filter bar */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Search description…"
-                        value={f.desc}
-                        onChange={e => setInflowFilter(p => ({ ...p, desc: e.target.value }))}
-                        className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                      />
-                      <span className="text-xs text-gray-400">Amount</span>
-                      <input type="number" placeholder="from" value={f.amtFrom}
-                        onChange={e => setInflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
-                        className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                      />
-                      <input type="number" placeholder="to" value={f.amtTo}
-                        onChange={e => setInflowFilter(p => ({ ...p, amtTo: e.target.value }))}
-                        className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                      />
-                      <button type="button" onClick={() => setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
-                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
-                        Clear
-                      </button>
-                      <span className="text-xs text-gray-400 ml-auto">
-                        {filtered.length} / {creditRows.length} rows
-                      </span>
-                    </div>
-
-                    {/* Apply bar */}
-                    <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                      <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                        Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
-                      </span>
-                      <select value={applyInflowConfig} onChange={e => setApplyInflowConfig(e.target.value)}
-                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                        <option value="">— Allocation Config —</option>
-                        <option value="__general__">General (date-based)</option>
-                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                      <button
-                        type="button"
-                        disabled={!applyInflowConfig}
-                        onClick={() => {
-                          if (!applyInflowConfig) return
-                          setRowConfigs(prev => {
-                            const next = { ...prev }
-                            for (const { ri } of filtered)
-                              next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
-                            return next
-                          })
-                        }}
-                        className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
-                      >
-                        Apply
-                      </button>
-                    </div>
-
-                    {/* Row table */}
-                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="grid grid-cols-[40px_1fr_100px_190px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
-                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span>
-                      </div>
-                      <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
-                        {filtered.length === 0
-                          ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
-                          : filtered.map(({ ri, raw, credit }) => {
-                              const date  = dateIdx >= 0 ? (parseDate(raw[dateIdx]) ?? '') : ''
-                              const desc  = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                              const selId = rowConfigs[ri] ?? ''
-                              return (
-                                <div key={ri} className="grid grid-cols-[40px_1fr_100px_190px] items-center px-3 py-2 gap-2 text-xs">
-                                  <span className="text-gray-400 font-mono">{ri + 1}</span>
-                                  <div className="min-w-0">
-                                    <div className="text-gray-700 truncate">{desc || '—'}</div>
-                                    <div className="text-gray-400">{date}</div>
-                                  </div>
-                                  <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
-                                  <select value={selId}
-                                    onChange={e => setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))}
-                                    className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                    <option value="">General (date-based)</option>
-                                    {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                  </select>
-                                </div>
-                              )
-                            })
-                        }
-                      </div>
-                    </div>
-                  </div>
-                )
-              }
-
-              // ── Outflow tab ──────────────────────────────────────────────
-              const f = outflowFilter
-              const filtered = debitRows.filter(({ raw, debit }) => {
-                const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
-                if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
-                if (f.amtFrom && debit < parseFloat(f.amtFrom))        return false
-                if (f.amtTo   && debit > parseFloat(f.amtTo))          return false
-                return true
-              })
-              const isFiltered = filtered.length < debitRows.length
-
-              return (
-                <div className="space-y-3">
-                  {/* Filter bar */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Search description…"
-                      value={f.desc}
-                      onChange={e => setOutflowFilter(p => ({ ...p, desc: e.target.value }))}
-                      className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                    />
-                    <span className="text-xs text-gray-400">Amount</span>
-                    <input type="number" placeholder="from" value={f.amtFrom}
-                      onChange={e => setOutflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
-                      className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                    />
-                    <input type="number" placeholder="to" value={f.amtTo}
-                      onChange={e => setOutflowFilter(p => ({ ...p, amtTo: e.target.value }))}
-                      className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                    />
-                    <button type="button" onClick={() => setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
-                      className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
-                      Clear
-                    </button>
-                    <span className="text-xs text-gray-400 ml-auto">
-                      {filtered.length} / {debitRows.length} rows
-                    </span>
-                  </div>
-
-                  {/* Apply bar */}
-                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                      Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
-                    </span>
-                    <select value={applyS1} onChange={e => setApplyS1(e.target.value)}
-                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                      <option value="">Stage Code 1</option>
-                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
-                    <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
-                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                      <option value="">Stage Code 2</option>
-                      <option value="Percentage Allocation">Percentage Allocation</option>
-                      <option value="Specific Seed">Specific Seed</option>
-                      <option value="Savings">Savings</option>
-                    </select>
-                    <button
-                      type="button"
-                      disabled={!applyS1 && !applyS2}
-                      onClick={() => {
-                        if (!applyS1 && !applyS2) return
-                        setRowStageCodes(prev => {
-                          const next = { ...prev }
-                          for (const { ri } of filtered)
-                            next[ri] = {
-                              s1: applyS1 || (prev[ri]?.s1 ?? defaultStageCode1),
-                              s2: applyS2 || (prev[ri]?.s2 ?? defaultStageCode2),
-                            }
-                          return next
-                        })
-                      }}
-                      className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
-                    >
-                      Apply
-                    </button>
-                  </div>
-
-                  {/* Row table */}
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-[40px_1fr_100px_130px_130px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
-                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span>
-                    </div>
-                    <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
-                      {filtered.length === 0
-                        ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
-                        : filtered.map(({ ri, raw, debit }) => {
-                            const date = dateIdx >= 0 ? (parseDate(raw[dateIdx]) ?? '') : ''
-                            const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                            const sc   = rowStageCodes[ri] ?? { s1: defaultStageCode1, s2: defaultStageCode2 }
-                            return (
-                              <div key={ri} className="grid grid-cols-[40px_1fr_100px_130px_130px] items-center px-3 py-2 gap-2 text-xs">
-                                <span className="text-gray-400 font-mono">{ri + 1}</span>
-                                <div className="min-w-0">
-                                  <div className="text-gray-700 truncate">{desc || '—'}</div>
-                                  <div className="text-gray-400">{date}</div>
-                                </div>
-                                <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
-                                <select value={sc.s1}
-                                  onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: e.target.value, s2: prev[ri]?.s2 ?? defaultStageCode2 } }))}
-                                  className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                  <option value="">— None —</option>
-                                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                </select>
-                                <select value={sc.s2}
-                                  onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? defaultStageCode1, s2: e.target.value } }))}
-                                  className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                  <option value="">— None —</option>
-                                  <option value="Percentage Allocation">Percentage Allocation</option>
-                                  <option value="Specific Seed">Specific Seed</option>
-                                  <option value="Savings">Savings</option>
-                                </select>
-                              </div>
-                            )
-                          })
-                      }
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-
-            <NavButtons
-              step={step}
-              onBack={() => setStep(3)}
-              onNext={proceedToImport}
               nextLabel={`Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
             />
           </div>
         )}
 
-        {/* ─────────────────────── STEP 5: Preview & Import ────────────── */}
-        {step === 5 && sheet && config && (
+        {/* ─────────────────────── STEP 4: Preview & Import ────────────── */}
+        {step === 4 && sheet && config && (
           <div className="space-y-5">
-
-            {/* Persistent bank bar */}
-            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
-              <select
-                value={internalBank?.id ?? ''}
-                onChange={e => {
-                  const found = bankList.find(b => b.id === e.target.value)
-                  setInternalBank(found ? { id: found.id, name: found.name } : null)
-                }}
-                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
-                  internalBank ? 'border-gray-300' : 'border-amber-400'
-                }`}
-              >
-                <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              {internalBank && (
-                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
-              )}
-            </div>
-
-            {/* No-bank warning */}
-            {!internalBank && (
-              <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                Select a bank before importing.
-              </div>
-            )}
-
             {/* Summary */}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-lg bg-gray-50 px-3 py-3">
@@ -1446,7 +1103,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <p className="font-semibold">Bank Statement Split Rules</p>
                 <p>Credit &gt; 0 → <strong>Inflow</strong> table &nbsp;·&nbsp; Debit &gt; 0 → <strong>Outflow</strong> table</p>
                 <p className="text-gray-500">Description follows the non-empty amount column into the correct table.</p>
-                {internalBank && <p>Bank: <strong>{internalBank.name}</strong> will be tagged on all rows.</p>}
+                {bank && <p>Bank: <strong>{bank.name}</strong> will be tagged on all rows.</p>}
               </div>
             )}
 
@@ -1730,6 +1387,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               {f.label}
                             </th>
                           ))}
+                        {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                          <th className="px-3 py-2 text-left font-semibold text-primary whitespace-nowrap">Bank</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1747,6 +1407,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 </td>
                               )
                             })}
+                          {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                                {bank.name}
+                              </span>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1787,6 +1454,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <div className="text-sm space-y-1">
                   <div className="text-success">✓ {result.imported.toLocaleString()} rows imported</div>
                   {result.skipped > 0 && <div className="text-amber-600">⚠ {result.skipped} rows skipped</div>}
+                  {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
+                    <div className="flex items-center gap-1.5 text-gray-600 pt-1">
+                      <span className="text-xs">Bank:</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+                        {bank.name}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">

@@ -344,32 +344,15 @@ function SpecialConfigsTab({ onNew, onEdit, onDelete }: {
   const [loading,  setLoading]  = useState(true)
   const [err,      setErr]      = useState<string | null>(null)
 
-  const MIGRATION_SQL = `ALTER TABLE allocation_configs
-  ADD COLUMN IF NOT EXISTS is_special       boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS allocation_type  text    NOT NULL DEFAULT 'percentage'
-    CHECK (allocation_type IN ('percentage', 'amount')),
-  ADD COLUMN IF NOT EXISTS total_amount     numeric(15,2);
-
-ALTER TABLE inflow_transactions
-  ADD COLUMN IF NOT EXISTS allocation_config_id uuid REFERENCES allocation_configs(id);`
-
   const load = async () => {
     setLoading(true)
-    setErr(null)
     const { data, error } = await supabase
       .from('allocation_configs')
       .select('*')
       .eq('is_special', true)
       .order('created_at', { ascending: false })
-    if (error) {
-      setErr(
-        error.message.includes('is_special') || error.message.includes('column')
-          ? '__migration__'
-          : error.message,
-      )
-    } else {
-      setConfigs((data ?? []) as AllocationConfig[])
-    }
+    if (error) setErr(error.message)
+    else setConfigs((data ?? []) as AllocationConfig[])
     setLoading(false)
   }
 
@@ -380,35 +363,6 @@ ALTER TABLE inflow_transactions
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
       ))}
-    </div>
-  )
-
-  if (err === '__migration__') return (
-    <div className="max-w-2xl space-y-4">
-      <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-        <div>
-          <p className="font-semibold">Database migration required</p>
-          <p className="mt-0.5 text-amber-700">
-            The <code className="font-mono bg-amber-100 px-1 rounded">is_special</code> column is missing from{' '}
-            <code className="font-mono bg-amber-100 px-1 rounded">allocation_configs</code>.
-            Run the SQL below in your Supabase SQL Editor, then refresh this page.
-          </p>
-        </div>
-      </div>
-      <div className="rounded-xl border border-gray-200 bg-gray-900 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
-          <Terminal className="w-3.5 h-3.5 text-gray-400" />
-          <span className="text-xs text-gray-400 font-mono">Supabase SQL Editor</span>
-        </div>
-        <pre className="px-4 py-4 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
-      </div>
-      <button
-        onClick={load}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-      >
-        Retry
-      </button>
     </div>
   )
 
