@@ -7,6 +7,7 @@ import {
   Target,
   Globe,
   ArrowLeftRight,
+  ArrowRightLeft,
   BarChart3,
   Settings,
   Users,
@@ -18,6 +19,10 @@ import {
   Gift,
   Archive,
   LayoutList,
+  BookOpen,
+  Landmark,
+  RotateCcw,
+  Undo2,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -41,6 +46,14 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Setup',                 path: '/setup',                 icon: SlidersHorizontal},
   { label: 'Reports',               path: '/reports',               icon: BarChart3        },
   { label: 'Settings',              path: '/settings',              icon: Settings         },
+]
+
+const FINANCE_NAV_ITEMS: NavItem[] = [
+  { label: 'Bank Ledger',         path: '/bank-ledger',          icon: BookOpen       },
+  { label: 'Bank Deposits',       path: '/bank-deposits',        icon: Landmark       },
+  { label: 'Intrabank Transfers', path: '/intrabank-transfers',  icon: ArrowRightLeft },
+  { label: 'Refunds',             path: '/refunds',              icon: RotateCcw      },
+  { label: 'Reversals',           path: '/reversals',            icon: Undo2          },
 ]
 
 const BUDGET_NAV_ITEMS: NavItem[] = [
@@ -130,6 +143,30 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               key={path}
               to={path}
               end={path === '/'}
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-white/15 text-white border-l-2 border-accent pl-[10px]'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span className="truncate">{label}</span>
+            </NavLink>
+          ))}
+
+          {/* Finance section */}
+          <div className="pt-4 pb-1">
+            <p className="px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
+              Finance
+            </p>
+          </div>
+          {FINANCE_NAV_ITEMS.map(({ label, path, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
               onClick={onClose}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
