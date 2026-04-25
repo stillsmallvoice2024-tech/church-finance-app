@@ -6,6 +6,9 @@ export interface DbBank {
   name:           string
   account_number: string | null
   account_type:   string | null
+  starting_balance:               number | null
+  starting_balance_category:      string | null
+  starting_balance_budget_portion: string | null
   created_at:     string
 }
 
