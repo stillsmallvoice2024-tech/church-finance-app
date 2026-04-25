@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
-import { useForm, useFieldArray, useWatch, type Control } from 'react-hook-form'
+import { useForm, useFieldArray, useWatch, Controller, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, Trash2 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
+import { InlineCategorySelect } from '../ui/InlineCategorySelect'
 import {
   useAddAllocationConfig,
   useUpdateAllocationConfig,
@@ -84,7 +85,7 @@ function TotalStrip({ control }: { control: Control<FormValues> }) {
 export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, existingConfigs = [] }: Props) {
   const isEdit = !!editRecord?.id
 
-  const { categories } = useCategories()
+  const { categories, refetch: refetchCategories } = useCategories()
 
   const addMutation    = useAddAllocationConfig()
   const updateMutation = useUpdateAllocationConfig()
@@ -199,16 +200,19 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
             <div key={field.id} className="grid grid-cols-[1fr_140px_100px_32px] gap-2 items-start">
               {/* Category */}
               <div>
-                <select
-                  {...register(`rows.${idx}.category_name`)}
-                  className={iCls(!!errors.rows?.[idx]?.category_name)}
-                  disabled={categories.length === 0}
-                >
-                  <option value="">Select category…</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name={`rows.${idx}.category_name`}
+                  render={({ field }) => (
+                    <InlineCategorySelect
+                      value={field.value}
+                      onChange={field.onChange}
+                      categories={categories}
+                      onRefresh={refetchCategories}
+                      selectCls={iCls(!!errors.rows?.[idx]?.category_name)}
+                    />
+                  )}
+                />
                 {errors.rows?.[idx]?.category_name && (
                   <p className="mt-0.5 text-xs text-red-500">{errors.rows[idx]!.category_name!.message}</p>
                 )}

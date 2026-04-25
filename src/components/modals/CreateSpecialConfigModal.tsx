@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, AlertTriangle, Terminal } from 'lucide-react'
 import { Modal } from '../ui/Modal'
+import { InlineCategorySelect } from '../ui/InlineCategorySelect'
 import { supabase } from '../../lib/supabase'
 import { useCategories } from '../../hooks/useCategories'
 import type { AllocationConfig } from '../../store/allocationStore'
@@ -29,7 +30,7 @@ interface RowDraft {
 }
 
 export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }: Props) {
-  const { categories } = useCategories()
+  const { categories, refetch: refetchCategories } = useCategories()
 
   const [name,          setName]          = useState('')
   const [allocType,     setAllocType]     = useState<'percentage' | 'amount'>('percentage')
@@ -207,16 +208,13 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }:
             <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
               {rows.map((row, i) => (
                 <div key={i} className="grid grid-cols-[1fr_120px_36px] items-center px-3 py-1.5 gap-2">
-                  <select
+                  <InlineCategorySelect
                     value={row.category_name}
-                    onChange={e => setRowField(i, 'category_name', e.target.value)}
-                    className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                  >
-                    <option value="">— Select —</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
+                    onChange={name => setRowField(i, 'category_name', name)}
+                    categories={categories}
+                    onRefresh={refetchCategories}
+                    selectCls="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
+                  />
                   <input
                     type="number"
                     min="0"
