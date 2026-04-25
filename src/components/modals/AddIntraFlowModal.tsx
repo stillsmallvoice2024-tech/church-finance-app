@@ -14,7 +14,7 @@ const schema = z.object({
   account_from:       z.string().min(1, 'Source account is required'),
   account_to:         z.string().min(1, 'Destination account is required'),
   total_amount:       z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
-  description:        z.string().optional(),
+  description:        z.string().min(1, 'Description is required'),
   transaction_ref:    z.string().optional(),
   account_from_stage1: z.string().optional(),
   account_from_stage2: z.string().optional(),
@@ -170,7 +170,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
 
         {/* Description + Transaction Ref */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Description" error={errors.description?.message}>
+          <Field label="Description *" error={errors.description?.message}>
             <input
               type="text" placeholder="Transfer description"
               {...register('description')}

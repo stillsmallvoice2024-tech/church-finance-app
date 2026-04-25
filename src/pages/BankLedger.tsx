@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { BookOpen, LayoutGrid, LayoutList, AlertCircle, RefreshCw } from 'lucide-react'
-import { Card }         from '../components/ui/Card'
-import { usePageTitle } from '../hooks/usePageTitle'
-import { useBanks }     from '../hooks/useBanks'
-import { supabase }     from '../lib/supabase'
+import { Card }          from '../components/ui/Card'
+import { usePageTitle }  from '../hooks/usePageTitle'
+import { useBanks }      from '../hooks/useBanks'
+import { supabase }      from '../lib/supabase'
+import { ReceiptBadge }  from '../components/ui/ReceiptBadge'
 import { formatDate, formatCurrency } from '../utils/formatters'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -15,6 +16,7 @@ interface LedgerRow {
   inflow:      number
   outflow:     number
   balance:     number   // running
+  entity_type: 'inflow' | 'outflow'
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -57,17 +59,17 @@ export default function BankLedger() {
     }
 
     // Merge & sort chronologically
-    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number }
+    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; entity_type: 'inflow' | 'outflow' }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
-        inflow: r.amount as number, outflow: 0,
+        inflow: r.amount as number, outflow: 0, entity_type: 'inflow' as const,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
-        inflow: 0, outflow: r.amount_disbursed as number,
+        inflow: 0, outflow: r.amount_disbursed as number, entity_type: 'outflow' as const,
       })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
 
@@ -217,7 +219,10 @@ export default function BankLedger() {
                   </div>
                   {row.description && <p className="text-xs text-gray-600 truncate">{row.description}</p>}
                   <div className="flex items-center justify-between pt-1 border-t border-gray-50">
-                    <span className="text-xs text-gray-400">Balance</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-400">Balance</span>
+                      <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
+                    </div>
                     <span className={`text-sm font-bold ${row.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
                       {formatCurrency(row.balance)}
                     </span>
@@ -230,7 +235,7 @@ export default function BankLedger() {
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)'].map(h => (
+                    {['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)', '📎'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -243,7 +248,7 @@ export default function BankLedger() {
                       ))}</tr>
                     ))
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={5} className="py-16 text-center">
+                    <tr><td colSpan={6} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <BookOpen className="w-10 h-10 text-gray-200" />
                         <p className="text-sm">No transactions for {selectedBankName}.</p>
@@ -261,6 +266,9 @@ export default function BankLedger() {
                       </td>
                       <td className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${row.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
                         {formatCurrency(row.balance)}
+                      </td>
+                      <td className="px-2 py-3">
+                        <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
                       </td>
                     </tr>
                   ))}

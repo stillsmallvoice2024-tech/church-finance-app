@@ -29,6 +29,7 @@ import BankDeposits         from './pages/BankDeposits'
 import IntraBankTransfers   from './pages/IntraBankTransfers'
 import RefundTransactions   from './pages/RefundTransactions'
 import ReversalTransactions from './pages/ReversalTransactions'
+import Receipts             from './pages/Receipts'
 
 export default function App() {
   useAuthListener()
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="intrabank-transfers"  element={<ErrorBoundary><IntraBankTransfers /></ErrorBoundary>} />
             <Route path="refunds"              element={<ErrorBoundary><RefundTransactions /></ErrorBoundary>} />
             <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
+            <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
           </Route>
         </Route>
 

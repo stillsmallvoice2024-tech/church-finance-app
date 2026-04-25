@@ -677,6 +677,9 @@ export interface AddBankInput {
   name:            string
   account_number?: string
   account_type?:   string
+  starting_balance?:               number
+  starting_balance_category?:      string
+  starting_balance_budget_portion?: string
 }
 
 export function useAddBank(): MutationHook<AddBankInput, string> {
@@ -709,6 +712,9 @@ export interface UpdateBankInput {
   name:            string
   account_number?: string
   account_type?:   string
+  starting_balance?:               number
+  starting_balance_category?:      string
+  starting_balance_budget_portion?: string
 }
 
 export function useUpdateBank(): MutationHook<UpdateBankInput> {
@@ -722,7 +728,14 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
     try {
       const { error: err } = await supabase
         .from('banks')
-        .update({ name: input.name, account_number: input.account_number ?? null, account_type: input.account_type ?? null })
+        .update({
+          name:           input.name,
+          account_number: input.account_number ?? null,
+          account_type:   input.account_type   ?? null,
+          starting_balance:                input.starting_balance               ?? null,
+          starting_balance_category:       input.starting_balance_category      ?? null,
+          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+        })
         .eq('id', input.id)
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, newData: input as unknown as Record<string, unknown> })

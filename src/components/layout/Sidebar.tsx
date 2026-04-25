@@ -23,6 +23,7 @@ import {
   Landmark,
   RotateCcw,
   Undo2,
+  Paperclip,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -54,6 +55,7 @@ const FINANCE_NAV_ITEMS: NavItem[] = [
   { label: 'Intrabank Transfers', path: '/intrabank-transfers',  icon: ArrowRightLeft },
   { label: 'Refunds',             path: '/refunds',              icon: RotateCcw      },
   { label: 'Reversals',           path: '/reversals',            icon: Undo2          },
+  { label: 'Receipts',            path: '/receipts',             icon: Paperclip      },
 ]
 
 const BUDGET_NAV_ITEMS: NavItem[] = [
