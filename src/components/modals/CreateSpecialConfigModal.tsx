@@ -25,8 +25,9 @@ interface Props {
 }
 
 interface RowDraft {
-  category_name: string
-  value: string
+  category_name:  string
+  budget_portion: string
+  value:          string
 }
 
 export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }: Props) {
@@ -35,7 +36,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }:
   const [name,          setName]          = useState('')
   const [allocType,     setAllocType]     = useState<'percentage' | 'amount'>('percentage')
   const [totalAmount,   setTotalAmount]   = useState('')
-  const [rows,          setRows]          = useState<RowDraft[]>([{ category_name: '', value: '' }])
+  const [rows,          setRows]          = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '' }])
   const [saving,        setSaving]        = useState(false)
   const [error,         setError]         = useState<string | null>(null)
 
@@ -48,21 +49,22 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }:
       setRows(
         editRecord.rows.length > 0
           ? editRecord.rows.map(r => ({
-              category_name: r.category_name,
+              category_name:  r.category_name,
+              budget_portion: r.budget_portion ?? '',
               value: String(allocType === 'amount' ? (r.amount ?? '') : (r.percentage ?? '')),
             }))
-          : [{ category_name: '', value: '' }],
+          : [{ category_name: '', budget_portion: '', value: '' }],
       )
     } else {
       setName('')
       setAllocType('percentage')
       setTotalAmount('')
-      setRows([{ category_name: '', value: '' }])
+      setRows([{ category_name: '', budget_portion: '', value: '' }])
     }
     setError(null)
   }, [open, editRecord]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addRow    = () => setRows(prev => [...prev, { category_name: '', value: '' }])
+  const addRow    = () => setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '' }])
   const removeRow = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i))
   const setRowField = (i: number, field: keyof RowDraft, val: string) =>
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
@@ -81,7 +83,8 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }:
     if (validRows.length === 0) { setError('Add at least one category row'); return }
 
     const dbRows = validRows.map(r => ({
-      category_name: r.category_name,
+      category_name:  r.category_name,
+      budget_portion: r.budget_portion || null,
       ...(allocType === 'percentage'
         ? { percentage: parseFloat(r.value) }
         : { amount: parseFloat(r.value) }),
@@ -200,14 +203,15 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }:
           </div>
 
           <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[1fr_120px_36px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
               <span>Category</span>
+              <span>Budget Portion</span>
               <span>{allocType === 'percentage' ? '%' : '₦ Amount'}</span>
               <span />
             </div>
             <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
               {rows.map((row, i) => (
-                <div key={i} className="grid grid-cols-[1fr_120px_36px] items-center px-3 py-1.5 gap-2">
+                <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] items-center px-3 py-1.5 gap-2">
                   <InlineCategorySelect
                     value={row.category_name}
                     onChange={name => setRowField(i, 'category_name', name)}
@@ -215,6 +219,16 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, editRecord }:
                     onRefresh={refetchCategories}
                     selectCls="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                   />
+                  <select
+                    value={row.budget_portion}
+                    onChange={e => setRowField(i, 'budget_portion', e.target.value)}
+                    className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
+                  >
+                    <option value="">— Portion —</option>
+                    <option value="Percentage Allocation">Percentage Allocation</option>
+                    <option value="Specific Seed">Specific Seed</option>
+                    <option value="Savings">Savings</option>
+                  </select>
                   <input
                     type="number"
                     min="0"
