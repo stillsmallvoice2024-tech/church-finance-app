@@ -249,6 +249,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const { banks: bankList } = useBanks()
   const [internalBank, setInternalBank] = useState<{ id: string; name: string } | null>(bank ?? null)
 
+  // Sync bank prop → internalBank when parent provides/updates it (e.g. async bank data load)
+  useEffect(() => {
+    if (bank) setInternalBank(bank)
+  }, [bank])
+
   // Batch defaults
   const [batchPendingDeduction, setBatchPendingDeduction] = useState(false)
 

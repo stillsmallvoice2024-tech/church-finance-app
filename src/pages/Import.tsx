@@ -83,7 +83,7 @@ export default function Import() {
     setParseError(null)
     setDupLoading(false)
     setSkipDups(false)
-    setSelectedBankId('')
+    // NOTE: intentionally do NOT clear selectedBankId — bank persists across file changes
     setSelectedFile(null)
   }
 
