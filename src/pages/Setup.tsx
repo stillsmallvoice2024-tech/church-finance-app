@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
@@ -10,6 +10,7 @@ import { useToastStore } from '../store/toastStore'
 import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
 import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
 import { CreateSpecialConfigModal } from '../components/modals/CreateSpecialConfigModal'
+import { ResetDataModal }           from '../components/modals/ResetDataModal'
 import {
   useLockAllocationConfig,
   useUnlockAllocationConfig,
@@ -572,7 +573,8 @@ export default function SetupPage() {
   const [specialModalOpen,  setSpecialModalOpen]  = useState(false)
   const [editSpecialRecord, setEditSpecialRecord] = useState<AllocationConfig | null>(null)
   const [deleteSpecialTarget, setDeleteSpecialTarget] = useState<AllocationConfig | null>(null)
-  const [specialRefetch, setSpecialRefetch] = useState(0)
+  const [specialRefetch,   setSpecialRefetch]   = useState(0)
+  const [resetModalOpen,   setResetModalOpen]   = useState(false)
   const { configs, reload: reloadAllocs } = useAllocationStore()
 
   const { push: toast } = useToastStore()
@@ -688,6 +690,23 @@ export default function SetupPage() {
             />
           )}
           {activeTab === 'Database'       && <DatabaseTab />}
+        </div>
+
+        {/* Danger Zone */}
+        <div className="border border-red-200 rounded-xl p-5 space-y-3 bg-red-50/40">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
+            <h2 className="text-base font-semibold text-red-700">Danger Zone</h2>
+          </div>
+          <p className="text-sm text-gray-600">
+            Permanently delete all transaction data. All data is exported to CSV before deletion. Categories, banks, and user accounts are preserved.
+          </p>
+          <button
+            onClick={() => setResetModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" /> Reset All Data
+          </button>
         </div>
       </div>
 
@@ -805,6 +824,11 @@ export default function SetupPage() {
         }}
         loading={false}
         label={deleteSpecialTarget ? `"${deleteSpecialTarget.name}"` : 'this config'}
+      />
+      <ResetDataModal
+        open={resetModalOpen}
+        onClose={() => setResetModalOpen(false)}
+        onDone={() => toast('All data deleted successfully', 'success')}
       />
     </>
   )
