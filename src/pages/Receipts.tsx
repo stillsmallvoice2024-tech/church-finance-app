@@ -1,0 +1,201 @@
+import { useState } from 'react'
+import { Paperclip, Download, Trash2, Loader2, Search, FolderOpen, FileText, Image, AlertTriangle, Terminal } from 'lucide-react'
+import { Card } from '../components/ui/Card'
+import { usePageTitle } from '../hooks/usePageTitle'
+import { useAllReceipts, type ReceiptEntityType, type Receipt } from '../hooks/useReceipts'
+import { formatDate } from '../utils/formatters'
+
+const MIGRATION_SQL =
+`CREATE TABLE IF NOT EXISTS public.receipts (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type text NOT NULL CHECK (entity_type IN ('outflow','inflow','bank_deposit')),
+  entity_id   uuid NOT NULL,
+  file_name   text NOT NULL,
+  file_path   text NOT NULL,
+  file_size   bigint,
+  mime_type   text,
+  uploaded_by uuid REFERENCES public.profiles(id),
+  created_at  timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS receipts_entity
+  ON public.receipts(entity_type, entity_id);
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('receipts', 'receipts', false)
+ON CONFLICT (id) DO NOTHING;`
+
+type Folder = 'all' | ReceiptEntityType
+
+const FOLDERS: { key: Folder; label: string }[] = [
+  { key: 'all',          label: 'All Receipts'         },
+  { key: 'outflow',      label: 'Outflow Receipts'     },
+  { key: 'inflow',       label: 'Inflow Receipts'      },
+  { key: 'bank_deposit', label: 'Bank Deposit Receipts' },
+]
+
+function fileIcon(mimeType: string | null) {
+  if (mimeType?.startsWith('image/')) return <Image className="w-8 h-8 text-blue-400" />
+  return <FileText className="w-8 h-8 text-red-400" />
+}
+
+function formatBytes(bytes: number | null) {
+  if (!bytes) return ''
+  if (bytes < 1024)       return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export default function Receipts() {
+  usePageTitle('Receipts')
+
+  const [folder,  setFolder]  = useState<Folder>('all')
+  const [search,  setSearch]  = useState('')
+
+  const entityType = folder === 'all' ? undefined : folder
+  const { receipts, loading, error, remove, getDownloadUrl } = useAllReceipts(entityType)
+
+  const isMigrationError = !!error && /relation.*does not exist|receipts|Could not find/i.test(error)
+
+  const filtered = receipts.filter(r =>
+    !search || r.file_name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const countFor = (key: Folder) =>
+    key === 'all' ? receipts.length : receipts.filter(r => r.entity_type === key).length
+
+  const handleDownload = async (r: Receipt) => {
+    const url = await getDownloadUrl(r.file_path)
+    if (!url) return
+    const a = document.createElement('a')
+    a.href = url; a.download = r.file_name; a.click()
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Receipts</h1>
+        <p className="text-sm text-gray-500 mt-0.5">All uploaded receipt files</p>
+      </div>
+
+      {/* Migration error */}
+      {error && (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              {isMigrationError
+                ? 'The receipts table does not exist yet. Run the SQL below in your Supabase SQL Editor to create it, then reload.'
+                : error}
+            </span>
+          </div>
+          {isMigrationError && (
+            <div className="rounded-xl border border-gray-200 bg-gray-900 overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                <Terminal className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+              </div>
+              <pre className="px-4 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-5">
+        {/* Folder panel */}
+        <div className="w-52 shrink-0 space-y-1">
+          {FOLDERS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFolder(key)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                folder === key
+                  ? 'bg-primary text-white font-medium'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <FolderOpen className="w-4 h-4 shrink-0" />
+                <span className="truncate">{label}</span>
+              </div>
+              <span className={`text-xs rounded-full px-1.5 py-0.5 ${
+                folder === key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {loading ? '…' : countFor(key)}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Main panel */}
+        <div className="flex-1 min-w-0 space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text" placeholder="Search file name…" value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+          </div>
+
+          {loading ? (
+            <Card>
+              <div className="py-16 flex justify-center">
+                <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+              </div>
+            </Card>
+          ) : filtered.length === 0 && !error ? (
+            <Card>
+              <div className="py-16 flex flex-col items-center gap-3 text-gray-400">
+                <Paperclip className="w-12 h-12 text-gray-200" />
+                <p className="text-sm">{search ? 'No files match your search.' : 'No receipts in this folder yet.'}</p>
+              </div>
+            </Card>
+          ) : !error && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {filtered.map(r => (
+                <div
+                  key={r.id}
+                  className="bg-white border border-gray-100 rounded-xl p-3 space-y-2 hover:shadow-md transition-shadow group"
+                >
+                  <div className="flex justify-center py-2">
+                    {fileIcon(r.mime_type)}
+                  </div>
+                  <p className="text-xs font-medium text-gray-800 truncate text-center" title={r.file_name}>
+                    {r.file_name}
+                  </p>
+                  <div className="text-center space-y-0.5">
+                    <p className="text-[10px] text-gray-400">{formatDate(r.created_at.slice(0, 10))}</p>
+                    {r.file_size && (
+                      <p className="text-[10px] text-gray-400">{formatBytes(r.file_size)}</p>
+                    )}
+                    <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize">
+                      {r.entity_type.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div className="flex justify-center gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleDownload(r)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                      title="Download"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => remove(r)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

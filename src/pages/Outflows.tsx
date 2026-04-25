@@ -9,6 +9,7 @@ import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
 import { ImportModal }             from '../components/modals/ImportModal'
 import { CanWrite }                from '../components/auth/RoleGates'
+import { ReceiptBadge }            from '../components/ui/ReceiptBadge'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
@@ -219,7 +220,7 @@ export default function Outflows() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', 'Actions'].map(h => (
+                  {['Date', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', '📎', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -239,7 +240,7 @@ export default function Outflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-16 text-center">
+                    <td colSpan={11} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <TrendingDown className="w-10 h-10 text-gray-200" />
                         <p className="text-sm">No outflow transactions match your filters.</p>
@@ -273,6 +274,9 @@ export default function Outflows() {
                         <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
+                        <td className="px-2 py-3">
+                          <ReceiptBadge entityType="outflow" entityId={row.id} />
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             {canWrite() && (
