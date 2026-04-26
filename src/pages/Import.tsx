@@ -16,9 +16,7 @@ import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { formatDate } from '../utils/formatters'
-import {
-  INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
-} from '../utils/inflowTypes'
+// inflowTypes import removed — income type classification replaces hardcoded types
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
 
@@ -37,6 +35,14 @@ interface ParseResult {
   txnIdCol: string | null   // which column header was used
   ids: string[]             // all non-blank transaction IDs found
 }
+
+const TXN_TYPE_OPTIONS = [
+  { value: '',                    label: 'Normal' },
+  { value: 'refund',              label: 'Refund' },
+  { value: 'reversal',            label: 'Reversal' },
+  { value: 'bank_deposit',        label: 'Bank Deposit' },
+  { value: 'intrabank_transfer',  label: 'Intrabank Transfer' },
+]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -465,10 +471,12 @@ function ManualEntryForm() {
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
 
   // Inflow-specific state
-  const [inflowType, setInflowType]           = useState<InflowType>('general_giving')
-  const [typeManuallySet, setTypeManuallySet] = useState(false)
-  const [incomeTypeId,    setIncomeTypeId]    = useState('')
+  const [incomeTypeId,      setIncomeTypeId]      = useState('')
   const [incomeTypeAutoSet, setIncomeTypeAutoSet] = useState(false)
+  const [configOverride,    setConfigOverride]    = useState('')
+
+  // Shared direction state
+  const [txnType, setTxnType] = useState('')
 
   // Outflow-specific state
   const [isPending, setIsPending] = useState(false)
@@ -498,19 +506,16 @@ function ManualEntryForm() {
       return next
     })
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }))
-    if (key === 'description' && direction === 'inflow' && !typeManuallySet) {
-      setInflowType(autoAssignInflowType(val))
-    }
   }
 
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
     setDirection(d)
     setFields({ date: new Date().toISOString().slice(0, 10) })
     setErrors({})
-    setInflowType('general_giving')
-    setTypeManuallySet(false)
     setIncomeTypeId('')
     setIncomeTypeAutoSet(false)
+    setConfigOverride('')
+    setTxnType('')
     setIsPending(false)
     setDupWarning(null)
     setPendingSave(null)
@@ -544,28 +549,33 @@ function ManualEntryForm() {
     setSaving(true)
     try {
       const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
-      const configId = selectedIncomeType?.special_config_id
-        ?? getConfigForDate(configs, v('date'))?.id
+      const effectiveConfigId  = configOverride
+        || selectedIncomeType?.special_config_id
+        || getConfigForDate(configs, v('date'))?.id
       await addInflow.mutate({
         date:                       v('date'),
         amount:                     parseFloat(v('amount')),
-        inflow_type:                inflowType,
         description:                v('description')               || undefined,
         bank_id:                    v('bank_id')                   || undefined,
-        allocation_config_id:       configId,
+        allocation_config_id:       effectiveConfigId,
         stage_code_1:               v('stage_code_1')              || undefined,
         stage_code_2:               v('stage_code_2')              || undefined,
         transaction_ref:            v('transaction_ref')           || undefined,
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
         income_type_id:             incomeTypeId                   || undefined,
+        transaction_type:           txnType                        || undefined,
+        original_transaction_id:    v('original_transaction_id')   || undefined,
+        fx_currency:                v('fx_currency')               || undefined,
+        fx_amount:                  v('fx_amount')  ? parseFloat(v('fx_amount'))  : undefined,
+        fx_rate:                    v('fx_rate')    ? parseFloat(v('fx_rate'))    : undefined,
       })
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
-      setInflowType('general_giving')
-      setTypeManuallySet(false)
       setIncomeTypeId('')
       setIncomeTypeAutoSet(false)
+      setConfigOverride('')
+      setTxnType('')
       setErrors({})
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error')
@@ -580,23 +590,29 @@ function ManualEntryForm() {
     setSaving(true)
     try {
       await addOutflow.mutate({
-        date:                 v('date'),
-        amount_disbursed:     parseFloat(v('amount_disbursed')),
-        description:          v('description')      || undefined,
-        bank_id:              v('bank_id')          || undefined,
-        allocation_config_id: getConfigForDate(configs, v('date'))?.id,
-        bank_description:     v('bank_description') || undefined,
-        transaction_id:       v('transaction_id')   || undefined,
-        stage_code_1:         v('stage_code_1')     || undefined,
-        stage_code_2:         v('stage_code_2')     || undefined,
-        amount_refunded:      v('amount_refunded')  ? parseFloat(v('amount_refunded'))  : undefined,
-        transfer_charge:      v('transfer_charge')  ? parseFloat(v('transfer_charge'))  : undefined,
-        is_pending_deduction: isPending,
-        remarks:              v('remarks')          || undefined,
+        date:                    v('date'),
+        amount_disbursed:        parseFloat(v('amount_disbursed')),
+        description:             v('description')      || undefined,
+        bank_id:                 v('bank_id')          || undefined,
+        allocation_config_id:    getConfigForDate(configs, v('date'))?.id,
+        bank_description:        v('bank_description') || undefined,
+        transaction_id:          v('transaction_id')   || undefined,
+        stage_code_1:            v('stage_code_1')     || undefined,
+        stage_code_2:            v('stage_code_2')     || undefined,
+        amount_refunded:         v('amount_refunded')  ? parseFloat(v('amount_refunded'))  : undefined,
+        transfer_charge:         v('transfer_charge')  ? parseFloat(v('transfer_charge'))  : undefined,
+        is_pending_deduction:    isPending,
+        remarks:                 v('remarks')          || undefined,
+        transaction_type:        txnType               || undefined,
+        original_transaction_id: v('original_transaction_id') || undefined,
+        fx_currency:             v('fx_currency')      || undefined,
+        fx_amount:               v('fx_amount') ? parseFloat(v('fx_amount')) : undefined,
+        fx_rate:                 v('fx_rate')   ? parseFloat(v('fx_rate'))   : undefined,
       })
       toast('Outflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setIsPending(false)
+      setTxnType('')
       setErrors({})
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error')
@@ -613,6 +629,8 @@ function ManualEntryForm() {
     const errs: Record<string, string> = {}
     if (!v('date'))   errs.date   = 'Date is required'
     if (!v('amount') || parseFloat(v('amount')) <= 0) errs.amount = 'Enter a valid amount'
+    if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
+      errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
 
     const ref = v('transaction_ref').trim()
@@ -632,6 +650,8 @@ function ManualEntryForm() {
     if (!v('date'))            errs.date            = 'Date is required'
     if (!v('amount_disbursed') || parseFloat(v('amount_disbursed')) <= 0)
       errs.amount_disbursed = 'Enter a valid amount'
+    if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
+      errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
 
     const txnId = v('transaction_id').trim()
@@ -657,20 +677,6 @@ function ManualEntryForm() {
 
   return (
     <div className="max-w-2xl space-y-5">
-
-      {/* Allocation config label */}
-      {cfgLoaded && v('date') && (() => {
-        const cfg = getConfigForDate(configs, v('date'))
-        return cfg ? (
-          <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-primary/5 border border-primary/20 text-primary">
-            <span>Using: <strong>{cfg.name}</strong> — effective {formatDate(cfg.start_date)}</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700">
-            No allocation config found for {formatDate(v('date'))} — transaction will be saved without an allocation
-          </div>
-        )
-      })()}
 
       {/* Direction toggle */}
       <div className="flex gap-2">
@@ -739,28 +745,6 @@ function ManualEntryForm() {
             )}
           </Field>
 
-          {/* Inflow Type */}
-          <Field label="Inflow Type">
-            <div className="grid grid-cols-3 gap-1.5">
-              {INFLOW_TYPES.map(t => (
-                <button
-                  key={t} type="button"
-                  onClick={() => { setInflowType(t); setTypeManuallySet(true) }}
-                  className={`px-2 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                    inflowType === t
-                      ? 'bg-primary text-white border-primary'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {INFLOW_TYPE_LABELS[t]}
-                </button>
-              ))}
-            </div>
-            {!typeManuallySet && v('description') && (
-              <p className="text-[10px] text-gray-400 mt-1">Auto-assigned from description · click to change</p>
-            )}
-          </Field>
-
           {/* Income Type */}
           {incomeTypes.length > 0 && (
             <Field label="Income Type">
@@ -785,6 +769,42 @@ function ManualEntryForm() {
             </Field>
           )}
 
+          {/* Allocation Config */}
+          {cfgLoaded && v('date') && (() => {
+            const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
+            const autoCfg = selectedIncomeType?.special_config_id
+              ? configs.find(c => c.id === selectedIncomeType.special_config_id)
+              : getConfigForDate(configs, v('date'))
+            const effectiveCfg = configOverride
+              ? configs.find(c => c.id === configOverride)
+              : autoCfg
+            return (
+              <div className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config</p>
+                {effectiveCfg ? (
+                  <p className="text-xs text-primary">
+                    Using: <strong>{effectiveCfg.name}</strong>
+                    {!configOverride && autoCfg && (
+                      <span className="text-gray-400 ml-1">— effective {formatDate(autoCfg.start_date)}</span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-600">No config found for this date — transaction saved without allocation</p>
+                )}
+                <select
+                  value={configOverride}
+                  onChange={e => setConfigOverride(e.target.value)}
+                  className={`${iCls} bg-white text-xs`}
+                >
+                  <option value="">— Use auto-detected —</option>
+                  {configs.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )
+          })()}
+
           {/* Stage Code 1 + 2 */}
           <div className="grid grid-cols-2 gap-4">
             <Field label="Stage Code 1">
@@ -808,6 +828,22 @@ function ManualEntryForm() {
             <input type="text" placeholder="Ref / cheque no." value={v('transaction_ref')} onChange={e => set('transaction_ref', e.target.value)} className={iCls} />
           </Field>
 
+          {/* Transaction Type */}
+          <Field label="Transaction Type">
+            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
+              {TXN_TYPE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </Field>
+
+          {/* Original Transaction ID (refund / reversal only) */}
+          {(txnType === 'refund' || txnType === 'reversal') && (
+            <Field label="Original Transaction ID *" error={errors.original_transaction_id}>
+              <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
+            </Field>
+          )}
+
           {/* Specific Seed Description */}
           <Field label="Specific Seed Description">
             <input type="text" placeholder="For specific seed entries" value={v('specific_seed_description')} onChange={e => set('specific_seed_description', e.target.value)} className={iCls} />
@@ -817,6 +853,27 @@ function ManualEntryForm() {
           <Field label="Remark">
             <textarea rows={2} placeholder="Additional notes…" value={v('remark')} onChange={e => set('remark', e.target.value)} className={`${iCls} resize-none`} />
           </Field>
+
+          {/* Foreign Currency */}
+          <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Foreign Currency (optional)</p>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Currency">
+                <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
+              </Field>
+              <Field label="FX Amount">
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('fx_amount')} onChange={e => set('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+              </Field>
+              <Field label="FX Rate">
+                <input type="number" min="0" step="0.0001" placeholder="0.00" value={v('fx_rate')} onChange={e => set('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+              </Field>
+            </div>
+            {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
+              <p className="text-xs text-gray-500">
+                ≈ ₦{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+              </p>
+            )}
+          </div>
 
           <div className="flex justify-end pt-1">
             <button
@@ -929,6 +986,43 @@ function ManualEntryForm() {
           <Field label="Remarks">
             <textarea rows={2} placeholder="Additional notes…" value={v('remarks')} onChange={e => set('remarks', e.target.value)} className={`${iCls} resize-none`} />
           </Field>
+
+          {/* Transaction Type */}
+          <Field label="Transaction Type">
+            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
+              {TXN_TYPE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </Field>
+
+          {/* Original Transaction ID (refund / reversal only) */}
+          {(txnType === 'refund' || txnType === 'reversal') && (
+            <Field label="Original Transaction ID *" error={errors.original_transaction_id}>
+              <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
+            </Field>
+          )}
+
+          {/* Foreign Currency */}
+          <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Foreign Currency (optional)</p>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Currency">
+                <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
+              </Field>
+              <Field label="FX Amount">
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('fx_amount')} onChange={e => set('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+              </Field>
+              <Field label="FX Rate">
+                <input type="number" min="0" step="0.0001" placeholder="0.00" value={v('fx_rate')} onChange={e => set('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+              </Field>
+            </div>
+            {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
+              <p className="text-xs text-gray-500">
+                ≈ ₦{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+              </p>
+            )}
+          </div>
 
           <div className="flex justify-end pt-1">
             <button
