@@ -19,6 +19,9 @@ import { formatDate } from '../utils/formatters'
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../utils/inflowTypes'
+import { useIncomeTypes } from '../hooks/useIncomeTypes'
+import { classifyIncomeType } from '../utils/classifyIncomeType'
+import { Sparkles } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -452,6 +455,7 @@ function ManualEntryForm() {
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
   const { configs, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
+  const { incomeTypes }                                = useIncomeTypes()
   const addInflow  = useAddInflow()
   const addOutflow = useAddOutflow()
 
@@ -461,8 +465,10 @@ function ManualEntryForm() {
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
 
   // Inflow-specific state
-  const [inflowType, setInflowType]           = useState<InflowType>('general_giving')
+  const [inflowType,      setInflowType]      = useState<InflowType>('general_giving')
   const [typeManuallySet, setTypeManuallySet] = useState(false)
+  const [incomeTypeId,      setIncomeTypeId]      = useState('')
+  const [incomeTypeAutoSet, setIncomeTypeAutoSet] = useState(false)
 
   // Outflow-specific state
   const [isPending, setIsPending] = useState(false)
@@ -481,11 +487,21 @@ function ManualEntryForm() {
   const [saving, setSaving]                 = useState(false)
 
   const set = (key: string, val: string) => {
-    setFields(prev => ({ ...prev, [key]: val }))
+    setFields(prev => {
+      const next = { ...prev, [key]: val }
+      if (direction === 'inflow' && (key === 'description' || key === 'stage_code_1')) {
+        const desc   = key === 'description' ? val : (prev.description ?? '')
+        const stage1 = key === 'stage_code_1' ? val : (prev.stage_code_1 ?? '')
+        if (!typeManuallySet) setInflowType(autoAssignInflowType(desc))
+        if (!incomeTypeId || incomeTypeAutoSet) {
+          const match = classifyIncomeType(desc, stage1, incomeTypes)
+          if (match) { setIncomeTypeId(match.id); setIncomeTypeAutoSet(true) }
+          else if (incomeTypeAutoSet) { setIncomeTypeId(''); setIncomeTypeAutoSet(false) }
+        }
+      }
+      return next
+    })
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }))
-    if (key === 'description' && direction === 'inflow' && !typeManuallySet) {
-      setInflowType(autoAssignInflowType(val))
-    }
   }
 
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
@@ -494,6 +510,8 @@ function ManualEntryForm() {
     setErrors({})
     setInflowType('general_giving')
     setTypeManuallySet(false)
+    setIncomeTypeId('')
+    setIncomeTypeAutoSet(false)
     setIsPending(false)
     setDupWarning(null)
     setPendingSave(null)
@@ -525,6 +543,9 @@ function ManualEntryForm() {
 
   const doSaveInflow = async () => {
     setSaving(true)
+    const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
+    const configId = selectedIncomeType?.special_config_id
+      ?? getConfigForDate(configs, v('date'))?.id
     try {
       await addInflow.mutate({
         date:                       v('date'),
@@ -532,17 +553,20 @@ function ManualEntryForm() {
         inflow_type:                inflowType,
         description:                v('description')               || undefined,
         bank_id:                    v('bank_id')                   || undefined,
-        allocation_config_id:       getConfigForDate(configs, v('date'))?.id,
+        allocation_config_id:       configId,
         stage_code_1:               v('stage_code_1')              || undefined,
         stage_code_2:               v('stage_code_2')              || undefined,
         transaction_ref:            v('transaction_ref')           || undefined,
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
+        income_type_id:             incomeTypeId                   || undefined,
       })
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setInflowType('general_giving')
       setTypeManuallySet(false)
+      setIncomeTypeId('')
+      setIncomeTypeAutoSet(false)
       setErrors({})
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error')
@@ -737,6 +761,34 @@ function ManualEntryForm() {
               <p className="text-[10px] text-gray-400 mt-1">Auto-assigned from description · click to change</p>
             )}
           </Field>
+
+          {/* Custom Income Type */}
+          {incomeTypes.length > 0 && (
+            <Field label="Income Type">
+              <div className="flex items-center gap-2">
+                {incomeTypeId && (() => {
+                  const t = incomeTypes.find(x => x.id === incomeTypeId)
+                  return t ? <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} /> : null
+                })()}
+                <select
+                  value={incomeTypeId}
+                  onChange={e => {
+                    setIncomeTypeId(e.target.value)
+                    setIncomeTypeAutoSet(false)
+                  }}
+                  className={`flex-1 ${iCls}`}
+                >
+                  <option value="">— None —</option>
+                  {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              {incomeTypeAutoSet && incomeTypeId && (
+                <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
+                  <Sparkles className="w-3 h-3" /> Auto-suggested · click to change
+                </p>
+              )}
+            </Field>
+          )}
 
           {/* Stage Code 1 + 2 */}
           <div className="grid grid-cols-2 gap-4">

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
-  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2,
+  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2, Sparkles,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
@@ -11,6 +11,8 @@ import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { formatDate } from '../../utils/formatters'
+import { useIncomeTypes } from '../../hooks/useIncomeTypes'
+import { classifyIncomeType } from '../../utils/classifyIncomeType'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -358,6 +360,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [rowTxnTypes,   setRowTxnTypes]   = useState<Record<number, string>>({})
   const [rowOrigTxnIds, setRowOrigTxnIds] = useState<Record<number, string>>({})
 
+  // Per-row income type (user-defined)
+  const [rowIncomeTypes,  setRowIncomeTypes]  = useState<Record<number, string>>({})
+  const [applyIncomeType, setApplyIncomeType] = useState('')
+  const { incomeTypes } = useIncomeTypes()
+
   // Date format selection + conflict resolution
   const [dateFormat,         setDateFormat]         = useState<DateFormat>('DD/MM/YYYY')
   const [pendingConflicts,   setPendingConflicts]   = useState<Array<{ rowIndex: number; rawValue: string }>>([])
@@ -410,6 +417,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowTxnTypes({})
     setRowOrigTxnIds({})
     setCreateConfigPendingRow(null)
+    setRowIncomeTypes({})
+    setApplyIncomeType('')
   }, [])
 
   const handleClose = () => { reset(); onClose() }
@@ -615,10 +624,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId)   row.created_by = userId
           if (bank)     row.bank_id   = bank.id
-          // Per-row config override from Step 4; fall back to date-based config
+          // Income type — per-row or auto-classified
+          const effIncomeTypeId = rowIncomeTypes[ri] ?? (classifyIncomeType(desc ?? '', '', incomeTypes)?.id ?? '')
+          if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
+          // Per-row config override from Step 4; fall back to income-type special config; fall back to date-based
           const overrideCfgId = rowConfigs[ri]
+          const linkedCfgId   = effIncomeTypeId ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? '') : ''
           if (overrideCfgId) {
             row.allocation_config_id = overrideCfgId
+          } else if (linkedCfgId) {
+            row.allocation_config_id = linkedCfgId
           } else if (cfg) {
             row.allocation_config_id = cfg.id
           }
@@ -810,8 +825,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
         if (targetTable === 'inflow_transactions') {
           const rowCfgId = rowConfigs[ri]
+          const effIncomeTypeId = rowIncomeTypes[ri] ?? (classifyIncomeType(String(row.description ?? ''), String(row.stage_code_1 ?? ''), incomeTypes)?.id ?? '')
+          if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
+          const linkedCfgId = effIncomeTypeId ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? '') : ''
           if (rowCfgId) {
             row.allocation_config_id = rowCfgId
+          } else if (linkedCfgId) {
+            row.allocation_config_id = linkedCfgId
           } else if (row.allocation_config_name) {
             const named = latestConfigs.find(c => c.name === row.allocation_config_name)
             if (named) row.allocation_config_id = named.id
@@ -1293,17 +1313,38 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           {/* Apply bar */}
                           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                             <span className="text-xs text-gray-500 shrink-0">Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:</span>
+                            <select value={applyIncomeType} onChange={e => setApplyIncomeType(e.target.value)}
+                              className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                              <option value="">— Income Type —</option>
+                              <option value="__clear__">Clear income type</option>
+                              {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
                             <select value={applyInflowConfig} onChange={e => setApplyInflowConfig(e.target.value)}
                               className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                               <option value="">— Allocation Config —</option>
                               <option value="__general__">General (date-based)</option>
                               {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
-                            <button type="button" disabled={!applyInflowConfig}
+                            <button type="button" disabled={!applyInflowConfig && !applyIncomeType}
                               onClick={() => {
-                                if (!applyInflowConfig) return
+                                setRowIncomeTypes(prev => {
+                                  const next = { ...prev }
+                                  if (!applyIncomeType) return next
+                                  for (const { ri } of filtered)
+                                    next[ri] = applyIncomeType === '__clear__' ? '' : applyIncomeType
+                                  return next
+                                })
                                 setRowConfigs(prev => {
                                   const next = { ...prev }
+                                  // If applying income type, auto-set config from its special config
+                                  if (applyIncomeType && applyIncomeType !== '__clear__') {
+                                    const linkedCfg = incomeTypes.find(t => t.id === applyIncomeType)?.special_config_id ?? ''
+                                    if (linkedCfg && !applyInflowConfig) {
+                                      for (const { ri } of filtered) next[ri] = linkedCfg
+                                      return next
+                                    }
+                                  }
+                                  if (!applyInflowConfig) return next
                                   for (const { ri } of filtered)
                                     next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
                                   return next
@@ -1315,8 +1356,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           </div>
                           {/* Row table */}
                           <div className="border border-gray-200 rounded-xl overflow-hidden">
-                            <div className="grid grid-cols-[40px_1fr_100px_190px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
-                              <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span>
+                            <div className="grid grid-cols-[36px_1fr_90px_130px_130px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                              <span>#</span><span>Description / Date</span><span>Amount</span><span>Income Type</span><span>Config</span>
                             </div>
                             <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                               {filtered.length === 0
@@ -1324,15 +1365,36 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 : filtered.map(({ ri, raw, credit }) => {
                                     const date  = dateIdx >= 0 ? (parseDate(raw[dateIdx]) ?? '') : ''
                                     const desc  = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                                    const selId = rowConfigs[ri] ?? ''
+                                    const autoIt = classifyIncomeType(desc, '', incomeTypes)
+                                    const effItId = rowIncomeTypes[ri] !== undefined ? rowIncomeTypes[ri] : (autoIt?.id ?? '')
+                                    const isAutoIt = rowIncomeTypes[ri] === undefined && !!effItId
+                                    const selId  = rowConfigs[ri] ?? ''
+                                    const itColor = incomeTypes.find(t => t.id === effItId)?.color
                                     return (
-                                      <div key={ri} className="grid grid-cols-[40px_1fr_100px_190px] items-center px-3 py-2 gap-2 text-xs">
+                                      <div key={ri} className="grid grid-cols-[36px_1fr_90px_130px_130px] items-center px-3 py-2 gap-2 text-xs">
                                         <span className="text-gray-400 font-mono">{ri + 1}</span>
                                         <div className="min-w-0">
                                           <div className="text-gray-700 truncate">{desc || '—'}</div>
                                           <div className="text-gray-400">{date}</div>
                                         </div>
                                         <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
+                                        <div className="relative">
+                                          {itColor && (
+                                            <div className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none" style={{ backgroundColor: itColor }} />
+                                          )}
+                                          <select value={effItId}
+                                            onChange={e => {
+                                              const val = e.target.value
+                                              setRowIncomeTypes(prev => ({ ...prev, [ri]: val }))
+                                              const linked = incomeTypes.find(t => t.id === val)?.special_config_id
+                                              if (linked) setRowConfigs(prev => ({ ...prev, [ri]: linked }))
+                                            }}
+                                            className={`text-xs px-2 py-1 border rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full ${itColor ? 'pl-5' : ''} ${isAutoIt ? 'border-primary/40' : 'border-gray-200'}`}>
+                                            <option value="">— None —</option>
+                                            {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                          </select>
+                                          {isAutoIt && <Sparkles className="absolute right-5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-primary pointer-events-none" />}
+                                        </div>
                                         <select value={selId}
                                           onChange={e => setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))}
                                           className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
@@ -1649,11 +1711,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       const amt          = amtColIdx  >= 0 ? parseNumber(rawArr[amtColIdx])        : 0
                       const selId        = rowConfigs[ri] ?? ''
                       const effectiveType = rowTxnTypes[ri] ?? batchTxnType
+                      const descColIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
+                      const sc1ColIdx    = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
+                      const rowDesc      = descColIdx >= 0 && rawArr[descColIdx] != null ? String(rawArr[descColIdx]).trim() : ''
+                      const rowSc1       = sc1ColIdx  >= 0 && rawArr[sc1ColIdx]  != null ? String(rawArr[sc1ColIdx]).trim()  : ''
+                      const autoIt       = classifyIncomeType(rowDesc, rowSc1, incomeTypes)
+                      const effItId      = rowIncomeTypes[ri] !== undefined ? rowIncomeTypes[ri] : (autoIt?.id ?? '')
+                      const isAutoIt     = rowIncomeTypes[ri] === undefined && !!effItId
+                      const itColor      = incomeTypes.find(t => t.id === effItId)?.color
                       return (
                         <div key={ri} className="divide-y divide-gray-50">
-                          <div className="grid grid-cols-[24px_1fr_76px_100px_140px] items-center px-3 py-1.5 gap-2 text-xs">
+                          <div className="grid grid-cols-[24px_1fr_68px_90px_110px_110px] items-center px-3 py-1.5 gap-2 text-xs">
                             <span className="text-gray-400 font-mono text-right">{ri + 1}</span>
-                            <span className="text-gray-600 truncate">{date}</span>
+                            <span className="text-gray-600 truncate">{date || rowDesc || '—'}</span>
                             <span className="text-gray-700 font-medium text-right">₦{amt.toLocaleString()}</span>
                             <select
                               value={effectiveType}
@@ -1671,6 +1741,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 <option key={o.value} value={o.value}>{o.label}</option>
                               ))}
                             </select>
+                            <div className="relative">
+                              {itColor && (
+                                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none" style={{ backgroundColor: itColor }} />
+                              )}
+                              <select
+                                value={effItId}
+                                onChange={e => {
+                                  const val = e.target.value
+                                  setRowIncomeTypes(prev => ({ ...prev, [ri]: val }))
+                                  const linked = incomeTypes.find(t => t.id === val)?.special_config_id
+                                  if (linked) setRowConfigs(prev => ({ ...prev, [ri]: linked }))
+                                }}
+                                className={`text-xs px-1.5 py-1 border rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full ${itColor ? 'pl-5' : ''} ${isAutoIt ? 'border-primary/40' : 'border-gray-200'}`}
+                              >
+                                <option value="">— None —</option>
+                                {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                              {isAutoIt && <Sparkles className="absolute right-4 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-primary pointer-events-none" />}
+                            </div>
                             <select
                               value={selId}
                               onChange={e => {
