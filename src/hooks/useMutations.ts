@@ -485,8 +485,9 @@ export function useDeleteAccount(): MutationHook<string> {
 // ── useAddCategory ─────────────────────────────────────────────────────────────
 
 export interface AddCategoryInput {
-  name: string
-  description?: string
+  name:              string
+  description?:      string
+  starting_balance?: number
 }
 
 export function useAddCategory(): MutationHook<AddCategoryInput, string> {
@@ -499,7 +500,11 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
     setLoading(true); setError(null)
     try {
       const { data, error: err } = await supabase
-        .from('categories').insert(input).select('id').single()
+        .from('categories').insert({
+          name:             input.name,
+          description:      input.description ?? null,
+          starting_balance: input.starting_balance ?? null,
+        }).select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'categories', recordId: data.id, newData: input as unknown as Record<string, unknown> })
@@ -515,9 +520,10 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
 // ── useUpdateCategory ──────────────────────────────────────────────────────────
 
 export interface UpdateCategoryInput {
-  id: string
-  name: string
-  description?: string
+  id:                string
+  name:              string
+  description?:      string
+  starting_balance?: number
 }
 
 export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
@@ -531,7 +537,11 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
     try {
       const { error: err } = await supabase
         .from('categories')
-        .update({ name: input.name, description: input.description ?? null })
+        .update({
+          name:             input.name,
+          description:      input.description ?? null,
+          starting_balance: input.starting_balance ?? null,
+        })
         .eq('id', input.id)
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, newData: input as unknown as Record<string, unknown> })

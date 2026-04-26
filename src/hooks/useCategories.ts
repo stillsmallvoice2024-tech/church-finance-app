@@ -2,10 +2,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
 export interface Category {
-  id: string
-  name: string
-  description: string | null
-  created_at: string
+  id:               string
+  name:             string
+  description:      string | null
+  starting_balance: number | null
+  created_at:       string
 }
 
 export function useCategories() {
