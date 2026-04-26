@@ -64,6 +64,63 @@ export function useIncomeTypes() {
   return { incomeTypes, loading, error, refetch: fetch }
 }
 
+// ── useIncomeTypeOptions ───────────────────────────────────────────────────────
+// Lightweight fetch used by CreateSpecialConfigModal to show / guard link selection.
+
+export interface IncomeTypeOption {
+  id:               string
+  name:             string
+  color:            string
+  special_config_id: string | null
+}
+
+export function useIncomeTypeOptions() {
+  const [options,  setOptions]  = useState<IncomeTypeOption[]>([])
+  const [loading,  setLoading]  = useState(true)
+
+  const reload = () => {
+    supabase
+      .from('income_types')
+      .select('id, name, color, special_config_id')
+      .order('name')
+      .then(({ data }) => {
+        setOptions((data ?? []) as IncomeTypeOption[])
+        setLoading(false)
+      })
+  }
+
+  useEffect(() => { reload() }, [])
+
+  return { options, loading, reload }
+}
+
+// ── setIncomeTypeConfigLink ────────────────────────────────────────────────────
+// Atomically clears the old link (if any) then sets the new one.
+// Pass null as incomeTypeId to only clear.
+
+export async function setIncomeTypeConfigLink(
+  configId:     string,
+  incomeTypeId: string | null,
+  prevIncomeTypeId: string | null,
+): Promise<void> {
+  // Clear previous link
+  if (prevIncomeTypeId && prevIncomeTypeId !== incomeTypeId) {
+    const { error } = await supabase
+      .from('income_types')
+      .update({ special_config_id: null })
+      .eq('id', prevIncomeTypeId)
+    if (error) throw new Error(error.message)
+  }
+  // Set new link
+  if (incomeTypeId) {
+    const { error } = await supabase
+      .from('income_types')
+      .update({ special_config_id: configId })
+      .eq('id', incomeTypeId)
+    if (error) throw new Error(error.message)
+  }
+}
+
 // ── useSpecialConfigOptions ────────────────────────────────────────────────────
 // Lightweight fetch of special configs for the dropdown in AddIncomeTypeModal.
 
