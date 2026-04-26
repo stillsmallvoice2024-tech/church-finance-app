@@ -476,11 +476,14 @@ ALTER TABLE outflow_transactions
 -- Transaction type + original reference
 ALTER TABLE inflow_transactions
   ADD COLUMN IF NOT EXISTS transaction_type          text,
-  ADD COLUMN IF NOT EXISTS original_transaction_id   text;
+  ADD COLUMN IF NOT EXISTS original_transaction_id   text,
+  ADD COLUMN IF NOT EXISTS allocation_config_id      uuid,
+  ADD COLUMN IF NOT EXISTS income_type_id            uuid;
 
 ALTER TABLE outflow_transactions
   ADD COLUMN IF NOT EXISTS transaction_type          text,
-  ADD COLUMN IF NOT EXISTS original_transaction_id   text;
+  ADD COLUMN IF NOT EXISTS original_transaction_id   text,
+  ADD COLUMN IF NOT EXISTS allocation_config_id      uuid;
 
 -- Bank deposits table
 CREATE TABLE IF NOT EXISTS bank_deposits (

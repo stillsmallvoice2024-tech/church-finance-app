@@ -614,6 +614,21 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const total = inflowToInsert.length + outflowToInsert.length
       const BATCH = 100
 
+      const MISSING_COL_SQL: Record<string, string> = {
+        allocation_config_id:
+          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS allocation_config_id uuid;\n' +
+          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS allocation_config_id uuid;',
+        income_type_id:
+          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS income_type_id uuid;\n' +
+          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS income_type_id uuid;',
+      }
+      const missingColMsg = (col: string) => {
+        const sql = MISSING_COL_SQL[col]
+        return sql
+          ? `⚠ ${col} column missing — run in Supabase SQL Editor:\n${sql}`
+          : `⚠ ${col} column missing — run DB migration to add this column`
+      }
+
       for (let i = 0; i < inflowToInsert.length; i += BATCH) {
         const batch = inflowToInsert.slice(i, i + BATCH)
         let { error: err } = await supabase.from('inflow_transactions').insert(batch)
@@ -623,7 +638,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const { error: retryErr } = await supabase.from('inflow_transactions').insert(stripped)
           err = retryErr ?? null
           if (!errors.some(e => e.includes(missingInflow))) {
-            errors.push(`⚠ ${missingInflow} column missing — run DB migration to add this column`)
+            errors.push(missingColMsg(missingInflow))
           }
         }
         if (err) {
@@ -643,7 +658,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const { error: retryErr } = await supabase.from('outflow_transactions').insert(stripped)
           err = retryErr ?? null
           if (!errors.some(e => e.includes(missingOutflow))) {
-            errors.push(`⚠ ${missingOutflow} column missing — run DB migration to add this column`)
+            errors.push(missingColMsg(missingOutflow))
           }
         }
         if (err) {
@@ -1641,7 +1656,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
-                    {result.errors.map((e, i) => <div key={i}>{e}</div>)}
+                    {result.errors.map((e, i) => <div key={i} className="whitespace-pre-wrap">{e}</div>)}
                   </div>
                 )}
               </div>
