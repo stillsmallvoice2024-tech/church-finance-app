@@ -29,7 +29,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 type AllocType  = 'percentage' | 'amount'
-interface RowDraft { category_name: string; budget_portion: string; value: string }
+interface RowDraft { category_name: string; budget_portion: string; value: string; apply_to_category: boolean }
 interface NewCatMode { rowIndex: number; draft: string; saving: boolean; error: string | null }
 
 interface Props {
@@ -55,7 +55,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const error   = addError || updateError
 
   const [allocType,  setAllocType]  = useState<AllocType>('percentage')
-  const [rows,       setRows]       = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '' }])
+  const [rows,       setRows]       = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
   const [allocError, setAllocError] = useState<string | null>(null)
   const [newCatMode, setNewCatMode] = useState<NewCatMode | null>(null)
   const newCatInputRef = useRef<HTMLInputElement>(null)
@@ -72,9 +72,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const target       = allocType === 'percentage' ? 100 : (startingBalance ?? 0)
   const balanced     = !hasBalance || (target > 0 && Math.abs(runningTotal - target) < 0.01)
 
-  const addRow      = () => setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '' }])
+  const addRow      = () => setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '', apply_to_category: true }])
   const removeRow   = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i))
-  const setRowField = (i: number, field: keyof RowDraft, val: string) =>
+  const setRowField = (i: number, field: keyof RowDraft, val: string | boolean) =>
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
 
   // Focus the new-category input whenever it appears
@@ -100,21 +100,23 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         const usesPercent = allocs[0].percentage !== undefined
         setAllocType(usesPercent ? 'percentage' : 'amount')
         setRows(allocs.map(r => ({
-          category_name:  r.category_name,
-          budget_portion: r.budget_portion,
-          value:          String(usesPercent ? (r.percentage ?? '') : (r.amount ?? '')),
+          category_name:     r.category_name,
+          budget_portion:    r.budget_portion,
+          value:             String(usesPercent ? (r.percentage ?? '') : (r.amount ?? '')),
+          apply_to_category: r.apply_to_category !== false,
         })))
       } else if (editRecord.starting_balance_category) {
         // backward-compat: legacy single-field bank
         setAllocType('percentage')
         setRows([{
-          category_name:  editRecord.starting_balance_category,
-          budget_portion: editRecord.starting_balance_budget_portion ?? '',
-          value:          '',
+          category_name:     editRecord.starting_balance_category,
+          budget_portion:    editRecord.starting_balance_budget_portion ?? '',
+          value:             '',
+          apply_to_category: true,
         }])
       } else {
         setAllocType('percentage')
-        setRows([{ category_name: '', budget_portion: '', value: '' }])
+        setRows([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
       }
     } else {
       resetForm({ name: '', account_number: '', account_type: '' })
@@ -160,8 +162,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     const validRows = rows.filter(r => r.category_name && r.budget_portion && parseFloat(r.value) > 0)
     const allocations: StartingBalanceRow[] = hasBalance
       ? validRows.map(r => ({
-          category_name:  r.category_name,
-          budget_portion: r.budget_portion,
+          category_name:     r.category_name,
+          budget_portion:    r.budget_portion,
+          apply_to_category: r.apply_to_category,
           ...(allocType === 'percentage'
             ? { percentage: parseFloat(r.value) }
             : { amount: parseFloat(r.value) }),
@@ -290,17 +293,18 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 </div>
 
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                     <span>Category</span>
                     <span>Portion</span>
                     <span>{allocType === 'percentage' ? '%' : '₦'}</span>
+                    <span title="Count in category balance" className="cursor-help">Count</span>
                     <span />
                   </div>
                   <div className="divide-y divide-gray-100 max-h-52 overflow-y-auto">
                     {rows.map((row, i) => {
                       const inNewMode = newCatMode?.rowIndex === i
                       return (
-                        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] items-center px-3 py-1.5 gap-2">
+                        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] items-center px-3 py-1.5 gap-2">
 
                           {/* Category cell — select or inline-create */}
                           {inNewMode ? (
@@ -376,6 +380,16 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                             className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                           />
 
+                          <input
+                            type="checkbox"
+                            checked={row.apply_to_category}
+                            onChange={e => setRowField(i, 'apply_to_category', e.target.checked)}
+                            title={row.apply_to_category
+                              ? 'Will be added to category balance'
+                              : 'Already in category records — not counted again'}
+                            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer justify-self-center"
+                          />
+
                           <button
                             type="button"
                             onClick={() => removeRow(i)}
@@ -401,6 +415,10 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 >
                   <Plus className="w-3.5 h-3.5" /> Add row
                 </button>
+
+                <p className="text-[11px] text-gray-400">
+                  <span className="font-medium">Count</span>: tick if this amount is new and should be added to the category balance. Untick if it already exists in the category's transaction records.
+                </p>
               </div>
 
               {/* Allocation error / imbalance warning */}
