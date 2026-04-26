@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AlertTriangle, Terminal, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Terminal, Plus, Trash2, Check, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
-import { useAddBank, useUpdateBank, type AddBankInput } from '../../hooks/useMutations'
+import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import type { DbBank, StartingBalanceRow } from '../../hooks/useBanks'
 
 const ACCOUNT_TYPES = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
+const NEW_SENTINEL = '__new__'
 
 const MIGRATION_SQL =
 `ALTER TABLE banks
@@ -29,6 +30,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 type AllocType  = 'percentage' | 'amount'
 interface RowDraft { category_name: string; budget_portion: string; value: string }
+interface NewCatMode { rowIndex: number; draft: string; saving: boolean; error: string | null }
 
 interface Props {
   open:        boolean
@@ -39,13 +41,15 @@ interface Props {
 
 export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
-  const { categories } = useCategories()
+  const { categories, refetch: refetchCategories } = useCategories()
 
   const addMutation    = useAddBank()
   const updateMutation = useUpdateBank()
+  const addCatMutation = useAddCategory()
 
-  const { mutate: add,    loading: adding,   error: addError,    reset: resetAdd    } = addMutation
-  const { mutate: update, loading: updating, error: updateError, reset: resetUpdate } = updateMutation
+  const { mutate: add,         loading: adding,   error: addError,    reset: resetAdd    } = addMutation
+  const { mutate: update,      loading: updating, error: updateError, reset: resetUpdate } = updateMutation
+  const { mutate: addCategory                                                             } = addCatMutation
 
   const loading = adding || updating
   const error   = addError || updateError
@@ -53,6 +57,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [allocType,  setAllocType]  = useState<AllocType>('percentage')
   const [rows,       setRows]       = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '' }])
   const [allocError, setAllocError] = useState<string | null>(null)
+  const [newCatMode, setNewCatMode] = useState<NewCatMode | null>(null)
+  const newCatInputRef = useRef<HTMLInputElement>(null)
 
   const { register, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -71,11 +77,17 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const setRowField = (i: number, field: keyof RowDraft, val: string) =>
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
 
+  // Focus the new-category input whenever it appears
+  useEffect(() => {
+    if (newCatMode) setTimeout(() => newCatInputRef.current?.focus(), 0)
+  }, [newCatMode?.rowIndex])
+
   useEffect(() => {
     if (!open) return
     resetAdd()
     resetUpdate()
     setAllocError(null)
+    setNewCatMode(null)
     if (editRecord) {
       resetForm({
         name:             editRecord.name,
@@ -110,6 +122,22 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       setRows([{ category_name: '', budget_portion: '', value: '' }])
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
+
+  const confirmNewCategory = async (rowIndex: number) => {
+    if (!newCatMode) return
+    const name = newCatMode.draft.trim()
+    if (!name) return
+    setNewCatMode(prev => prev ? { ...prev, saving: true, error: null } : null)
+    try {
+      await addCategory({ name })
+      await refetchCategories()
+      setRowField(rowIndex, 'category_name', name)
+      setNewCatMode(null)
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message ?? 'Failed to create category'
+      setNewCatMode(prev => prev ? { ...prev, saving: false, error: msg } : null)
+    }
+  }
 
   const onSubmit = async (values: FormValues) => {
     setAllocError(null)
@@ -269,48 +297,102 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                     <span />
                   </div>
                   <div className="divide-y divide-gray-100 max-h-52 overflow-y-auto">
-                    {rows.map((row, i) => (
-                      <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] items-center px-3 py-1.5 gap-2">
-                        <select
-                          value={row.category_name}
-                          onChange={e => setRowField(i, 'category_name', e.target.value)}
-                          className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
-                        >
-                          <option value="">— Category —</option>
-                          {categories.map(c => (
-                            <option key={c.id} value={c.name}>{c.name}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={row.budget_portion}
-                          onChange={e => setRowField(i, 'budget_portion', e.target.value)}
-                          className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
-                        >
-                          <option value="">— Portion —</option>
-                          {BUDGET_PORTIONS.map(p => (
-                            <option key={p} value={p}>{p}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min="0"
-                          step={allocType === 'percentage' ? '0.01' : '1'}
-                          value={row.value}
-                          onChange={e => setRowField(i, 'value', e.target.value)}
-                          placeholder={allocType === 'percentage' ? '0.00' : '0'}
-                          className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeRow(i)}
-                          className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                    {rows.map((row, i) => {
+                      const inNewMode = newCatMode?.rowIndex === i
+                      return (
+                        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] items-center px-3 py-1.5 gap-2">
+
+                          {/* Category cell — select or inline-create */}
+                          {inNewMode ? (
+                            <div className="flex items-center gap-1 min-w-0">
+                              <input
+                                ref={newCatInputRef}
+                                type="text"
+                                value={newCatMode!.draft}
+                                onChange={e => setNewCatMode(prev => prev ? { ...prev, draft: e.target.value } : null)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); confirmNewCategory(i) }
+                                  if (e.key === 'Escape') setNewCatMode(null)
+                                }}
+                                placeholder="Category name"
+                                disabled={newCatMode!.saving}
+                                className="text-xs px-2 py-1.5 border border-primary rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0 flex-1"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => confirmNewCategory(i)}
+                                disabled={!newCatMode!.draft.trim() || newCatMode!.saving}
+                                className="p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-40 transition-colors shrink-0"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setNewCatMode(null)}
+                                disabled={newCatMode!.saving}
+                                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <select
+                              value={row.category_name}
+                              onChange={e => {
+                                if (e.target.value === NEW_SENTINEL) {
+                                  setNewCatMode({ rowIndex: i, draft: '', saving: false, error: null })
+                                } else {
+                                  setRowField(i, 'category_name', e.target.value)
+                                }
+                              }}
+                              className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
+                            >
+                              <option value="">— Category —</option>
+                              {categories.map(c => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                              ))}
+                              <option value={NEW_SENTINEL}>+ New category…</option>
+                            </select>
+                          )}
+
+                          <select
+                            value={row.budget_portion}
+                            onChange={e => setRowField(i, 'budget_portion', e.target.value)}
+                            className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
+                          >
+                            <option value="">— Portion —</option>
+                            {BUDGET_PORTIONS.map(p => (
+                              <option key={p} value={p}>{p}</option>
+                            ))}
+                          </select>
+
+                          <input
+                            type="number"
+                            min="0"
+                            step={allocType === 'percentage' ? '0.01' : '1'}
+                            value={row.value}
+                            onChange={e => setRowField(i, 'value', e.target.value)}
+                            placeholder={allocType === 'percentage' ? '0.00' : '0'}
+                            className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => removeRow(i)}
+                            className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
+
+                {/* Inline new-category error */}
+                {newCatMode?.error && (
+                  <p className="text-xs text-red-500">{newCatMode.error}</p>
+                )}
 
                 <button
                   type="button"
