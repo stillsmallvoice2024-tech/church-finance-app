@@ -71,7 +71,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState<string | null>(null)
 
-  const isMigrationError = !!error && /relation.*does not exist|income_types|income_type_rules|Could not find/i.test(error)
+  const isMigrationError = !!error && /relation.*does not exist|does not exist/i.test(error)
 
   // Populate form when editing
   useEffect(() => {
