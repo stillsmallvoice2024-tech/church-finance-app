@@ -39,12 +39,20 @@ export default function App() {
   useEffect(() => { fetchCodes() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // When the tab becomes visible again after being minimised or backgrounded,
-  // proactively refresh the Supabase session so the first query after a long
-  // idle doesn't fail with a stale JWT.
+  // force a token refresh before any data queries fire so the JWT isn't stale.
+  // Also stop/start the SDK's own auto-refresh timer to match visibility state —
+  // this is the pattern Supabase recommends for browser apps.
   useEffect(() => {
-    const handleVisibility = () => {
+    const handleVisibility = async () => {
       if (document.visibilityState === 'visible') {
-        supabase.auth.getSession()
+        supabase.auth.startAutoRefresh()
+        // Force an actual server round-trip (not a cache read) to renew the JWT
+        await supabase.auth.refreshSession().catch(() => {
+          // If refresh fails the SDK will fire SIGNED_OUT via onAuthStateChange,
+          // which clearAuth() already handles — nothing extra needed here.
+        })
+      } else {
+        supabase.auth.stopAutoRefresh()
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)

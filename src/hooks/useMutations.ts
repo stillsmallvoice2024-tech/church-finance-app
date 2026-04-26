@@ -13,6 +13,15 @@ function extractMessage(err: unknown): string {
   return 'An unexpected error occurred'
 }
 
+// If a mutation returns a JWT / auth error, force a session refresh so the
+// next attempt gets a fresh token instead of hanging on a stale one.
+function handleAuthError(err: unknown): void {
+  const msg = extractMessage(err).toLowerCase()
+  if (msg.includes('jwt') || msg.includes('invalid claim') || msg.includes('not authenticated')) {
+    supabase.auth.refreshSession().catch(() => {})
+  }
+}
+
 /**
  * Write an audit entry. Fire-and-forget so it never blocks the main operation.
  * Console-warns on failure but does NOT surface to the user.
@@ -386,7 +395,7 @@ export function useAddLedgerEntry(): MutationHook<AddLedgerEntryInput, string> {
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'ledger_entries', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -420,7 +429,7 @@ export function useAddAccount(): MutationHook<AddAccountInput, string> {
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'accounts', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -453,7 +462,7 @@ export function useUpdateAccount(): MutationHook<UpdateAccountInput> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'accounts', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -475,7 +484,7 @@ export function useDeleteAccount(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'accounts', recordId: id })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -510,7 +519,7 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'categories', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -546,7 +555,7 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -568,7 +577,7 @@ export function useDeleteCategory(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'categories', recordId: id })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -605,7 +614,7 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'fx_transactions', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -638,7 +647,7 @@ export function useAddSpecialProject(): MutationHook<AddSpecialProjectInput, str
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'special_projects', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -674,7 +683,7 @@ export function useAddProjectEntry(): MutationHook<AddProjectEntryInput, string>
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'project_entries', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -710,7 +719,7 @@ export function useAddBank(): MutationHook<AddBankInput, string> {
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'banks', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -756,7 +765,7 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -778,7 +787,7 @@ export function useDeleteBank(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'banks', recordId: id })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -816,7 +825,7 @@ export function useAddAllocationConfig(): MutationHook<AddAllocationConfigInput,
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'allocation_configs', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -848,7 +857,7 @@ export function useUpdateAllocationConfig(): MutationHook<UpdateAllocationConfig
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -871,7 +880,7 @@ export function useLockAllocationConfig(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: id, newData: { status: 'locked' } })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -894,7 +903,7 @@ export function useUnlockAllocationConfig(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: id, newData: { status: 'draft' } })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
