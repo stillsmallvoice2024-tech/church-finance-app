@@ -39,7 +39,17 @@ CREATE TABLE IF NOT EXISTS public.income_type_rules (
 
 ALTER TABLE public.inflow_transactions
   ADD COLUMN IF NOT EXISTS income_type_id uuid
-    REFERENCES public.income_types(id) ON DELETE SET NULL;`
+    REFERENCES public.income_types(id) ON DELETE SET NULL;
+
+-- RLS policies (required for authenticated users to read/write)
+ALTER TABLE public.income_types      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.income_type_rules ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "authenticated full access" ON public.income_types
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "authenticated full access" ON public.income_type_rules
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);`
 
 // ── Rule row type ──────────────────────────────────────────────────────────────
 
