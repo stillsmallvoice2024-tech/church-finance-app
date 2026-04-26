@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthListener } from './hooks/useAuth'
 import { useAccountCodesStore } from './store/accountCodesStore'
 import './store/themeStore' // side-effect: applies stored theme class immediately
+import { supabase } from './lib/supabase'
 import { AuthGuard } from './components/auth/AuthGuard'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
@@ -36,6 +37,19 @@ export default function App() {
   const fetchCodes = useAccountCodesStore(s => s.fetch)
   // Pre-fetch account codes so dropdowns are ready before any form page loads
   useEffect(() => { fetchCodes() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When the tab becomes visible again after being minimised or backgrounded,
+  // proactively refresh the Supabase session so the first query after a long
+  // idle doesn't fail with a stale JWT.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
 
   return (
     <BrowserRouter>
