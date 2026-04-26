@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
-  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2, Sparkles,
+  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2, Sparkles, ChevronDown,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
@@ -291,6 +292,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // Per-row income type overrides (rowIndex → incomeTypeId)
   const [rowIncomeTypes, setRowIncomeTypes] = useState<Record<number, string>>({})
+  const [expandedRows,   setExpandedRows]   = useState<Set<number>>(new Set())
+  const [tooltipState,   setTooltipState]   = useState<{ text: string; x: number; y: number } | null>(null)
+
+  const toggleExpand = (ri: number) =>
+    setExpandedRows(prev => { const s = new Set(prev); s.has(ri) ? s.delete(ri) : s.add(ri); return s })
 
   // In-wizard dup check
   const [wizardDupLoading, setWizardDupLoading] = useState(false)
@@ -1238,7 +1244,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                   <div className="grid grid-cols-[36px_1fr_72px_120px_120px_96px] items-center px-3 py-2 gap-2 text-xs">
                                     <span className="text-gray-400 font-mono">{ri + 1}</span>
                                     <div className="min-w-0">
-                                      <div className="text-gray-700 truncate">{desc || '—'}</div>
+                                      <div
+                                        className="flex items-center gap-1 cursor-pointer select-none group"
+                                        onClick={() => toggleExpand(ri)}
+                                        onMouseEnter={e => {
+                                          if (!desc) return
+                                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                          const spaceBelow = window.innerHeight - rect.bottom
+                                          setTooltipState({ text: desc, x: rect.left, y: spaceBelow >= 80 ? rect.bottom + 4 : rect.top - 4 })
+                                        }}
+                                        onMouseLeave={() => setTooltipState(null)}
+                                      >
+                                        <span className="text-gray-700 truncate">{desc || '—'}</span>
+                                        {desc && <ChevronDown className={`w-3 h-3 shrink-0 text-gray-300 group-hover:text-gray-500 transition-transform duration-150 ${expandedRows.has(ri) ? 'rotate-180' : ''}`} />}
+                                      </div>
+                                      {expandedRows.has(ri) && (
+                                        <div className="mt-1 text-gray-600 break-words leading-snug bg-gray-50 rounded px-2 py-1 border border-gray-100 text-[11px]">
+                                          {desc}
+                                        </div>
+                                      )}
                                       <div className="text-gray-400">{date}</div>
                                     </div>
                                     <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
@@ -1407,7 +1431,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 <div className="grid grid-cols-[40px_1fr_80px_110px_110px_90px] items-center px-3 py-2 gap-2 text-xs">
                                   <span className="text-gray-400 font-mono">{ri + 1}</span>
                                   <div className="min-w-0">
-                                    <div className="text-gray-700 truncate">{desc || '—'}</div>
+                                    <div
+                                      className="flex items-center gap-1 cursor-pointer select-none group"
+                                      onClick={() => toggleExpand(ri)}
+                                      onMouseEnter={e => {
+                                        if (!desc) return
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                        const spaceBelow = window.innerHeight - rect.bottom
+                                        setTooltipState({ text: desc, x: rect.left, y: spaceBelow >= 80 ? rect.bottom + 4 : rect.top - 4 })
+                                      }}
+                                      onMouseLeave={() => setTooltipState(null)}
+                                    >
+                                      <span className="text-gray-700 truncate">{desc || '—'}</span>
+                                      {desc && <ChevronDown className={`w-3 h-3 shrink-0 text-gray-300 group-hover:text-gray-500 transition-transform duration-150 ${expandedRows.has(ri) ? 'rotate-180' : ''}`} />}
+                                    </div>
+                                    {expandedRows.has(ri) && (
+                                      <div className="mt-1 text-gray-600 break-words leading-snug bg-gray-50 rounded px-2 py-1 border border-gray-100 text-[11px]">
+                                        {desc}
+                                      </div>
+                                    )}
                                     <div className="text-gray-400">{date}</div>
                                   </div>
                                   <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
@@ -1450,6 +1492,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 </div>
               )
             })()}
+
+            {tooltipState && createPortal(
+              <div
+                className="fixed z-[9999] max-w-xs bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl pointer-events-none break-words leading-snug"
+                style={{ top: tooltipState.y, left: Math.min(tooltipState.x, window.innerWidth - 320) }}
+              >
+                {tooltipState.text}
+              </div>,
+              document.body,
+            )}
 
             <NavButtons
               step={step}
