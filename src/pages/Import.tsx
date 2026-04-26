@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import {
   Upload, PenLine, FileSpreadsheet, FileText,
   CheckCircle2, AlertTriangle, Loader2, X,
-  TrendingUp, TrendingDown,
+  TrendingUp, TrendingDown, Sparkles,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -21,7 +21,6 @@ import {
 } from '../utils/inflowTypes'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
-import { Sparkles } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -86,7 +85,7 @@ export default function Import() {
     setParseError(null)
     setDupLoading(false)
     setSkipDups(false)
-    setSelectedBankId('')
+    // NOTE: intentionally do NOT clear selectedBankId — bank persists across file changes
     setSelectedFile(null)
   }
 
@@ -455,19 +454,20 @@ function ManualEntryForm() {
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
   const { configs, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
-  const { incomeTypes }                                = useIncomeTypes()
   const addInflow  = useAddInflow()
   const addOutflow = useAddOutflow()
 
   useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
+  const { incomeTypes } = useIncomeTypes()
+
   // Direction toggle
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
 
   // Inflow-specific state
-  const [inflowType,      setInflowType]      = useState<InflowType>('general_giving')
+  const [inflowType, setInflowType]           = useState<InflowType>('general_giving')
   const [typeManuallySet, setTypeManuallySet] = useState(false)
-  const [incomeTypeId,      setIncomeTypeId]      = useState('')
+  const [incomeTypeId,    setIncomeTypeId]    = useState('')
   const [incomeTypeAutoSet, setIncomeTypeAutoSet] = useState(false)
 
   // Outflow-specific state
@@ -489,19 +489,18 @@ function ManualEntryForm() {
   const set = (key: string, val: string) => {
     setFields(prev => {
       const next = { ...prev, [key]: val }
-      if (direction === 'inflow' && (key === 'description' || key === 'stage_code_1')) {
-        const desc   = key === 'description' ? val : (prev.description ?? '')
-        const stage1 = key === 'stage_code_1' ? val : (prev.stage_code_1 ?? '')
-        if (!typeManuallySet) setInflowType(autoAssignInflowType(desc))
-        if (!incomeTypeId || incomeTypeAutoSet) {
-          const match = classifyIncomeType(desc, stage1, incomeTypes)
-          if (match) { setIncomeTypeId(match.id); setIncomeTypeAutoSet(true) }
-          else if (incomeTypeAutoSet) { setIncomeTypeId(''); setIncomeTypeAutoSet(false) }
-        }
+      if (direction === 'inflow' && !incomeTypeAutoSet && (key === 'description' || key === 'stage_code_1')) {
+        const desc  = key === 'description' ? val : (next.description ?? '')
+        const stage = key === 'stage_code_1' ? val : (next.stage_code_1 ?? '')
+        const match = classifyIncomeType(desc, stage, incomeTypes)
+        setIncomeTypeId(match ? match.id : '')
       }
       return next
     })
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }))
+    if (key === 'description' && direction === 'inflow' && !typeManuallySet) {
+      setInflowType(autoAssignInflowType(val))
+    }
   }
 
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
@@ -543,10 +542,10 @@ function ManualEntryForm() {
 
   const doSaveInflow = async () => {
     setSaving(true)
-    const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
-    const configId = selectedIncomeType?.special_config_id
-      ?? getConfigForDate(configs, v('date'))?.id
     try {
+      const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
+      const configId = selectedIncomeType?.special_config_id
+        ?? getConfigForDate(configs, v('date'))?.id
       await addInflow.mutate({
         date:                       v('date'),
         amount:                     parseFloat(v('amount')),
@@ -762,31 +761,27 @@ function ManualEntryForm() {
             )}
           </Field>
 
-          {/* Custom Income Type */}
+          {/* Income Type */}
           {incomeTypes.length > 0 && (
             <Field label="Income Type">
-              <div className="flex items-center gap-2">
-                {incomeTypeId && (() => {
-                  const t = incomeTypes.find(x => x.id === incomeTypeId)
-                  return t ? <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} /> : null
-                })()}
+              <div className="space-y-1">
                 <select
                   value={incomeTypeId}
-                  onChange={e => {
-                    setIncomeTypeId(e.target.value)
-                    setIncomeTypeAutoSet(false)
-                  }}
-                  className={`flex-1 ${iCls}`}
+                  onChange={e => { setIncomeTypeId(e.target.value); setIncomeTypeAutoSet(!!e.target.value) }}
+                  className={iCls}
                 >
-                  <option value="">— None —</option>
-                  {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  <option value="">— Unclassified —</option>
+                  {incomeTypes.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
                 </select>
+                {incomeTypeId && !incomeTypeAutoSet && (
+                  <p className="text-[10px] flex items-center gap-1 text-indigo-500">
+                    <Sparkles className="w-3 h-3" />
+                    Auto-detected · change above to override
+                  </p>
+                )}
               </div>
-              {incomeTypeAutoSet && incomeTypeId && (
-                <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
-                  <Sparkles className="w-3 h-3" /> Auto-suggested · click to change
-                </p>
-              )}
             </Field>
           )}
 

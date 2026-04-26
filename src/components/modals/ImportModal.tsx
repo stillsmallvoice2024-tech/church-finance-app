@@ -10,19 +10,13 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
-import { formatDate } from '../../utils/formatters'
+import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
-type TargetTable =
-  | 'bank_statement'
-  | 'inflow_transactions'
-  | 'outflow_transactions'
-  | 'intra_flows'
-  | 'ledger_entries'
-  | 'fx_transactions'
+type TargetTable = 'bank_statement' | 'fx_transactions'
 
 interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -38,71 +32,11 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
       { key: 'reference',   label: 'Reference / Txn ID'                    },
     ],
   },
-  inflow_transactions: {
-    label: 'Inflow Transactions',
-    fields: [
-      { key: 'date',                      label: 'Date',                    required: true },
-      { key: 'amount',                    label: 'Amount',                  required: true },
-      { key: 'inflow_type',               label: 'Inflow Type'                            },
-      { key: 'description',               label: 'Description'                            },
-      { key: 'stage_code_1',              label: 'Stage Code 1'                           },
-      { key: 'stage_code_2',              label: 'Stage Code 2'                           },
-      { key: 'transaction_ref',           label: 'Transaction Ref'                        },
-      { key: 'specific_seed_description', label: 'Seed Description'                       },
-      { key: 'remark',                    label: 'Remark'                                 },
-      { key: 'allocation_config_name',    label: 'Allocation Config (by name)'            },
-    ],
-  },
-  outflow_transactions: {
-    label: 'Outflow Transactions',
-    fields: [
-      { key: 'date',                 label: 'Date',             required: true },
-      { key: 'amount_disbursed',     label: 'Amount Disbursed', required: true },
-      { key: 'description',          label: 'Description'                      },
-      { key: 'amount_refunded',      label: 'Amount Refunded'                  },
-      { key: 'transfer_charge',      label: 'Transfer Charge'                  },
-      { key: 'actual_amount',        label: 'Actual Amount'                    },
-      { key: 'bank_total',           label: 'Bank Total'                       },
-      { key: 'stage_code_1',         label: 'Stage Code 1'                     },
-      { key: 'stage_code_2',         label: 'Stage Code 2'                     },
-      { key: 'transaction_id',       label: 'Transaction ID'                   },
-      { key: 'bank_description',     label: 'Bank Description'                 },
-      { key: 'remarks',              label: 'Remarks'                          },
-      { key: 'is_pending_deduction', label: 'Pending Deduction'                },
-    ],
-  },
-  intra_flows: {
-    label: 'Intra-Account Flows',
-    fields: [
-      { key: 'date',                label: 'Date',         required: true },
-      { key: 'total_amount',        label: 'Total Amount', required: true },
-      { key: 'account_from',        label: 'Account From'                 },
-      { key: 'account_to',          label: 'Account To'                   },
-      { key: 'description',         label: 'Description'                  },
-      { key: 'transaction_ref',     label: 'Transaction Ref'              },
-      { key: 'account_from_stage1', label: 'From Stage 1'                 },
-      { key: 'account_from_stage2', label: 'From Stage 2'                 },
-      { key: 'account_to_stage1',   label: 'To Stage 1'                   },
-      { key: 'account_to_stage2',   label: 'To Stage 2'                   },
-      { key: 'remark',              label: 'Remark'                       },
-    ],
-  },
-  ledger_entries: {
-    label: 'Ledger Entries',
-    fields: [
-      { key: 'account_id',   label: 'Account ID',   required: true },
-      { key: 'date',         label: 'Date',         required: true },
-      { key: 'inflow',       label: 'Inflow'                       },
-      { key: 'outflow',      label: 'Outflow'                      },
-      { key: 'balance',      label: 'Balance'                      },
-      { key: 'description',  label: 'Description'                  },
-      { key: 'refund_intraflow', label: 'Refund/Intraflow'         },
-    ],
-  },
   fx_transactions: {
     label: 'FX Transactions',
     fields: [
       { key: 'date',            label: 'Date',            required: true },
+      { key: 'currency',        label: 'Currency',        required: true },
       { key: 'deposit',         label: 'Deposit'                         },
       { key: 'withdrawal',      label: 'Withdrawal'                      },
       { key: 'running_balance', label: 'Running Balance'                 },
@@ -114,25 +48,12 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
 
 const SKIP = '__skip__'
 
-const STAGE_CODE_TABLES = new Set<TargetTable>([
-  'inflow_transactions', 'outflow_transactions', 'bank_statement',
-])
-
-const TXN_TYPE_OPTIONS = [
-  { value: '',                   label: 'Normal' },
-  { value: 'refund',             label: 'Refund' },
-  { value: 'reversal',           label: 'Reversal' },
-  { value: 'bank_deposit',       label: 'Bank Deposit' },
-  { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
-]
-
 // ── Date / number parsing ──────────────────────────────────────────────────────
 
 type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
 
 function parseDate(raw: unknown, format: DateFormat = 'DD/MM/YYYY'): string | null {
   if (raw == null || raw === '') return null
-  // Excel serial number — format irrelevant
   if (typeof raw === 'number') {
     const d = XLSX.SSF.parse_date_code(raw)
     if (d) {
@@ -144,19 +65,13 @@ function parseDate(raw: unknown, format: DateFormat = 'DD/MM/YYYY'): string | nu
     return null
   }
   const s = String(raw).trim()
-  // YYYY-MM-DD always accepted regardless of declared format
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  // Slash-separated: interpret according to declared format
   const parts = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (parts) {
     const [, g1, g2, g3] = parts
-    if (format === 'MM/DD/YYYY') {
-      return `${g3}-${g1.padStart(2, '0')}-${g2.padStart(2, '0')}`
-    }
-    // DD/MM/YYYY (default)
-    return `${g3}-${g2.padStart(2, '0')}-${g1.padStart(2, '0')}`
+    if (format === 'MM/DD/YYYY') return `${g3}-${g1.padStart(2,'0')}-${g2.padStart(2,'0')}`
+    return `${g3}-${g2.padStart(2,'0')}-${g1.padStart(2,'0')}`
   }
-  // Try native Date parse as last resort
   const parsed = new Date(s)
   if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
   return null
@@ -194,9 +109,9 @@ const ALIAS_MAP: Record<string, string[]> = {
   remark:           ['remark', 'remarks', 'note', 'notes', 'comment'],
   narration:        ['narration', 'description', 'desc', 'memo'],
   inflow_type:      ['inflowtype', 'type', 'category'],
+  bank_id:          ['bankid', 'banktxnid', 'banktransactionid', 'bankref', 'bankreference', 'banksessionid'],
 }
 
-// B4: Score rows to find the real header (skips pre-header filler rows)
 function detectHeaderRow(rows: unknown[][]): number {
   const allAliases = new Set(Object.values(ALIAS_MAP).flat())
   const scan = Math.min(15, rows.length)
@@ -210,6 +125,14 @@ function detectHeaderRow(rows: unknown[][]): number {
   }
   return bestScore >= 2 ? bestIdx : 0
 }
+
+const TXN_TYPE_OPTIONS = [
+  { value: '',                   label: 'Normal' },
+  { value: 'refund',             label: 'Refund' },
+  { value: 'reversal',           label: 'Reversal' },
+  { value: 'bank_deposit',       label: 'Bank Deposit' },
+  { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
+]
 
 function autoMapColumn(header: string, fields: FieldDef[]): string {
   const h = header.toLowerCase().replace(/[\s_\-().]+/g, '')
@@ -239,7 +162,7 @@ interface ParsedSheet {
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
 function StepDots({ step }: { step: number }) {
-  const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Import']
+  const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Configure Rows', 'Import']
   return (
     <div className="flex items-center gap-0 mb-5">
       {STEPS.map((label, i) => {
@@ -319,22 +242,42 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // Allocation configs — load once so Step 4 and runImport can use them
   const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: allocLoaded } = useAllocationStore()
-  const { categories } = useCategories()
   useEffect(() => { if (!allocLoaded) fetchAllocConfigs() }, [allocLoaded, fetchAllocConfigs])
 
-  // Pending deduction — batch toggle + per-row overrides
-  const [batchPendingDeduction, setBatchPendingDeduction]   = useState(false)
-  const [rowPendingDeductions,  setRowPendingDeductions]    = useState<Record<number, boolean>>({})
+  // Categories for stage code dropdowns
+  const { categories } = useCategories()
 
-  // FX currency (standalone selector, not a mapped column)
+  // Bank selector inside wizard
+  const { banks: bankList } = useBanks()
+  const [internalBank, setInternalBank] = useState<{ id: string; name: string } | null>(bank ?? null)
+
+  // Income types for auto-classify + per-row picker
+  const { incomeTypes } = useIncomeTypes()
+
+  // Sync bank prop → internalBank when parent provides/updates it (e.g. async bank data load)
+  useEffect(() => {
+    if (bank) setInternalBank(bank)
+  }, [bank])
+
+  // Batch defaults
+  const [batchPendingDeduction, setBatchPendingDeduction] = useState(false)
+
+  // Date format (Phase A)
+  const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
+
+  // FX currency (Phase B)
   const [fxCurrency, setFxCurrency] = useState('')
 
   // Per-row special config assignment (rowIndex → configId)
   const [rowConfigs, setRowConfigs] = useState<Record<number, string>>({})
 
-  // bank_statement step 4: Credit/Debit tabs + per-row stage codes
-  const [rowStageCodes, setRowStageCodes] = useState<Record<number, { s1: string; s2: string }>>({})
-  const [bsConfigTab,   setBsConfigTab]   = useState<'inflow' | 'outflow'>('inflow')
+  // Step 4 — Configure Rows
+  const [rowStageCodes,   setRowStageCodes]   = useState<Record<number, { s1: string; s2: string }>>({})
+  const [rowTxnTypes,     setRowTxnTypes]     = useState<Record<number, string>>({})
+  const [rowOrigTxnIds,   setRowOrigTxnIds]   = useState<Record<number, string>>({})
+  const [batchTxnType,    setBatchTxnType]    = useState('')
+  const [createConfigPendingRow, setCreateConfigPendingRow] = useState<number | 'apply' | null>(null)
+  const [bsConfigTab,     setBsConfigTab]     = useState<'inflow' | 'outflow'>('inflow')
 
   // Step 4 — filter bars
   const [inflowFilter,  setInflowFilter]  = useState({ desc: '', amtFrom: '', amtTo: '' })
@@ -344,6 +287,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [applyInflowConfig, setApplyInflowConfig] = useState('')
   const [applyS1,           setApplyS1]           = useState('')
   const [applyS2,           setApplyS2]           = useState('')
+  const [applyIncomeType,   setApplyIncomeType]   = useState('')
+
+  // Per-row income type overrides (rowIndex → incomeTypeId)
+  const [rowIncomeTypes, setRowIncomeTypes] = useState<Record<number, string>>({})
 
   // In-wizard dup check
   const [wizardDupLoading, setWizardDupLoading] = useState(false)
@@ -351,25 +298,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [skipWizardDups,   setSkipWizardDups]   = useState(false)
 
   // Special configs (is_special = true) loaded when modal opens
-  const [specialConfigs,         setSpecialConfigs]         = useState<typeof allocConfigs>([])
-  const [createConfigOpen,       setCreateConfigOpen]       = useState(false)
-  const [createConfigPendingRow, setCreateConfigPendingRow] = useState<number | null>(null)
-
-  // Per-row transaction type + original txn ID (C1)
-  const [batchTxnType,  setBatchTxnType]  = useState('')
-  const [rowTxnTypes,   setRowTxnTypes]   = useState<Record<number, string>>({})
-  const [rowOrigTxnIds, setRowOrigTxnIds] = useState<Record<number, string>>({})
-
-  // Per-row income type (user-defined)
-  const [rowIncomeTypes,  setRowIncomeTypes]  = useState<Record<number, string>>({})
-  const [applyIncomeType, setApplyIncomeType] = useState('')
-  const { incomeTypes } = useIncomeTypes()
-
-  // Date format selection + conflict resolution
-  const [dateFormat,         setDateFormat]         = useState<DateFormat>('DD/MM/YYYY')
-  const [pendingConflicts,   setPendingConflicts]   = useState<Array<{ rowIndex: number; rawValue: string }>>([])
-  const [conflictResolution, setConflictResolution] = useState<'all' | 'row' | 'skip'>('all')
-  const [perRowDateFormat,   setPerRowDateFormat]   = useState<Record<number, string>>({}) // '__skip__' or 'MM/DD/YYYY'
+  const [specialConfigs,   setSpecialConfigs]   = useState<typeof allocConfigs>([])
+  const [createConfigOpen, setCreateConfigOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -396,29 +326,26 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setImporting(false)
     setParsing(false)
     setBatchPendingDeduction(false)
-    setRowPendingDeductions({})
+    setDateFormat('DD/MM/YYYY')
     setFxCurrency('')
     setRowConfigs({})
     setRowStageCodes({})
+    setRowTxnTypes({})
+    setRowOrigTxnIds({})
+    setBatchTxnType('')
+    setCreateConfigPendingRow(null)
     setBsConfigTab('inflow')
     setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })
     setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })
     setApplyInflowConfig('')
     setApplyS1('')
     setApplyS2('')
+    setApplyIncomeType('')
+    setRowIncomeTypes({})
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
-    setDateFormat('DD/MM/YYYY')
-    setPendingConflicts([])
-    setConflictResolution('all')
-    setPerRowDateFormat({})
-    setBatchTxnType('')
-    setRowTxnTypes({})
-    setRowOrigTxnIds({})
-    setCreateConfigPendingRow(null)
-    setRowIncomeTypes({})
-    setApplyIncomeType('')
+    // NOTE: intentionally do NOT reset internalBank — persists across "Import Another"
   }, [])
 
   const handleClose = () => { reset(); onClose() }
@@ -440,11 +367,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const data = await file.arrayBuffer()
         const wb   = XLSX.read(data, { type: 'array', cellDates: false })
         parsed = wb.SheetNames.map(name => {
-          const ws       = wb.Sheets[name]
-          const allRows  = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
-          const hdrIdx   = detectHeaderRow(allRows)
-          const headers  = (allRows[hdrIdx] ?? []).map(h => String(h ?? '').trim())
-          const dataRows = allRows.slice(hdrIdx + 1).filter(r => r.some(c => c !== '' && c != null))
+          const ws        = wb.Sheets[name]
+          const rows      = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
+          const headerIdx = detectHeaderRow(rows)
+          const headers   = (rows[headerIdx] ?? []).map(h => String(h ?? '').trim())
+          const dataRows  = rows.slice(headerIdx + 1).filter(r => r.some(c => c !== '' && c != null))
           return { name, headers, rows: dataRows, rowCount: dataRows.length }
         })
       } else {
@@ -495,20 +422,40 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setStep(3)
   }
 
-  // ── Step 3 → 4: dup check ────────────────────────────────────────────────
+  // ── Step 3 → 4 (bank_statement) or Step 3 → 5 (fx_transactions) ─────────
 
+  // bank_statement: pre-populate rowStageCodes from mapped columns, go to step 4
+  const proceedToRowConfig = useCallback(() => {
+    if (!sheet || !config || targetTable !== 'bank_statement') return
+
+    const s1ColIdx = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
+    const s2ColIdx = sheet.headers.findIndex(h => mapping[h] === 'stage_code_2')
+    const debitIdx = sheet.headers.findIndex(h => mapping[h] === 'debit')
+
+    const initial: Record<number, { s1: string; s2: string }> = {}
+    for (let ri = 0; ri < sheet.rows.length; ri++) {
+      const raw   = sheet.rows[ri] as unknown[]
+      const debit = debitIdx >= 0 ? parseNumber(raw[debitIdx]) : 0
+      if (debit <= 0) continue
+      const s1 = s1ColIdx >= 0 && raw[s1ColIdx] != null && raw[s1ColIdx] !== ''
+        ? String(raw[s1ColIdx]).trim() : ''
+      const s2 = s2ColIdx >= 0 && raw[s2ColIdx] != null && raw[s2ColIdx] !== ''
+        ? String(raw[s2ColIdx]).trim() : ''
+      initial[ri] = { s1, s2 }
+    }
+    setRowStageCodes(initial)
+    setStep(4)
+  }, [sheet, config, targetTable, mapping])
+
+  // fx_transactions (and any future non-bank_statement): skip step 4, go straight to step 5 + dup check
   const proceedToImport = useCallback(async () => {
     if (!sheet || !config || !targetTable) return
-    setStep(4)
+    setStep(5)
 
-    // Dup check — only for tables with a reference field
-    if (!STAGE_CODE_TABLES.has(targetTable)) return
+    // Dup check for bank_statement only
+    if (targetTable !== 'bank_statement') return
 
-    const refFieldKey =
-      targetTable === 'inflow_transactions'  ? 'transaction_ref' :
-      targetTable === 'outflow_transactions' ? 'transaction_id'  : 'reference'
-
-    const refHeader = Object.keys(mapping).find(h => mapping[h] === refFieldKey)
+    const refHeader = Object.keys(mapping).find(h => mapping[h] === 'reference')
     if (!refHeader) return
 
     const refColIdx = sheet.headers.indexOf(refHeader)
@@ -526,35 +473,31 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     try {
       const results: Array<{ id: string; table: string }> = []
 
-      if (targetTable === 'inflow_transactions' || targetTable === 'bank_statement') {
-        const { data, error } = await supabase
-          .from('inflow_transactions')
-          .select('transaction_ref')
-          .in('transaction_ref', uniqueIds)
-        if (error) {
-          if (error.message.includes('invalid input syntax for type uuid')) {
-            results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
-          }
-        } else {
-          for (const r of data ?? []) {
-            if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
-          }
+      const { data: inflowData, error: inflowErr } = await supabase
+        .from('inflow_transactions')
+        .select('transaction_ref')
+        .in('transaction_ref', uniqueIds)
+      if (inflowErr) {
+        if (inflowErr.message.includes('invalid input syntax for type uuid')) {
+          results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
+        }
+      } else {
+        for (const r of inflowData ?? []) {
+          if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
         }
       }
 
-      if (targetTable === 'outflow_transactions' || targetTable === 'bank_statement') {
-        const { data, error } = await supabase
-          .from('outflow_transactions')
-          .select('transaction_id')
-          .in('transaction_id', uniqueIds)
-        if (error) {
-          if (error.message.includes('invalid input syntax for type uuid')) {
-            results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
-          }
-        } else {
-          for (const r of data ?? []) {
-            if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
-          }
+      const { data: outflowData, error: outflowErr } = await supabase
+        .from('outflow_transactions')
+        .select('transaction_id')
+        .in('transaction_id', uniqueIds)
+      if (outflowErr) {
+        if (outflowErr.message.includes('invalid input syntax for type uuid')) {
+          results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
+        }
+      } else {
+        for (const r of outflowData ?? []) {
+          if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
         }
       }
 
@@ -597,17 +540,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const debitIdx  = colIdx('debit')
       const refIdx    = colIdx('reference')
 
-      const inflowRows:         Record<string, unknown>[] = []
-      const outflowRows:        Record<string, unknown>[] = []
-      const bankDepositBSRows:  Record<string, unknown>[] = []
-      const intraBankBSRows:    Record<string, unknown>[] = []
+      const inflowRows:  Record<string, unknown>[] = []
+      const outflowRows: Record<string, unknown>[] = []
 
       for (let ri = 0; ri < sheet.rows.length; ri++) {
-        const raw      = sheet.rows[ri] as unknown[]
-        const rowFmt   = perRowDateFormat[ri]
-        if (rowFmt === '__skip__') { skipped++; continue }
-        const effectiveFmt = (rowFmt as DateFormat | undefined) ?? dateFormat
-        const date = dateIdx >= 0 ? parseDate(raw[dateIdx], effectiveFmt) : null
+        const raw  = sheet.rows[ri] as unknown[]
+        const date = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
         if (!date) { skipped++; continue }
 
         const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
@@ -617,19 +555,22 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
                          ? String(raw[refIdx]).trim() : null
 
-        const cfg     = getConfigForDate(latestConfigs, date)
-        const txnType = rowTxnTypes[ri] ?? batchTxnType
+        const cfg = getConfigForDate(latestConfigs, date)
+        const txnType = rowTxnTypes[ri] ?? ''
+        const origId  = rowOrigTxnIds[ri] ?? ''
 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
-          if (userId)   row.created_by = userId
-          if (bank)     row.bank_id   = bank.id
-          // Income type — per-row or auto-classified
-          const effIncomeTypeId = rowIncomeTypes[ri] ?? (classifyIncomeType(desc ?? '', '', incomeTypes)?.id ?? '')
+          if (userId) row.created_by = userId
+          // Resolve income type: per-row override → auto-classify
+          const effIncomeTypeId = rowIncomeTypes[ri]
+            ?? (desc ? classifyIncomeType(desc, '', incomeTypes)?.id : undefined)
           if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
-          // Per-row config override from Step 4; fall back to income-type special config; fall back to date-based
+          // Resolve config: per-row override → income type's linked config → date-based config
           const overrideCfgId = rowConfigs[ri]
-          const linkedCfgId   = effIncomeTypeId ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? '') : ''
+          const linkedCfgId   = effIncomeTypeId
+            ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
+            : null
           if (overrideCfgId) {
             row.allocation_config_id = overrideCfgId
           } else if (linkedCfgId) {
@@ -637,37 +578,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           } else if (cfg) {
             row.allocation_config_id = cfg.id
           }
-          if (txnType)  row.transaction_type = txnType
-          if ((txnType === 'refund' || txnType === 'reversal') && rowOrigTxnIds[ri]) {
-            row.original_transaction_id = rowOrigTxnIds[ri]
-          }
+          if (internalBank) row.bank_name = internalBank.name
+          if (txnType) row.transaction_type = txnType
+          if (origId)  row.original_transaction_id = origId
           inflowRows.push(row)
-          if (txnType === 'bank_deposit') {
-            bankDepositBSRows.push({ date, bank_id: bank?.id ?? null, bank_name: bank?.name ?? null, amount: credit, description: desc, transaction_ref: ref })
-          } else if (txnType === 'intrabank_transfer') {
-            intraBankBSRows.push({ date, to_bank_id: bank?.id ?? null, to_bank_name: bank?.name ?? null, amount: credit, description: desc, transaction_ref: ref })
-          }
         }
         if (debit > 0) {
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
-          if (userId)   row.created_by = userId
-          if (bank)     row.bank_id   = bank.id
-          if (cfg)      row.allocation_config_id = cfg.id
-          // Per-row stage codes from Step 4
+          if (userId) row.created_by = userId
+          if (cfg)    row.allocation_config_id = cfg.id
+          if (internalBank) row.bank_name = internalBank.name
           const sc = rowStageCodes[ri]
           if (sc) {
             if (sc.s1) row.stage_code_1 = sc.s1
             if (sc.s2) row.stage_code_2 = sc.s2
           }
-          if (rowPendingDeductions[ri] ?? batchPendingDeduction) row.is_pending_deduction = true
-          if (txnType)  row.transaction_type = txnType
-          if ((txnType === 'refund' || txnType === 'reversal') && rowOrigTxnIds[ri]) {
-            row.original_transaction_id = rowOrigTxnIds[ri]
-          }
+          if (batchPendingDeduction) row.is_pending_deduction = true
+          if (txnType) row.transaction_type = txnType
+          if (origId)  row.original_transaction_id = origId
           outflowRows.push(row)
-          if (txnType === 'intrabank_transfer') {
-            intraBankBSRows.push({ date, from_bank_id: bank?.id ?? null, from_bank_name: bank?.name ?? null, amount: debit, description: desc, transaction_ref: ref })
-          }
         }
         if (credit === 0 && debit === 0) skipped++
       }
@@ -687,7 +616,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       for (let i = 0; i < inflowToInsert.length; i += BATCH) {
         const batch = inflowToInsert.slice(i, i + BATCH)
-        const { error: err } = await supabase.from('inflow_transactions').insert(batch)
+        let { error: err } = await supabase.from('inflow_transactions').insert(batch)
+        const missingInflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
+        if (missingInflow) {
+          const stripped = batch.map(row => { const r = { ...row }; delete r[missingInflow]; return r })
+          const { error: retryErr } = await supabase.from('inflow_transactions').insert(stripped)
+          err = retryErr ?? null
+          if (!errors.some(e => e.includes(missingInflow))) {
+            errors.push(`⚠ ${missingInflow} column missing — run DB migration to add this column`)
+          }
+        }
         if (err) {
           const msg = err.message.includes('invalid input syntax for type uuid')
             ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
@@ -698,7 +636,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
       for (let i = 0; i < outflowToInsert.length; i += BATCH) {
         const batch = outflowToInsert.slice(i, i + BATCH)
-        const { error: err } = await supabase.from('outflow_transactions').insert(batch)
+        let { error: err } = await supabase.from('outflow_transactions').insert(batch)
+        const missingOutflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
+        if (missingOutflow) {
+          const stripped = batch.map(row => { const r = { ...row }; delete r[missingOutflow]; return r })
+          const { error: retryErr } = await supabase.from('outflow_transactions').insert(stripped)
+          err = retryErr ?? null
+          if (!errors.some(e => e.includes(missingOutflow))) {
+            errors.push(`⚠ ${missingOutflow} column missing — run DB migration to add this column`)
+          }
+        }
         if (err) {
           const msg = err.message.includes('invalid input syntax for type uuid')
             ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
@@ -708,259 +655,83 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
       }
 
-      // Extra inserts for tagged row types
-      if (bankDepositBSRows.length > 0) {
-        await supabase.from('bank_deposits').insert(bankDepositBSRows)
+      setResult({ imported, skipped, errors })
+      setImporting(false)
+    }
+
+    // ── FX transactions ───────────────────────────────────────────────────────
+    if (targetTable === 'fx_transactions') {
+      const colIdx = (field: string) => {
+        const h = Object.keys(mapping).find(k => mapping[k] === field)
+        return h !== undefined ? sheet.headers.indexOf(h) : -1
       }
-      if (intraBankBSRows.length > 0) {
-        await supabase.from('intrabank_transfers').insert(intraBankBSRows)
+      const dateIdx    = colIdx('date')
+      const currIdx    = colIdx('currency')
+      const depIdx     = colIdx('deposit')
+      const wdIdx      = colIdx('withdrawal')
+      const balIdx     = colIdx('running_balance')
+      const narrIdx    = colIdx('narration')
+      const refIdx     = colIdx('transaction_ref')
+
+      const fxRows: Record<string, unknown>[] = []
+      for (let ri = 0; ri < sheet.rows.length; ri++) {
+        const raw  = sheet.rows[ri] as unknown[]
+        const date = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
+        if (!date) { skipped++; continue }
+        // Use standalone fxCurrency selector; column currency is fallback
+        const currency = fxCurrency
+          || (currIdx >= 0 && raw[currIdx] != null && raw[currIdx] !== ''
+              ? String(raw[currIdx]).trim() : null)
+        if (!currency) { skipped++; continue }
+        const row: Record<string, unknown> = { date, currency }
+        if (depIdx  >= 0) row.deposit          = parseNumber(raw[depIdx])
+        if (wdIdx   >= 0) row.withdrawal        = parseNumber(raw[wdIdx])
+        if (balIdx  >= 0) row.running_balance   = parseNumber(raw[balIdx])
+        if (narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '') row.narration = String(raw[narrIdx]).trim()
+        if (refIdx  >= 0 && raw[refIdx]  != null && raw[refIdx]  !== '') row.transaction_ref = String(raw[refIdx]).trim()
+        if (userId) row.created_by = userId
+        if (internalBank) row.bank_name = internalBank.name
+        fxRows.push(row)
+      }
+
+      const BATCH = 100
+      for (let i = 0; i < fxRows.length; i += BATCH) {
+        const batch = fxRows.slice(i, i + BATCH)
+        const { error: err } = await supabase.from('fx_transactions').insert(batch)
+        if (err) {
+          errors.push(`FX batch: ${err.message}`); skipped += batch.length
+        } else {
+          imported += batch.length
+        }
+        setProgress(Math.round(((i + batch.length) / fxRows.length) * 100))
       }
 
       setResult({ imported, skipped, errors })
       setImporting(false)
-      return
     }
-
-    // ── Standard single-table mode ────────────────────────────────────────────
-
-    const nonTextFields = ['date', 'description', 'currency', 'transaction_ref',
-      'narration', 'remark', 'remarks', 'bank_description', 'stage_code_1', 'stage_code_2',
-      'inflow_type', 'account_from', 'account_to', 'transaction_id', 'specific_seed_description',
-      'account_id', 'account_from_stage1', 'account_from_stage2', 'account_to_stage1',
-      'account_to_stage2', 'is_pending_deduction', 'allocation_config_name']
-
-    const numericFields = new Set(
-      config.fields.filter(f => !nonTextFields.includes(f.key)).map(f => f.key),
-    )
-
-    // Build rows
-    const mappedRows:         Record<string, unknown>[] = []
-    const bankDepositExtraRows: Record<string, unknown>[] = []
-    const intraBankExtraRows:   Record<string, unknown>[] = []
-    for (let ri = 0; ri < sheet.rows.length; ri++) {
-      const raw = sheet.rows[ri]
-      const row: Record<string, unknown> = {}
-
-      for (let ci = 0; ci < sheet.headers.length; ci++) {
-        const header = sheet.headers[ci]
-        const field  = mapping[header]
-        if (!field || field === SKIP) continue
-        const val = raw[ci]
-
-        if (field === 'date') {
-          const rowFmtG = perRowDateFormat[ri]
-          if (rowFmtG === '__skip__') { skipped++; break }
-          const effectiveFmtG = (rowFmtG as DateFormat | undefined) ?? dateFormat
-          const d = parseDate(val, effectiveFmtG)
-          if (!d) { errors.push(`Row ${ri + 2}: invalid date "${val}"`); continue }
-          row[field] = d
-        } else if (field === 'is_pending_deduction') {
-          row[field] = String(val).trim().toLowerCase() === 'true' || val === true || val === 1
-        } else if (numericFields.has(field)) {
-          row[field] = parseNumber(val)
-        } else {
-          row[field] = val != null && val !== '' ? String(val).trim() : null
-        }
-      }
-
-      // Check required fields
-      const missing = config.fields.filter(f => f.required && !row[f.key]).map(f => f.label)
-      if (missing.length > 0) {
-        skipped++
-        if (errors.length < 20) errors.push(`Row ${ri + 2}: missing required fields: ${missing.join(', ')}`)
-        continue
-      }
-
-      // Skip all-empty rows
-      if (Object.values(row).every(v => v == null || v === '' || v === 0)) { skipped++; continue }
-
-      // Pending deduction — per-row overrides batch setting
-      if (targetTable === 'outflow_transactions') {
-        if (rowPendingDeductions[ri] ?? batchPendingDeduction) row.is_pending_deduction = true
-      }
-
-      // FX currency stamp
-      if (targetTable === 'fx_transactions' && fxCurrency) row.currency = fxCurrency
-
-      if (userId) row.created_by = userId
-
-      // Transaction type + original ref (C1)
-      const txnType = rowTxnTypes[ri] ?? batchTxnType
-      if (txnType) row.transaction_type = txnType
-      if ((txnType === 'refund' || txnType === 'reversal') && rowOrigTxnIds[ri]) {
-        row.original_transaction_id = rowOrigTxnIds[ri]
-      }
-      // Collect extra table rows for special types
-      if (txnType === 'bank_deposit' && targetTable === 'inflow_transactions') {
-        bankDepositExtraRows.push({
-          date: row.date, bank_id: bank?.id ?? null, bank_name: bank?.name ?? null,
-          amount: row.amount, description: row.description, transaction_ref: row.transaction_ref,
-        })
-      } else if (txnType === 'intrabank_transfer') {
-        intraBankExtraRows.push({
-          date: row.date,
-          ...(targetTable === 'inflow_transactions'
-            ? { to_bank_id: bank?.id ?? null, to_bank_name: bank?.name ?? null }
-            : { from_bank_id: bank?.id ?? null, from_bank_name: bank?.name ?? null }),
-          amount: (row.amount ?? row.amount_disbursed) as number,
-          description: row.description,
-          transaction_ref: (row.transaction_ref ?? row.transaction_id) as string | null,
-        })
-      }
-
-      mappedRows.push(row)
-    }
-
-    // Inject bank_id
-    if (bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions')) {
-      for (const row of mappedRows) row.bank_id = bank.id
-    }
-
-    // Inject allocation_config_id per row
-    if (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') {
-      for (let ri = 0; ri < mappedRows.length; ri++) {
-        const row  = mappedRows[ri]
-        const date = row.date as string | undefined
-        if (!date) continue
-
-        if (targetTable === 'inflow_transactions') {
-          const rowCfgId = rowConfigs[ri]
-          const effIncomeTypeId = rowIncomeTypes[ri] ?? (classifyIncomeType(String(row.description ?? ''), String(row.stage_code_1 ?? ''), incomeTypes)?.id ?? '')
-          if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
-          const linkedCfgId = effIncomeTypeId ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? '') : ''
-          if (rowCfgId) {
-            row.allocation_config_id = rowCfgId
-          } else if (linkedCfgId) {
-            row.allocation_config_id = linkedCfgId
-          } else if (row.allocation_config_name) {
-            const named = latestConfigs.find(c => c.name === row.allocation_config_name)
-            if (named) row.allocation_config_id = named.id
-            delete row.allocation_config_name
-          } else {
-            const cfg = getConfigForDate(latestConfigs, date)
-            if (cfg) row.allocation_config_id = cfg.id
-          }
-        } else {
-          const cfg = getConfigForDate(latestConfigs, date)
-          if (cfg) row.allocation_config_id = cfg.id
-        }
-        // Remove virtual field if not deleted above
-        delete row.allocation_config_name
-      }
-    }
-
-    // Apply dup skip filter
-    const txnField =
-      targetTable === 'inflow_transactions'  ? 'transaction_ref' :
-      targetTable === 'outflow_transactions' ? 'transaction_id'  : null
-
-    let rowsToInsert = mappedRows
-    if (allSkipIds.size > 0 && txnField) {
-      rowsToInsert = mappedRows.filter(r => {
-        const id = r[txnField] as string | undefined
-        return !id || !allSkipIds.has(id)
-      })
-      const dupCount = mappedRows.length - rowsToInsert.length
-      if (dupCount > 0) { skipped += dupCount; errors.push(`${dupCount} duplicate transaction ID(s) skipped`) }
-    }
-
-    // Batch insert
-    const BATCH = 100
-    for (let i = 0; i < rowsToInsert.length; i += BATCH) {
-      const batch = rowsToInsert.slice(i, i + BATCH)
-      const { error } = await supabase.from(targetTable).insert(batch)
-      if (error) {
-        let msg = `Batch ${Math.floor(i / BATCH) + 1}: ${error.message}`
-        if (error.message.includes('invalid input syntax for type uuid')) {
-          msg = targetTable === 'inflow_transactions'
-            ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
-            : 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
-        }
-        errors.push(msg)
-        skipped += batch.length
-      } else {
-        imported += batch.length
-      }
-      setProgress(Math.round(((i + batch.length) / rowsToInsert.length) * 100))
-    }
-
-    // Extra inserts for tagged row types (C1)
-    if (bankDepositExtraRows.length > 0) {
-      await supabase.from('bank_deposits').insert(bankDepositExtraRows)
-    }
-    if (intraBankExtraRows.length > 0) {
-      await supabase.from('intrabank_transfers').insert(intraBankExtraRows)
-    }
-
-    setResult({ imported, skipped, errors })
-    setImporting(false)
-  }, [sheet, config, targetTable, mapping, user, skipTxnIds, bank,
-      batchPendingDeduction, rowPendingDeductions, fxCurrency,
-      rowConfigs, rowStageCodes, skipWizardDups, wizardDupsFound,
-      dateFormat, perRowDateFormat,
-      batchTxnType, rowTxnTypes, rowOrigTxnIds])
-
-  // ── Date conflict handling ────────────────────────────────────────────────
-
-  const handleStartImport = useCallback(() => {
-    if (!sheet) return
-    if (dateFormat === 'DD/MM/YYYY') {
-      const dateColH   = Object.keys(mapping).find(k => mapping[k] === 'date')
-      const dateColIdx = dateColH !== undefined ? sheet.headers.indexOf(dateColH) : -1
-      if (dateColIdx >= 0) {
-        const conflicts: Array<{ rowIndex: number; rawValue: string }> = []
-        for (let ri = 0; ri < sheet.rows.length; ri++) {
-          if (perRowDateFormat[ri]) continue
-          const raw = (sheet.rows[ri] as unknown[])[dateColIdx]
-          if (typeof raw === 'string') {
-            const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-            if (m && parseInt(m[2], 10) > 12) conflicts.push({ rowIndex: ri, rawValue: raw.trim() })
-          }
-        }
-        if (conflicts.length > 0) {
-          setPendingConflicts(conflicts)
-          setConflictResolution('all')
-          return
-        }
-      }
-    }
-    setPendingConflicts([])
-    runImport()
-  }, [sheet, mapping, dateFormat, perRowDateFormat, runImport])
-
-  const handleConflictApply = useCallback(() => {
-    const current = pendingConflicts[0]
-    if (!current) return
-    if (conflictResolution === 'all') {
-      setDateFormat('MM/DD/YYYY')
-      setPendingConflicts([])
-    } else if (conflictResolution === 'row') {
-      setPerRowDateFormat(prev => ({ ...prev, [current.rowIndex]: 'MM/DD/YYYY' }))
-      setPendingConflicts(prev => prev.slice(1))
-    } else {
-      setPerRowDateFormat(prev => ({ ...prev, [current.rowIndex]: '__skip__' }))
-      setPendingConflicts(prev => prev.slice(1))
-    }
-  }, [pendingConflicts, conflictResolution])
+  }, [sheet, config, targetTable, mapping, user, skipTxnIds,
+      dateFormat, fxCurrency, batchPendingDeduction,
+      rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
+      skipWizardDups, wizardDupsFound, internalBank,
+      rowIncomeTypes, incomeTypes])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <>
-    <Modal open={open} onClose={handleClose} title="Import Transactions" size="max-w-3xl">
+    <Modal open={open} onClose={handleClose} title="Import Transactions" size="max-w-3xl"
+      headerExtra={step > 1 ? (
+        <button
+          type="button"
+          onClick={reset}
+          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <RefreshCw className="w-3 h-3" /> Clear
+        </button>
+      ) : undefined}
+    >
       <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <StepDots step={step} />
-          {step > 1 && !result && (
-            <button
-              type="button"
-              onClick={reset}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors shrink-0 mt-1"
-            >
-              <RefreshCw className="w-3 h-3" /> Start Over
-            </button>
-          )}
-        </div>
+        <StepDots step={step} />
 
         {/* ────────────────────────── STEP 1: Upload ───────────────────── */}
         {step === 1 && (
@@ -1065,42 +836,67 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               </div>
             </div>
 
-            {/* FX currency selector (B5) */}
-            {targetTable === 'fx_transactions' && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-gray-600">FX Currency <span className="text-red-500">*</span></label>
-                <select
-                  value={fxCurrency}
-                  onChange={e => setFxCurrency(e.target.value)}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${fxCurrency ? 'border-gray-300' : 'border-amber-300'}`}
-                >
-                  <option value="">— Select currency —</option>
-                  {['USD — US Dollar','GBP — British Pound','EUR — Euro','CNY — Chinese Yuan','AED — UAE Dirham','CAD — Canadian Dollar','CHF — Swiss Franc','ZAR — South African Rand'].map(c => (
-                    <option key={c} value={c.split(' ')[0]}>{c}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* Bank selector — required for all import types */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-600">Bank *</label>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-300'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
 
             {/* Date format selector */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-600">Date format in this file</label>
-              <div className="flex items-center gap-5">
+              <div className="flex gap-4">
                 {(['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'] as DateFormat[]).map(fmt => (
-                  <label key={fmt} className="flex items-center gap-1.5 cursor-pointer select-none text-sm text-gray-700">
+                  <label key={fmt} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
                     <input
                       type="radio"
                       name="dateFormat"
                       value={fmt}
                       checked={dateFormat === fmt}
                       onChange={() => setDateFormat(fmt)}
-                      className="accent-primary"
+                      className="text-primary focus:ring-primary/30"
                     />
                     {fmt}
                   </label>
                 ))}
               </div>
             </div>
+
+            {/* FX Currency — only for fx_transactions */}
+            {targetTable === 'fx_transactions' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-600">FX Currency *</label>
+                <select
+                  value={fxCurrency}
+                  onChange={e => setFxCurrency(e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                    fxCurrency ? 'border-gray-300' : 'border-amber-300'
+                  }`}
+                >
+                  <option value="">— Select currency —</option>
+                  {['USD','GBP','EUR','CNY','AED','CAD','CHF','ZAR'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                {!fxCurrency && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> Select an FX currency before importing.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Preview table */}
             {sheet && (
@@ -1139,7 +935,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               step={step}
               onBack={preloadedFile ? undefined : () => { setStep(1); setSheets([]); setFileName('') }}
               onNext={proceedToMapping}
-              nextDisabled={!targetTable || !selectedSheet}
+              nextDisabled={!targetTable || !selectedSheet || !internalBank || (targetTable === 'fx_transactions' && !fxCurrency)}
               nextLabel="Map Columns"
             />
           </div>
@@ -1148,6 +944,28 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         {/* ─────────────────────── STEP 3: Column Mapping ──────────────── */}
         {step === 3 && sheet && config && (
           <div className="space-y-4">
+
+            {/* Persistent bank bar */}
+            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-400'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              {internalBank && (
+                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
+              )}
+            </div>
+
             <p className="text-sm text-gray-600">
               Map each spreadsheet column to an app field.
               Smart defaults have been applied where column names match.
@@ -1196,21 +1014,470 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             <NavButtons
               step={step}
               onBack={() => setStep(2)}
-              onNext={proceedToImport}
+              onNext={targetTable === 'bank_statement' ? proceedToRowConfig : proceedToImport}
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
-                if (config.fields.some(f => f.required && !mappedFields.has(f.key))) return true
-                if (targetTable === 'fx_transactions' && !fxCurrency) return true
-                return false
+                return config.fields.some(f => f.required && !mappedFields.has(f.key))
               })()}
+              nextLabel={targetTable === 'bank_statement'
+                ? `Configure Rows (${sheet.rowCount.toLocaleString()})`
+                : `Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
+            />
+          </div>
+        )}
+
+        {/* ─────────────────────── STEP 4: Configure Rows ─────────────── */}
+        {step === 4 && sheet && config && targetTable === 'bank_statement' && (
+          <div className="space-y-5">
+
+            {/* Persistent bank bar */}
+            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-400'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              {internalBank && (
+                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
+              )}
+            </div>
+
+            {/* Tabs */}
+            <div className="flex items-center justify-between border-b border-gray-200">
+              <div className="flex">
+                {(['inflow', 'outflow'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setBsConfigTab(tab)}
+                    className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                      bsConfigTab === tab
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab === 'inflow' ? 'Credit (Inflow)' : 'Debit (Outflow)'}
+                  </button>
+                ))}
+              </div>
+              {bsConfigTab === 'outflow' && (
+                <label className="flex items-center gap-2 pb-2 cursor-pointer select-none text-xs text-gray-700 pr-2">
+                  <input
+                    type="checkbox"
+                    checked={batchPendingDeduction}
+                    onChange={e => setBatchPendingDeduction(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
+                  />
+                  Mark all debit rows as Pending Deduction
+                </label>
+              )}
+            </div>
+
+            {(() => {
+              const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
+              const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
+              const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
+              const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
+
+              const allRows = sheet.rows.map((raw, ri) => {
+                const r = raw as unknown[]
+                return {
+                  ri,
+                  raw: r,
+                  credit: creditIdx >= 0 ? parseNumber(r[creditIdx]) : 0,
+                  debit:  debitIdx  >= 0 ? parseNumber(r[debitIdx])  : 0,
+                }
+              })
+              const creditRows = allRows.filter(r => r.credit > 0)
+              const debitRows  = allRows.filter(r => r.debit  > 0)
+
+              // ── Inflow tab ───────────────────────────────────────────────
+              if (bsConfigTab === 'inflow') {
+                const f = inflowFilter
+                const filtered = creditRows.filter(({ raw, credit }) => {
+                  const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
+                  if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
+                  if (f.amtFrom && credit < parseFloat(f.amtFrom))       return false
+                  if (f.amtTo   && credit > parseFloat(f.amtTo))         return false
+                  return true
+                })
+                const isFiltered = filtered.length < creditRows.length
+
+                return (
+                  <div className="space-y-3">
+                    {/* Filter bar */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Search description…"
+                        value={f.desc}
+                        onChange={e => setInflowFilter(p => ({ ...p, desc: e.target.value }))}
+                        className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      />
+                      <span className="text-xs text-gray-400">Amount</span>
+                      <input type="number" placeholder="from" value={f.amtFrom}
+                        onChange={e => setInflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
+                        className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      />
+                      <input type="number" placeholder="to" value={f.amtTo}
+                        onChange={e => setInflowFilter(p => ({ ...p, amtTo: e.target.value }))}
+                        className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      />
+                      <button type="button" onClick={() => setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
+                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
+                        Clear
+                      </button>
+                      <span className="text-xs text-gray-400 ml-auto">
+                        {filtered.length} / {creditRows.length} rows
+                      </span>
+                    </div>
+
+                    {/* Apply bar */}
+                    <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+                        Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
+                      </span>
+                      <select value={applyInflowConfig} onChange={e => {
+                          if (e.target.value === '__create__') { setCreateConfigPendingRow('apply'); setApplyInflowConfig('') }
+                          else setApplyInflowConfig(e.target.value)
+                        }}
+                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
+                        <option value="">— Allocation Config —</option>
+                        <option value="__general__">General (date-based)</option>
+                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        <option value="__create__">＋ Create New Config…</option>
+                      </select>
+                      {incomeTypes.length > 0 && (
+                        <select value={applyIncomeType} onChange={e => setApplyIncomeType(e.target.value)}
+                          className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[110px]">
+                          <option value="">— Income Type —</option>
+                          {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      )}
+                      <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
+                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                        <option value="">— Type —</option>
+                        {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!applyInflowConfig && !applyIncomeType && !batchTxnType}
+                        onClick={() => {
+                          setRowConfigs(prev => {
+                            const next = { ...prev }
+                            if (applyInflowConfig) {
+                              for (const { ri } of filtered)
+                                next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
+                            }
+                            return next
+                          })
+                          if (applyIncomeType) {
+                            setRowIncomeTypes(prev => {
+                              const next = { ...prev }
+                              for (const { ri } of filtered) next[ri] = applyIncomeType
+                              return next
+                            })
+                          }
+                          if (batchTxnType !== '') {
+                            setRowTxnTypes(prev => {
+                              const next = { ...prev }
+                              for (const { ri } of filtered) next[ri] = batchTxnType
+                              return next
+                            })
+                          }
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
+                      >
+                        Apply
+                      </button>
+                    </div>
+
+                    {/* Row table */}
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="grid grid-cols-[36px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Income Type</span><span>Type</span>
+                      </div>
+                      <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
+                        {filtered.length === 0
+                          ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
+                          : filtered.map(({ ri, raw, credit }) => {
+                              const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
+                              const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+                              const selId   = rowConfigs[ri] ?? ''
+                              const txnType = rowTxnTypes[ri] ?? ''
+                              const origId  = rowOrigTxnIds[ri] ?? ''
+                              const autoType = desc ? classifyIncomeType(desc, '', incomeTypes) : null
+                              const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
+                              const effIncomeType = incomeTypes.find(t => t.id === effIncomeTypeId)
+                              return (
+                                <div key={ri}>
+                                  <div className="grid grid-cols-[36px_1fr_72px_120px_120px_96px] items-center px-3 py-2 gap-2 text-xs">
+                                    <span className="text-gray-400 font-mono">{ri + 1}</span>
+                                    <div className="min-w-0">
+                                      <div className="text-gray-700 truncate">{desc || '—'}</div>
+                                      <div className="text-gray-400">{date}</div>
+                                    </div>
+                                    <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
+                                    <select value={selId}
+                                      onChange={e => {
+                                        if (e.target.value === '__create__') { setCreateConfigPendingRow(ri) }
+                                        else setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                      }}
+                                      className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                      <option value="">General (date-based)</option>
+                                      {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                      <option value="__create__">＋ Create New Config…</option>
+                                    </select>
+                                    <div className="relative">
+                                      <select
+                                        value={effIncomeTypeId}
+                                        onChange={e => setRowIncomeTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
+                                      >
+                                        <option value="">— None —</option>
+                                        {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                      </select>
+                                      {autoType && !rowIncomeTypes[ri] && (
+                                        <Sparkles className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-400" />
+                                      )}
+                                      {effIncomeType && (
+                                        <span
+                                          className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                                          style={{ background: effIncomeType.color }}
+                                        />
+                                      )}
+                                    </div>
+                                    <select value={txnType}
+                                      onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                      className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                      {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                  </div>
+                                  {(txnType === 'refund' || txnType === 'reversal') && (
+                                    <div className="px-3 pb-2 flex items-center gap-2">
+                                      <span className="text-[10px] text-gray-400 w-28 shrink-0">Original Txn ID:</span>
+                                      <input type="text" value={origId}
+                                        onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
+                                        placeholder="ID of original transaction"
+                                        className="flex-1 text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })
+                        }
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              // ── Outflow tab ──────────────────────────────────────────────
+              const f = outflowFilter
+              const filtered = debitRows.filter(({ raw, debit }) => {
+                const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
+                if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
+                if (f.amtFrom && debit < parseFloat(f.amtFrom))        return false
+                if (f.amtTo   && debit > parseFloat(f.amtTo))          return false
+                return true
+              })
+              const isFiltered = filtered.length < debitRows.length
+
+              return (
+                <div className="space-y-3">
+                  {/* Filter bar */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Search description…"
+                      value={f.desc}
+                      onChange={e => setOutflowFilter(p => ({ ...p, desc: e.target.value }))}
+                      className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    />
+                    <span className="text-xs text-gray-400">Amount</span>
+                    <input type="number" placeholder="from" value={f.amtFrom}
+                      onChange={e => setOutflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
+                      className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    />
+                    <input type="number" placeholder="to" value={f.amtTo}
+                      onChange={e => setOutflowFilter(p => ({ ...p, amtTo: e.target.value }))}
+                      className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    />
+                    <button type="button" onClick={() => setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
+                      className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
+                      Clear
+                    </button>
+                    <span className="text-xs text-gray-400 ml-auto">
+                      {filtered.length} / {debitRows.length} rows
+                    </span>
+                  </div>
+
+                  {/* Apply bar */}
+                  <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+                      Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
+                    </span>
+                    <select value={applyS1} onChange={e => setApplyS1(e.target.value)}
+                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
+                      <option value="">Stage Code 1</option>
+                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                    <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
+                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
+                      <option value="">Stage Code 2</option>
+                      <option value="Percentage Allocation">Percentage Allocation</option>
+                      <option value="Specific Seed">Specific Seed</option>
+                      <option value="Savings">Savings</option>
+                    </select>
+                    <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
+                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      <option value="">— Type —</option>
+                      {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!applyS1 && !applyS2 && !batchTxnType}
+                      onClick={() => {
+                        if (applyS1 || applyS2) {
+                          setRowStageCodes(prev => {
+                            const next = { ...prev }
+                            for (const { ri } of filtered)
+                              next[ri] = {
+                                s1: applyS1 || (prev[ri]?.s1 ?? ''),
+                                s2: applyS2 || (prev[ri]?.s2 ?? ''),
+                              }
+                            return next
+                          })
+                        }
+                        if (batchTxnType !== '') {
+                          setRowTxnTypes(prev => {
+                            const next = { ...prev }
+                            for (const { ri } of filtered) next[ri] = batchTxnType
+                            return next
+                          })
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </div>
+
+                  {/* Row table */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="grid grid-cols-[40px_1fr_80px_110px_110px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span><span>Type</span>
+                    </div>
+                    <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
+                      {filtered.length === 0
+                        ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
+                        : filtered.map(({ ri, raw, debit }) => {
+                            const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
+                            const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+                            const sc      = rowStageCodes[ri] ?? { s1: '', s2: '' }
+                            const txnType = rowTxnTypes[ri] ?? ''
+                            const origId  = rowOrigTxnIds[ri] ?? ''
+                            return (
+                              <div key={ri}>
+                                <div className="grid grid-cols-[40px_1fr_80px_110px_110px_90px] items-center px-3 py-2 gap-2 text-xs">
+                                  <span className="text-gray-400 font-mono">{ri + 1}</span>
+                                  <div className="min-w-0">
+                                    <div className="text-gray-700 truncate">{desc || '—'}</div>
+                                    <div className="text-gray-400">{date}</div>
+                                  </div>
+                                  <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
+                                  <select value={sc.s1}
+                                    onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: e.target.value, s2: prev[ri]?.s2 ?? '' } }))}
+                                    className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                    <option value="">— None —</option>
+                                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                  </select>
+                                  <select value={sc.s2}
+                                    onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
+                                    className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                    <option value="">— None —</option>
+                                    <option value="Percentage Allocation">Percentage Allocation</option>
+                                    <option value="Specific Seed">Specific Seed</option>
+                                    <option value="Savings">Savings</option>
+                                  </select>
+                                  <select value={txnType}
+                                    onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                    className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                    {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                  </select>
+                                </div>
+                                {(txnType === 'refund' || txnType === 'reversal') && (
+                                  <div className="px-3 pb-2 flex items-center gap-2">
+                                    <span className="text-[10px] text-gray-400 w-28 shrink-0">Original Txn ID:</span>
+                                    <input type="text" value={origId}
+                                      onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
+                                      placeholder="ID of original transaction"
+                                      className="flex-1 text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })
+                      }
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
+            <NavButtons
+              step={step}
+              onBack={() => setStep(3)}
+              onNext={proceedToImport}
               nextLabel={`Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
             />
           </div>
         )}
 
-        {/* ─────────────────────── STEP 4: Preview & Import ────────────── */}
-        {step === 4 && sheet && config && (
+        {/* ─────────────────────── STEP 5: Preview & Import ────────────── */}
+        {step === 5 && sheet && config && (
           <div className="space-y-5">
+
+            {/* Persistent bank bar */}
+            <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
+              <select
+                value={internalBank?.id ?? ''}
+                onChange={e => {
+                  const found = bankList.find(b => b.id === e.target.value)
+                  setInternalBank(found ? { id: found.id, name: found.name } : null)
+                }}
+                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                  internalBank ? 'border-gray-300' : 'border-amber-400'
+                }`}
+              >
+                <option value="">— Select bank —</option>
+                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              {internalBank && (
+                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
+              )}
+            </div>
+
+            {/* No-bank warning */}
+            {!internalBank && (
+              <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Select a bank before importing.
+              </div>
+            )}
+
             {/* Summary */}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-lg bg-gray-50 px-3 py-3">
@@ -1238,567 +1505,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <p className="font-semibold">Bank Statement Split Rules</p>
                 <p>Credit &gt; 0 → <strong>Inflow</strong> table &nbsp;·&nbsp; Debit &gt; 0 → <strong>Outflow</strong> table</p>
                 <p className="text-gray-500">Description follows the non-empty amount column into the correct table.</p>
-                {bank && <p>Bank: <strong>{bank.name}</strong> will be tagged on all rows.</p>}
+                {internalBank && <p>Bank: <strong>{internalBank.name}</strong> will be tagged on all rows.</p>}
               </div>
             )}
-
-            {/* Credit/Debit tabs for bank_statement Configure Rows */}
-            {targetTable === 'bank_statement' && (() => {
-              const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
-              const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
-              const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
-              const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
-
-              const allRows = sheet.rows.map((raw, ri) => {
-                const r = raw as unknown[]
-                return {
-                  ri,
-                  raw: r,
-                  credit: creditIdx >= 0 ? parseNumber(r[creditIdx]) : 0,
-                  debit:  debitIdx  >= 0 ? parseNumber(r[debitIdx])  : 0,
-                }
-              })
-              const creditRows = allRows.filter(r => r.credit > 0)
-              const debitRows  = allRows.filter(r => r.debit  > 0)
-
-              return (
-                <div className="space-y-3 border border-gray-200 rounded-xl overflow-hidden">
-                  {/* Tabs */}
-                  <div className="flex border-b border-gray-200">
-                    {(['inflow', 'outflow'] as const).map(tab => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setBsConfigTab(tab)}
-                        className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                          bsConfigTab === tab
-                            ? 'border-primary text-primary'
-                            : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        {tab === 'inflow' ? `Credit (Inflow) — ${creditRows.length} rows` : `Debit (Outflow) — ${debitRows.length} rows`}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="p-3 space-y-3">
-                    {bsConfigTab === 'inflow' ? (() => {
-                      const f = inflowFilter
-                      const filtered = creditRows.filter(({ raw, credit }) => {
-                        const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
-                        if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
-                        if (f.amtFrom && credit < parseFloat(f.amtFrom))       return false
-                        if (f.amtTo   && credit > parseFloat(f.amtTo))         return false
-                        return true
-                      })
-                      const isFiltered = filtered.length < creditRows.length
-                      return (
-                        <>
-                          {/* Filter bar */}
-                          <div className="flex flex-wrap items-center gap-2">
-                            <input type="text" placeholder="Search description…" value={f.desc}
-                              onChange={e => setInflowFilter(p => ({ ...p, desc: e.target.value }))}
-                              className="flex-1 min-w-[140px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
-                            <span className="text-xs text-gray-400">₦</span>
-                            <input type="number" placeholder="from" value={f.amtFrom}
-                              onChange={e => setInflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
-                              className="w-20 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
-                            <input type="number" placeholder="to" value={f.amtTo}
-                              onChange={e => setInflowFilter(p => ({ ...p, amtTo: e.target.value }))}
-                              className="w-20 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
-                            <button type="button" onClick={() => setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
-                              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">Clear</button>
-                            <span className="text-xs text-gray-400 ml-auto">{filtered.length} / {creditRows.length}</span>
-                          </div>
-                          {/* Apply bar */}
-                          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                            <span className="text-xs text-gray-500 shrink-0">Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:</span>
-                            <select value={applyIncomeType} onChange={e => setApplyIncomeType(e.target.value)}
-                              className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                              <option value="">— Income Type —</option>
-                              <option value="__clear__">Clear income type</option>
-                              {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                            <select value={applyInflowConfig} onChange={e => setApplyInflowConfig(e.target.value)}
-                              className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                              <option value="">— Allocation Config —</option>
-                              <option value="__general__">General (date-based)</option>
-                              {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                            <button type="button" disabled={!applyInflowConfig && !applyIncomeType}
-                              onClick={() => {
-                                setRowIncomeTypes(prev => {
-                                  const next = { ...prev }
-                                  if (!applyIncomeType) return next
-                                  for (const { ri } of filtered)
-                                    next[ri] = applyIncomeType === '__clear__' ? '' : applyIncomeType
-                                  return next
-                                })
-                                setRowConfigs(prev => {
-                                  const next = { ...prev }
-                                  // If applying income type, auto-set config from its special config
-                                  if (applyIncomeType && applyIncomeType !== '__clear__') {
-                                    const linkedCfg = incomeTypes.find(t => t.id === applyIncomeType)?.special_config_id ?? ''
-                                    if (linkedCfg && !applyInflowConfig) {
-                                      for (const { ri } of filtered) next[ri] = linkedCfg
-                                      return next
-                                    }
-                                  }
-                                  if (!applyInflowConfig) return next
-                                  for (const { ri } of filtered)
-                                    next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
-                                  return next
-                                })
-                              }}
-                              className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50">
-                              Apply
-                            </button>
-                          </div>
-                          {/* Row table */}
-                          <div className="border border-gray-200 rounded-xl overflow-hidden">
-                            <div className="grid grid-cols-[36px_1fr_90px_130px_130px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
-                              <span>#</span><span>Description / Date</span><span>Amount</span><span>Income Type</span><span>Config</span>
-                            </div>
-                            <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
-                              {filtered.length === 0
-                                ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
-                                : filtered.map(({ ri, raw, credit }) => {
-                                    const date  = dateIdx >= 0 ? (parseDate(raw[dateIdx]) ?? '') : ''
-                                    const desc  = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                                    const autoIt = classifyIncomeType(desc, '', incomeTypes)
-                                    const effItId = rowIncomeTypes[ri] !== undefined ? rowIncomeTypes[ri] : (autoIt?.id ?? '')
-                                    const isAutoIt = rowIncomeTypes[ri] === undefined && !!effItId
-                                    const selId  = rowConfigs[ri] ?? ''
-                                    const itColor = incomeTypes.find(t => t.id === effItId)?.color
-                                    return (
-                                      <div key={ri} className="grid grid-cols-[36px_1fr_90px_130px_130px] items-center px-3 py-2 gap-2 text-xs">
-                                        <span className="text-gray-400 font-mono">{ri + 1}</span>
-                                        <div className="min-w-0">
-                                          <div className="text-gray-700 truncate">{desc || '—'}</div>
-                                          <div className="text-gray-400">{date}</div>
-                                        </div>
-                                        <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
-                                        <div className="relative">
-                                          {itColor && (
-                                            <div className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none" style={{ backgroundColor: itColor }} />
-                                          )}
-                                          <select value={effItId}
-                                            onChange={e => {
-                                              const val = e.target.value
-                                              setRowIncomeTypes(prev => ({ ...prev, [ri]: val }))
-                                              const linked = incomeTypes.find(t => t.id === val)?.special_config_id
-                                              if (linked) setRowConfigs(prev => ({ ...prev, [ri]: linked }))
-                                            }}
-                                            className={`text-xs px-2 py-1 border rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full ${itColor ? 'pl-5' : ''} ${isAutoIt ? 'border-primary/40' : 'border-gray-200'}`}>
-                                            <option value="">— None —</option>
-                                            {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                          </select>
-                                          {isAutoIt && <Sparkles className="absolute right-5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-primary pointer-events-none" />}
-                                        </div>
-                                        <select value={selId}
-                                          onChange={e => setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))}
-                                          className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                          <option value="">General (date-based)</option>
-                                          {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
-                                      </div>
-                                    )
-                                  })
-                              }
-                            </div>
-                          </div>
-                        </>
-                      )
-                    })() : (() => {
-                      const f = outflowFilter
-                      const filtered = debitRows.filter(({ raw, debit }) => {
-                        const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
-                        if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
-                        if (f.amtFrom && debit < parseFloat(f.amtFrom))        return false
-                        if (f.amtTo   && debit > parseFloat(f.amtTo))          return false
-                        return true
-                      })
-                      const isFiltered = filtered.length < debitRows.length
-                      return (
-                        <>
-                          {/* Filter bar */}
-                          <div className="flex flex-wrap items-center gap-2">
-                            <input type="text" placeholder="Search description…" value={f.desc}
-                              onChange={e => setOutflowFilter(p => ({ ...p, desc: e.target.value }))}
-                              className="flex-1 min-w-[140px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
-                            <span className="text-xs text-gray-400">₦</span>
-                            <input type="number" placeholder="from" value={f.amtFrom}
-                              onChange={e => setOutflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
-                              className="w-20 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
-                            <input type="number" placeholder="to" value={f.amtTo}
-                              onChange={e => setOutflowFilter(p => ({ ...p, amtTo: e.target.value }))}
-                              className="w-20 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
-                            <button type="button" onClick={() => setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
-                              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">Clear</button>
-                            <span className="text-xs text-gray-400 ml-auto">{filtered.length} / {debitRows.length}</span>
-                          </div>
-                          {/* Apply bar */}
-                          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                            <span className="text-xs text-gray-500 shrink-0">Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:</span>
-                            <select value={applyS1} onChange={e => setApplyS1(e.target.value)}
-                              className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                              <option value="">Stage Code 1</option>
-                              {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                            </select>
-                            <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
-                              className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                              <option value="">Stage Code 2</option>
-                              <option value="Percentage Allocation">Percentage Allocation</option>
-                              <option value="Specific Seed">Specific Seed</option>
-                              <option value="Savings">Savings</option>
-                            </select>
-                            <button type="button" disabled={!applyS1 && !applyS2}
-                              onClick={() => {
-                                if (!applyS1 && !applyS2) return
-                                setRowStageCodes(prev => {
-                                  const next = { ...prev }
-                                  for (const { ri } of filtered)
-                                    next[ri] = {
-                                      s1: applyS1 || (prev[ri]?.s1 ?? ''),
-                                      s2: applyS2 || (prev[ri]?.s2 ?? ''),
-                                    }
-                                  return next
-                                })
-                              }}
-                              className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50">
-                              Apply
-                            </button>
-                          </div>
-                          {/* Row table */}
-                          <div className="border border-gray-200 rounded-xl overflow-hidden">
-                            <div className="grid grid-cols-[40px_1fr_100px_130px_130px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
-                              <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span>
-                            </div>
-                            <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
-                              {filtered.length === 0
-                                ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
-                                : filtered.map(({ ri, raw, debit }) => {
-                                    const date = dateIdx >= 0 ? (parseDate(raw[dateIdx]) ?? '') : ''
-                                    const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                                    const sc   = rowStageCodes[ri] ?? { s1: '', s2: '' }
-                                    return (
-                                      <div key={ri} className="grid grid-cols-[40px_1fr_100px_130px_130px] items-center px-3 py-2 gap-2 text-xs">
-                                        <span className="text-gray-400 font-mono">{ri + 1}</span>
-                                        <div className="min-w-0">
-                                          <div className="text-gray-700 truncate">{desc || '—'}</div>
-                                          <div className="text-gray-400">{date}</div>
-                                        </div>
-                                        <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
-                                        <select value={sc.s1}
-                                          onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: e.target.value, s2: prev[ri]?.s2 ?? '' } }))}
-                                          className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                          <option value="">— None —</option>
-                                          {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                        </select>
-                                        <select value={sc.s2}
-                                          onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
-                                          className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                          <option value="">— None —</option>
-                                          <option value="Percentage Allocation">Percentage Allocation</option>
-                                          <option value="Specific Seed">Specific Seed</option>
-                                          <option value="Savings">Savings</option>
-                                        </select>
-                                      </div>
-                                    )
-                                  })
-                              }
-                            </div>
-                          </div>
-                        </>
-                      )
-                    })()}
-                  </div>
-                </div>
-              )
-            })()}
-
-            {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="text-xs font-medium text-gray-500">Bank</span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-                  {bank.name}
-                </span>
-                <span className="text-xs text-gray-400">will be applied to all {sheet.rowCount.toLocaleString()} rows</span>
-              </div>
-            )}
-
-            {/* FX currency bar */}
-            {targetTable === 'fx_transactions' && fxCurrency && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="text-xs font-medium text-gray-500">Currency</span>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-                  {fxCurrency}
-                </span>
-                <span className="text-xs text-gray-400">will be stamped on all rows</span>
-              </div>
-            )}
-            {targetTable === 'fx_transactions' && !fxCurrency && (
-              <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                Go back to Step 2 and select an FX currency before importing.
-              </div>
-            )}
-
-            {/* Pending deduction + transaction type — batch + per-row (B2/C1) */}
-            {(targetTable === 'bank_statement' || targetTable === 'outflow_transactions') && (() => {
-              const colIdx = (field: string) => {
-                const h = Object.keys(mapping).find(k => mapping[k] === field)
-                return h !== undefined ? sheet.headers.indexOf(h) : -1
-              }
-              const debitIdx = targetTable === 'bank_statement' ? colIdx('debit') : colIdx('amount_disbursed')
-              const dateIdx  = colIdx('date')
-              const descIdx  = colIdx('description')
-              const debitRows = sheet.rows.map((r, ri) => {
-                const raw = r as unknown[]
-                const amt = debitIdx >= 0 ? parseNumber(raw[debitIdx]) : 0
-                if (targetTable === 'bank_statement' && amt <= 0) return null
-                return { ri, amt, date: dateIdx >= 0 ? String(raw[dateIdx] ?? '') : '', desc: descIdx >= 0 ? String(raw[descIdx] ?? '') : '' }
-              }).filter(Boolean) as Array<{ ri: number; amt: number; date: string; desc: string }>
-
-              if (debitRows.length === 0) return null
-              return (
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Outflow / Debit Rows
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-gray-500">All type:</span>
-                        <select
-                          value={batchTxnType}
-                          onChange={e => { setBatchTxnType(e.target.value); setRowTxnTypes({}) }}
-                          className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                        >
-                          {TXN_TYPE_OPTIONS.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={batchPendingDeduction}
-                          onChange={e => {
-                            setBatchPendingDeduction(e.target.checked)
-                            setRowPendingDeductions({})
-                          }}
-                          className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
-                        />
-                        Mark all pending
-                      </label>
-                    </div>
-                  </div>
-                  <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
-                    {debitRows.map(({ ri, amt, date, desc }) => {
-                      const effective     = rowPendingDeductions[ri] ?? batchPendingDeduction
-                      const effectiveType = rowTxnTypes[ri] ?? batchTxnType
-                      return (
-                        <div key={ri}>
-                          <div className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50">
-                            <input
-                              type="checkbox"
-                              checked={effective}
-                              onChange={e => {
-                                const val = e.target.checked
-                                setRowPendingDeductions(prev => {
-                                  const next = { ...prev }
-                                  if (val === batchPendingDeduction) { delete next[ri] } else { next[ri] = val }
-                                  return next
-                                })
-                              }}
-                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 shrink-0 cursor-pointer"
-                            />
-                            <span className="text-xs text-gray-500 w-20 shrink-0 truncate">{date}</span>
-                            <span className="text-xs text-gray-700 flex-1 truncate min-w-0">
-                              {desc || <span className="text-gray-300 italic">no description</span>}
-                            </span>
-                            <span className="text-xs font-medium text-gray-700 shrink-0 w-20 text-right">
-                              ₦{parseNumber(amt).toLocaleString()}
-                            </span>
-                            <select
-                              value={effectiveType}
-                              onChange={e => {
-                                const val = e.target.value
-                                setRowTxnTypes(prev => {
-                                  const next = { ...prev }
-                                  if (val === batchTxnType) { delete next[ri] } else { next[ri] = val }
-                                  return next
-                                })
-                              }}
-                              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white shrink-0"
-                            >
-                              {TXN_TYPE_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                          {(effectiveType === 'refund' || effectiveType === 'reversal') && (
-                            <div className="px-4 pb-1.5 pt-0.5 flex items-center gap-2 text-xs bg-amber-50/50">
-                              <span className="text-gray-500 shrink-0">Original Txn ID:</span>
-                              <input
-                                type="text"
-                                value={rowOrigTxnIds[ri] ?? ''}
-                                onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
-                                placeholder="Enter original transaction ID…"
-                                className="flex-1 text-xs px-2 py-0.5 border border-amber-200 rounded outline-none focus:ring-2 focus:ring-amber-300/50 bg-white"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Allocation config label */}
-            {(targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (() => {
-              const dateHeader = Object.keys(mapping).find(h => mapping[h] === 'date')
-              const dateColIdx = dateHeader !== undefined ? sheet.headers.indexOf(dateHeader) : -1
-              const firstDate  = dateColIdx >= 0 && sheet.rows[0] ? parseDate(sheet.rows[0][dateColIdx]) : null
-              const cfg        = firstDate ? getConfigForDate(allocConfigs, firstDate) : null
-              return cfg ? (
-                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-primary/5 border border-primary/20 text-primary">
-                  Using: <strong>{cfg.name}</strong> — effective {formatDate(cfg.start_date)}
-                  <span className="ml-auto text-gray-400">config applied per row date</span>
-                </div>
-              ) : firstDate ? (
-                <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700">
-                  No allocation config found for {formatDate(firstDate)} — rows will be saved without an allocation
-                </div>
-              ) : null
-            })()}
-
-            {/* D11: Per-row special config assignment — inflow_transactions only */}
-            {targetTable === 'inflow_transactions' && sheet.rows.length > 0 && (() => {
-              const dateColIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
-              const amtColIdx  = sheet.headers.findIndex(h => mapping[h] === 'amount')
-              return (
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Inflow Rows — Type & Config</span>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-500 shrink-0">All:</label>
-                      <select
-                        value={batchTxnType}
-                        onChange={e => { setBatchTxnType(e.target.value); setRowTxnTypes({}) }}
-                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                      >
-                        {TXN_TYPE_OPTIONS.map(o => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => { setCreateConfigPendingRow(null); setCreateConfigOpen(true) }}
-                        className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium shrink-0"
-                      >
-                        + Create Config
-                      </button>
-                    </div>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
-                    {sheet.rows.map((row, ri) => {
-                      const rawArr       = row as unknown[]
-                      const date         = dateColIdx >= 0 ? (parseDate(rawArr[dateColIdx]) ?? '') : ''
-                      const amt          = amtColIdx  >= 0 ? parseNumber(rawArr[amtColIdx])        : 0
-                      const selId        = rowConfigs[ri] ?? ''
-                      const effectiveType = rowTxnTypes[ri] ?? batchTxnType
-                      const descColIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
-                      const sc1ColIdx    = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
-                      const rowDesc      = descColIdx >= 0 && rawArr[descColIdx] != null ? String(rawArr[descColIdx]).trim() : ''
-                      const rowSc1       = sc1ColIdx  >= 0 && rawArr[sc1ColIdx]  != null ? String(rawArr[sc1ColIdx]).trim()  : ''
-                      const autoIt       = classifyIncomeType(rowDesc, rowSc1, incomeTypes)
-                      const effItId      = rowIncomeTypes[ri] !== undefined ? rowIncomeTypes[ri] : (autoIt?.id ?? '')
-                      const isAutoIt     = rowIncomeTypes[ri] === undefined && !!effItId
-                      const itColor      = incomeTypes.find(t => t.id === effItId)?.color
-                      return (
-                        <div key={ri} className="divide-y divide-gray-50">
-                          <div className="grid grid-cols-[24px_1fr_68px_90px_110px_110px] items-center px-3 py-1.5 gap-2 text-xs">
-                            <span className="text-gray-400 font-mono text-right">{ri + 1}</span>
-                            <span className="text-gray-600 truncate">{date || rowDesc || '—'}</span>
-                            <span className="text-gray-700 font-medium text-right">₦{amt.toLocaleString()}</span>
-                            <select
-                              value={effectiveType}
-                              onChange={e => {
-                                const val = e.target.value
-                                setRowTxnTypes(prev => {
-                                  const next = { ...prev }
-                                  if (val === batchTxnType) { delete next[ri] } else { next[ri] = val }
-                                  return next
-                                })
-                              }}
-                              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                            >
-                              {TXN_TYPE_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                            <div className="relative">
-                              {itColor && (
-                                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none" style={{ backgroundColor: itColor }} />
-                              )}
-                              <select
-                                value={effItId}
-                                onChange={e => {
-                                  const val = e.target.value
-                                  setRowIncomeTypes(prev => ({ ...prev, [ri]: val }))
-                                  const linked = incomeTypes.find(t => t.id === val)?.special_config_id
-                                  if (linked) setRowConfigs(prev => ({ ...prev, [ri]: linked }))
-                                }}
-                                className={`text-xs px-1.5 py-1 border rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full ${itColor ? 'pl-5' : ''} ${isAutoIt ? 'border-primary/40' : 'border-gray-200'}`}
-                              >
-                                <option value="">— None —</option>
-                                {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                              </select>
-                              {isAutoIt && <Sparkles className="absolute right-4 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-primary pointer-events-none" />}
-                            </div>
-                            <select
-                              value={selId}
-                              onChange={e => {
-                                if (e.target.value === '__create_new__') {
-                                  setCreateConfigPendingRow(ri)
-                                  setCreateConfigOpen(true)
-                                } else {
-                                  setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
-                                }
-                              }}
-                              className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                            >
-                              <option value="">General (date-based)</option>
-                              {specialConfigs.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                              <option value="__create_new__">＋ Create New Config…</option>
-                            </select>
-                          </div>
-                          {(effectiveType === 'refund' || effectiveType === 'reversal') && (
-                            <div className="px-3 pb-1.5 pt-0.5 flex items-center gap-2 text-xs bg-amber-50/50">
-                              <span className="w-6 shrink-0" />
-                              <span className="text-gray-500 shrink-0">Original Txn ID:</span>
-                              <input
-                                type="text"
-                                value={rowOrigTxnIds[ri] ?? ''}
-                                onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
-                                placeholder="Enter original transaction ID…"
-                                className="flex-1 text-xs px-2 py-0.5 border border-amber-200 rounded outline-none focus:ring-2 focus:ring-amber-300/50 bg-white"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })()}
 
             {/* D12: In-wizard dup check results */}
             {wizardDupLoading && (
@@ -1857,54 +1566,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               )
             })()}
 
-            {/* Date conflict resolution */}
-            {pendingConflicts.length > 0 && (() => {
-              const conflict = pendingConflicts[0]
-              return (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-semibold text-amber-800">Date format conflict on row {conflict.rowIndex + 1}</p>
-                      <p className="text-xs text-amber-700 mt-0.5">
-                        Declared format is <strong>DD/MM/YYYY</strong>, but <code className="font-mono bg-amber-100 px-1 rounded">{conflict.rawValue}</code> has{' '}
-                        <strong>{conflict.rawValue.split('/')[1]}</strong> in the month position — not a valid month.
-                        {pendingConflicts.length > 1 && ` (${pendingConflicts.length} conflicts remaining)`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5 pl-6">
-                    {([
-                      { value: 'all',  label: 'Switch to MM/DD/YYYY for all rows' },
-                      { value: 'row',  label: `Treat row ${conflict.rowIndex + 1} alone as MM/DD/YYYY` },
-                      { value: 'skip', label: `Skip row ${conflict.rowIndex + 1}` },
-                    ] as const).map(opt => (
-                      <label key={opt.value} className="flex items-center gap-2 cursor-pointer select-none text-sm text-amber-800">
-                        <input
-                          type="radio"
-                          name="conflictResolution"
-                          value={opt.value}
-                          checked={conflictResolution === opt.value}
-                          onChange={() => setConflictResolution(opt.value)}
-                          className="accent-amber-600"
-                        />
-                        {opt.label}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleConflictApply}
-                      className="px-4 py-1.5 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
-                    >
-                      Apply
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
-
             {/* First 3 rows preview mapped */}
             {sheet.rows.slice(0, 3).length > 0 && (
               <div>
@@ -1920,9 +1581,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               {f.label}
                             </th>
                           ))}
-                        {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-                          <th className="px-3 py-2 text-left font-semibold text-primary whitespace-nowrap">Bank</th>
-                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1933,20 +1591,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             .map(f => {
                               const colIdx = sheet.headers.findIndex(h => mapping[h] === f.key)
                               const val = colIdx >= 0 ? row[colIdx] : ''
-                              const display = f.key === 'date' ? (parseDate(val, dateFormat) ?? String(val)) : String(val ?? '')
+                              const display = f.key === 'date' ? (parseDate(val) ?? String(val)) : String(val ?? '')
                               return (
                                 <td key={f.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap border-r border-gray-50 last:border-0 max-w-[120px] truncate">
                                   {display}
                                 </td>
                               )
                             })}
-                          {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-                            <td className="px-3 py-1.5 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
-                                {bank.name}
-                              </span>
-                            </td>
-                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1987,14 +1638,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <div className="text-sm space-y-1">
                   <div className="text-success">✓ {result.imported.toLocaleString()} rows imported</div>
                   {result.skipped > 0 && <div className="text-amber-600">⚠ {result.skipped} rows skipped</div>}
-                  {bank && (targetTable === 'inflow_transactions' || targetTable === 'outflow_transactions') && (
-                    <div className="flex items-center gap-1.5 text-gray-600 pt-1">
-                      <span className="text-xs">Bank:</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-                        {bank.name}
-                      </span>
-                    </div>
-                  )}
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
@@ -2008,9 +1651,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             {!result ? (
               <NavButtons
                 step={step}
-                onBack={() => setStep(3)}
-                onNext={handleStartImport}
-                nextDisabled={importing || wizardDupLoading || pendingConflicts.length > 0 || (targetTable === 'fx_transactions' && !fxCurrency)}
+                onBack={() => setStep(targetTable === 'bank_statement' ? 4 : 3)}
+                onNext={runImport}
+                nextDisabled={importing || wizardDupLoading || !internalBank}
                 nextLabel={importing ? 'Importing…' : 'Start Import'}
                 nextLoading={importing || wizardDupLoading}
               />
@@ -2036,14 +1679,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     </Modal>
 
     <CreateSpecialConfigModal
-      open={createConfigOpen}
-      onClose={() => setCreateConfigOpen(false)}
+      open={createConfigOpen || createConfigPendingRow !== null}
+      onClose={() => { setCreateConfigOpen(false); setCreateConfigPendingRow(null) }}
       onSaved={cfg => {
         setSpecialConfigs(prev => [...prev, cfg])
-        if (createConfigPendingRow !== null) {
+        if (createConfigPendingRow === 'apply') {
+          setApplyInflowConfig(cfg.id)
+        } else if (typeof createConfigPendingRow === 'number') {
           setRowConfigs(prev => ({ ...prev, [createConfigPendingRow]: cfg.id }))
-          setCreateConfigPendingRow(null)
         }
+        setCreateConfigPendingRow(null)
         setCreateConfigOpen(false)
       }}
     />
