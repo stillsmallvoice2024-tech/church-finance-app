@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
+export interface StartingBalanceRow {
+  category_name:  string
+  budget_portion: string
+  percentage?:    number
+  amount?:        number
+}
+
 export interface DbBank {
   id:             string
   name:           string
@@ -9,6 +16,7 @@ export interface DbBank {
   starting_balance:               number | null
   starting_balance_category:      string | null
   starting_balance_budget_portion: string | null
+  starting_balance_allocations:   StartingBalanceRow[]
   created_at:     string
 }
 

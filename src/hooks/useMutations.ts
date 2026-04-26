@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import type { InflowType } from '../utils/inflowTypes'
+import type { StartingBalanceRow } from './useBanks'
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
 
@@ -679,6 +680,8 @@ export interface AddBankInput {
   starting_balance?:               number
   starting_balance_category?:      string
   starting_balance_budget_portion?: string
+  starting_balance_alloc_type?:    'percentage' | 'amount'
+  starting_balance_allocations?:   StartingBalanceRow[]
 }
 
 export function useAddBank(): MutationHook<AddBankInput, string> {
@@ -714,6 +717,8 @@ export interface UpdateBankInput {
   starting_balance?:               number
   starting_balance_category?:      string
   starting_balance_budget_portion?: string
+  starting_balance_alloc_type?:    'percentage' | 'amount'
+  starting_balance_allocations?:   StartingBalanceRow[]
 }
 
 export function useUpdateBank(): MutationHook<UpdateBankInput> {
@@ -734,6 +739,8 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
           starting_balance:                input.starting_balance               ?? null,
           starting_balance_category:       input.starting_balance_category      ?? null,
           starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+          starting_balance_alloc_type:     input.starting_balance_alloc_type    ?? null,
+          starting_balance_allocations:    input.starting_balance_allocations   ?? [],
         })
         .eq('id', input.id)
       if (err) throw err

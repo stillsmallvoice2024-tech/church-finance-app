@@ -1,40 +1,36 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AlertTriangle, Terminal } from 'lucide-react'
+import { AlertTriangle, Terminal, Plus, Trash2, Check, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
-import { useAddBank, useUpdateBank, type AddBankInput } from '../../hooks/useMutations'
+import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
-import type { DbBank } from '../../hooks/useBanks'
+import type { DbBank, StartingBalanceRow } from '../../hooks/useBanks'
 
 const ACCOUNT_TYPES = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
+const NEW_SENTINEL = '__new__'
 
 const MIGRATION_SQL =
 `ALTER TABLE banks
   ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS starting_balance_category text,
-  ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text;`
+  ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
+  ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
+  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';`
 
 const schema = z.object({
-  name:           z.string().min(1, 'Bank name is required'),
-  account_number: z.string().optional(),
-  account_type:   z.string().optional(),
-  starting_balance:               z.coerce.number().min(0).optional(),
-  starting_balance_category:      z.string().optional(),
-  starting_balance_budget_portion: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if ((data.starting_balance ?? 0) > 0 && !data.starting_balance_category) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Category is required when a starting balance is set',
-      path: ['starting_balance_category'],
-    })
-  }
+  name:             z.string().min(1, 'Bank name is required'),
+  account_number:   z.string().optional(),
+  account_type:     z.string().optional(),
+  starting_balance: z.coerce.number().min(0).optional(),
 })
 
 type FormValues = z.infer<typeof schema>
+type AllocType  = 'percentage' | 'amount'
+interface RowDraft { category_name: string; budget_portion: string; value: string }
+interface NewCatMode { rowIndex: number; draft: string; saving: boolean; error: string | null }
 
 interface Props {
   open:        boolean
@@ -45,16 +41,24 @@ interface Props {
 
 export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
-  const { categories } = useCategories()
+  const { categories, refetch: refetchCategories } = useCategories()
 
   const addMutation    = useAddBank()
   const updateMutation = useUpdateBank()
+  const addCatMutation = useAddCategory()
 
-  const { mutate: add,    loading: adding,   error: addError,    reset: resetAdd    } = addMutation
-  const { mutate: update, loading: updating, error: updateError, reset: resetUpdate } = updateMutation
+  const { mutate: add,         loading: adding,   error: addError,    reset: resetAdd    } = addMutation
+  const { mutate: update,      loading: updating, error: updateError, reset: resetUpdate } = updateMutation
+  const { mutate: addCategory                                                             } = addCatMutation
 
   const loading = adding || updating
   const error   = addError || updateError
+
+  const [allocType,  setAllocType]  = useState<AllocType>('percentage')
+  const [rows,       setRows]       = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '' }])
+  const [allocError, setAllocError] = useState<string | null>(null)
+  const [newCatMode, setNewCatMode] = useState<NewCatMode | null>(null)
+  const newCatInputRef = useRef<HTMLInputElement>(null)
 
   const { register, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -62,34 +66,115 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   })
 
   const startingBalance = watch('starting_balance')
-  const hasBalance = (startingBalance ?? 0) > 0
+  const hasBalance      = (startingBalance ?? 0) > 0
+
+  const runningTotal = rows.reduce((s, r) => s + (parseFloat(r.value) || 0), 0)
+  const target       = allocType === 'percentage' ? 100 : (startingBalance ?? 0)
+  const balanced     = !hasBalance || (target > 0 && Math.abs(runningTotal - target) < 0.01)
+
+  const addRow      = () => setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '' }])
+  const removeRow   = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i))
+  const setRowField = (i: number, field: keyof RowDraft, val: string) =>
+    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+
+  // Focus the new-category input whenever it appears
+  useEffect(() => {
+    if (newCatMode) setTimeout(() => newCatInputRef.current?.focus(), 0)
+  }, [newCatMode?.rowIndex])
 
   useEffect(() => {
     if (!open) return
     resetAdd()
     resetUpdate()
+    setAllocError(null)
+    setNewCatMode(null)
     if (editRecord) {
       resetForm({
-        name:           editRecord.name,
-        account_number: editRecord.account_number ?? '',
-        account_type:   editRecord.account_type   ?? '',
-        starting_balance:               editRecord.starting_balance               ?? undefined,
-        starting_balance_category:      editRecord.starting_balance_category      ?? '',
-        starting_balance_budget_portion: editRecord.starting_balance_budget_portion ?? '',
+        name:             editRecord.name,
+        account_number:   editRecord.account_number ?? '',
+        account_type:     editRecord.account_type   ?? '',
+        starting_balance: editRecord.starting_balance ?? undefined,
       })
+      const allocs = editRecord.starting_balance_allocations ?? []
+      if (allocs.length > 0) {
+        const usesPercent = allocs[0].percentage !== undefined
+        setAllocType(usesPercent ? 'percentage' : 'amount')
+        setRows(allocs.map(r => ({
+          category_name:  r.category_name,
+          budget_portion: r.budget_portion,
+          value:          String(usesPercent ? (r.percentage ?? '') : (r.amount ?? '')),
+        })))
+      } else if (editRecord.starting_balance_category) {
+        // backward-compat: legacy single-field bank
+        setAllocType('percentage')
+        setRows([{
+          category_name:  editRecord.starting_balance_category,
+          budget_portion: editRecord.starting_balance_budget_portion ?? '',
+          value:          '',
+        }])
+      } else {
+        setAllocType('percentage')
+        setRows([{ category_name: '', budget_portion: '', value: '' }])
+      }
     } else {
       resetForm({ name: '', account_number: '', account_type: '' })
+      setAllocType('percentage')
+      setRows([{ category_name: '', budget_portion: '', value: '' }])
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
+  const confirmNewCategory = async (rowIndex: number) => {
+    if (!newCatMode) return
+    const name = newCatMode.draft.trim()
+    if (!name) return
+    setNewCatMode(prev => prev ? { ...prev, saving: true, error: null } : null)
+    try {
+      await addCategory({ name })
+      await refetchCategories()
+      setRowField(rowIndex, 'category_name', name)
+      setNewCatMode(null)
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message ?? 'Failed to create category'
+      setNewCatMode(prev => prev ? { ...prev, saving: false, error: msg } : null)
+    }
+  }
+
   const onSubmit = async (values: FormValues) => {
+    setAllocError(null)
+    if (hasBalance) {
+      const validRows = rows.filter(r => r.category_name && r.budget_portion && parseFloat(r.value) > 0)
+      if (validRows.length === 0) {
+        setAllocError('Add at least one complete allocation row')
+        return
+      }
+      if (!balanced) {
+        setAllocError(
+          allocType === 'percentage'
+            ? `Allocations total ${runningTotal.toFixed(1)}% — must equal 100%`
+            : `Allocations total ₦${runningTotal.toLocaleString()} — must equal starting balance ₦${(values.starting_balance ?? 0).toLocaleString()}`
+        )
+        return
+      }
+    }
+
+    const validRows = rows.filter(r => r.category_name && r.budget_portion && parseFloat(r.value) > 0)
+    const allocations: StartingBalanceRow[] = hasBalance
+      ? validRows.map(r => ({
+          category_name:  r.category_name,
+          budget_portion: r.budget_portion,
+          ...(allocType === 'percentage'
+            ? { percentage: parseFloat(r.value) }
+            : { amount: parseFloat(r.value) }),
+        }))
+      : []
+
     const payload: AddBankInput = {
       name:           values.name,
       account_number: values.account_number || undefined,
       account_type:   values.account_type   || undefined,
-      starting_balance:               values.starting_balance               || undefined,
-      starting_balance_category:      values.starting_balance_category      || undefined,
-      starting_balance_budget_portion: values.starting_balance_budget_portion || undefined,
+      starting_balance:             values.starting_balance || undefined,
+      starting_balance_alloc_type:  hasBalance ? allocType : undefined,
+      starting_balance_allocations: allocations,
     }
     try {
       if (isEdit && editRecord) {
@@ -169,34 +254,168 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             />
           </Field>
 
-          <Field
-            label={`Category${hasBalance ? ' *' : ''}`}
-            error={errors.starting_balance_category?.message}
-          >
-            <select
-              {...register('starting_balance_category')}
-              className={`${iCls(!!errors.starting_balance_category)} bg-white`}
-              disabled={!hasBalance}
-            >
-              <option value="">— Select category —</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-          </Field>
+          {hasBalance && (
+            <div className="space-y-3 pt-1">
 
-          <Field label="Budget Portion" error={errors.starting_balance_budget_portion?.message}>
-            <select
-              {...register('starting_balance_budget_portion')}
-              className={`${iCls(!!errors.starting_balance_budget_portion)} bg-white`}
-              disabled={!hasBalance}
-            >
-              <option value="">— Select portion —</option>
-              {BUDGET_PORTIONS.map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </Field>
+              {/* Allocation type toggle */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Allocation Type</label>
+                <div className="flex gap-2">
+                  {(['percentage', 'amount'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setAllocType(t)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                        allocType === t
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
+                      }`}
+                    >
+                      {t === 'percentage' ? 'Percentage %' : 'Amount ₦'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Row builder */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-gray-600">Allocations *</label>
+                  <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
+                    {allocType === 'percentage'
+                      ? `${runningTotal.toFixed(1)} / 100%`
+                      : `₦${runningTotal.toLocaleString()} / ₦${(startingBalance ?? 0).toLocaleString()}`}
+                  </span>
+                </div>
+
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                    <span>Category</span>
+                    <span>Portion</span>
+                    <span>{allocType === 'percentage' ? '%' : '₦'}</span>
+                    <span />
+                  </div>
+                  <div className="divide-y divide-gray-100 max-h-52 overflow-y-auto">
+                    {rows.map((row, i) => {
+                      const inNewMode = newCatMode?.rowIndex === i
+                      return (
+                        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] items-center px-3 py-1.5 gap-2">
+
+                          {/* Category cell — select or inline-create */}
+                          {inNewMode ? (
+                            <div className="flex items-center gap-1 min-w-0">
+                              <input
+                                ref={newCatInputRef}
+                                type="text"
+                                value={newCatMode!.draft}
+                                onChange={e => setNewCatMode(prev => prev ? { ...prev, draft: e.target.value } : null)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); confirmNewCategory(i) }
+                                  if (e.key === 'Escape') setNewCatMode(null)
+                                }}
+                                placeholder="Category name"
+                                disabled={newCatMode!.saving}
+                                className="text-xs px-2 py-1.5 border border-primary rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0 flex-1"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => confirmNewCategory(i)}
+                                disabled={!newCatMode!.draft.trim() || newCatMode!.saving}
+                                className="p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-40 transition-colors shrink-0"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setNewCatMode(null)}
+                                disabled={newCatMode!.saving}
+                                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <select
+                              value={row.category_name}
+                              onChange={e => {
+                                if (e.target.value === NEW_SENTINEL) {
+                                  setNewCatMode({ rowIndex: i, draft: '', saving: false, error: null })
+                                } else {
+                                  setRowField(i, 'category_name', e.target.value)
+                                }
+                              }}
+                              className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
+                            >
+                              <option value="">— Category —</option>
+                              {categories.map(c => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                              ))}
+                              <option value={NEW_SENTINEL}>+ New category…</option>
+                            </select>
+                          )}
+
+                          <select
+                            value={row.budget_portion}
+                            onChange={e => setRowField(i, 'budget_portion', e.target.value)}
+                            className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
+                          >
+                            <option value="">— Portion —</option>
+                            {BUDGET_PORTIONS.map(p => (
+                              <option key={p} value={p}>{p}</option>
+                            ))}
+                          </select>
+
+                          <input
+                            type="number"
+                            min="0"
+                            step={allocType === 'percentage' ? '0.01' : '1'}
+                            value={row.value}
+                            onChange={e => setRowField(i, 'value', e.target.value)}
+                            placeholder={allocType === 'percentage' ? '0.00' : '0'}
+                            className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => removeRow(i)}
+                            className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Inline new-category error */}
+                {newCatMode?.error && (
+                  <p className="text-xs text-red-500">{newCatMode.error}</p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={addRow}
+                  className="flex items-center gap-1.5 text-xs text-primary hover:text-primary-light font-medium"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add row
+                </button>
+              </div>
+
+              {/* Allocation error / imbalance warning */}
+              {(allocError || (!balanced && runningTotal > 0)) && (
+                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  {allocError ?? (
+                    allocType === 'percentage'
+                      ? `Total is ${runningTotal.toFixed(1)}% — must equal 100%`
+                      : `Total ₦${runningTotal.toLocaleString()} doesn't match starting balance ₦${(startingBalance ?? 0).toLocaleString()}`
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
@@ -210,7 +429,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           </button>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (hasBalance && !balanced)}
             className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
           >
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
