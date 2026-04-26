@@ -91,14 +91,12 @@ export interface AddOutflowInput {
 export interface AddIntraFlowInput {
   date: string
   account_from: string
+  account_from_stage2: string
   account_to: string
+  account_to_stage2: string
   total_amount: number
   description?: string
   transaction_ref?: string
-  account_from_stage1?: string
-  account_from_stage2?: string
-  account_to_stage1?: string
-  account_to_stage2?: string
   remark?: string
 }
 
