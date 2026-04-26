@@ -11,6 +11,8 @@ import { useAllocationStore, type AllocationConfig } from '../store/allocationSt
 import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
 import { CreateSpecialConfigModal } from '../components/modals/CreateSpecialConfigModal'
 import { ResetDataModal }           from '../components/modals/ResetDataModal'
+import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeModal'
+import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
 import {
   useLockAllocationConfig,
   useUnlockAllocationConfig,
@@ -19,7 +21,7 @@ import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Database'] as const
+const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Database'] as const
 type Tab = typeof TABS[number]
 
 // ── General tab ────────────────────────────────────────────────────────────────
@@ -508,6 +510,94 @@ CREATE TABLE IF NOT EXISTS intrabank_transfers (
   created_at          timestamptz DEFAULT now()
 );`
 
+// ── Income Types tab ───────────────────────────────────────────────────────────
+
+function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
+  onAdd:    () => void
+  onEdit:   (t: IncomeType) => void
+  onDelete: (t: IncomeType) => void
+}) {
+  const { incomeTypes, loading, error } = useIncomeTypes()
+
+  if (loading) return (
+    <div className="max-w-2xl space-y-2">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+      ))}
+    </div>
+  )
+
+  if (error && !/income_types|relation.*does not exist/i.test(error)) return (
+    <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 max-w-2xl">
+      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+    </div>
+  )
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      {/* Migration hint */}
+      {error && /income_types|relation.*does not exist/i.test(error) && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>The <code className="font-mono text-xs">income_types</code> table doesn't exist yet. Add an income type to see the migration SQL.</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">Define custom income types with auto-recognition rules.</p>
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Income Type
+        </button>
+      </div>
+
+      {incomeTypes.length === 0 && !error ? (
+        <div className="py-12 flex flex-col items-center gap-3 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+          <Layers className="w-10 h-10 text-gray-200" />
+          <p className="text-sm">No income types yet. Add one to get started.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {incomeTypes.map(t => (
+            <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
+              {/* Color swatch */}
+              <div className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ backgroundColor: t.color }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
+                {/* Rules summary */}
+                {t.rules.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {t.rules.map(r => (
+                      <span key={r.id} className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        <span className="text-gray-400">{r.rule_type === 'keyword' ? 'kw:' : 'sc:'}</span>
+                        {r.rule_value}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {t.special_config_name && (
+                  <p className="text-[11px] text-primary mt-1">↳ Auto-applies: {t.special_config_name}</p>
+                )}
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DatabaseTab() {
   const [copied, setCopied] = useState(false)
 
@@ -574,7 +664,11 @@ export default function SetupPage() {
   const [editSpecialRecord, setEditSpecialRecord] = useState<AllocationConfig | null>(null)
   const [deleteSpecialTarget, setDeleteSpecialTarget] = useState<AllocationConfig | null>(null)
   const [specialRefetch,   setSpecialRefetch]   = useState(0)
-  const [resetModalOpen,   setResetModalOpen]   = useState(false)
+  const [resetModalOpen,       setResetModalOpen]       = useState(false)
+  const [incomeTypeModalOpen,  setIncomeTypeModalOpen]  = useState(false)
+  const [editIncomeType,       setEditIncomeType]       = useState<IncomeType | null>(null)
+  const [deleteIncomeTypeTarget, setDeleteIncomeTypeTarget] = useState<IncomeType | null>(null)
+  const [incomeTypeRefetch,    setIncomeTypeRefetch]    = useState(0)
   const { configs, reload: reloadAllocs } = useAllocationStore()
 
   const { push: toast } = useToastStore()
@@ -687,6 +781,14 @@ export default function SetupPage() {
               onNew={() => { setEditSpecialRecord(null); setSpecialModalOpen(true) }}
               onEdit={c => { setEditSpecialRecord(c); setSpecialModalOpen(true) }}
               onDelete={c => setDeleteSpecialTarget(c)}
+            />
+          )}
+          {activeTab === 'Income Types' && (
+            <IncomeTypesTab
+              key={incomeTypeRefetch}
+              onAdd={() => { setEditIncomeType(null); setIncomeTypeModalOpen(true) }}
+              onEdit={t => { setEditIncomeType(t); setIncomeTypeModalOpen(true) }}
+              onDelete={t => setDeleteIncomeTypeTarget(t)}
             />
           )}
           {activeTab === 'Database'       && <DatabaseTab />}
@@ -829,6 +931,29 @@ export default function SetupPage() {
         open={resetModalOpen}
         onClose={() => setResetModalOpen(false)}
         onDone={() => toast('All data deleted successfully', 'success')}
+      />
+      <AddIncomeTypeModal
+        open={incomeTypeModalOpen}
+        onClose={() => { setIncomeTypeModalOpen(false); setEditIncomeType(null) }}
+        onSaved={() => { setIncomeTypeModalOpen(false); setEditIncomeType(null); setIncomeTypeRefetch(n => n + 1) }}
+        editRecord={editIncomeType}
+      />
+      <DeleteDialog
+        open={!!deleteIncomeTypeTarget}
+        onClose={() => setDeleteIncomeTypeTarget(null)}
+        onConfirm={async () => {
+          if (!deleteIncomeTypeTarget) return
+          try {
+            await deleteIncomeType(deleteIncomeTypeTarget.id)
+            setDeleteIncomeTypeTarget(null)
+            setIncomeTypeRefetch(n => n + 1)
+            toast('Income type deleted', 'success')
+          } catch (e) {
+            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+          }
+        }}
+        loading={false}
+        label={deleteIncomeTypeTarget ? `"${deleteIncomeTypeTarget.name}"` : 'this income type'}
       />
     </>
   )

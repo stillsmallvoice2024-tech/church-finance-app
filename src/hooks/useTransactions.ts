@@ -19,6 +19,7 @@ export interface InflowTransaction {
   fx_currency: string | null
   transaction_type: string | null
   original_transaction_id: string | null
+  income_type_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string

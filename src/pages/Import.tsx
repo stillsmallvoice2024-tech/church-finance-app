@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import {
   Upload, PenLine, FileSpreadsheet, FileText,
   CheckCircle2, AlertTriangle, Loader2, X,
-  TrendingUp, TrendingDown,
+  TrendingUp, TrendingDown, Sparkles,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -19,6 +19,8 @@ import { formatDate } from '../utils/formatters'
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../utils/inflowTypes'
+import { useIncomeTypes } from '../hooks/useIncomeTypes'
+import { classifyIncomeType } from '../utils/classifyIncomeType'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -457,12 +459,16 @@ function ManualEntryForm() {
 
   useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
+  const { incomeTypes } = useIncomeTypes()
+
   // Direction toggle
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
 
   // Inflow-specific state
   const [inflowType, setInflowType]           = useState<InflowType>('general_giving')
   const [typeManuallySet, setTypeManuallySet] = useState(false)
+  const [incomeTypeId,    setIncomeTypeId]    = useState('')
+  const [incomeTypeAutoSet, setIncomeTypeAutoSet] = useState(false)
 
   // Outflow-specific state
   const [isPending, setIsPending] = useState(false)
@@ -481,7 +487,16 @@ function ManualEntryForm() {
   const [saving, setSaving]                 = useState(false)
 
   const set = (key: string, val: string) => {
-    setFields(prev => ({ ...prev, [key]: val }))
+    setFields(prev => {
+      const next = { ...prev, [key]: val }
+      if (direction === 'inflow' && !incomeTypeAutoSet && (key === 'description' || key === 'stage_code_1')) {
+        const desc  = key === 'description' ? val : (next.description ?? '')
+        const stage = key === 'stage_code_1' ? val : (next.stage_code_1 ?? '')
+        const match = classifyIncomeType(desc, stage, incomeTypes)
+        setIncomeTypeId(match ? match.id : '')
+      }
+      return next
+    })
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }))
     if (key === 'description' && direction === 'inflow' && !typeManuallySet) {
       setInflowType(autoAssignInflowType(val))
@@ -494,6 +509,8 @@ function ManualEntryForm() {
     setErrors({})
     setInflowType('general_giving')
     setTypeManuallySet(false)
+    setIncomeTypeId('')
+    setIncomeTypeAutoSet(false)
     setIsPending(false)
     setDupWarning(null)
     setPendingSave(null)
@@ -526,23 +543,29 @@ function ManualEntryForm() {
   const doSaveInflow = async () => {
     setSaving(true)
     try {
+      const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
+      const configId = selectedIncomeType?.special_config_id
+        ?? getConfigForDate(configs, v('date'))?.id
       await addInflow.mutate({
         date:                       v('date'),
         amount:                     parseFloat(v('amount')),
         inflow_type:                inflowType,
         description:                v('description')               || undefined,
         bank_id:                    v('bank_id')                   || undefined,
-        allocation_config_id:       getConfigForDate(configs, v('date'))?.id,
+        allocation_config_id:       configId,
         stage_code_1:               v('stage_code_1')              || undefined,
         stage_code_2:               v('stage_code_2')              || undefined,
         transaction_ref:            v('transaction_ref')           || undefined,
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
+        income_type_id:             incomeTypeId                   || undefined,
       })
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setInflowType('general_giving')
       setTypeManuallySet(false)
+      setIncomeTypeId('')
+      setIncomeTypeAutoSet(false)
       setErrors({})
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error')
@@ -737,6 +760,30 @@ function ManualEntryForm() {
               <p className="text-[10px] text-gray-400 mt-1">Auto-assigned from description · click to change</p>
             )}
           </Field>
+
+          {/* Income Type */}
+          {incomeTypes.length > 0 && (
+            <Field label="Income Type">
+              <div className="space-y-1">
+                <select
+                  value={incomeTypeId}
+                  onChange={e => { setIncomeTypeId(e.target.value); setIncomeTypeAutoSet(!!e.target.value) }}
+                  className={iCls}
+                >
+                  <option value="">— Unclassified —</option>
+                  {incomeTypes.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {incomeTypeId && !incomeTypeAutoSet && (
+                  <p className="text-[10px] flex items-center gap-1 text-indigo-500">
+                    <Sparkles className="w-3 h-3" />
+                    Auto-detected · change above to override
+                  </p>
+                )}
+              </div>
+            </Field>
+          )}
 
           {/* Stage Code 1 + 2 */}
           <div className="grid grid-cols-2 gap-4">

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
-  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2,
+  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2, Sparkles,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
@@ -11,6 +11,8 @@ import { useAuthStore } from '../../store/authStore'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
+import { useIncomeTypes } from '../../hooks/useIncomeTypes'
+import { classifyIncomeType } from '../../utils/classifyIncomeType'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -249,6 +251,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const { banks: bankList } = useBanks()
   const [internalBank, setInternalBank] = useState<{ id: string; name: string } | null>(bank ?? null)
 
+  // Income types for auto-classify + per-row picker
+  const { incomeTypes } = useIncomeTypes()
+
   // Sync bank prop → internalBank when parent provides/updates it (e.g. async bank data load)
   useEffect(() => {
     if (bank) setInternalBank(bank)
@@ -282,6 +287,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [applyInflowConfig, setApplyInflowConfig] = useState('')
   const [applyS1,           setApplyS1]           = useState('')
   const [applyS2,           setApplyS2]           = useState('')
+  const [applyIncomeType,   setApplyIncomeType]   = useState('')
+
+  // Per-row income type overrides (rowIndex → incomeTypeId)
+  const [rowIncomeTypes, setRowIncomeTypes] = useState<Record<number, string>>({})
 
   // In-wizard dup check
   const [wizardDupLoading, setWizardDupLoading] = useState(false)
@@ -331,6 +340,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setApplyInflowConfig('')
     setApplyS1('')
     setApplyS2('')
+    setApplyIncomeType('')
+    setRowIncomeTypes({})
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
@@ -551,10 +562,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
-          // Per-row config override from Step 4; fall back to date-based config
+          // Resolve income type: per-row override → auto-classify
+          const effIncomeTypeId = rowIncomeTypes[ri]
+            ?? (desc ? classifyIncomeType(desc, '', incomeTypes)?.id : undefined)
+          if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
+          // Resolve config: per-row override → income type's linked config → date-based config
           const overrideCfgId = rowConfigs[ri]
+          const linkedCfgId   = effIncomeTypeId
+            ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
+            : null
           if (overrideCfgId) {
             row.allocation_config_id = overrideCfgId
+          } else if (linkedCfgId) {
+            row.allocation_config_id = linkedCfgId
           } else if (cfg) {
             row.allocation_config_id = cfg.id
           }
@@ -692,7 +712,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
       dateFormat, fxCurrency, batchPendingDeduction,
       rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
-      skipWizardDups, wizardDupsFound, internalBank])
+      skipWizardDups, wizardDupsFound, internalBank,
+      rowIncomeTypes, incomeTypes])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -1129,12 +1150,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           if (e.target.value === '__create__') { setCreateConfigPendingRow('apply'); setApplyInflowConfig('') }
                           else setApplyInflowConfig(e.target.value)
                         }}
-                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[140px]">
+                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
                         <option value="">— Allocation Config —</option>
                         <option value="__general__">General (date-based)</option>
                         {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         <option value="__create__">＋ Create New Config…</option>
                       </select>
+                      {incomeTypes.length > 0 && (
+                        <select value={applyIncomeType} onChange={e => setApplyIncomeType(e.target.value)}
+                          className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[110px]">
+                          <option value="">— Income Type —</option>
+                          {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      )}
                       <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
                         className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                         <option value="">— Type —</option>
@@ -1142,7 +1170,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       </select>
                       <button
                         type="button"
-                        disabled={!applyInflowConfig && !batchTxnType}
+                        disabled={!applyInflowConfig && !applyIncomeType && !batchTxnType}
                         onClick={() => {
                           setRowConfigs(prev => {
                             const next = { ...prev }
@@ -1152,6 +1180,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             }
                             return next
                           })
+                          if (applyIncomeType) {
+                            setRowIncomeTypes(prev => {
+                              const next = { ...prev }
+                              for (const { ri } of filtered) next[ri] = applyIncomeType
+                              return next
+                            })
+                          }
                           if (batchTxnType !== '') {
                             setRowTxnTypes(prev => {
                               const next = { ...prev }
@@ -1168,8 +1203,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
                     {/* Row table */}
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="grid grid-cols-[40px_1fr_80px_160px_110px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
-                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Type</span>
+                      <div className="grid grid-cols-[36px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Income Type</span><span>Type</span>
                       </div>
                       <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                         {filtered.length === 0
@@ -1180,9 +1215,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               const selId   = rowConfigs[ri] ?? ''
                               const txnType = rowTxnTypes[ri] ?? ''
                               const origId  = rowOrigTxnIds[ri] ?? ''
+                              const autoType = desc ? classifyIncomeType(desc, '', incomeTypes) : null
+                              const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
+                              const effIncomeType = incomeTypes.find(t => t.id === effIncomeTypeId)
                               return (
                                 <div key={ri}>
-                                  <div className="grid grid-cols-[40px_1fr_80px_160px_110px] items-center px-3 py-2 gap-2 text-xs">
+                                  <div className="grid grid-cols-[36px_1fr_72px_120px_120px_96px] items-center px-3 py-2 gap-2 text-xs">
                                     <span className="text-gray-400 font-mono">{ri + 1}</span>
                                     <div className="min-w-0">
                                       <div className="text-gray-700 truncate">{desc || '—'}</div>
@@ -1199,6 +1237,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                       <option value="__create__">＋ Create New Config…</option>
                                     </select>
+                                    <div className="relative">
+                                      <select
+                                        value={effIncomeTypeId}
+                                        onChange={e => setRowIncomeTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
+                                      >
+                                        <option value="">— None —</option>
+                                        {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                      </select>
+                                      {autoType && !rowIncomeTypes[ri] && (
+                                        <Sparkles className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-400" />
+                                      )}
+                                      {effIncomeType && (
+                                        <span
+                                          className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                                          style={{ background: effIncomeType.color }}
+                                        />
+                                      )}
+                                    </div>
                                     <select value={txnType}
                                       onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
