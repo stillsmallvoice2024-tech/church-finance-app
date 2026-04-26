@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
@@ -10,6 +10,8 @@ import { useAllocationStore, getConfigForDate } from '../../store/allocationStor
 import {
   INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
 } from '../../utils/inflowTypes'
+import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
+import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
@@ -64,6 +66,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   useEffect(() => { fetchAllocConfigs() }, [fetchAllocConfigs])
   const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
 
+  const { incomeTypes } = useIncomeTypes()
+
   const addMutation    = useAddInflow()
   const updateMutation = useUpdateTransaction('inflow_transactions')
 
@@ -79,6 +83,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const [configManuallySet, setConfigManuallySet] = useState(false)
   const [fxOpen,            setFxOpen]            = useState(false)
 
+  // Custom income type (user-defined, separate from the legacy inflowType)
+  const [incomeTypeId,        setIncomeTypeId]        = useState<string>('')
+  const [incomeTypeAutoSet,   setIncomeTypeAutoSet]   = useState(false)
+
+  const selectedIncomeType: IncomeType | null =
+    incomeTypes.find(t => t.id === incomeTypeId) ?? null
+
   const {
     register,
     handleSubmit,
@@ -89,10 +100,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   const description     = watch('description')
+  const stageCode1      = watch('stage_code_1')
   const transactionType = watch('transaction_type')
   const watchedDate     = watch('date')
 
-  // Auto-assign type when description changes (only if user hasn't manually changed it)
+  // Auto-assign legacy inflow type from description
   const [typeManuallySet, setTypeManuallySet] = useState(false)
   useEffect(() => {
     if (!typeManuallySet && description) {
@@ -100,9 +112,39 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     }
   }, [description, typeManuallySet])
 
-  // Auto-select allocation config by date (unless manually overridden)
+  // Auto-classify income type from description + stage code
+  useEffect(() => {
+    if (incomeTypeId && !incomeTypeAutoSet) return   // manually set — leave it
+    if (!incomeTypes.length) return
+    const match = classifyIncomeType(description ?? '', stageCode1 ?? '', incomeTypes)
+    if (match) {
+      setIncomeTypeId(match.id)
+      setIncomeTypeAutoSet(true)
+    } else if (incomeTypeAutoSet) {
+      // previous auto-match no longer fires — clear it
+      setIncomeTypeId('')
+      setIncomeTypeAutoSet(false)
+    }
+  }, [description, stageCode1, incomeTypes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-apply special config when income type changes (unless config was manually picked)
+  useEffect(() => {
+    if (configManuallySet) return
+    if (selectedIncomeType?.special_config_id) {
+      setSelectedConfigId(selectedIncomeType.special_config_id)
+    } else if (!incomeTypeId) {
+      // income type cleared — fall back to date-based
+      if (watchedDate) {
+        const cfg = getConfigForDate(lockedConfigs, watchedDate)
+        setSelectedConfigId(cfg?.id ?? '')
+      }
+    }
+  }, [incomeTypeId, selectedIncomeType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select allocation config by date (unless manually overridden or income-type config applied)
   useEffect(() => {
     if (configManuallySet || !watchedDate) return
+    if (selectedIncomeType?.special_config_id) return  // income type already set config
     const cfg = getConfigForDate(lockedConfigs, watchedDate)
     setSelectedConfigId(cfg?.id ?? '')
   }, [watchedDate, lockedConfigs, configManuallySet])
@@ -120,12 +162,14 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     resetUpdate()
     setTypeManuallySet(false)
     setConfigManuallySet(false)
+    setIncomeTypeAutoSet(false)
     setFxOpen(false)
     if (editRecord) {
       setInflowType(editRecord.inflow_type ?? 'general_giving')
       setTypeManuallySet(true)
       setSelectedConfigId((editRecord as Record<string, unknown>).allocation_config_id as string ?? '')
       setConfigManuallySet(true)
+      setIncomeTypeId(editRecord.income_type_id ?? '')
       resetForm({
         date:                       editRecord.date,
         amount:                     editRecord.amount,
@@ -145,6 +189,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     } else {
       setInflowType('general_giving')
       setSelectedConfigId('')
+      setIncomeTypeId('')
       resetForm({ date: new Date().toISOString().slice(0, 10), amount: undefined })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
@@ -171,6 +216,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : null,
             transaction_type:           values.transaction_type        || null,
             original_transaction_id:    values.original_transaction_id || null,
+            income_type_id:             incomeTypeId || null,
           },
         })
       } else {
@@ -190,6 +236,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
           transaction_type:           values.transaction_type        || undefined,
           original_transaction_id:    values.original_transaction_id || undefined,
+          income_type_id:             incomeTypeId || undefined,
         }
         await add(input)
       }
@@ -272,22 +319,72 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           )}
         </Field>
 
+        {/* Custom Income Type */}
+        {incomeTypes.length > 0 && (
+          <Field label="Income Type">
+            <div className="flex items-center gap-2">
+              {selectedIncomeType && (
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: selectedIncomeType.color }} />
+              )}
+              <select
+                value={incomeTypeId}
+                onChange={e => {
+                  setIncomeTypeId(e.target.value)
+                  setIncomeTypeAutoSet(false)
+                  // If user manually clears the type, let date-based config take over
+                  if (!e.target.value) setConfigManuallySet(false)
+                }}
+                className={`flex-1 ${inputCls(false)}`}
+              >
+                <option value="">— None —</option>
+                {incomeTypes.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            {incomeTypeAutoSet && incomeTypeId && (
+              <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
+                <Sparkles className="w-3 h-3" /> Auto-suggested from description · click to change
+              </p>
+            )}
+          </Field>
+        )}
+
         {/* Allocation Config */}
         <Field label="Allocation Config">
-          <select
-            value={selectedConfigId}
-            onChange={e => { setSelectedConfigId(e.target.value); setConfigManuallySet(true) }}
-            className={inputCls(false)}
-          >
-            <option value="">Date-based (auto)</option>
-            {lockedConfigs.map(c => (
-              <option key={c.id} value={c.id}>{c.name} — effective {c.start_date}</option>
-            ))}
-          </select>
-          {!selectedConfigId && watchedDate && (
-            <p className="text-[10px] text-gray-400 mt-0.5">
-              Auto: {getConfigForDate(lockedConfigs, watchedDate)?.name ?? 'no config found for this date'}
-            </p>
+          {selectedIncomeType?.special_config_id && !configManuallySet ? (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
+                <span className="text-xs text-primary font-medium">
+                  Auto-applying: {selectedIncomeType.special_config_name ?? 'Special Config'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConfigManuallySet(true)}
+                  className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+                >
+                  Override
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <select
+                value={selectedConfigId}
+                onChange={e => { setSelectedConfigId(e.target.value); setConfigManuallySet(true) }}
+                className={inputCls(false)}
+              >
+                <option value="">Date-based (auto)</option>
+                {lockedConfigs.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} — effective {c.start_date}</option>
+                ))}
+              </select>
+              {!selectedConfigId && watchedDate && (
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  Auto: {getConfigForDate(lockedConfigs, watchedDate)?.name ?? 'no config found for this date'}
+                </p>
+              )}
+            </>
           )}
         </Field>
 
