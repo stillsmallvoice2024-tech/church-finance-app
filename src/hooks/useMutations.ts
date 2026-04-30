@@ -25,6 +25,29 @@ function handleAuthError(err: unknown): void {
  * Write an audit entry. Fire-and-forget so it never blocks the main operation.
  * Console-warns on failure but does NOT surface to the user.
  */
+
+async function logFieldChanges(
+  userId:    string,
+  tableName: string,
+  recordId:  string,
+  oldData:   Record<string, unknown>,
+  newData:   Record<string, unknown>,
+): Promise<void> {
+  const rows = Object.keys(newData)
+    .filter(k => String(oldData[k] ?? '') !== String(newData[k] ?? ''))
+    .map(k => ({
+      user_id:    userId,
+      table_name: tableName,
+      record_id:  recordId,
+      field_name: k,
+      old_value:  oldData[k] != null ? String(oldData[k]) : null,
+      new_value:  newData[k] != null ? String(newData[k]) : null,
+    }))
+  if (rows.length === 0) return
+  const { error } = await supabase.from('field_changes').insert(rows)
+  if (error) console.warn('[field_changes] write failed:', error.message)
+}
+
 async function logAudit({
   userId,
   action,
@@ -295,6 +318,9 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         oldData:   (oldData ?? null) as Record<string, unknown> | null,
         newData:   updates,
       })
+      if (oldData) {
+        logFieldChanges(user.id, table, id, oldData as Record<string, unknown>, updates)
+      }
     } catch (err) {
       const msg = extractMessage(err)
       setError(msg)
