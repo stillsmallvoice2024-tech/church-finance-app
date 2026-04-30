@@ -18,7 +18,7 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
-import { INFLOW_TYPE_LABELS, INFLOW_TYPE_BADGE } from '../utils/inflowTypes'
+import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 
 const PAGE_SIZE = 25
 
@@ -100,6 +100,7 @@ export default function Inflows() {
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('inflow_transactions')
   const { categories } = useCategories()
+  const { incomeTypes } = useIncomeTypes()
 
   usePageTitle('Inflows')
 
@@ -233,7 +234,7 @@ export default function Inflows() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
-                  {['Date', 'Type', 'Description', 'Stage Code 1', 'Stage Code 2', 'Specific Seed', 'Amount (₦)', 'Actions'].map(h => (
+                  {['Date', 'Type', 'Description', 'Amount (₦)', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -242,9 +243,9 @@ export default function Inflows() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
-                  Array.from({ length: 9 }).map((_, i) => (
+                  Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 6 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -253,7 +254,7 @@ export default function Inflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-16 text-center">
+                    <td colSpan={6} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <TrendingUp className="w-10 h-10 text-gray-200" />
                         <p className="text-sm">No inflow transactions match your filters.</p>
@@ -278,14 +279,20 @@ export default function Inflows() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${INFLOW_TYPE_BADGE[row.inflow_type] ?? 'bg-gray-100 text-gray-600'}`}>
-                            {INFLOW_TYPE_LABELS[row.inflow_type] ?? row.inflow_type}
-                          </span>
+                          {(() => {
+                            const it = incomeTypes.find(t => t.id === row.income_type_id)
+                            return it ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ backgroundColor: `${it.color}22`, color: it.color }}>
+                                {it.name}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-gray-100 text-gray-400">
+                                —
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate">{row.description ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.stage_code_2 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px] truncate">{row.specific_seed_description ?? '—'}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-success whitespace-nowrap">{formatCurrency(Number(row.amount))}</td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
@@ -306,7 +313,7 @@ export default function Inflows() {
                     if (expanded && row.remark) {
                       rows.push(
                         <tr key={`${row.id}-exp`} className="bg-blue-50/40">
-                          <td colSpan={9} className="px-8 py-3">
+                          <td colSpan={6} className="px-8 py-3">
                             <p className="text-xs font-semibold text-gray-500 mb-0.5">Remark</p>
                             <p className="text-sm text-gray-700">{row.remark}</p>
                           </td>

@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
-import type { InflowType } from '../utils/inflowTypes'
 import type { StartingBalanceRow } from './useBanks'
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
@@ -57,7 +56,6 @@ async function logAudit({
 export interface AddInflowInput {
   date: string
   amount: number
-  inflow_type?: InflowType
   description?: string
   bank_id?: string
   allocation_config_id?: string
@@ -497,6 +495,8 @@ export interface AddCategoryInput {
   name:              string
   description?:      string
   starting_balance?: number
+  starting_balance_budget_portion?: string
+  group_id?:         string | null
 }
 
 export function useAddCategory(): MutationHook<AddCategoryInput, string> {
@@ -513,6 +513,8 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
           name:             input.name,
           description:      input.description ?? null,
           starting_balance: input.starting_balance ?? null,
+          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+          group_id:         input.group_id ?? null,
         }).select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
@@ -533,6 +535,9 @@ export interface UpdateCategoryInput {
   name:              string
   description?:      string
   starting_balance?: number
+  starting_balance_budget_portion?: string
+  group_id?:         string | null
+  is_hidden?:        boolean
 }
 
 export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
@@ -550,6 +555,9 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
           name:             input.name,
           description:      input.description ?? null,
           starting_balance: input.starting_balance ?? null,
+          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+          group_id:         input.group_id ?? null,
+          ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
         })
         .eq('id', input.id)
       if (err) throw err
@@ -578,6 +586,44 @@ export function useDeleteCategory(): MutationHook<string> {
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'categories', recordId: id })
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddCategoryGroup / useDeleteCategoryGroup ───────────────────────────────
+
+export function useAddCategoryGroup(): MutationHook<{ name: string }, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: { name: string }): Promise<string> => {
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('category_groups').insert({ name: input.name }).select('id').single()
+      if (err) throw err
+      return data!.id as string
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+export function useDeleteCategoryGroup(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase.from('category_groups').delete().eq('id', id)
+      if (err) throw err
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 

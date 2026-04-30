@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal } from 'lucide-react'
-import { useCategories, type Category } from '../hooks/useCategories'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X } from 'lucide-react'
+import { useCategories, useCategoryGroups, type Category, type CategoryGroup } from '../hooks/useCategories'
 import { CurrencyInput } from '../components/ui/CurrencyInput'
 import {
   useAddCategory,
   useUpdateCategory,
   useDeleteCategory,
+  useAddCategoryGroup,
+  useDeleteCategoryGroup,
   type AddCategoryInput,
   type UpdateCategoryInput,
 } from '../hooks/useMutations'
@@ -13,39 +15,74 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useToast } from '../store/toastStore'
 import { Modal } from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
+import { supabase } from '../lib/supabase'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
+const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
+
 const MIGRATION_SQL =
-`ALTER TABLE public.categories
-  ADD COLUMN IF NOT EXISTS starting_balance numeric(15,2) DEFAULT 0;`
+`-- Run in Supabase SQL Editor:
+CREATE TABLE IF NOT EXISTS public.category_groups (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       text NOT NULL,
+  sort_order int NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.category_groups ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Auth users manage groups" ON public.category_groups
+  FOR ALL USING (auth.uid() IS NOT NULL);
+
+ALTER TABLE public.categories
+  ADD COLUMN IF NOT EXISTS group_id uuid REFERENCES public.category_groups(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
+  ADD COLUMN IF NOT EXISTS is_hidden boolean NOT NULL DEFAULT false;`
+
+// ── Deletion check ─────────────────────────────────────────────────────────────
+
+async function categoryHasLinkedData(cat: Category): Promise<boolean> {
+  if (cat.starting_balance && cat.starting_balance !== 0) return true
+  const [inf, out] = await Promise.all([
+    supabase.from('inflow_transactions').select('id', { count: 'exact', head: true }).eq('stage_code_1', cat.name),
+    supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('stage_code_1', cat.name),
+  ])
+  return (inf.count ?? 0) > 0 || (out.count ?? 0) > 0
+}
 
 // ── Category form modal ────────────────────────────────────────────────────────
 
 interface CategoryModalProps {
-  open: boolean
-  onClose: () => void
-  onSuccess: () => void
+  open:        boolean
+  onClose:     () => void
+  onSuccess:   () => void
   editRecord?: Category | null
+  groups:      CategoryGroup[]
+  onGroupCreated: () => void
 }
 
-function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalProps) {
+function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated }: CategoryModalProps) {
   const isEdit = !!editRecord
 
   const addMutation    = useAddCategory()
   const updateMutation = useUpdateCategory()
+  const addGroupMutation = useAddCategoryGroup()
 
-  const { mutate: add,    loading: adding,   error: addErr,    reset: resetAdd    } = addMutation
-  const { mutate: update, loading: updating, error: updateErr, reset: resetUpdate } = updateMutation
+  const { mutate: add,      loading: adding,    error: addErr,    reset: resetAdd    } = addMutation
+  const { mutate: update,   loading: updating,  error: updateErr, reset: resetUpdate } = updateMutation
+  const { mutate: addGroup, loading: addingGrp                                       } = addGroupMutation
 
   const loading = adding || updating
   const error   = addErr || updateErr
 
-  const [name,            setName]            = useState('')
-  const [desc,            setDesc]            = useState('')
-  const [startingBalance, setStartingBalance] = useState<number | undefined>(undefined)
+  const isMigrationError = !!error && /column.*does not exist|does not exist|relation.*does not exist/i.test(error)
 
-  const isMigrationError = !!error && /column.*does not exist|does not exist/i.test(error)
+  const [name,           setName]           = useState('')
+  const [desc,           setDesc]           = useState('')
+  const [startingBalance, setStartingBalance] = useState<number | undefined>(undefined)
+  const [sbPortion,      setSbPortion]      = useState('')
+  const [groupId,        setGroupId]        = useState('')
+  const [newGroupName,   setNewGroupName]   = useState('')
+  const [showNewGroup,   setShowNewGroup]   = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -53,18 +90,43 @@ function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalPr
     setName(editRecord?.name ?? '')
     setDesc(editRecord?.description ?? '')
     setStartingBalance(editRecord?.starting_balance ?? undefined)
+    setSbPortion(editRecord?.starting_balance_budget_portion ?? '')
+    setGroupId(editRecord?.group_id ?? '')
+    setNewGroupName('')
+    setShowNewGroup(false)
   }, [open, editRecord]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) return
+    const id = await addGroup({ name: newGroupName.trim() })
+    onGroupCreated()
+    setGroupId(id)
+    setNewGroupName('')
+    setShowNewGroup(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     try {
-      const sb = startingBalance ?? undefined
       if (isEdit && editRecord) {
-        const input: UpdateCategoryInput = { id: editRecord.id, name: name.trim(), description: desc.trim() || undefined, starting_balance: sb }
+        const input: UpdateCategoryInput = {
+          id: editRecord.id,
+          name: name.trim(),
+          description: desc.trim() || undefined,
+          starting_balance: startingBalance,
+          starting_balance_budget_portion: sbPortion || undefined,
+          group_id: groupId || null,
+        }
         await update(input)
       } else {
-        const input: AddCategoryInput = { name: name.trim(), description: desc.trim() || undefined, starting_balance: sb }
+        const input: AddCategoryInput = {
+          name: name.trim(),
+          description: desc.trim() || undefined,
+          starting_balance: startingBalance,
+          starting_balance_budget_portion: sbPortion || undefined,
+          group_id: groupId || null,
+        }
         await add(input)
       }
       onSuccess()
@@ -73,22 +135,13 @@ function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalPr
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={isEdit ? 'Edit Category' : 'New Category'}
-      size="max-w-md"
-    >
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Category' : 'New Category'} size="max-w-md">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {error && (
           <div className="space-y-2">
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>
-                {isMigrationError
-                  ? 'Database migration required — run the SQL below in your Supabase SQL Editor, then try again.'
-                  : error}
-              </span>
+              <span>{isMigrationError ? 'Database migration required — run the SQL below in your Supabase SQL Editor, then try again.' : error}</span>
             </div>
             {isMigrationError && (
               <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
@@ -102,54 +155,86 @@ function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalPr
           </div>
         )}
 
+        {/* Name */}
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">Category Name *</label>
           <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="e.g. Tithes, Offerings, Welfare"
-            required
+            type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. Tithes, Offerings, Welfare" required
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           />
         </div>
 
+        {/* Group */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Group (optional)</label>
+          <div className="flex gap-2">
+            <select
+              value={groupId}
+              onChange={e => setGroupId(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+            >
+              <option value="">— No group —</option>
+              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+            <button type="button" onClick={() => setShowNewGroup(v => !v)} title="Create new group"
+              className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors">
+              {showNewGroup ? <X className="w-4 h-4" /> : <FolderPlus className="w-4 h-4" />}
+            </button>
+          </div>
+          {showNewGroup && (
+            <div className="flex gap-2 mt-1">
+              <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+                placeholder="New group name" autoFocus
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+              <button type="button" onClick={handleCreateGroup} disabled={!newGroupName.trim() || addingGrp}
+                className="px-3 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60">
+                {addingGrp ? '…' : 'Add'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Description */}
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">Description</label>
-          <textarea
-            value={desc}
-            onChange={e => setDesc(e.target.value)}
-            rows={2}
+          <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2}
             placeholder="Optional description"
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none"
           />
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Starting Balance (₦)</label>
-          <CurrencyInput
-            value={startingBalance}
-            onChange={setStartingBalance}
-            placeholder="0.00"
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-          />
+        {/* Starting Balance */}
+        <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balance (optional)</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Starting Balance (₦)</label>
+              <CurrencyInput value={startingBalance} onChange={setStartingBalance} placeholder="0.00"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Budget Portion *</label>
+              <select value={sbPortion} onChange={e => setSbPortion(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+              >
+                <option value="">— Select —</option>
+                {BUDGET_PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
           <p className="text-[11px] text-gray-400">Balance brought forward — the opening balance for this category.</p>
         </div>
 
         <div className="flex justify-end gap-3 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-          >
+          <button type="button" onClick={onClose} disabled={loading}
+            className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={loading || !name.trim()}
-            className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
-          >
+          <button type="submit" disabled={loading || !name.trim()}
+            className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2">
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Create'}
           </button>
@@ -164,16 +249,33 @@ function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalPr
 export default function Categories() {
   usePageTitle('Categories')
 
-  const { categories, loading, error, refetch } = useCategories()
-  const { mutate: deleteCategory } = useDeleteCategory()
+  const { categories, loading, error, refetch }    = useCategories()
+  const { groups, refetch: refetchGroups }          = useCategoryGroups()
+  const { mutate: deleteCategory }                  = useDeleteCategory()
+  const { mutate: updateCategory }                  = useUpdateCategory()
+  const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
   const toast = useToast()
 
   const [modalOpen,    setModalOpen]    = useState(false)
   const [editRecord,   setEditRecord]   = useState<Category | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null)
+  const [hideTarget,   setHideTarget]   = useState<Category | null>(null)
+  const [showHidden,   setShowHidden]   = useState(false)
+  const [checkingDeps, setCheckingDeps] = useState(false)
 
-  const openAdd = () => { setEditRecord(null); setModalOpen(true) }
+  const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (c: Category) => { setEditRecord(c); setModalOpen(true) }
+
+  const handleDeleteClick = async (cat: Category) => {
+    setCheckingDeps(true)
+    const hasData = await categoryHasLinkedData(cat)
+    setCheckingDeps(false)
+    if (hasData) {
+      setHideTarget(cat)
+    } else {
+      setDeleteTarget(cat)
+    }
+  }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -188,6 +290,43 @@ export default function Categories() {
     }
   }
 
+  const handleToggleHide = async (cat: Category, hide: boolean) => {
+    try {
+      await updateCategory({ id: cat.id, name: cat.name, is_hidden: hide })
+      toast.success(hide ? `"${cat.name}" hidden.` : `"${cat.name}" restored.`)
+      refetch()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed.')
+    } finally {
+      setHideTarget(null)
+    }
+  }
+
+  const handleDeleteGroup = async (g: CategoryGroup) => {
+    try {
+      await deleteGroup(g.id)
+      toast.success(`Group "${g.name}" deleted.`)
+      refetchGroups()
+      refetch()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Delete failed.')
+    }
+  }
+
+  const visible  = categories.filter(c => showHidden || !c.is_hidden)
+  const hiddenCt = categories.filter(c => c.is_hidden).length
+
+  // Bucket categories by group
+  const groupMap = new Map<string | null, Category[]>()
+  for (const cat of visible) {
+    const key = cat.group_id ?? null
+    if (!groupMap.has(key)) groupMap.set(key, [])
+    groupMap.get(key)!.push(cat)
+  }
+
+  const ungrouped = groupMap.get(null) ?? []
+  const grouped   = groups.filter(g => groupMap.has(g.id))
+
   return (
     <div className="space-y-5">
 
@@ -195,102 +334,92 @@ export default function Categories() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Categories</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Manage income and allocation categories
-          </p>
+          <p className="text-sm text-gray-500 mt-0.5">Manage income and allocation categories</p>
         </div>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Category
-        </button>
+        <div className="flex items-center gap-2">
+          {hiddenCt > 0 && (
+            <button onClick={() => setShowHidden(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              {showHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {showHidden ? 'Hide hidden' : `Show hidden (${hiddenCt})`}
+            </button>
+          )}
+          <button onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
+            <Plus className="w-4 h-4" />
+            Add Category
+          </button>
+        </div>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          {error}
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
         <div className="space-y-2">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-14 rounded-xl bg-gray-100 animate-pulse" />
-          ))}
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-14 rounded-xl bg-gray-100 animate-pulse" />)}
         </div>
       )}
 
-      {/* Empty */}
-      {!loading && !error && categories.length === 0 && (
+      {!loading && !error && visible.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
             <Layers className="w-8 h-8 text-primary" />
           </div>
           <div>
             <p className="font-semibold text-gray-800">No categories yet</p>
-            <p className="text-sm text-gray-500 mt-1">
-              Create your first category to use in allocation configurations.
-            </p>
+            <p className="text-sm text-gray-500 mt-1">Create your first category to use in allocation configurations.</p>
           </div>
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Category
+          <button onClick={openAdd}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
+            <Plus className="w-4 h-4" />Add Category
           </button>
         </div>
       )}
 
-      {/* List */}
-      {!loading && categories.length > 0 && (
+      {/* Category table — grouped */}
+      {!loading && visible.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Name</th>
                 <th className="px-5 py-3 text-left font-medium hidden sm:table-cell">Description</th>
+                <th className="px-5 py-3 text-left font-medium hidden md:table-cell">Portion</th>
                 <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Bal. B/F</th>
                 <th className="px-5 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {categories.map(cat => (
-                <tr key={cat.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-medium text-gray-800">{cat.name}</td>
-                  <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
-                    {cat.description ?? <span className="text-gray-300 italic">—</span>}
-                  </td>
-                  <td className="px-5 py-3 text-right hidden sm:table-cell font-mono text-sm text-gray-700">
-                    {cat.starting_balance != null && cat.starting_balance !== 0
-                      ? `₦${cat.starting_balance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => openEdit(cat)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(cat)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+              {/* Grouped categories */}
+              {grouped.map(g => (
+                <>
+                  <tr key={`grp-${g.id}`} className="bg-gray-50">
+                    <td colSpan={5} className="px-5 py-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{g.name}</span>
+                        <button onClick={() => handleDeleteGroup(g)}
+                          className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors" title="Remove group">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {(groupMap.get(g.id) ?? []).map(cat => <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDeleteClick} onToggleHide={handleToggleHide} checking={checkingDeps} />)}
+                </>
+              ))}
+              {/* Ungrouped categories */}
+              {ungrouped.length > 0 && grouped.length > 0 && (
+                <tr className="bg-gray-50">
+                  <td colSpan={5} className="px-5 py-2">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Ungrouped</span>
                   </td>
                 </tr>
-              ))}
+              )}
+              {ungrouped.map(cat => <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDeleteClick} onToggleHide={handleToggleHide} checking={checkingDeps} />)}
             </tbody>
           </table>
         </div>
@@ -302,6 +431,8 @@ export default function Categories() {
         onClose={() => setModalOpen(false)}
         onSuccess={refetch}
         editRecord={editRecord}
+        groups={groups}
+        onGroupCreated={refetchGroups}
       />
 
       <DeleteDialog
@@ -310,6 +441,80 @@ export default function Categories() {
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}
       />
+
+      {/* Hide dialog — shown when category has linked data */}
+      {!!hideTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+            <h2 className="font-semibold text-gray-900">Cannot Delete</h2>
+            <p className="text-sm text-gray-600">
+              <strong>"{hideTarget.name}"</strong> has linked transactions or a non-zero starting balance.
+              It cannot be deleted but can be hidden from views.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setHideTarget(null)}
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={() => handleToggleHide(hideTarget, true)}
+                className="px-4 py-2 text-sm text-white bg-amber-500 rounded-lg hover:bg-amber-600">
+                Hide Category
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+// ── Category row ───────────────────────────────────────────────────────────────
+
+function CategoryRow({ cat, onEdit, onDelete, onToggleHide, checking }: {
+  cat:           Category
+  onEdit:        (c: Category) => void
+  onDelete:      (c: Category) => void
+  onToggleHide:  (c: Category, hide: boolean) => void
+  checking:      boolean
+}) {
+  return (
+    <tr className={`hover:bg-gray-50 transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
+      <td className="px-5 py-3 font-medium text-gray-800">
+        {cat.name}
+        {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
+      </td>
+      <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
+        {cat.description ?? <span className="text-gray-300 italic">—</span>}
+      </td>
+      <td className="px-5 py-3 hidden md:table-cell">
+        {cat.starting_balance_budget_portion
+          ? <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{cat.starting_balance_budget_portion}</span>
+          : <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-5 py-3 text-right hidden sm:table-cell font-mono text-sm text-gray-700">
+        {cat.starting_balance != null && cat.starting_balance !== 0
+          ? `₦${cat.starting_balance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
+          : <span className="text-gray-300">—</span>}
+      </td>
+      <td className="px-5 py-3">
+        <div className="flex items-center justify-end gap-1">
+          {cat.is_hidden ? (
+            <button onClick={() => onToggleHide(cat, false)}
+              className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Restore">
+              <Eye className="w-4 h-4" />
+            </button>
+          ) : (
+            <button onClick={() => onEdit(cat)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+              <Pencil className="w-4 h-4" />
+            </button>
+          )}
+          <button onClick={() => onDelete(cat)} disabled={checking}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors disabled:opacity-40" title="Delete">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
   )
 }

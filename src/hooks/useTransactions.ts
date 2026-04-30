@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { InflowType } from '../utils/inflowTypes'
 
 // ── DB row types (mirror the exact columns in schema.sql) ──────────────────────
 
@@ -9,7 +8,6 @@ export interface InflowTransaction {
   date: string
   description: string | null
   amount: number
-  inflow_type: InflowType
   stage_code_1: string | null
   stage_code_2: string | null
   stage_code_3: string | null
