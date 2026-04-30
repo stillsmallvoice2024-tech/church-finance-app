@@ -760,6 +760,76 @@ export function useAddProjectEntry(): MutationHook<AddProjectEntryInput, string>
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
 
+// ── useUpdateProjectEntry ──────────────────────────────────────────────────────
+
+export interface UpdateProjectEntryInput {
+  id:          string
+  date:        string
+  description?: string
+  inflow?:     number
+  outflow?:    number
+  balance:     number
+}
+
+export function useUpdateProjectEntry(): MutationHook<UpdateProjectEntryInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateProjectEntryInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data: oldData } = await supabase.from('project_entries').select('*').eq('id', input.id).single()
+      const updates = { date: input.date, description: input.description ?? null, inflow: input.inflow ?? 0, outflow: input.outflow ?? 0, balance: input.balance }
+      const { error: err } = await supabase.from('project_entries').update(updates).eq('id', input.id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'project_entries', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates })
+      if (oldData) logFieldChanges(user.id, 'project_entries', input.id, oldData as Record<string, unknown>, updates)
+    } catch (err) {
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUpdateFXTransaction ─────────────────────────────────────────────────────
+
+export interface UpdateFXTransactionInput {
+  id:              string
+  date:            string
+  currency:        'USD' | 'GBP' | 'EUR' | 'CNY'
+  deposit?:        number
+  withdrawal?:     number
+  running_balance: number
+  narration?:      string
+  transaction_ref?: string
+}
+
+export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateFXTransactionInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data: oldData } = await supabase.from('fx_transactions').select('*').eq('id', input.id).single()
+      const { id, ...updates } = input
+      const { error: err } = await supabase.from('fx_transactions').update(updates).eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'fx_transactions', recordId: id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates })
+      if (oldData) logFieldChanges(user.id, 'fx_transactions', id, oldData as Record<string, unknown>, updates)
+    } catch (err) {
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
 // ── useAddBank ─────────────────────────────────────────────────────────────────
 
 export interface AddBankInput {

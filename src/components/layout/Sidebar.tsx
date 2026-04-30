@@ -24,6 +24,7 @@ import {
   RotateCcw,
   Undo2,
   Paperclip,
+  ClipboardList,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -66,7 +67,8 @@ const BUDGET_NAV_ITEMS: NavItem[] = [
 ]
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
-  { label: 'User Management', path: '/users', icon: Users },
+  { label: 'User Management', path: '/users',      icon: Users         },
+  { label: 'Change Log',      path: '/change-log', icon: ClipboardList },
 ]
 
 // Church cross SVG
