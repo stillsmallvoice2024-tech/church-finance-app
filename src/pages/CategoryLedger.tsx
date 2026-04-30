@@ -111,6 +111,19 @@ export default function CategoryLedger() {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.actual_amount ?? r.amount_disbursed ?? 0)
     }
 
+    // Add category starting balances into their respective portions
+    for (const cat of categories) {
+      if (!cat.starting_balance || cat.starting_balance === 0) continue
+      const portion = cat.starting_balance_budget_portion ?? ''
+      const row = ensure(cat.name)
+      if (portion === 'Specific Seed') {
+        row.specificSeed += cat.starting_balance
+      } else if (portion === 'Savings') {
+        row.savingsIn += cat.starting_balance
+      }
+      // 'Percentage Allocation' starting balances go into allocMap below
+    }
+
     // Compute percentage-allocated amounts across all time
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
@@ -121,6 +134,14 @@ export default function CategoryLedger() {
         if (!catRow.percentage) continue
         const allocated = Number(r.amount) * (catRow.percentage / 100)
         allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
+      }
+    }
+
+    // Add Percentage Allocation starting balances into allocMap
+    for (const cat of categories) {
+      if (!cat.starting_balance || cat.starting_balance === 0) continue
+      if ((cat.starting_balance_budget_portion ?? '') === 'Percentage Allocation') {
+        allocMap.set(cat.name, (allocMap.get(cat.name) ?? 0) + cat.starting_balance)
       }
     }
 
@@ -242,8 +263,31 @@ export default function CategoryLedger() {
         }
       }
 
+      // Prepend starting balance as first inflow if it matches the active portion
+      const catRecord = categories.find(c => c.name === activeCategory)
+      const portionMap: Record<LedgerPortion, string> = {
+        'Percentage':    'Percentage Allocation',
+        'Specific Seed': 'Specific Seed',
+        'Savings':       'Savings',
+      }
+      const bfRow: LedgerRow[] = []
+      if (
+        catRecord?.starting_balance &&
+        catRecord.starting_balance !== 0 &&
+        (catRecord.starting_balance_budget_portion ?? '') === portionMap[ledgerPortion]
+      ) {
+        bfRow.push({
+          id:          'bal-bf',
+          date:        '0000-01-01',
+          description: 'Balance Brought Forward',
+          inflow:      catRecord.starting_balance,
+          outflow:     0,
+          balance:     0,
+        })
+      }
+
       // Merge, sort by date, compute running balance
-      const combined = [...inRows, ...outRows].sort((a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1))
+      const combined = [...bfRow, ...inRows, ...outRows].sort((a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1))
       let balance = 0
       for (const row of combined) {
         balance += row.inflow - row.outflow
@@ -588,8 +632,8 @@ export default function CategoryLedger() {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {ledgerRows.map(row => (
-                        <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{formatDate(row.date)}</td>
+                        <tr key={row.id} className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : 'hover:bg-gray-50'}`}>
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
                           <td className="px-4 py-3 text-gray-700 max-w-xs truncate">{row.description}</td>
                           <td className="px-4 py-3 text-right font-mono text-success">
                             {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
@@ -621,9 +665,9 @@ export default function CategoryLedger() {
               {ledgerRows.length > 0 && displayMode === 'cards' && (
                 <div className="space-y-2">
                   {ledgerRows.map(row => (
-                    <div key={row.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-4">
+                    <div key={row.id} className={`border rounded-xl px-4 py-3 flex items-center gap-4 ${row.id === 'bal-bf' ? 'bg-blue-50/60 border-blue-100 font-medium' : 'bg-white border-gray-200'}`}>
                       <div className="w-20 shrink-0">
-                        <p className="text-xs text-gray-400">{formatDate(row.date)}</p>
+                        <p className="text-xs text-gray-400">{row.id === 'bal-bf' ? 'Bal. B/F' : formatDate(row.date)}</p>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-700 truncate">{row.description}</p>
