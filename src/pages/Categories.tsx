@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X } from 'lucide-react'
 import { useCategories, useCategoryGroups, type Category, type CategoryGroup } from '../hooks/useCategories'
 import { CurrencyInput } from '../components/ui/CurrencyInput'
@@ -250,7 +250,7 @@ export default function Categories() {
   usePageTitle('Categories')
 
   const { categories, loading, error, refetch }    = useCategories()
-  const { groups, refetch: refetchGroups }          = useCategoryGroups()
+  const { groups, error: groupsError, refetch: refetchGroups } = useCategoryGroups()
   const { mutate: deleteCategory }                  = useDeleteCategory()
   const { mutate: updateCategory }                  = useUpdateCategory()
   const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
@@ -352,9 +352,13 @@ export default function Categories() {
         </div>
       </div>
 
-      {error && (
+      {(error || groupsError) && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            {error && <p>{error}</p>}
+            {groupsError && <p>Groups: {groupsError} — run the migration SQL to create the category_groups table.</p>}
+          </div>
         </div>
       )}
 
@@ -396,8 +400,8 @@ export default function Categories() {
             <tbody className="divide-y divide-gray-50">
               {/* Grouped categories */}
               {grouped.map(g => (
-                <>
-                  <tr key={`grp-${g.id}`} className="bg-gray-50">
+                <Fragment key={g.id}>
+                  <tr className="bg-gray-50">
                     <td colSpan={5} className="px-5 py-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{g.name}</span>
@@ -409,7 +413,7 @@ export default function Categories() {
                     </td>
                   </tr>
                   {(groupMap.get(g.id) ?? []).map(cat => <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDeleteClick} onToggleHide={handleToggleHide} checking={checkingDeps} />)}
-                </>
+                </Fragment>
               ))}
               {/* Ungrouped categories */}
               {ungrouped.length > 0 && grouped.length > 0 && (

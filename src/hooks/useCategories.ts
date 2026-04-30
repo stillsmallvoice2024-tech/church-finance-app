@@ -44,19 +44,22 @@ export function useCategories() {
 export function useCategoryGroups() {
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
+    setError(null)
+    const { data, error: err } = await supabase
       .from('category_groups')
       .select('*')
       .order('sort_order')
       .order('name')
-    setGroups((data ?? []) as CategoryGroup[])
+    if (err) setError(err.message)
+    else setGroups((data ?? []) as CategoryGroup[])
     setLoading(false)
   }, [])
 
   useEffect(() => { fetch() }, [fetch])
 
-  return { groups, loading, refetch: fetch }
+  return { groups, loading, error, refetch: fetch }
 }
