@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react'
@@ -13,6 +13,7 @@ import {
 import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
+import { CurrencyInput } from '../ui/CurrencyInput'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
     reset: resetForm,
@@ -267,7 +269,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
           <Field label="Amount (₦) *" error={errors.amount?.message}>
-            <input type="number" min="0" step="0.01" placeholder="0.00" {...register('amount')} className={inputCls(!!errors.amount)} />
+            <Controller control={control} name="amount" render={({ field }) => (
+              <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.amount)} />
+            )} />
           </Field>
         </div>
 
@@ -442,12 +446,14 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <Field label="FX Amount" error={errors.fx_amount?.message}>
-                  <input type="number" min="0" step="0.0001" placeholder="0.0000"
-                    {...register('fx_amount')} className={inputCls(!!errors.fx_amount)} />
+                  <Controller control={control} name="fx_amount" render={({ field }) => (
+                    <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.0000" className={inputCls(!!errors.fx_amount)} />
+                  )} />
                 </Field>
                 <Field label="FX Rate" error={errors.fx_rate?.message}>
-                  <input type="number" min="0" step="0.000001" placeholder="0.000000"
-                    {...register('fx_rate')} className={inputCls(!!errors.fx_rate)} />
+                  <Controller control={control} name="fx_rate" render={({ field }) => (
+                    <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.000000" className={inputCls(!!errors.fx_rate)} />
+                  )} />
                 </Field>
               </div>
             </div>

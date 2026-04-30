@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal } from 'lucide-react'
 import { useCategories, type Category } from '../hooks/useCategories'
+import { CurrencyInput } from '../components/ui/CurrencyInput'
 import {
   useAddCategory,
   useUpdateCategory,
@@ -42,7 +43,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalPr
 
   const [name,            setName]            = useState('')
   const [desc,            setDesc]            = useState('')
-  const [startingBalance, setStartingBalance] = useState('')
+  const [startingBalance, setStartingBalance] = useState<number | undefined>(undefined)
 
   const isMigrationError = !!error && /column.*does not exist|does not exist/i.test(error)
 
@@ -51,16 +52,14 @@ function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalPr
     resetAdd(); resetUpdate()
     setName(editRecord?.name ?? '')
     setDesc(editRecord?.description ?? '')
-    setStartingBalance(
-      editRecord?.starting_balance != null ? String(editRecord.starting_balance) : ''
-    )
+    setStartingBalance(editRecord?.starting_balance ?? undefined)
   }, [open, editRecord]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     try {
-      const sb = startingBalance ? parseFloat(startingBalance) : undefined
+      const sb = startingBalance ?? undefined
       if (isEdit && editRecord) {
         const input: UpdateCategoryInput = { id: editRecord.id, name: name.trim(), description: desc.trim() || undefined, starting_balance: sb }
         await update(input)
@@ -128,13 +127,10 @@ function CategoryModal({ open, onClose, onSuccess, editRecord }: CategoryModalPr
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">Starting Balance (₦)</label>
-          <input
-            type="number"
+          <CurrencyInput
             value={startingBalance}
-            onChange={e => setStartingBalance(e.target.value)}
+            onChange={setStartingBalance}
             placeholder="0.00"
-            min="0"
-            step="0.01"
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           />
           <p className="text-[11px] text-gray-400">Balance brought forward — the opening balance for this category.</p>

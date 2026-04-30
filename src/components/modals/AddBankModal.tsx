@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { AlertTriangle, Terminal, Plus, Trash2, Check, X } from 'lucide-react'
@@ -7,6 +7,8 @@ import { Modal } from '../ui/Modal'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import type { DbBank, StartingBalanceRow } from '../../hooks/useBanks'
+import { CurrencyInput } from '../ui/CurrencyInput'
+import { formatCurrency, parseCurrency } from '../../utils/currency'
 
 const ACCOUNT_TYPES = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -60,7 +62,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [newCatMode, setNewCatMode] = useState<NewCatMode | null>(null)
   const newCatInputRef = useRef<HTMLInputElement>(null)
 
-  const { register, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
+  const { register, control, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', account_number: '', account_type: '' },
   })
@@ -250,11 +252,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balance (optional)</p>
 
           <Field label="Starting Balance (₦)" error={errors.starting_balance?.message}>
-            <input
-              type="number" min="0" step="0.01" placeholder="0.00"
-              {...register('starting_balance')}
-              className={iCls(!!errors.starting_balance)}
-            />
+            <Controller control={control} name="starting_balance" render={({ field }) => (
+              <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={iCls(!!errors.starting_balance)} />
+            )} />
           </Field>
 
           {hasBalance && (
@@ -371,11 +371,18 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                           </select>
 
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             min="0"
-                            step={allocType === 'percentage' ? '0.01' : '1'}
-                            value={row.value}
-                            onChange={e => setRowField(i, 'value', e.target.value)}
+                            value={formatCurrency(row.value)}
+                            onChange={e => {
+                              const raw = e.target.value.replace(/[^0-9.]/g, '')
+                              const parts = raw.split('.')
+                              const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw
+                              const [int, dec] = clean.split('.')
+                              const fmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (dec !== undefined ? `.${dec}` : '')
+                              setRowField(i, 'value', parseCurrency(fmt) !== undefined ? String(parseCurrency(fmt)) : '')
+                            }}
                             placeholder={allocType === 'percentage' ? '0.00' : '0'}
                             className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                           />

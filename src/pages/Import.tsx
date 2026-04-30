@@ -16,6 +16,7 @@ import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { formatDate } from '../utils/formatters'
+import { formatCurrency, parseCurrency } from '../utils/currency'
 // inflowTypes import removed — income type classification replaces hardcoded types
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
@@ -508,6 +509,13 @@ function ManualEntryForm() {
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }))
   }
 
+  // Currency fields: store raw numeric string, display with commas
+  const setCurrency = (key: string, displayVal: string) => {
+    const stripped = displayVal.replace(/,/g, '')
+    set(key, stripped)
+  }
+  const vCurrency = (key: string): string => formatCurrency(v(key))
+
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
     setDirection(d)
     setFields({ date: new Date().toISOString().slice(0, 10) })
@@ -714,7 +722,7 @@ function ManualEntryForm() {
               <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
             </Field>
             <Field label="Amount (₦) *" error={errors.amount}>
-              <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount')} onChange={e => set('amount', e.target.value)} className={iCls} />
+              <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('amount')} onChange={e => setCurrency('amount', e.target.value)} className={iCls} />
             </Field>
           </div>
 
@@ -862,10 +870,10 @@ function ManualEntryForm() {
                 <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
               </Field>
               <Field label="FX Amount">
-                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('fx_amount')} onChange={e => set('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_amount')} onChange={e => setCurrency('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
               </Field>
               <Field label="FX Rate">
-                <input type="number" min="0" step="0.0001" placeholder="0.00" value={v('fx_rate')} onChange={e => set('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_rate')} onChange={e => setCurrency('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
               </Field>
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
@@ -899,7 +907,7 @@ function ManualEntryForm() {
               <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
             </Field>
             <Field label="Amount Disbursed (₦) *" error={errors.amount_disbursed}>
-              <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount_disbursed')} onChange={e => set('amount_disbursed', e.target.value)} className={iCls} />
+              <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('amount_disbursed')} onChange={e => setCurrency('amount_disbursed', e.target.value)} className={iCls} />
             </Field>
           </div>
 
@@ -974,10 +982,10 @@ function ManualEntryForm() {
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Optional Banking Details</p>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Amount Refunded (₦)">
-                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('amount_refunded')} onChange={e => set('amount_refunded', e.target.value)} className={iCls} />
+                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('amount_refunded')} onChange={e => setCurrency('amount_refunded', e.target.value)} className={iCls} />
               </Field>
               <Field label="Transfer Charge (₦)">
-                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('transfer_charge')} onChange={e => set('transfer_charge', e.target.value)} className={iCls} />
+                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('transfer_charge')} onChange={e => setCurrency('transfer_charge', e.target.value)} className={iCls} />
               </Field>
             </div>
           </div>
@@ -1011,10 +1019,10 @@ function ManualEntryForm() {
                 <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
               </Field>
               <Field label="FX Amount">
-                <input type="number" min="0" step="0.01" placeholder="0.00" value={v('fx_amount')} onChange={e => set('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_amount')} onChange={e => setCurrency('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
               </Field>
               <Field label="FX Rate">
-                <input type="number" min="0" step="0.0001" placeholder="0.00" value={v('fx_rate')} onChange={e => set('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
+                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_rate')} onChange={e => setCurrency('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
               </Field>
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (

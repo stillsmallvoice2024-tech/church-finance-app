@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddFXTransaction, type AddFXTransactionInput } from '../../hooks/useMutations'
+import { CurrencyInput } from '../ui/CurrencyInput'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
 
@@ -28,7 +29,7 @@ interface Props {
 
 export function AddFXModal({ open, onClose, onSuccess, currentBalances }: Props) {
   const { mutate, loading, error, reset } = useAddFXTransaction()
-  const { register, handleSubmit, watch, formState: { errors }, reset: resetForm } = useForm<FormValues>({
+  const { register, control, handleSubmit, watch, formState: { errors }, reset: resetForm } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { currency: 'USD', type: 'deposit' },
   })
@@ -99,7 +100,9 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances }: Props)
         </Field>
 
         <Field label={`Amount (${sym}) *`} error={errors.amount?.message}>
-          <input type="number" min="0" step="0.0001" placeholder="0.0000" {...register('amount')} className={iCls(!!errors.amount)} />
+          <Controller control={control} name="amount" render={({ field }) => (
+            <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.0000" className={iCls(!!errors.amount)} />
+          )} />
         </Field>
 
         {/* Balance preview */}
