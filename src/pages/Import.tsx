@@ -498,10 +498,8 @@ function ManualEntryForm() {
   const set = (key: string, val: string) => {
     setFields(prev => {
       const next = { ...prev, [key]: val }
-      if (direction === 'inflow' && !incomeTypeAutoSet && (key === 'description' || key === 'stage_code_1')) {
-        const desc  = key === 'description' ? val : (next.description ?? '')
-        const stage = key === 'stage_code_1' ? val : (next.stage_code_1 ?? '')
-        const match = classifyIncomeType(desc, stage, incomeTypes)
+      if (direction === 'inflow' && !incomeTypeAutoSet && key === 'description') {
+        const match = classifyIncomeType(val, '', incomeTypes)
         setIncomeTypeId(match ? match.id : '')
       }
       return next
@@ -564,10 +562,7 @@ function ManualEntryForm() {
         date:                       v('date'),
         amount:                     parseFloat(v('amount')),
         description:                v('description')               || undefined,
-        bank_id:                    v('bank_id')                   || undefined,
         allocation_config_id:       effectiveConfigId,
-        stage_code_1:               v('stage_code_1')              || undefined,
-        stage_code_2:               v('stage_code_2')              || undefined,
         transaction_ref:            v('transaction_ref')           || undefined,
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
@@ -601,12 +596,9 @@ function ManualEntryForm() {
         date:                    v('date'),
         amount_disbursed:        parseFloat(v('amount_disbursed')),
         description:             v('description')      || undefined,
-        bank_id:                 v('bank_id')          || undefined,
         allocation_config_id:    getConfigForDate(configs, v('date'))?.id,
         bank_description:        v('bank_description') || undefined,
         transaction_id:          v('transaction_id')   || undefined,
-        stage_code_1:            v('stage_code_1')     || undefined,
-        stage_code_2:            v('stage_code_2')     || undefined,
         amount_refunded:         v('amount_refunded')  ? parseFloat(v('amount_refunded'))  : undefined,
         transfer_charge:         v('transfer_charge')  ? parseFloat(v('transfer_charge'))  : undefined,
         is_pending_deduction:    isPending,
@@ -813,24 +805,6 @@ function ManualEntryForm() {
             )
           })()}
 
-          {/* Stage Code 1 + 2 */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Stage Code 1">
-              <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
-                <option value="">— Select —</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Stage Code 2 (Portion Type)">
-              <select value={v('stage_code_2')} onChange={e => set('stage_code_2', e.target.value)} className={iCls}>
-                <option value="">— Select —</option>
-                <option value="Percentage Allocation">Percentage Allocation</option>
-                <option value="Specific Seed">Specific Seed</option>
-                <option value="Savings">Savings</option>
-              </select>
-            </Field>
-          </div>
-
           {/* Transaction Ref */}
           <Field label="Transaction Ref">
             <input type="text" placeholder="Ref / cheque no." value={v('transaction_ref')} onChange={e => set('transaction_ref', e.target.value)} className={iCls} />
@@ -945,24 +919,6 @@ function ManualEntryForm() {
             </Field>
             <Field label="Transaction ID">
               <input type="text" placeholder="Bank Txn ID" value={v('transaction_id')} onChange={e => set('transaction_id', e.target.value)} className={iCls} />
-            </Field>
-          </div>
-
-          {/* Stage Code 1 + 2 */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Stage Code 1">
-              <select value={v('stage_code_1')} onChange={e => set('stage_code_1', e.target.value)} className={iCls}>
-                <option value="">— Select —</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Stage Code 2 (Portion Type)">
-              <select value={v('stage_code_2')} onChange={e => set('stage_code_2', e.target.value)} className={iCls}>
-                <option value="">— Select —</option>
-                <option value="Percentage Allocation">Percentage Allocation</option>
-                <option value="Specific Seed">Specific Seed</option>
-                <option value="Savings">Savings</option>
-              </select>
             </Field>
           </div>
 

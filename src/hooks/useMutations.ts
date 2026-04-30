@@ -57,7 +57,6 @@ export interface AddInflowInput {
   date: string
   amount: number
   description?: string
-  bank_id?: string
   allocation_config_id?: string
   stage_code_1?: string
   stage_code_2?: string
@@ -78,7 +77,6 @@ export interface AddOutflowInput {
   amount_disbursed: number
   is_pending_deduction?: boolean
   description?: string
-  bank_id?: string
   allocation_config_id?: string
   bank_description?: string
   transaction_id?: string
