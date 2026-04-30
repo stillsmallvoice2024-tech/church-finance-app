@@ -34,9 +34,9 @@ export function getConfigForDate(
   configs: AllocationConfig[],
   date: string,
 ): AllocationConfig | null {
-  // ISO date strings compare correctly as plain strings (YYYY-MM-DD lexicographic order)
+  // Only locked (approved) configs are eligible — draft configs are never applied
   const eligible = configs
-    .filter(c => c.start_date <= date)
+    .filter(c => c.status === 'locked' && c.start_date <= date)
     .sort((a, b) => b.start_date.localeCompare(a.start_date))
 
   return eligible[0] ?? null

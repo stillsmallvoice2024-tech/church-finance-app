@@ -16,6 +16,7 @@ import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useI
 import {
   useLockAllocationConfig,
   useUnlockAllocationConfig,
+  useDeleteAllocationConfig,
 } from '../hooks/useMutations'
 import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
@@ -205,11 +206,12 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
 
 // ── Allocation tab ─────────────────────────────────────────────────────────────
 
-function AllocationTab({ onNew, onEdit, onLock, onEditLocked }: {
-  onNew:       () => void
-  onEdit:      (c: AllocationConfig) => void
-  onLock:      (c: AllocationConfig) => void
-  onEditLocked:(c: AllocationConfig) => void
+function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
+  onNew:        () => void
+  onEdit:       (c: AllocationConfig) => void
+  onLock:       (c: AllocationConfig) => void
+  onEditLocked: (c: AllocationConfig) => void
+  onDelete:     (c: AllocationConfig) => void
 }) {
   const { configs, loading, error, fetch } = useAllocationStore()
 
@@ -218,14 +220,19 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked }: {
   const statusBadge = (config: AllocationConfig) => {
     const isLocked = config.status === 'locked'
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-        isLocked
-          ? 'bg-green-50 text-green-700 border border-green-200'
-          : 'bg-amber-50 text-amber-700 border border-amber-200'
-      }`}>
-        {isLocked ? <Lock className="w-3 h-3" /> : <FileEdit className="w-3 h-3" />}
-        {isLocked ? 'Locked' : 'Draft'}
-      </span>
+      <div className="flex flex-col gap-0.5">
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+          isLocked
+            ? 'bg-green-50 text-green-700 border border-green-200'
+            : 'bg-amber-50 text-amber-700 border border-amber-200'
+        }`}>
+          {isLocked ? <Lock className="w-3 h-3" /> : <FileEdit className="w-3 h-3" />}
+          {isLocked ? 'Approved & Locked' : 'Draft'}
+        </span>
+        {!isLocked && (
+          <span className="text-[10px] text-gray-400">Not in use — approve &amp; lock to activate</span>
+        )}
+      </div>
     )
   }
 
@@ -317,6 +324,13 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked }: {
                             <Pencil className="w-4 h-4" />
                           </button>
                         )}
+                        <button
+                          onClick={() => onDelete(config)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -661,8 +675,9 @@ export default function SetupPage() {
   const [deleteBankRecord, setDeleteBankRecord] = useState<DbBank | null>(null)
   const [allocModalOpen,  setAllocModalOpen]  = useState(false)
   const [editAllocRecord, setEditAllocRecord] = useState<AllocationConfig | null>(null)
-  const [lockTarget,      setLockTarget]      = useState<AllocationConfig | null>(null)
-  const [editLockedTarget, setEditLockedTarget] = useState<AllocationConfig | null>(null)
+  const [lockTarget,        setLockTarget]        = useState<AllocationConfig | null>(null)
+  const [editLockedTarget,  setEditLockedTarget]  = useState<AllocationConfig | null>(null)
+  const [deleteAllocTarget, setDeleteAllocTarget] = useState<AllocationConfig | null>(null)
   const [specialModalOpen,  setSpecialModalOpen]  = useState(false)
   const [editSpecialRecord, setEditSpecialRecord] = useState<AllocationConfig | null>(null)
   const [deleteSpecialTarget, setDeleteSpecialTarget] = useState<AllocationConfig | null>(null)
@@ -678,6 +693,7 @@ export default function SetupPage() {
   const { mutate: deleteBank, loading: deletingBank } = useDeleteBank()
   const { mutate: lockConfig,   loading: locking   } = useLockAllocationConfig()
   const { mutate: unlockConfig, loading: unlocking } = useUnlockAllocationConfig()
+  const { mutate: deleteAllocConfig               } = useDeleteAllocationConfig()
 
   usePageTitle('Setup')
 
@@ -685,8 +701,21 @@ export default function SetupPage() {
   const handleEditAlloc   = (c: AllocationConfig) => { setEditAllocRecord(c); setAllocModalOpen(true) }
   const handleAllocSuccess = () => { reloadAllocs() }
 
-  const handleLock       = (c: AllocationConfig) => setLockTarget(c)
-  const handleEditLocked = (c: AllocationConfig) => setEditLockedTarget(c)
+  const handleLock        = (c: AllocationConfig) => setLockTarget(c)
+  const handleEditLocked  = (c: AllocationConfig) => setEditLockedTarget(c)
+  const handleDeleteAlloc = (c: AllocationConfig) => setDeleteAllocTarget(c)
+
+  const confirmDeleteAlloc = async () => {
+    if (!deleteAllocTarget) return
+    try {
+      await deleteAllocConfig(deleteAllocTarget.id)
+      toast(`"${deleteAllocTarget.name}" deleted`, 'success')
+      setDeleteAllocTarget(null)
+      reloadAllocs()
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+    }
+  }
 
   const confirmLock = async () => {
     if (!lockTarget) return
@@ -777,7 +806,7 @@ export default function SetupPage() {
         <div>
           {activeTab === 'General'        && <GeneralTab />}
           {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Allocation'     && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} />}
+          {activeTab === 'Allocation'     && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
           {activeTab === 'Special Configs' && (
             <SpecialConfigsTab
               key={specialRefetch}
@@ -899,6 +928,13 @@ export default function SetupPage() {
           </div>
         </div>
       </Modal>
+      <DeleteDialog
+        open={!!deleteAllocTarget}
+        onClose={() => setDeleteAllocTarget(null)}
+        onConfirm={confirmDeleteAlloc}
+        label={deleteAllocTarget ? `"${deleteAllocTarget.name}"` : 'this configuration'}
+      />
+
       <AddBankModal
         open={bankModalOpen}
         onClose={() => { setBankModalOpen(false); setEditBankRecord(null) }}
