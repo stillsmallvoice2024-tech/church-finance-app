@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
-import { useCategories } from '../hooks/useCategories'
+import { useCategories, useCategoryGroups } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency, formatDate } from '../utils/formatters'
 
@@ -40,6 +40,7 @@ export default function CategoryLedger() {
   usePageTitle('Category Ledger')
 
   const { categories }                           = useCategories()
+  const { groups }                               = useCategoryGroups()
   const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
 
   // Summary state
@@ -447,45 +448,79 @@ export default function CategoryLedger() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {filteredRows.map(row => (
-                    <tr key={row.name} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 font-medium text-gray-800">{row.name}</td>
+                  {(() => {
+                    const nameToGroupId = new Map(categories.map(c => [c.name, c.group_id]))
+                    const groupedSections = groups
+                      .map(g => ({ group: g, rows: filteredRows.filter(r => nameToGroupId.get(r.name) === g.id) }))
+                      .filter(s => s.rows.length > 0)
+                    const ungroupedRows = filteredRows.filter(r => !nameToGroupId.get(r.name))
 
-                      <td className="px-4 py-3 text-right">
-                        {row.percentage !== null ? (
-                          <span className="font-mono font-semibold text-primary">{Number(row.percentage).toFixed(1)}%</span>
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
-                      </td>
+                    const CategoryDataRow = ({ row }: { row: CategoryRow }) => (
+                      <tr className="hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-3 font-medium text-gray-800">{row.name}</td>
+                        <td className="px-4 py-3 text-right">
+                          {row.percentage !== null
+                            ? <span className="font-mono font-semibold text-primary">{Number(row.percentage).toFixed(1)}%</span>
+                            : <span className="text-gray-300 text-xs">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell">
+                          {row.percentageAllocated > 0
+                            ? <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated)}</span>
+                            : <span className="text-gray-300 text-xs">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell">
+                          {row.specificSeed > 0
+                            ? <span className="font-mono text-amber-700">{formatCurrency(row.specificSeed)}</span>
+                            : <span className="text-gray-300 text-xs">—</span>}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {row.savingsIn > 0 || row.savingsOut > 0
+                            ? <span className={`font-mono font-semibold ${row.savingsIn - row.savingsOut >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(row.savingsIn - row.savingsOut)}</span>
+                            : <span className="text-gray-300 text-xs">—</span>}
+                        </td>
+                      </tr>
+                    )
 
-                      <td className="px-4 py-3 text-right hidden md:table-cell">
-                        {row.percentageAllocated > 0 ? (
-                          <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated)}</span>
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
-                      </td>
+                    const GroupSubtotalRow = ({ sectionRows, label }: { sectionRows: CategoryRow[]; label: string }) => {
+                      const sPct   = sectionRows.reduce((s, r) => s + (r.percentage ?? 0), 0)
+                      const sAlloc = sectionRows.reduce((s, r) => s + r.percentageAllocated, 0)
+                      const sSeed  = sectionRows.reduce((s, r) => s + r.specificSeed, 0)
+                      const sSav   = sectionRows.reduce((s, r) => s + (r.savingsIn - r.savingsOut), 0)
+                      return (
+                        <tr className="bg-gray-50 border-t border-gray-100 text-xs font-semibold text-gray-600">
+                          <td className="px-5 py-2 pl-8">↳ {label} subtotal</td>
+                          <td className="px-4 py-2 text-right font-mono text-primary">{sPct > 0 ? `${sPct.toFixed(1)}%` : '—'}</td>
+                          <td className="px-4 py-2 text-right font-mono text-primary hidden md:table-cell">{sAlloc > 0 ? formatCurrency(sAlloc) : '—'}</td>
+                          <td className="px-4 py-2 text-right font-mono text-amber-700 hidden md:table-cell">{sSeed > 0 ? formatCurrency(sSeed) : '—'}</td>
+                          <td className={`px-5 py-2 text-right font-mono ${sSav >= 0 ? 'text-success' : 'text-danger'}`}>{sSav !== 0 ? formatCurrency(sSav) : '—'}</td>
+                        </tr>
+                      )
+                    }
 
-                      <td className="px-4 py-3 text-right hidden md:table-cell">
-                        {row.specificSeed > 0 ? (
-                          <span className="font-mono text-amber-700">{formatCurrency(row.specificSeed)}</span>
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
+                    return (
+                      <>
+                        {groupedSections.map(({ group, rows: gRows }) => (
+                          <Fragment key={group.id}>
+                            <tr className="bg-gray-100 border-y border-gray-200">
+                              <td colSpan={5} className="px-5 py-2">
+                                <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{group.name}</span>
+                              </td>
+                            </tr>
+                            {gRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
+                            <GroupSubtotalRow sectionRows={gRows} label={group.name} />
+                          </Fragment>
+                        ))}
+                        {ungroupedRows.length > 0 && groupedSections.length > 0 && (
+                          <tr className="bg-gray-100 border-y border-gray-200">
+                            <td colSpan={5} className="px-5 py-2">
+                              <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Other</span>
+                            </td>
+                          </tr>
                         )}
-                      </td>
-
-                      <td className="px-5 py-3 text-right">
-                        {row.savingsIn > 0 || row.savingsOut > 0 ? (
-                          <span className={`font-mono font-semibold ${row.savingsIn - row.savingsOut >= 0 ? 'text-success' : 'text-danger'}`}>
-                            {formatCurrency(row.savingsIn - row.savingsOut)}
-                          </span>
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        {ungroupedRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
+                      </>
+                    )
+                  })()}
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">

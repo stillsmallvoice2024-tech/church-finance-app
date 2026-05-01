@@ -3,6 +3,7 @@ import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucid
 import { supabase } from '../lib/supabase'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency } from '../utils/formatters'
+import { useCategories } from '../hooks/useCategories'
 
 interface SavingsRow {
   category:     string
@@ -13,6 +14,8 @@ interface SavingsRow {
 
 export default function SavingsPortions() {
   usePageTitle('Savings Portions')
+
+  const { categories } = useCategories()
 
   const [rows,    setRows]    = useState<SavingsRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,6 +59,13 @@ export default function SavingsPortions() {
       ensure(cat).withdrawn += Number(r.actual_amount ?? r.amount_disbursed ?? 0)
     }
 
+    // Add starting balances for savings categories
+    for (const cat of categories) {
+      if (!cat.starting_balance || cat.starting_balance === 0) continue
+      if (cat.starting_balance_budget_portion !== 'Savings') continue
+      ensure(cat.name).deposited += cat.starting_balance
+    }
+
     const result: SavingsRow[] = [...map.entries()].map(([category, v]) => ({
       category,
       deposited: v.deposited,
@@ -65,7 +75,7 @@ export default function SavingsPortions() {
 
     setRows(result)
     setLoading(false)
-  }, [])
+  }, [categories])
 
   useEffect(() => { load() }, [load])
 

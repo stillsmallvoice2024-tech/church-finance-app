@@ -63,32 +63,21 @@ export default function SpecificGivings() {
     const start = `${year}-01-01`
     const end   = `${year}-12-31`
 
-    const [byType, byCode] = await Promise.all([
-      supabase
-        .from('inflow_transactions')
-        .select('id, date, stage_code_1, specific_seed_description, description, amount')
-        .eq('inflow_type', 'specific_seed')
-        .gte('date', start)
-        .lte('date', end)
-        .order('date', { ascending: false }),
-      supabase
-        .from('inflow_transactions')
-        .select('id, date, stage_code_1, specific_seed_description, description, amount')
-        .eq('stage_code_2', 'Specific Seed')
-        .neq('inflow_type', 'specific_seed') // avoid double-counting
-        .gte('date', start)
-        .lte('date', end)
-        .order('date', { ascending: false }),
-    ])
+    const result = await supabase
+      .from('inflow_transactions')
+      .select('id, date, stage_code_1, specific_seed_description, description, amount')
+      .eq('stage_code_2', 'Specific Seed')
+      .gte('date', start)
+      .lte('date', end)
+      .order('date', { ascending: false })
 
-    if (byType.error || byCode.error) {
-      setError(byType.error?.message ?? byCode.error?.message ?? 'Failed to load data')
+    if (result.error) {
+      setError(result.error.message)
       setLoading(false)
       return
     }
 
-    const all = [...(byType.data ?? []), ...(byCode.data ?? [])] as SpecificRow[]
-    all.sort((a, b) => b.date.localeCompare(a.date))
+    const all = (result.data ?? []) as SpecificRow[]
     setRows(all)
     setLoading(false)
   }, [year])
