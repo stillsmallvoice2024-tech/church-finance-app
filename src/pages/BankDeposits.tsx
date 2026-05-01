@@ -16,6 +16,8 @@ import { useToastStore } from '../store/toastStore'
 import { useAuthStore }  from '../store/authStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -176,6 +178,7 @@ export default function BankDeposits() {
   const [showModal,    setShowModal]    = useState(false)
   const [editRecord,   setEditRecord]   = useState<DepositRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DepositRow | null>(null)
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
   const [deleting,     setDeleting]     = useState(false)
   const [showRecon,    setShowRecon]    = useState(false)
   const [reconData,    setReconData]    = useState<{ depositsTotal: number; inflowTaggedTotal: number } | null>(null)
@@ -383,9 +386,17 @@ export default function BankDeposits() {
                 </div>
                 <p className="text-base font-bold text-gray-900">{formatCurrency(row.amount)}</p>
                 {row.bank_name       && <p className="text-xs text-gray-500">{row.bank_name}</p>}
-                {row.description     && <p className="text-xs text-gray-600 truncate">{row.description}</p>}
+                {row.description     && (
+                  <div className="text-xs text-gray-600">
+                    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  </div>
+                )}
                 {row.transaction_ref && <p className="text-xs text-gray-400 font-mono truncate">Ref: {row.transaction_ref}</p>}
-                {row.remarks         && <p className="text-xs text-gray-400 italic truncate">{row.remarks}</p>}
+                {row.remarks         && (
+                  <div className="text-xs text-gray-400 italic">
+                    <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -418,9 +429,13 @@ export default function BankDeposits() {
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate">{row.description ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
+                      <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    </td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate">{row.remarks ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
+                      <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    </td>
                     {admin && (
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -456,6 +471,7 @@ export default function BankDeposits() {
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}
       />
+      <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
 }

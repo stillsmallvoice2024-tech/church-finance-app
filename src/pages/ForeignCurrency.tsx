@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react'
-import { Plus, Download, TrendingUp, TrendingDown } from 'lucide-react'
+import { Plus, Download, TrendingUp, TrendingDown, Pencil } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { useFXTransactions } from '../hooks/useFX'
+import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
 import { AddFXModal } from '../components/modals/AddFXModal'
 import { exportCSV } from '../utils/csvExport'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
 
@@ -24,7 +26,9 @@ function fmtNGN(n: number) {
 
 export default function ForeignCurrency() {
   const [addOpen, setAddOpen]           = useState(false)
+  const [editRecord, setEditRecord]     = useState<FXTransaction | null>(null)
   const [filterCcy, setFilterCcy]       = useState<FXCurrency | ''>('')
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
   const [rates, setRates]               = useState<Record<FXCurrency, number>>({
     USD: 0, GBP: 0, EUR: 0, CNY: 0,
   })
@@ -234,6 +238,7 @@ export default function ForeignCurrency() {
                   <th className="px-4 py-3 text-right font-medium">Running Balance</th>
                   <th className="px-4 py-3 text-left font-medium">Narration</th>
                   <th className="px-4 py-3 text-left font-medium">Ref</th>
+                  {canWrite() && <th className="px-4 py-3 w-10" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -272,12 +277,23 @@ export default function ForeignCurrency() {
                       <td className="px-4 py-3 text-right text-gray-700">
                         {meta.symbol}{fmtFX(t.running_balance)}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">
-                        {t.narration ?? '—'}
+                      <td className="px-4 py-3 text-gray-600 max-w-[200px]">
+                        <DescriptionCell id={t.id} text={t.narration} expanded={descExpanded.has(t.id)} onToggle={() => toggleDesc(t.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
                       <td className="px-4 py-3 text-gray-400 font-mono text-xs">
                         {t.transaction_ref ?? '—'}
                       </td>
+                      {canWrite() && (
+                        <td className="px-2 py-3">
+                          <button
+                            onClick={() => setEditRecord(t)}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                            title="Edit transaction"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -287,11 +303,19 @@ export default function ForeignCurrency() {
         )}
       </div>
 
+      <DescriptionTooltip tooltip={descTooltip} />
       <AddFXModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSuccess={refetch}
         currentBalances={currentBalances}
+      />
+      <AddFXModal
+        open={!!editRecord}
+        onClose={() => setEditRecord(null)}
+        onSuccess={() => { setEditRecord(null); refetch() }}
+        currentBalances={currentBalances}
+        editRecord={editRecord}
       />
     </div>
   )

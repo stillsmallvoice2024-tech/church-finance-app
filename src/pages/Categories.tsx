@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, LayoutList, LayoutGrid } from 'lucide-react'
 import { useCategories, useCategoryGroups, type Category, type CategoryGroup } from '../hooks/useCategories'
 import { CurrencyInput } from '../components/ui/CurrencyInput'
 import {
@@ -16,6 +16,8 @@ import { useToast } from '../store/toastStore'
 import { Modal } from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { supabase } from '../lib/supabase'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +264,7 @@ export default function Categories() {
   const [hideTarget,   setHideTarget]   = useState<Category | null>(null)
   const [showHidden,   setShowHidden]   = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(false)
+  const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (c: Category) => { setEditRecord(c); setModalOpen(true) }
@@ -337,6 +340,16 @@ export default function Categories() {
           <p className="text-sm text-gray-500 mt-0.5">Manage income and allocation categories</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
+            <button onClick={() => setDisplayMode('table')} title="Table view"
+              className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button onClick={() => setDisplayMode('cards')} title="Card view"
+              className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
           {hiddenCt > 0 && (
             <button onClick={() => setShowHidden(v => !v)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
@@ -384,8 +397,49 @@ export default function Categories() {
         </div>
       )}
 
+      {/* Category cards */}
+      {!loading && visible.length > 0 && displayMode === 'cards' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visible.map(cat => {
+            const group = groups.find(g => g.id === cat.group_id)
+            return (
+              <div key={cat.id} className={`rounded-xl border border-gray-200 bg-white p-4 space-y-2 hover:shadow-md transition-shadow ${cat.is_hidden ? 'opacity-50' : ''}`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-800">{cat.name}
+                      {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
+                    </p>
+                    {group && <p className="text-xs text-gray-400">{group.name}</p>}
+                  </div>
+                  {cat.starting_balance_budget_portion && (
+                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{cat.starting_balance_budget_portion}</span>
+                  )}
+                </div>
+                {cat.description && <p className="text-xs text-gray-500 break-words">{cat.description}</p>}
+                {cat.starting_balance != null && cat.starting_balance !== 0 && (
+                  <p className="text-xs text-gray-600 font-mono">
+                    Bal. B/F: ₦{cat.starting_balance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+                <div className="flex gap-1 pt-1 border-t border-gray-50">
+                  <button onClick={() => openEdit(cat)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => handleDeleteClick(cat)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => handleToggleHide(cat, !cat.is_hidden)} className="p-1.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title={cat.is_hidden ? 'Show' : 'Hide'}>
+                    {cat.is_hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Category table — grouped */}
-      {!loading && visible.length > 0 && (
+      {!loading && visible.length > 0 && displayMode === 'table' && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -481,14 +535,16 @@ function CategoryRow({ cat, onEdit, onDelete, onToggleHide, checking }: {
   onToggleHide:  (c: Category, hide: boolean) => void
   checking:      boolean
 }) {
+  const { expandedIds, tooltip, setTooltip, toggle } = useDescriptionExpand()
   return (
     <tr className={`hover:bg-gray-50 transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
       <td className="px-5 py-3 font-medium text-gray-800">
         {cat.name}
         {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
       </td>
-      <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">
-        {cat.description ?? <span className="text-gray-300 italic">—</span>}
+      <td className="px-5 py-3 text-gray-500 hidden sm:table-cell max-w-[200px]">
+        <DescriptionCell id={cat.id} text={cat.description} expanded={expandedIds.has(cat.id)} onToggle={() => toggle(cat.id)} tooltip={tooltip} setTooltip={setTooltip} />
+        <DescriptionTooltip tooltip={tooltip} />
       </td>
       <td className="px-5 py-3 hidden md:table-cell">
         {cat.starting_balance_budget_portion

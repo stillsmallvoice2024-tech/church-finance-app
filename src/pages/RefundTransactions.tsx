@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
-import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw } from 'lucide-react'
+import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
 import { Card }            from '../components/ui/Card'
 import { usePageTitle }    from '../hooks/usePageTitle'
 import { supabase }        from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { AddInflowModal }  from '../components/modals/AddInflowModal'
+import { AddOutflowModal } from '../components/modals/AddOutflowModal'
+import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
+import { useRole } from '../hooks/useRole'
 
 interface TxnRow {
   id:                      string
@@ -14,10 +18,14 @@ interface TxnRow {
   original_transaction_id: string | null
   bank_name:               string | null
   remarks:                 string | null
+  inflowData?:             InflowTransaction
+  outflowData?:            OutflowTransaction
 }
 
 export default function RefundTransactions() {
   usePageTitle('Refunds')
+
+  const { canWrite } = useRole()
 
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -25,6 +33,8 @@ export default function RefundTransactions() {
   const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
+  const [editInflow,  setEditInflow]  = useState<InflowTransaction | null>(null)
+  const [editOutflow, setEditOutflow] = useState<OutflowTransaction | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -32,11 +42,11 @@ export default function RefundTransactions() {
 
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions')
-        .select('id, date, amount, description, original_transaction_id, bank_name, remark')
+        .select('*')
         .eq('transaction_type', 'refund')
         .order('date', { ascending: false }),
       supabase.from('outflow_transactions')
-        .select('id, date, amount_disbursed, description, original_transaction_id, bank_name, remarks')
+        .select('*')
         .eq('transaction_type', 'refund')
         .order('date', { ascending: false }),
     ])
@@ -55,6 +65,7 @@ export default function RefundTransactions() {
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remark as string | null,
+        inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string, direction: 'out' as const,
@@ -63,11 +74,17 @@ export default function RefundTransactions() {
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remarks as string | null,
+        outflowData: r as unknown as OutflowTransaction,
       })),
     ].sort((a, b) => b.date.localeCompare(a.date))
 
     setRows(merged)
     setLoading(false)
+  }
+
+  const handleEdit = (row: TxnRow) => {
+    if (row.direction === 'in' && row.inflowData) setEditInflow(row.inflowData)
+    else if (row.direction === 'out' && row.outflowData) setEditOutflow(row.outflowData)
   }
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -164,9 +181,16 @@ export default function RefundTransactions() {
               <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {row.direction === 'in' ? 'Inflow' : 'Outflow'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {row.direction === 'in' ? 'Inflow' : 'Outflow'}
+                    </span>
+                    {canWrite() && (
+                      <button onClick={() => handleEdit(row)} className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-base font-bold text-gray-900">{formatCurrency(row.amount)}</p>
                 {row.description && <p className="text-xs text-gray-600 truncate">{row.description}</p>}
@@ -186,6 +210,7 @@ export default function RefundTransactions() {
                   {['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
+                  {canWrite() && <th className="px-4 py-3 w-10" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -215,6 +240,13 @@ export default function RefundTransactions() {
                     <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate">{row.remarks ?? '—'}</td>
+                    {canWrite() && (
+                      <td className="px-2 py-3">
+                        <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -222,6 +254,19 @@ export default function RefundTransactions() {
           </div>
         )}
       </Card>
+
+      <AddInflowModal
+        open={!!editInflow}
+        onClose={() => setEditInflow(null)}
+        onSuccess={() => { setEditInflow(null); load() }}
+        editRecord={editInflow}
+      />
+      <AddOutflowModal
+        open={!!editOutflow}
+        onClose={() => setEditOutflow(null)}
+        onSuccess={() => { setEditOutflow(null); load() }}
+        editRecord={editOutflow}
+      />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingDown, Plus, Download, Pencil, Trash2,
-  Search, AlertCircle, RefreshCw, FileSpreadsheet,
+  Search, AlertCircle, RefreshCw, FileSpreadsheet, LayoutList, LayoutGrid,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
@@ -19,6 +19,8 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 const PAGE_SIZE = 25
 
@@ -89,9 +91,11 @@ export default function Outflows() {
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
 
   // UI state
-  const [editRecord,  setEditRecord]  = useState<OutflowTransaction | null>(null)
-  const [modalOpen,   setModalOpen]   = useState(false)
-  const [deleteId,    setDeleteId]    = useState<string | null>(null)
+  const [editRecord,   setEditRecord]  = useState<OutflowTransaction | null>(null)
+  const [modalOpen,    setModalOpen]   = useState(false)
+  const [deleteId,     setDeleteId]    = useState<string | null>(null)
+  const [displayMode,  setDisplayMode] = useState<'table' | 'cards'>('table')
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
   const [importOpen,  setImportOpen]  = useState(false)
 
   const { push: toast }                             = useToastStore()
@@ -156,6 +160,16 @@ export default function Outflows() {
             <p className="text-sm text-gray-500 mt-0.5">All disbursements and payments</p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
+              <button onClick={() => setDisplayMode('table')} title="Table view"
+                className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button onClick={() => setDisplayMode('cards')} title="Card view"
+                className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
             <button
               onClick={handleExport} disabled={data.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
@@ -214,8 +228,59 @@ export default function Outflows() {
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
-        {/* Table */}
-        <Card padding={false}>
+        {/* Cards / Table */}
+        {displayMode === 'cards' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-2/3" /><div className="h-6 bg-gray-200 rounded w-1/2" />
+                </div>
+              ))
+            ) : data.length === 0 ? (
+              <div className="col-span-full py-16 text-center text-gray-400">
+                <TrendingDown className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+                <p className="text-sm">No outflow transactions match your filters.</p>
+              </div>
+            ) : data.map(row => {
+              const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
+              return (
+                <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+                    {row.is_pending_deduction && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
+                    )}
+                  </div>
+                  <p className="text-lg font-bold text-danger">{formatCurrency(Number(row.amount_disbursed))}</p>
+                  <div className="text-sm text-gray-700">
+                    <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  </div>
+                  {row.stage_code_1 && <p className="text-xs text-gray-400">{row.stage_code_1}</p>}
+                  {row.remarks && <p className="text-xs text-gray-400 italic truncate">{row.remarks}</p>}
+                  {net !== Number(row.amount_disbursed) && (
+                    <p className="text-xs text-gray-500">Net: {formatCurrency(net)}</p>
+                  )}
+                  <div className="flex gap-1 pt-1 border-t border-gray-50">
+                    {canWrite() && (
+                      <button onClick={() => openEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canDelete() && (
+                      <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+        {displayMode === 'cards' && <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />}
+
+        {displayMode === 'table' && <Card padding={false}>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
@@ -255,13 +320,13 @@ export default function Outflows() {
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.transaction_id ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
-                          <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="flex items-start gap-1.5 min-w-0">
                             {row.is_pending_deduction && (
                               <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
                                 Pending
                               </span>
                             )}
-                            <span className="truncate" title={row.description ?? undefined}>{row.description ?? '—'}</span>
+                            <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
@@ -299,7 +364,7 @@ export default function Outflows() {
             </table>
           </div>
           <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
-        </Card>
+        </Card>}
       </div>
 
       <AddOutflowModal
@@ -316,6 +381,7 @@ export default function Outflows() {
         label="this outflow transaction"
       />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <DescriptionTooltip tooltip={descTooltip} />
 
       {/* Floating import button */}
       <CanWrite>
