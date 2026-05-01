@@ -13,6 +13,7 @@ export interface DbBank {
   name:           string
   account_number: string | null
   account_type:   string | null
+  currency:       string   // 'NGN' | 'USD' | 'GBP' | 'EUR' | 'CNY'
   starting_balance:               number | null
   starting_balance_category:      string | null
   starting_balance_budget_portion: string | null

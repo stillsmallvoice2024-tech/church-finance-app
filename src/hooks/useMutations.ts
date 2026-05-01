@@ -679,6 +679,7 @@ export interface AddBankInput {
   name:            string
   account_number?: string
   account_type?:   string
+  currency?:       string
   starting_balance?:               number
   starting_balance_category?:      string
   starting_balance_budget_portion?: string
@@ -716,6 +717,7 @@ export interface UpdateBankInput {
   name:            string
   account_number?: string
   account_type?:   string
+  currency?:       string
   starting_balance?:               number
   starting_balance_category?:      string
   starting_balance_budget_portion?: string
@@ -738,6 +740,7 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
           name:           input.name,
           account_number: input.account_number ?? null,
           account_type:   input.account_type   ?? null,
+          currency:       input.currency        ?? 'NGN',
           starting_balance:                input.starting_balance               ?? null,
           starting_balance_category:       input.starting_balance_category      ?? null,
           starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
