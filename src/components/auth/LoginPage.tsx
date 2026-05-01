@@ -22,7 +22,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
 
   const [mode,        setMode]        = useState<'signin' | 'forgot'>('signin')
-  const [email,       setEmail]       = useState('')
+  const [identifier,  setIdentifier]  = useState('')
   const [password,    setPassword]    = useState('')
   const [showPw,      setShowPw]      = useState(false)
   const [loading,     setLoading]     = useState(false)
@@ -33,10 +33,27 @@ export default function LoginPage() {
     if (isAuthenticated) navigate('/', { replace: true })
   }, [isAuthenticated, navigate])
 
+  const resolveEmail = async (input: string): Promise<string | null> => {
+    if (input.includes('@')) return input
+    // Look up email by username in profiles table
+    const { data } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('username', input.trim().toLowerCase())
+      .maybeSingle()
+    return data?.email ?? null
+  }
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
+    const email = await resolveEmail(identifier)
+    if (!email) {
+      setLoading(false)
+      setError('No account found for that username.')
+      return
+    }
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (err) setError(err.message)
@@ -46,6 +63,12 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     setLoading(true)
+    const email = await resolveEmail(identifier)
+    if (!email) {
+      setLoading(false)
+      setError('No account found for that username or email.')
+      return
+    }
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     })
@@ -77,7 +100,7 @@ export default function LoginPage() {
           {mode === 'signin' ? (
             <>
               <p className="mb-6 text-center text-sm font-medium text-gray-600">
-                Sign in with your church email
+                Sign in to your church finance account
               </p>
 
               {error && (
@@ -88,16 +111,16 @@ export default function LoginPage() {
               )}
 
               <form onSubmit={handleSignIn} className="space-y-4">
-                {/* Email */}
+                {/* Email or Username */}
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-600">Email address</label>
+                  <label className="text-xs font-medium text-gray-600">Email or Username</label>
                   <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@standingchurch.org"
+                    type="text"
+                    value={identifier}
+                    onChange={e => setIdentifier(e.target.value)}
+                    placeholder="you@standingchurch.org or username"
                     required
-                    autoComplete="email"
+                    autoComplete="username"
                     className={inputCls}
                   />
                 </div>
@@ -130,7 +153,7 @@ export default function LoginPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || !email || !password}
+                  disabled={loading || !identifier || !password}
                   className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -149,7 +172,7 @@ export default function LoginPage() {
             <>
               <p className="mb-2 text-center text-sm font-semibold text-gray-700">Reset your password</p>
               <p className="mb-6 text-center text-xs text-gray-500">
-                Enter your email and we'll send a reset link.
+                Enter your email or username and we'll send a reset link.
               </p>
 
               {error && (
@@ -164,26 +187,26 @@ export default function LoginPage() {
                   <CheckCircle2 className="w-10 h-10 text-success" />
                   <p className="text-sm font-medium text-gray-700">Reset email sent!</p>
                   <p className="text-xs text-gray-500 text-center">
-                    Check your inbox at <strong>{email}</strong> and click the link to set a new password.
+                    Check your inbox and click the link to set a new password.
                   </p>
                 </div>
               ) : (
                 <form onSubmit={handleForgotPassword} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-600">Email address</label>
+                    <label className="text-xs font-medium text-gray-600">Email or Username</label>
                     <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      placeholder="you@standingchurch.org"
+                      type="text"
+                      value={identifier}
+                      onChange={e => setIdentifier(e.target.value)}
+                      placeholder="you@standingchurch.org or username"
                       required
-                      autoComplete="email"
+                      autoComplete="username"
                       className={inputCls}
                     />
                   </div>
                   <button
                     type="submit"
-                    disabled={loading || !email}
+                    disabled={loading || !identifier}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
                   >
                     {loading && <Loader2 className="w-4 h-4 animate-spin" />}

@@ -119,7 +119,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               <ChurchCross />
             </div>
             <div className="min-w-0">
-              <p className="text-white font-semibold text-sm leading-tight truncate">
+              <p className="text-white font-semibold text-sm leading-tight break-words">
                 The Standing Church International
               </p>
               <p className="text-accent text-xs font-semibold tracking-widest uppercase mt-0.5">

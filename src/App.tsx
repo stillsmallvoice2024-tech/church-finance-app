@@ -32,6 +32,8 @@ import RefundTransactions   from './pages/RefundTransactions'
 import ReversalTransactions from './pages/ReversalTransactions'
 import Receipts             from './pages/Receipts'
 import ChangeLog            from './pages/ChangeLog'
+import ResetPassword        from './pages/ResetPassword'
+import AcceptInvite         from './pages/AcceptInvite'
 
 export default function App() {
   useAuthListener()
@@ -65,6 +67,8 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/invite/:token" element={<AcceptInvite />} />
 
         {/* Protected — AuthGuard checks auth + provides RoleContext */}
         <Route element={<AuthGuard />}>
