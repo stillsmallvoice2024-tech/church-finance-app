@@ -60,6 +60,18 @@ create table public.categories (
 );
 
 -- ============================================================
+-- CURRENCIES
+-- ============================================================
+create table public.currencies (
+  code       text primary key,
+  name       text not null,
+  symbol     text not null default '',
+  flag       text,
+  is_active  boolean not null default true,
+  sort_order integer default 100
+);
+
+-- ============================================================
 -- BANKS
 -- ============================================================
 create table public.banks (
@@ -67,7 +79,7 @@ create table public.banks (
   name                             text not null,
   account_number                   text,
   account_type                     text,
-  currency                         text not null default 'NGN' check (currency in ('NGN','USD','GBP','EUR','CNY')),
+  currency                         text not null default 'NGN',
   starting_balance                 numeric(15,2),
   starting_balance_category        text,
   starting_balance_budget_portion  text,
@@ -257,7 +269,7 @@ create table public.ledger_entries (
 create table public.fx_transactions (
   id              uuid default gen_random_uuid() primary key,
   date            date not null,
-  currency        text not null check (currency in ('USD','GBP','EUR','CNY')),
+  currency        text not null,
   transaction_ref text,
   narration       text,
   deposit         numeric(15,4) default 0,
@@ -371,6 +383,19 @@ create table public.field_changes (
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================
+-- Seed default currencies
+insert into public.currencies (code, name, symbol, flag, sort_order) values
+  ('NGN', 'Nigerian Naira', '₦', '🇳🇬', 0),
+  ('USD', 'US Dollar',      '$', '🇺🇸', 1),
+  ('GBP', 'British Pound',  '£', '🇬🇧', 2),
+  ('EUR', 'Euro',           '€', '🇪🇺', 3),
+  ('CNY', 'Chinese Yuan',   '¥', '🇨🇳', 4)
+on conflict (code) do nothing;
+
+-- ============================================================
+-- ROW LEVEL SECURITY (RLS)
+-- ============================================================
+alter table public.currencies         enable row level security;
 alter table public.profiles           enable row level security;
 alter table public.category_groups    enable row level security;
 alter table public.categories         enable row level security;
@@ -421,6 +446,13 @@ create policy "profiles_update_own" on public.profiles
   for update using (auth.uid() = id);
 
 create policy "profiles_admin_all" on public.profiles
+  for all using (public.is_admin());
+
+-- ── Currencies ─────────────────────────────────────────────────────────────────
+
+create policy "currencies_read" on public.currencies
+  for select using (auth.uid() is not null);
+create policy "currencies_write" on public.currencies
   for all using (public.is_admin());
 
 -- ── Category Groups ────────────────────────────────────────────────────────────
@@ -614,6 +646,7 @@ create policy "field_changes_write" on public.field_changes
 -- ============================================================
 -- USEFUL INDEXES
 -- ============================================================
+create index if not exists idx_currencies_sort     on public.currencies(sort_order);
 create index if not exists idx_inflow_date        on public.inflow_transactions(date);
 create index if not exists idx_outflow_date       on public.outflow_transactions(date);
 create index if not exists idx_intra_date         on public.intra_flows(date);

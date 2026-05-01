@@ -4,12 +4,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddFXTransaction, type AddFXTransactionInput } from '../../hooks/useMutations'
-
-type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
+import { useCurrencies } from '../../hooks/useCurrencies'
 
 const schema = z.object({
   date:            z.string().min(1, 'Date is required'),
-  currency:        z.enum(['USD', 'GBP', 'EUR', 'CNY'] as const),
+  currency:        z.string().min(1, 'Select a currency'),
   type:            z.enum(['deposit', 'withdrawal'] as const),
   amount:          z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   narration:       z.string().optional(),
@@ -22,12 +21,15 @@ interface Props {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
-  /** Current running balance per currency — used to preview new balance */
   currentBalances: Map<string, number>
 }
 
 export function AddFXModal({ open, onClose, onSuccess, currentBalances }: Props) {
   const { mutate, loading, error, reset } = useAddFXTransaction()
+  const { currencies } = useCurrencies()
+
+  const fxCurrencies = currencies.filter(c => c.code !== 'NGN')
+
   const { register, handleSubmit, watch, formState: { errors }, reset: resetForm } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { currency: 'USD', type: 'deposit' },
@@ -36,17 +38,25 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances }: Props)
   useEffect(() => {
     if (!open) return
     reset()
-    resetForm({ date: new Date().toISOString().slice(0, 10), currency: 'USD', type: 'deposit', amount: undefined })
-  }, [open, reset, resetForm])
+    resetForm({
+      date:     new Date().toISOString().slice(0, 10),
+      currency: fxCurrencies[0]?.code ?? 'USD',
+      type:     'deposit',
+      amount:   undefined,
+    })
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const selectedCurrency = watch('currency') as FXCurrency
-  const txType    = watch('type')
-  const amount    = Number(watch('amount') || 0)
-  const prevBal   = currentBalances.get(selectedCurrency) ?? 0
-  const newBal    = useMemo(
+  const selectedCurrency = watch('currency')
+  const txType   = watch('type')
+  const amount   = Number(watch('amount') || 0)
+  const prevBal  = currentBalances.get(selectedCurrency) ?? 0
+  const newBal   = useMemo(
     () => txType === 'deposit' ? prevBal + amount : prevBal - amount,
     [txType, prevBal, amount],
   )
+
+  const selectedMeta = fxCurrencies.find(c => c.code === selectedCurrency)
+  const sym = selectedMeta?.symbol ?? selectedCurrency
 
   const onSubmit = async (values: FormValues) => {
     const deposit    = values.type === 'deposit'    ? values.amount : 0
@@ -67,8 +77,6 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances }: Props)
     } catch { /* surfaced via hook error */ }
   }
 
-  const sym = { USD: '$', GBP: '£', EUR: '€', CNY: '¥' }[selectedCurrency]
-
   return (
     <Modal open={open} onClose={onClose} title="Add FX Transaction">
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -80,8 +88,10 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances }: Props)
           </Field>
           <Field label="Currency" error={errors.currency?.message}>
             <select {...register('currency')} className={`${iCls(!!errors.currency)} bg-white`}>
-              {(['USD','GBP','EUR','CNY'] as const).map(c => (
-                <option key={c} value={c}>{c}</option>
+              {fxCurrencies.map(c => (
+                <option key={c.code} value={c.code}>
+                  {c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}
+                </option>
               ))}
             </select>
           </Field>
@@ -126,8 +136,12 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances }: Props)
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} disabled={loading} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-          <button type="submit" disabled={loading} className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2">
+          <button type="button" onClick={onClose} disabled={loading}
+            className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            Cancel
+          </button>
+          <button type="submit" disabled={loading}
+            className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2">
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             {loading ? 'Saving…' : 'Save Transaction'}
           </button>

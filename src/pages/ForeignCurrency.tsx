@@ -4,18 +4,10 @@ import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions } from '../hooks/useFX'
 import { useFXConversions } from '../hooks/useFXConversions'
+import { useCurrencies } from '../hooks/useCurrencies'
 import { AddFXModal } from '../components/modals/AddFXModal'
 import { AddFXConversionModal } from '../components/modals/AddFXConversionModal'
 import { exportCSV } from '../utils/csvExport'
-
-type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
-
-const FX_META: { code: FXCurrency; symbol: string; flag: string; name: string }[] = [
-  { code: 'USD', symbol: '$', flag: '🇺🇸', name: 'US Dollar'      },
-  { code: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound'  },
-  { code: 'EUR', symbol: '€', flag: '🇪🇺', name: 'Euro'           },
-  { code: 'CNY', symbol: '¥', flag: '🇨🇳', name: 'Chinese Yuan'   },
-]
 
 function fmtFX(n: number, dp = 4) {
   return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })
@@ -25,14 +17,15 @@ function fmtNGN(n: number) {
 }
 
 export default function ForeignCurrency() {
+  const { currencies } = useCurrencies()
+  const fxMeta = currencies.filter(c => c.code !== 'NGN')
+
   const [addOpen,         setAddOpen]         = useState(false)
-  const [filterCcy,       setFilterCcy]       = useState<FXCurrency | ''>('')
+  const [filterCcy,       setFilterCcy]       = useState('')
   const [convertOpen,     setConvertOpen]     = useState(false)
   const [convertCcy,      setConvertCcy]      = useState<string>('USD')
   const [showConversions, setShowConversions] = useState(false)
-  const [rates, setRates] = useState<Record<FXCurrency, number>>({
-    USD: 0, GBP: 0, EUR: 0, CNY: 0,
-  })
+  const [rates, setRates] = useState<Record<string, number>>({})
 
   const { canWrite }                                = useRole()
   const { transactions, summaries, loading, error, refetch } =
@@ -56,7 +49,7 @@ export default function ForeignCurrency() {
   )
 
   // Currencies with unconverted balance (reconciliation prompt)
-  const unconvertedBalances = FX_META.filter(m => (summaryMap.get(m.code)?.currentBalance ?? 0) > 0)
+  const unconvertedBalances = fxMeta.filter(m => (summaryMap.get(m.code)?.currentBalance ?? 0) > 0)
 
   const handleExport = () => {
     exportCSV(
@@ -74,7 +67,7 @@ export default function ForeignCurrency() {
     )
   }
 
-  const totalNairaEquivalent = FX_META.reduce((sum, m) => {
+  const totalNairaEquivalent = fxMeta.reduce((sum, m) => {
     const bal  = summaryMap.get(m.code)?.currentBalance ?? 0
     const rate = rates[m.code]
     return sum + bal * rate
@@ -146,7 +139,7 @@ export default function ForeignCurrency() {
 
       {/* Currency Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {FX_META.map(meta => {
+        {fxMeta.map(meta => {
           const s       = summaryMap.get(meta.code)
           const balance = s?.currentBalance ?? 0
           const active  = balance > 0
@@ -199,7 +192,7 @@ export default function ForeignCurrency() {
           Naira Equivalent (Enter Rates)
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          {FX_META.map(meta => {
+          {fxMeta.map(meta => {
             const bal   = summaryMap.get(meta.code)?.currentBalance ?? 0
             const rate  = rates[meta.code]
             const equiv = bal * rate
@@ -272,7 +265,7 @@ export default function ForeignCurrency() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {conversions.map(c => {
-                    const meta = FX_META.find(m => m.code === c.fx_currency)
+                    const meta = fxMeta.find(m => m.code === c.fx_currency)
                     return (
                       <tr key={c.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{c.date}</td>
@@ -327,7 +320,7 @@ export default function ForeignCurrency() {
 
           <div className="flex items-center gap-2">
             <div className="flex gap-1">
-              {FX_META.map(m => (
+              {fxMeta.map(m => (
                 <button
                   key={m.code}
                   onClick={() => setFilterCcy(prev => prev === m.code ? '' : m.code)}
@@ -377,7 +370,7 @@ export default function ForeignCurrency() {
               <tbody className="divide-y divide-gray-50">
                 {transactions.map(t => {
                   const isDeposit = t.deposit > 0
-                  const meta      = FX_META.find(m => m.code === t.currency)!
+                  const meta      = fxMeta.find(m => m.code === t.currency)!
                   return (
                     <tr key={t.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{t.date}</td>

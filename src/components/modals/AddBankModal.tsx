@@ -6,17 +6,11 @@ import { AlertTriangle, Terminal, Plus, Trash2, Check, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
+import { useCurrencies } from '../../hooks/useCurrencies'
 import type { DbBank, StartingBalanceRow } from '../../hooks/useBanks'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
-const CURRENCIES = [
-  { code: 'NGN', label: 'NGN — Nigerian Naira' },
-  { code: 'USD', label: 'USD — US Dollar'      },
-  { code: 'GBP', label: 'GBP — British Pound'  },
-  { code: 'EUR', label: 'EUR — Euro'            },
-  { code: 'CNY', label: 'CNY — Chinese Yuan'    },
-] as const
 const NEW_SENTINEL = '__new__'
 
 const MIGRATION_SQL =
@@ -50,6 +44,7 @@ interface Props {
 export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
   const { categories, refetch: refetchCategories } = useCategories()
+  const { currencies } = useCurrencies()
 
   const addMutation    = useAddBank()
   const updateMutation = useUpdateBank()
@@ -254,8 +249,10 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
         <Field label="Account Currency">
           <select {...register('currency')} className={`${iCls(false)} bg-white`}>
-            {CURRENCIES.map(c => (
-              <option key={c.code} value={c.code}>{c.label}</option>
+            {currencies.map(c => (
+              <option key={c.code} value={c.code}>
+                {c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}
+              </option>
             ))}
           </select>
           <p className="text-[11px] text-gray-400 mt-0.5">

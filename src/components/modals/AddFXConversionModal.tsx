@@ -3,14 +3,8 @@ import { TrendingDown, TrendingUp, AlertCircle, RefreshCw } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddFXConversion, type AddFXConversionInput } from '../../hooks/useFXConversions'
 import { useAllocationStore } from '../../store/allocationStore'
+import { useCurrencies } from '../../hooks/useCurrencies'
 import type { FXCurrencySummary } from '../../hooks/useFX'
-
-const FX_META: { code: string; symbol: string; flag: string }[] = [
-  { code: 'USD', symbol: '$',  flag: '🇺🇸' },
-  { code: 'GBP', symbol: '£',  flag: '🇬🇧' },
-  { code: 'EUR', symbol: '€',  flag: '🇪🇺' },
-  { code: 'CNY', symbol: '¥',  flag: '🇨🇳' },
-]
 
 function fmtFX(n: number, dp = 4)  { return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp }) }
 function fmtNGN(n: number)          { return n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
@@ -26,6 +20,8 @@ interface Props {
 export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defaultCurrency }: Props) {
   const { mutate, loading, error, reset } = useAddFXConversion()
   const { configs } = useAllocationStore()
+  const { currencies } = useCurrencies()
+  const fxCurrencies = currencies.filter(c => c.code !== 'NGN')
 
   const [currency,    setCurrency]    = useState(defaultCurrency ?? 'USD')
   const [fxAmount,    setFxAmount]    = useState('')
@@ -38,7 +34,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
 
   const summary    = summaries.find(s => s.currency === currency)
   const balance    = summary?.currentBalance ?? 0
-  const meta       = FX_META.find(m => m.code === currency)!
+  const meta       = fxCurrencies.find(m => m.code === currency) ?? { code: currency, symbol: currency, flag: null }
   const fxAmt      = parseFloat(fxAmount) || 0
   const exchangeRate = parseFloat(rate)   || 0
   const nairaAmt   = fxAmt * exchangeRate
@@ -58,8 +54,8 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
   }, [open, defaultCurrency]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const availableCurrencies = useMemo(
-    () => FX_META.filter(m => (summaries.find(s => s.currency === m.code)?.currentBalance ?? 0) > 0),
-    [summaries],
+    () => fxCurrencies.filter(m => (summaries.find(s => s.currency === m.code)?.currentBalance ?? 0) > 0),
+    [fxCurrencies, summaries],
   )
 
   const handleSubmit = async (e: React.FormEvent) => {

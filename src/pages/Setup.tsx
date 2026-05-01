@@ -13,6 +13,7 @@ import { CreateSpecialConfigModal } from '../components/modals/CreateSpecialConf
 import { ResetDataModal }           from '../components/modals/ResetDataModal'
 import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeModal'
 import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
+import { useCurrencies, useAddCurrency, useDeleteCurrency } from '../hooks/useCurrencies'
 import {
   useLockAllocationConfig,
   useUnlockAllocationConfig,
@@ -21,7 +22,7 @@ import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Database'] as const
+const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Currencies', 'Database'] as const
 type Tab = typeof TABS[number]
 
 // ── General tab ────────────────────────────────────────────────────────────────
@@ -456,6 +457,184 @@ function SpecialConfigsTab({ onNew, onEdit, onDelete }: {
   )
 }
 
+// ── Currencies tab ─────────────────────────────────────────────────────────────
+
+const CURRENCIES_MIGRATION_SQL =
+`-- Create currencies table
+CREATE TABLE IF NOT EXISTS public.currencies (
+  code       text PRIMARY KEY,
+  name       text NOT NULL,
+  symbol     text NOT NULL DEFAULT '',
+  flag       text,
+  is_active  boolean NOT NULL DEFAULT true,
+  sort_order integer DEFAULT 100
+);
+ALTER TABLE public.currencies ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "currencies_read"  ON public.currencies FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY IF NOT EXISTS "currencies_write" ON public.currencies FOR ALL
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+-- Seed default currencies (skip if already present)
+INSERT INTO public.currencies (code, name, symbol, flag, sort_order) VALUES
+  ('NGN', 'Nigerian Naira', '₦', '🇳🇬', 0),
+  ('USD', 'US Dollar',      '$', '🇺🇸', 1),
+  ('GBP', 'British Pound',  '£', '🇬🇧', 2),
+  ('EUR', 'Euro',           '€', '🇪🇺', 3),
+  ('CNY', 'Chinese Yuan',   '¥', '🇨🇳', 4)
+ON CONFLICT (code) DO NOTHING;
+
+-- Remove hardcoded currency check constraints (if they exist)
+ALTER TABLE public.banks          DROP CONSTRAINT IF EXISTS banks_currency_check;
+ALTER TABLE public.fx_transactions DROP CONSTRAINT IF EXISTS fx_transactions_currency_check;`
+
+function CurrenciesTab() {
+  const { currencies, loading, error, refetch } = useCurrencies()
+  const { mutate: addCurrency, loading: adding, error: addError, reset: resetAdd } = useAddCurrency()
+  const { mutate: deleteCurrency } = useDeleteCurrency()
+  const { push: toast } = useToastStore()
+
+  const [code,   setCode]   = useState('')
+  const [name,   setName]   = useState('')
+  const [symbol, setSymbol] = useState('')
+  const [flag,   setFlag]   = useState('')
+  const [formErr, setFormErr] = useState<string | null>(null)
+  const [showMigration, setShowMigration] = useState(false)
+  const isMigrationError = !!error && /relation.*does not exist|does not exist/i.test(error)
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormErr(null)
+    if (!code.trim())   { setFormErr('Currency code is required (e.g. CHF)'); return }
+    if (!name.trim())   { setFormErr('Name is required'); return }
+    if (!symbol.trim()) { setFormErr('Symbol is required (e.g. Fr.)'); return }
+    try {
+      await addCurrency({ code: code.trim().toUpperCase(), name: name.trim(), symbol: symbol.trim(), flag: flag.trim() || undefined })
+      toast(`${code.toUpperCase()} added`, 'success')
+      setCode(''); setName(''); setSymbol(''); setFlag('')
+      resetAdd()
+      refetch()
+    } catch { /* error surfaced via addError */ }
+  }
+
+  const handleDelete = async (currCode: string) => {
+    try {
+      await deleteCurrency(currCode)
+      toast(`${currCode} removed`, 'success')
+      refetch()
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+    }
+  }
+
+  const iCls = 'px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      {/* Migration hint */}
+      {(isMigrationError || showMigration) && (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>Run this SQL in your Supabase editor to create the currencies table, then refresh.</span>
+          </div>
+          <pre className="bg-gray-900 text-green-300 text-xs rounded-xl p-4 overflow-x-auto whitespace-pre-wrap">
+            {CURRENCIES_MIGRATION_SQL}
+          </pre>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">Manage the currencies available across banks, FX transactions, and deposits.</p>
+        <button
+          onClick={() => setShowMigration(v => !v)}
+          className="text-xs text-gray-400 hover:text-gray-600 underline"
+        >
+          {showMigration ? 'Hide' : 'Show'} migration SQL
+        </button>
+      </div>
+
+      {/* Add form */}
+      <form onSubmit={handleAdd} className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Add Currency</p>
+        {(formErr || addError) && (
+          <p className="text-xs text-red-600">{formErr ?? addError}</p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Code *</label>
+            <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} maxLength={6}
+              placeholder="e.g. CHF" className={`${iCls} uppercase`} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Symbol *</label>
+            <input value={symbol} onChange={e => setSymbol(e.target.value)} maxLength={6}
+              placeholder="e.g. Fr." className={iCls} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              placeholder="e.g. Swiss Franc" className={iCls} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Flag emoji</label>
+            <input value={flag} onChange={e => setFlag(e.target.value)} maxLength={4}
+              placeholder="e.g. 🇨🇭" className={iCls} />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button type="submit" disabled={adding}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60">
+            {adding ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus className="w-4 h-4" />}
+            {adding ? 'Adding…' : 'Add Currency'}
+          </button>
+        </div>
+      </form>
+
+      {/* Currency list */}
+      {loading ? (
+        <div className="space-y-2">
+          {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Code</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Symbol</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Flag</th>
+                <th className="px-4 py-2.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {currencies.map(c => (
+                <tr key={c.code} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-mono font-semibold text-gray-800">{c.code}</td>
+                  <td className="px-4 py-2.5 text-gray-700">{c.name}</td>
+                  <td className="px-4 py-2.5 font-mono text-gray-600">{c.symbol}</td>
+                  <td className="px-4 py-2.5 text-lg">{c.flag ?? '—'}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      onClick={() => handleDelete(c.code)}
+                      className="p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-danger transition-colors"
+                      title={`Remove ${c.code}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Database tab ───────────────────────────────────────────────────────────────
 
 const MIGRATION_SQL = `-- Add bank_name to inflow/outflow
@@ -791,6 +970,7 @@ export default function SetupPage() {
               onDelete={t => setDeleteIncomeTypeTarget(t)}
             />
           )}
+          {activeTab === 'Currencies'     && <CurrenciesTab />}
           {activeTab === 'Database'       && <DatabaseTab />}
         </div>
 
