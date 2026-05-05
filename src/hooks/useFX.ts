@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 export interface FXTransaction {
   id: string
   date: string
-  currency: 'USD' | 'GBP' | 'EUR' | 'CNY'
+  currency: string
   transaction_ref: string | null
   narration: string | null
   deposit: number

@@ -6,11 +6,12 @@ import { AlertTriangle, Terminal, Plus, Trash2, Check, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
+import { useCurrencies } from '../../hooks/useCurrencies'
 import type { DbBank, StartingBalanceRow } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { formatCurrency, parseCurrency } from '../../utils/currency'
 
-const ACCOUNT_TYPES = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
+const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
 const NEW_SENTINEL = '__new__'
 
@@ -26,6 +27,7 @@ const schema = z.object({
   name:             z.string().min(1, 'Bank name is required'),
   account_number:   z.string().optional(),
   account_type:     z.string().optional(),
+  currency:         z.string().optional(),
   starting_balance: z.coerce.number().min(0).optional(),
 })
 
@@ -44,6 +46,7 @@ interface Props {
 export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
   const { categories, refetch: refetchCategories } = useCategories()
+  const { currencies } = useCurrencies()
 
   const addMutation    = useAddBank()
   const updateMutation = useUpdateBank()
@@ -95,6 +98,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         name:             editRecord.name,
         account_number:   editRecord.account_number ?? '',
         account_type:     editRecord.account_type   ?? '',
+        currency:         editRecord.currency       ?? 'NGN',
         starting_balance: editRecord.starting_balance ?? undefined,
       })
       const allocs = editRecord.starting_balance_allocations ?? []
@@ -177,6 +181,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       name:           values.name,
       account_number: values.account_number || undefined,
       account_type:   values.account_type   || undefined,
+      currency:       values.currency       || 'NGN',
       starting_balance:             values.starting_balance || undefined,
       starting_balance_alloc_type:  hasBalance ? allocType : undefined,
       starting_balance_allocations: allocations,
@@ -245,6 +250,19 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
+        </Field>
+
+        <Field label="Account Currency">
+          <select {...register('currency')} className={`${iCls(false)} bg-white`}>
+            {currencies.map(c => (
+              <option key={c.code} value={c.code}>
+                {c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Foreign-currency (domiciliary) accounts are tracked under Foreign Currency.
+          </p>
         </Field>
 
         {/* Opening Balance section */}
