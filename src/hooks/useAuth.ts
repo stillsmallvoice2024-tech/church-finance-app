@@ -6,14 +6,15 @@ import type { UserProfile } from '../types'
 // ── Internal helper ────────────────────────────────────────────────────────────
 async function fetchAndSetProfile(userId: string): Promise<void> {
   const { setProfile } = useAuthStore.getState()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single()
-
-  if (!error && data) {
-    setProfile(data as UserProfile)
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+    if (!error && data) setProfile(data as UserProfile)
+  } catch {
+    // fetch aborted (background tab) — user remains authenticated, profile stays null
   }
 }
 
@@ -39,8 +40,11 @@ export function useAuthListener(): void {
       ) {
         // Authenticated — hydrate the store
         useAuthStore.getState().setUser(session.user)
-        await fetchAndSetProfile(session.user.id)
-        if (mounted) useAuthStore.getState().setLoading(false)
+        try {
+          await fetchAndSetProfile(session.user.id)
+        } finally {
+          if (mounted) useAuthStore.getState().setLoading(false)
+        }
       } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
         // No session on first load, or explicit sign-out
         if (mounted) useAuthStore.getState().clearAuth()
