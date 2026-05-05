@@ -222,6 +222,8 @@ const { isAdmin, canWrite, canDelete } = useRole()
 2. `setLoading(false)` is in a `finally` block and only runs if `mounted && !signal.aborted` — so a superseded or unmounted event never clears the wrong loading state.
 3. A 10-second hard timeout (`PROFILE_FETCH_TIMEOUT_MS`) forces `setLoading(false)` if the fetch hangs, preventing a permanently stuck spinner.
 
+**Full structural rewrite (request ownership model):** `useAuth.ts` uses a monotonically increasing `requestIdRef` (useRef) and an `AbortController` ref (`controllerRef`) to enforce strict request ownership. Every auth event — including a synthetic `FOCUS_REVALIDATE` fired by a `window focus` listener — increments `requestId`, aborts the previous controller, and creates a new one. State updates (profile, setLoading) only run when `requestIdRef.current === requestId && mounted && !signal.aborted`. `fetchProfile` uses a raw `fetch` with `credentials: 'include'` and the session Bearer token. All lifecycle transitions are logged with `[auth:N]` prefixes for tracing races.
+
 ---
 
 ## Key Patterns
