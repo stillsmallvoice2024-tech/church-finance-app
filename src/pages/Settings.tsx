@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon } from 'lucide-react'
+import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
@@ -66,39 +66,53 @@ export default function Settings() {
   const { theme, setTheme } = useThemeStore()
 
   const [fullName,      setFullName]      = useState(profile?.full_name ?? '')
+  const [username,      setUsername]      = useState((profile as { username?: string | null } | null)?.username ?? '')
   const [savingName,    setSavingName]    = useState(false)
-  const [sendingReset,  setSendingReset]  = useState(false)
-  const [resetSent,     setResetSent]     = useState(false)
+
+  // In-app password change
+  const [newPassword,   setNewPassword]   = useState('')
+  const [confirmPw,     setConfirmPw]     = useState('')
+  const [showNewPw,     setShowNewPw]     = useState(false)
+  const [showConfPw,    setShowConfPw]    = useState(false)
+  const [changingPw,    setChangingPw]    = useState(false)
+  const [pwError,       setPwError]       = useState<string | null>(null)
+  const [pwDone,        setPwDone]        = useState(false)
 
   // Sync when profile loads
   useEffect(() => {
     if (profile?.full_name) setFullName(profile.full_name)
   }, [profile?.full_name])
 
-  const handleSaveName = async () => {
+  const handleSaveProfile = async () => {
     if (!fullName.trim() || !user?.id) return
     setSavingName(true)
     const { error } = await supabase
       .from('profiles')
-      .update({ full_name: fullName.trim(), updated_at: new Date().toISOString() })
+      .update({
+        full_name:  fullName.trim(),
+        username:   username.trim().toLowerCase() || null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', user.id)
     setSavingName(false)
     if (error) toast(error.message, 'error')
-    else        toast('Name updated successfully', 'success')
+    else        toast('Profile updated', 'success')
   }
 
-  const handleResetPassword = async () => {
-    if (!user?.email) return
-    setSendingReset(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
-    setSendingReset(false)
+  const handleChangePassword = async () => {
+    setPwError(null)
+    if (newPassword.length < 8) { setPwError('Password must be at least 8 characters.'); return }
+    if (newPassword !== confirmPw) { setPwError('Passwords do not match.'); return }
+    setChangingPw(true)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setChangingPw(false)
     if (error) {
-      toast(error.message, 'error')
+      setPwError(error.message)
     } else {
-      setResetSent(true)
-      toast(`Password reset email sent to ${user.email}`, 'success')
+      toast('Password updated successfully', 'success')
+      setPwDone(true)
+      setNewPassword(''); setConfirmPw('')
+      setTimeout(() => setPwDone(false), 4000)
     }
   }
 
@@ -141,10 +155,22 @@ export default function Settings() {
               type="text"
               value={fullName}
               onChange={e => setFullName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSaveName()}
               placeholder="Your full name"
               className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             />
+          </div>
+
+          {/* Username field */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value.replace(/\s/g, ''))}
+              placeholder="Optional — used to log in instead of email"
+              className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            <p className="text-xs text-gray-400">Leave blank to log in with your email only.</p>
           </div>
 
           {/* Email (read-only) */}
@@ -172,7 +198,7 @@ export default function Settings() {
           </div>
 
           <button
-            onClick={handleSaveName}
+            onClick={handleSaveProfile}
             disabled={savingName || !fullName.trim()}
             className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
           >
@@ -185,26 +211,64 @@ export default function Settings() {
       {/* ── Change Password ──────────────────────────────────────────────── */}
       <Section icon={Lock} title="Change Password">
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            We'll send a secure password reset link to <strong>{user?.email}</strong>.
-            Click the link in the email to set a new password.
-          </p>
-
-          {resetSent ? (
+          {pwDone && (
             <div className="flex items-center gap-2.5 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-success">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
-              Reset email sent. Check your inbox.
+              Password updated successfully.
             </div>
-          ) : (
-            <button
-              onClick={handleResetPassword}
-              disabled={sendingReset}
-              className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-60 flex items-center gap-2"
-            >
-              {sendingReset && <Loader2 className="w-4 h-4 animate-spin" />}
-              {sendingReset ? 'Sending…' : 'Send Password Reset Email'}
-            </button>
           )}
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPw ? 'text' : 'password'}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                autoComplete="new-password"
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-10"
+              />
+              <button type="button" onClick={() => setShowNewPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">Confirm New Password</label>
+            <div className="relative">
+              <input
+                type={showConfPw ? 'text' : 'password'}
+                value={confirmPw}
+                onChange={e => setConfirmPw(e.target.value)}
+                placeholder="Re-enter new password"
+                autoComplete="new-password"
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-10"
+              />
+              <button type="button" onClick={() => setShowConfPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showConfPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {pwError && (
+            <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-danger">
+              <XCircle className="w-3.5 h-3.5 shrink-0" />
+              {pwError}
+            </div>
+          )}
+
+          <button
+            onClick={handleChangePassword}
+            disabled={changingPw || !newPassword || !confirmPw}
+            className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
+          >
+            {changingPw && <Loader2 className="w-4 h-4 animate-spin" />}
+            {changingPw ? 'Updating…' : 'Update Password'}
+          </button>
         </div>
       </Section>
 

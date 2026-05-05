@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, ChevronDown, ChevronRight, Download, Building2, Trash2 } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, Download, Building2, Trash2, Pencil } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import {
@@ -35,10 +35,11 @@ function ProjectCard({
   project: DbSpecialProject
   onMutated: () => void
 }) {
-  const [expanded, setExpanded]       = useState(false)
+  const [expanded, setExpanded]         = useState(false)
   const [addEntryOpen, setAddEntryOpen] = useState(false)
-  const [deleteId, setDeleteId]       = useState<string | null>(null)
-  const [deleting, setDeleting]       = useState(false)
+  const [editEntry, setEditEntry]       = useState<import('../hooks/useSpecialProjects').ProjectEntry | null>(null)
+  const [deleteId, setDeleteId]         = useState<string | null>(null)
+  const [deleting, setDeleting]         = useState(false)
 
   const { canWrite, isAdmin } = useRole()
   const { push }              = useToastStore()
@@ -184,7 +185,7 @@ function ProjectCard({
                       <th className="px-4 py-2.5 text-right font-medium">Refund</th>
                       <th className="px-4 py-2.5 text-right font-medium">Outflow</th>
                       <th className="px-4 py-2.5 text-right font-medium">Balance</th>
-                      {isAdmin() && <th className="px-4 py-2.5 w-10" />}
+                      {canWrite() && <th className="px-4 py-2.5 w-20" />}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -207,15 +208,26 @@ function ProjectCard({
                         <td className="px-4 py-2.5 text-right font-semibold text-gray-800">
                           ₦{fmt(Number(e.balance))}
                         </td>
-                        {isAdmin() && (
+                        {canWrite() && (
                           <td className="px-4 py-2.5 text-center">
-                            <button
-                              onClick={ev => { ev.stopPropagation(); setDeleteId(e.id) }}
-                              className="text-gray-300 hover:text-red-500 transition-colors"
-                              title="Delete entry"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={ev => { ev.stopPropagation(); setEditEntry(e) }}
+                                className="p-1 text-gray-300 hover:text-primary transition-colors"
+                                title="Edit entry"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {isAdmin() && (
+                                <button
+                                  onClick={ev => { ev.stopPropagation(); setDeleteId(e.id) }}
+                                  className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+                                  title="Delete entry"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -239,7 +251,7 @@ function ProjectCard({
                       <td className="px-4 py-2.5 text-right text-gray-800">
                         ₦{fmt(runningBalance)}
                       </td>
-                      {isAdmin() && <td />}
+                      {canWrite() && <td />}
                     </tr>
                   </tbody>
                 </table>
@@ -250,11 +262,12 @@ function ProjectCard({
       </div>
 
       <AddProjectEntryModal
-        open={addEntryOpen}
-        onClose={() => setAddEntryOpen(false)}
+        open={addEntryOpen || !!editEntry}
+        onClose={() => { setAddEntryOpen(false); setEditEntry(null) }}
         onSuccess={() => { refetch(); onMutated() }}
         projectId={project.id}
         previousBalance={runningBalance}
+        editRecord={editEntry}
       />
 
       <DeleteDialog

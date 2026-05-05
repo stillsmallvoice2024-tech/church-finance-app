@@ -11,15 +11,13 @@ import type { IntraFlowRow } from '../../hooks/useTransactions'
 
 const schema = z.object({
   date:               z.string().min(1, 'Date is required'),
-  account_from:       z.string().min(1, 'Source account is required'),
-  account_to:         z.string().min(1, 'Destination account is required'),
+  account_from:       z.string().min(1, 'From Category is required'),
+  account_from_stage2: z.string().min(1, 'From Portion is required'),
+  account_to:         z.string().min(1, 'To Category is required'),
+  account_to_stage2:  z.string().min(1, 'To Portion is required'),
   total_amount:       z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   description:        z.string().min(1, 'Description is required'),
   transaction_ref:    z.string().optional(),
-  account_from_stage1: z.string().optional(),
-  account_from_stage2: z.string().optional(),
-  account_to_stage1:  z.string().optional(),
-  account_to_stage2:  z.string().optional(),
   remark:             z.string().optional(),
 })
 
@@ -60,17 +58,15 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
     resetUpdate()
     if (editRecord) {
       resetForm({
-        date:               editRecord.date,
-        account_from:       editRecord.account_from       ?? '',
-        account_to:         editRecord.account_to         ?? '',
-        total_amount:       editRecord.total_amount,
-        description:        editRecord.description        ?? '',
-        transaction_ref:    editRecord.transaction_ref    ?? '',
-        account_from_stage1: editRecord.account_from_stage1 ?? '',
+        date:                editRecord.date,
+        account_from:        editRecord.account_from        ?? '',
         account_from_stage2: editRecord.account_from_stage2 ?? '',
-        account_to_stage1:  editRecord.account_to_stage1  ?? '',
-        account_to_stage2:  editRecord.account_to_stage2  ?? '',
-        remark:             editRecord.remark             ?? '',
+        account_to:          editRecord.account_to          ?? '',
+        account_to_stage2:   editRecord.account_to_stage2   ?? '',
+        total_amount:        editRecord.total_amount,
+        description:         editRecord.description         ?? '',
+        transaction_ref:     editRecord.transaction_ref     ?? '',
+        remark:              editRecord.remark              ?? '',
       })
     } else {
       resetForm({ date: new Date().toISOString().slice(0, 10), total_amount: undefined })
@@ -83,32 +79,28 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
         await update({
           id: editRecord.id,
           updates: {
-            date:               values.date,
-            account_from:       values.account_from,
-            account_to:         values.account_to,
-            total_amount:       values.total_amount,
-            description:        values.description         || null,
-            transaction_ref:    values.transaction_ref     || null,
-            account_from_stage1: values.account_from_stage1 || null,
-            account_from_stage2: values.account_from_stage2 || null,
-            account_to_stage1:  values.account_to_stage1   || null,
-            account_to_stage2:  values.account_to_stage2   || null,
-            remark:             values.remark              || null,
+            date:                values.date,
+            account_from:        values.account_from,
+            account_from_stage2: values.account_from_stage2,
+            account_to:          values.account_to,
+            account_to_stage2:   values.account_to_stage2,
+            total_amount:        values.total_amount,
+            description:         values.description      || null,
+            transaction_ref:     values.transaction_ref  || null,
+            remark:              values.remark           || null,
           },
         })
       } else {
         const input: AddIntraFlowInput = {
-          date:               values.date,
-          account_from:       values.account_from,
-          account_to:         values.account_to,
-          total_amount:       values.total_amount,
-          description:        values.description         || undefined,
-          transaction_ref:    values.transaction_ref     || undefined,
-          account_from_stage1: values.account_from_stage1 || undefined,
-          account_from_stage2: values.account_from_stage2 || undefined,
-          account_to_stage1:  values.account_to_stage1   || undefined,
-          account_to_stage2:  values.account_to_stage2   || undefined,
-          remark:             values.remark              || undefined,
+          date:                values.date,
+          account_from:        values.account_from,
+          account_from_stage2: values.account_from_stage2,
+          account_to:          values.account_to,
+          account_to_stage2:   values.account_to_stage2,
+          total_amount:        values.total_amount,
+          description:         values.description      || undefined,
+          transaction_ref:     values.transaction_ref  || undefined,
+          remark:              values.remark           || undefined,
         }
         await add(input)
       }
@@ -148,7 +140,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           </Field>
         </div>
 
-        {/* From / To accounts */}
+        {/* From */}
         <div className="grid grid-cols-2 gap-4">
           <Field label="From Category *" error={errors.account_from?.message}>
             <select {...register('account_from')} className={inputCls(!!errors.account_from)}>
@@ -158,12 +150,32 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
               ))}
             </select>
           </Field>
+          <Field label="From Portion *" error={errors.account_from_stage2?.message}>
+            <select {...register('account_from_stage2')} className={inputCls(!!errors.account_from_stage2)}>
+              <option value="">— Select —</option>
+              <option value="Percentage Allocation">Percentage Allocation</option>
+              <option value="Specific Seed">Specific Seed</option>
+              <option value="Savings">Savings</option>
+            </select>
+          </Field>
+        </div>
+
+        {/* To */}
+        <div className="grid grid-cols-2 gap-4">
           <Field label="To Category *" error={errors.account_to?.message}>
             <select {...register('account_to')} className={inputCls(!!errors.account_to)}>
               <option value="">— Select —</option>
               {categories.map(c => (
                 <option key={c.id} value={c.name}>{c.name}</option>
               ))}
+            </select>
+          </Field>
+          <Field label="To Portion *" error={errors.account_to_stage2?.message}>
+            <select {...register('account_to_stage2')} className={inputCls(!!errors.account_to_stage2)}>
+              <option value="">— Select —</option>
+              <option value="Percentage Allocation">Percentage Allocation</option>
+              <option value="Specific Seed">Specific Seed</option>
+              <option value="Savings">Savings</option>
             </select>
           </Field>
         </div>
@@ -184,41 +196,6 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
               className={inputCls(!!errors.transaction_ref)}
             />
           </Field>
-        </div>
-
-        {/* Stage codes */}
-        <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Stage Codes (Optional)</p>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="From Stage 1 (Category)" error={errors.account_from_stage1?.message}>
-              <select {...register('account_from_stage1')} className={inputCls(!!errors.account_from_stage1)}>
-                <option value="">— Select —</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-            </Field>
-            <Field label="From Stage 2 (Portion)" error={errors.account_from_stage2?.message}>
-              <select {...register('account_from_stage2')} className={inputCls(!!errors.account_from_stage2)}>
-                <option value="">— Select —</option>
-                <option value="Percentage Allocation">Percentage Allocation</option>
-                <option value="Specific Seed">Specific Seed</option>
-                <option value="Savings">Savings</option>
-              </select>
-            </Field>
-            <Field label="To Stage 1 (Category)" error={errors.account_to_stage1?.message}>
-              <select {...register('account_to_stage1')} className={inputCls(!!errors.account_to_stage1)}>
-                <option value="">— Select —</option>
-                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-            </Field>
-            <Field label="To Stage 2 (Portion)" error={errors.account_to_stage2?.message}>
-              <select {...register('account_to_stage2')} className={inputCls(!!errors.account_to_stage2)}>
-                <option value="">— Select —</option>
-                <option value="Percentage Allocation">Percentage Allocation</option>
-                <option value="Specific Seed">Specific Seed</option>
-                <option value="Savings">Savings</option>
-              </select>
-            </Field>
-          </div>
         </div>
 
         {/* Remark */}

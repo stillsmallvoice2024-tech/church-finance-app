@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
-import { useAddProjectEntry, type AddProjectEntryInput } from '../../hooks/useMutations'
+import { useAddProjectEntry, useUpdateProjectEntry, type AddProjectEntryInput, type UpdateProjectEntryInput } from '../../hooks/useMutations'
+import type { ProjectEntry } from '../../hooks/useSpecialProjects'
 
 const num = z.coerce.number().min(0).optional().or(z.literal('')).transform(v => v === '' ? undefined : Number(v))
 
@@ -17,45 +18,76 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 interface Props {
-  open: boolean
-  onClose: () => void
-  onSuccess?: () => void
-  projectId: string
+  open:            boolean
+  onClose:         () => void
+  onSuccess?:      () => void
+  projectId:       string
   previousBalance: number
+  editRecord?:     ProjectEntry | null
 }
 
-export function AddProjectEntryModal({ open, onClose, onSuccess, projectId, previousBalance }: Props) {
-  const { mutate, loading, error, reset } = useAddProjectEntry()
+export function AddProjectEntryModal({ open, onClose, onSuccess, projectId, previousBalance, editRecord }: Props) {
+  const addEntry    = useAddProjectEntry()
+  const updateEntry = useUpdateProjectEntry()
+  const isEdit = !!editRecord
+
+  const hook = isEdit ? updateEntry : addEntry
+  const { loading, error, reset } = hook
+
   const { register, handleSubmit, watch, formState: { errors }, reset: resetForm } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   useEffect(() => {
     if (!open) return
     reset()
-    resetForm({ date: new Date().toISOString().slice(0, 10) })
-  }, [open, reset, resetForm])
+    if (editRecord) {
+      resetForm({
+        date:        editRecord.date,
+        description: editRecord.description ?? '',
+        inflow:      editRecord.inflow  || undefined,
+        outflow:     editRecord.outflow || undefined,
+      })
+    } else {
+      resetForm({ date: new Date().toISOString().slice(0, 10) })
+    }
+  }, [open, editRecord, reset, resetForm])
 
   const inflow  = Number(watch('inflow')  || 0)
   const outflow = Number(watch('outflow') || 0)
-  const newBalance = useMemo(() => previousBalance + inflow - outflow, [previousBalance, inflow, outflow])
+  const baseBalance = isEdit
+    ? previousBalance - (editRecord?.inflow ?? 0) + (editRecord?.outflow ?? 0)
+    : previousBalance
+  const newBalance = useMemo(() => baseBalance + inflow - outflow, [baseBalance, inflow, outflow])
 
   const onSubmit = async (values: FormValues) => {
-    const input: AddProjectEntryInput = {
-      project_id:  projectId,
-      date:        values.date,
-      description: values.description || undefined,
-      inflow:      typeof values.inflow  === 'number' ? values.inflow  : 0,
-      outflow:     typeof values.outflow === 'number' ? values.outflow : 0,
-      balance:     newBalance,
-    }
     try {
-      await mutate(input)
+      if (isEdit && editRecord) {
+        const input: UpdateProjectEntryInput = {
+          id:          editRecord.id,
+          date:        values.date,
+          description: values.description || undefined,
+          inflow:      typeof values.inflow  === 'number' ? values.inflow  : 0,
+          outflow:     typeof values.outflow === 'number' ? values.outflow : 0,
+          balance:     newBalance,
+        }
+        await updateEntry.mutate(input)
+      } else {
+        const input: AddProjectEntryInput = {
+          project_id:  projectId,
+          date:        values.date,
+          description: values.description || undefined,
+          inflow:      typeof values.inflow  === 'number' ? values.inflow  : 0,
+          outflow:     typeof values.outflow === 'number' ? values.outflow : 0,
+          balance:     newBalance,
+        }
+        await addEntry.mutate(input)
+      }
       onSuccess?.()
       onClose()
     } catch { /* surfaced via hook error */ }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Project Entry">
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Project Entry' : 'Add Project Entry'}>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
 
@@ -88,7 +120,7 @@ export function AddProjectEntryModal({ open, onClose, onSuccess, projectId, prev
           <button type="button" onClick={onClose} disabled={loading} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel</button>
           <button type="submit" disabled={loading} className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2">
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-            {loading ? 'Saving…' : 'Save Entry'}
+            {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Save Entry'}
           </button>
         </div>
       </form>

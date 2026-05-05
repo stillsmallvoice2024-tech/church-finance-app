@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
-import type { InflowType } from '../utils/inflowTypes'
 import type { StartingBalanceRow } from './useBanks'
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
@@ -13,10 +12,42 @@ function extractMessage(err: unknown): string {
   return 'An unexpected error occurred'
 }
 
+// If a mutation returns a JWT / auth error, force a session refresh so the
+// next attempt gets a fresh token instead of hanging on a stale one.
+function handleAuthError(err: unknown): void {
+  const msg = extractMessage(err).toLowerCase()
+  if (msg.includes('jwt') || msg.includes('invalid claim') || msg.includes('not authenticated')) {
+    supabase.auth.refreshSession().catch(() => {})
+  }
+}
+
 /**
  * Write an audit entry. Fire-and-forget so it never blocks the main operation.
  * Console-warns on failure but does NOT surface to the user.
  */
+
+async function logFieldChanges(
+  userId:    string,
+  tableName: string,
+  recordId:  string,
+  oldData:   Record<string, unknown>,
+  newData:   Record<string, unknown>,
+): Promise<void> {
+  const rows = Object.keys(newData)
+    .filter(k => String(oldData[k] ?? '') !== String(newData[k] ?? ''))
+    .map(k => ({
+      user_id:    userId,
+      table_name: tableName,
+      record_id:  recordId,
+      field_name: k,
+      old_value:  oldData[k] != null ? String(oldData[k]) : null,
+      new_value:  newData[k] != null ? String(newData[k]) : null,
+    }))
+  if (rows.length === 0) return
+  const { error } = await supabase.from('field_changes').insert(rows)
+  if (error) console.warn('[field_changes] write failed:', error.message)
+}
+
 async function logAudit({
   userId,
   action,
@@ -48,9 +79,7 @@ async function logAudit({
 export interface AddInflowInput {
   date: string
   amount: number
-  inflow_type?: InflowType
   description?: string
-  bank_id?: string
   allocation_config_id?: string
   stage_code_1?: string
   stage_code_2?: string
@@ -71,7 +100,6 @@ export interface AddOutflowInput {
   amount_disbursed: number
   is_pending_deduction?: boolean
   description?: string
-  bank_id?: string
   allocation_config_id?: string
   bank_description?: string
   transaction_id?: string
@@ -92,14 +120,12 @@ export interface AddOutflowInput {
 export interface AddIntraFlowInput {
   date: string
   account_from: string
+  account_from_stage2: string
   account_to: string
+  account_to_stage2: string
   total_amount: number
   description?: string
   transaction_ref?: string
-  account_from_stage1?: string
-  account_from_stage2?: string
-  account_to_stage1?: string
-  account_to_stage2?: string
   remark?: string
 }
 
@@ -292,6 +318,9 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         oldData:   (oldData ?? null) as Record<string, unknown> | null,
         newData:   updates,
       })
+      if (oldData) {
+        logFieldChanges(user.id, table, id, oldData as Record<string, unknown>, updates)
+      }
     } catch (err) {
       const msg = extractMessage(err)
       setError(msg)
@@ -388,7 +417,7 @@ export function useAddLedgerEntry(): MutationHook<AddLedgerEntryInput, string> {
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'ledger_entries', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -422,7 +451,7 @@ export function useAddAccount(): MutationHook<AddAccountInput, string> {
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'accounts', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -455,7 +484,7 @@ export function useUpdateAccount(): MutationHook<UpdateAccountInput> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'accounts', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -477,7 +506,7 @@ export function useDeleteAccount(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'accounts', recordId: id })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -487,8 +516,11 @@ export function useDeleteAccount(): MutationHook<string> {
 // ── useAddCategory ─────────────────────────────────────────────────────────────
 
 export interface AddCategoryInput {
-  name: string
-  description?: string
+  name:              string
+  description?:      string
+  starting_balance?: number
+  starting_balance_budget_portion?: string
+  group_id?:         string | null
 }
 
 export function useAddCategory(): MutationHook<AddCategoryInput, string> {
@@ -501,13 +533,19 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
     setLoading(true); setError(null)
     try {
       const { data, error: err } = await supabase
-        .from('categories').insert(input).select('id').single()
+        .from('categories').insert({
+          name:             input.name,
+          description:      input.description ?? null,
+          starting_balance: input.starting_balance ?? null,
+          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+          group_id:         input.group_id ?? null,
+        }).select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'categories', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -517,9 +555,13 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
 // ── useUpdateCategory ──────────────────────────────────────────────────────────
 
 export interface UpdateCategoryInput {
-  id: string
-  name: string
-  description?: string
+  id:                string
+  name:              string
+  description?:      string
+  starting_balance?: number
+  starting_balance_budget_portion?: string
+  group_id?:         string | null
+  is_hidden?:        boolean
 }
 
 export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
@@ -533,12 +575,19 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
     try {
       const { error: err } = await supabase
         .from('categories')
-        .update({ name: input.name, description: input.description ?? null })
+        .update({
+          name:             input.name,
+          description:      input.description ?? null,
+          starting_balance: input.starting_balance ?? null,
+          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+          group_id:         input.group_id ?? null,
+          ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
+        })
         .eq('id', input.id)
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -559,6 +608,44 @@ export function useDeleteCategory(): MutationHook<string> {
       const { error: err } = await supabase.from('categories').delete().eq('id', id)
       if (err) throw err
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'categories', recordId: id })
+    } catch (err) {
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useAddCategoryGroup / useDeleteCategoryGroup ───────────────────────────────
+
+export function useAddCategoryGroup(): MutationHook<{ name: string }, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: { name: string }): Promise<string> => {
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('category_groups').insert({ name: input.name }).select('id').single()
+      if (err) throw err
+      return data!.id as string
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+export function useDeleteCategoryGroup(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase.from('category_groups').delete().eq('id', id)
+      if (err) throw err
     } catch (err) {
       const msg = extractMessage(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
@@ -597,7 +684,7 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'fx_transactions', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -630,7 +717,7 @@ export function useAddSpecialProject(): MutationHook<AddSpecialProjectInput, str
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'special_projects', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -666,7 +753,77 @@ export function useAddProjectEntry(): MutationHook<AddProjectEntryInput, string>
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'project_entries', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUpdateProjectEntry ──────────────────────────────────────────────────────
+
+export interface UpdateProjectEntryInput {
+  id:          string
+  date:        string
+  description?: string
+  inflow?:     number
+  outflow?:    number
+  balance:     number
+}
+
+export function useUpdateProjectEntry(): MutationHook<UpdateProjectEntryInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateProjectEntryInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data: oldData } = await supabase.from('project_entries').select('*').eq('id', input.id).single()
+      const updates = { date: input.date, description: input.description ?? null, inflow: input.inflow ?? 0, outflow: input.outflow ?? 0, balance: input.balance }
+      const { error: err } = await supabase.from('project_entries').update(updates).eq('id', input.id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'project_entries', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates })
+      if (oldData) logFieldChanges(user.id, 'project_entries', input.id, oldData as Record<string, unknown>, updates)
+    } catch (err) {
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useUpdateFXTransaction ─────────────────────────────────────────────────────
+
+export interface UpdateFXTransactionInput {
+  id:              string
+  date:            string
+  currency:        'USD' | 'GBP' | 'EUR' | 'CNY'
+  deposit?:        number
+  withdrawal?:     number
+  running_balance: number
+  narration?:      string
+  transaction_ref?: string
+}
+
+export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateFXTransactionInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data: oldData } = await supabase.from('fx_transactions').select('*').eq('id', input.id).single()
+      const { id, ...updates } = input
+      const { error: err } = await supabase.from('fx_transactions').update(updates).eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'fx_transactions', recordId: id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates })
+      if (oldData) logFieldChanges(user.id, 'fx_transactions', id, oldData as Record<string, unknown>, updates)
+    } catch (err) {
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -703,7 +860,7 @@ export function useAddBank(): MutationHook<AddBankInput, string> {
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'banks', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -751,7 +908,7 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -773,7 +930,7 @@ export function useDeleteBank(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'banks', recordId: id })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -811,7 +968,7 @@ export function useAddAllocationConfig(): MutationHook<AddAllocationConfigInput,
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'allocation_configs', recordId: data.id, newData: input as unknown as Record<string, unknown> })
       return data.id
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -843,7 +1000,7 @@ export function useUpdateAllocationConfig(): MutationHook<UpdateAllocationConfig
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -866,7 +1023,30 @@ export function useLockAllocationConfig(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: id, newData: { status: 'locked' } })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useDeleteAllocationConfig ──────────────────────────────────────────────────
+
+export function useDeleteAllocationConfig(): MutationHook<string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (id: string): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('allocation_configs').delete().eq('id', id)
+      if (err) throw err
+      logAudit({ userId: user.id, action: 'DELETE', tableName: 'allocation_configs', recordId: id, newData: {} })
+    } catch (err) {
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 
@@ -889,7 +1069,7 @@ export function useUnlockAllocationConfig(): MutationHook<string> {
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'allocation_configs', recordId: id, newData: { status: 'draft' } })
     } catch (err) {
-      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
 

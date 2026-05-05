@@ -38,10 +38,16 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
 
   const reposition = useCallback(() => {
     if (!btnRef.current) return
-    const rect = btnRef.current.getBoundingClientRect()
+    const rect   = btnRef.current.getBoundingClientRect()
     const panelW = 288
-    const left = Math.min(rect.left, window.innerWidth - panelW - 8)
-    setPanelPos({ top: rect.bottom + 4, left })
+    const panelH = 380
+    const gap    = 6
+    const left   = Math.min(Math.max(rect.left, 8), window.innerWidth - panelW - 8)
+    const spaceBelow = window.innerHeight - rect.bottom
+    const top = spaceBelow >= panelH
+      ? rect.bottom + gap
+      : rect.top - panelH - gap
+    setPanelPos({ top: Math.max(8, top), left })
   }, [])
 
   const toggle = () => {

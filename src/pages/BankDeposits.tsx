@@ -3,19 +3,21 @@ import {
   Landmark, Plus, Pencil, Trash2, ChevronDown, ChevronUp,
   LayoutGrid, LayoutList, AlertCircle, RefreshCw,
 } from 'lucide-react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Card }         from '../components/ui/Card'
 import { Modal }        from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { useBanks, type DbBank } from '../hooks/useBanks'
+import { useBanks }     from '../hooks/useBanks'
 import { useRole }      from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { useAuthStore }  from '../store/authStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -28,9 +30,6 @@ interface DepositRow {
   description:     string | null
   transaction_ref: string | null
   remarks:         string | null
-  currency:        string | null
-  fx_amount:       number | null
-  fx_rate:         number | null
 }
 
 // ── Modal schema ───────────────────────────────────────────────────────────────
@@ -42,42 +41,25 @@ const schema = z.object({
   description:     z.string().optional(),
   transaction_ref: z.string().optional(),
   remarks:         z.string().optional(),
-  fx_amount:       z.coerce.number().optional(),
-  fx_rate:         z.coerce.number().optional(),
 })
 type FormValues = z.infer<typeof schema>
 
 // ── Add/Edit modal ─────────────────────────────────────────────────────────────
 
 function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
-  open:       boolean
-  onClose:    () => void
-  onSaved:    () => void
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
   editRecord: DepositRow | null
-  banks:      DbBank[]
+  banks: { id: string; name: string }[]
 }) {
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState<string | null>(null)
   const { user } = useAuthStore.getState()
 
-  const { register, handleSubmit, formState: { errors }, reset, control, setValue } = useForm<FormValues>({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),
   })
-
-  const watchedBankId  = useWatch({ control, name: 'bank_id' })
-  const watchedFxAmt   = useWatch({ control, name: 'fx_amount' })
-  const watchedFxRate  = useWatch({ control, name: 'fx_rate' })
-
-  const selectedBank  = banks.find(b => b.id === watchedBankId)
-  const isFxBank      = selectedBank && selectedBank.currency !== 'NGN'
-  const fxEquiv       = (watchedFxAmt && watchedFxRate) ? (Number(watchedFxAmt) * Number(watchedFxRate)) : null
-
-  // Auto-fill NGN amount when FX fields change
-  useEffect(() => {
-    if (isFxBank && fxEquiv != null && fxEquiv > 0) {
-      setValue('amount', fxEquiv)
-    }
-  }, [fxEquiv, isFxBank, setValue])
 
   useEffect(() => {
     if (!open) return
@@ -90,8 +72,6 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
         description:     editRecord.description     ?? '',
         transaction_ref: editRecord.transaction_ref ?? '',
         remarks:         editRecord.remarks         ?? '',
-        fx_amount:       editRecord.fx_amount       ?? undefined,
-        fx_rate:         editRecord.fx_rate         ?? undefined,
       })
     } else {
       reset({ date: new Date().toISOString().slice(0, 10), amount: undefined })
@@ -102,8 +82,7 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
     setSaving(true)
     setErr(null)
     try {
-      const bankObj  = banks.find(b => b.id === values.bank_id)
-      const currency = bankObj?.currency ?? 'NGN'
+      const bankObj = banks.find(b => b.id === values.bank_id)
       const payload = {
         date:            values.date,
         bank_id:         values.bank_id         || null,
@@ -112,9 +91,6 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
         description:     values.description     || null,
         transaction_ref: values.transaction_ref || null,
         remarks:         values.remarks         || null,
-        currency,
-        fx_amount:       (currency !== 'NGN' && values.fx_amount) ? values.fx_amount : null,
-        fx_rate:         (currency !== 'NGN' && values.fx_rate)   ? values.fx_rate   : null,
         created_by:      user?.id               ?? null,
       }
       if (editRecord) {
@@ -143,47 +119,17 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
-          <Field label={isFxBank ? 'NGN Amount (₦) *' : 'Amount (₦) *'} error={errors.amount?.message}>
+          <Field label="Amount (₦) *" error={errors.amount?.message}>
             <input type="number" min="0" step="0.01" placeholder="0.00"
-              {...register('amount')} className={inputCls(!!errors.amount)}
-              readOnly={!!(isFxBank && fxEquiv != null && fxEquiv > 0)} />
+              {...register('amount')} className={inputCls(!!errors.amount)} />
           </Field>
         </div>
         <Field label="Bank" error={errors.bank_id?.message}>
           <select {...register('bank_id')} className={inputCls(!!errors.bank_id)}>
             <option value="">— Select Bank —</option>
-            {banks.map(b => (
-              <option key={b.id} value={b.id}>
-                {b.name}{b.currency !== 'NGN' ? ` (${b.currency})` : ''}
-              </option>
-            ))}
+            {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </Field>
-
-        {/* FX fields — shown for foreign-currency banks */}
-        {isFxBank && (
-          <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 space-y-3">
-            <p className="text-xs font-semibold text-amber-700">
-              Foreign Currency Deposit ({selectedBank.currency})
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={`FX Amount (${selectedBank.currency})`} error={errors.fx_amount?.message}>
-                <input type="number" min="0" step="0.0001" placeholder="0.0000"
-                  {...register('fx_amount')} className={inputCls(!!errors.fx_amount)} />
-              </Field>
-              <Field label={`Rate (₦ per ${selectedBank.currency})`} error={errors.fx_rate?.message}>
-                <input type="number" min="0" step="0.01" placeholder="e.g. 1580.00"
-                  {...register('fx_rate')} className={inputCls(!!errors.fx_rate)} />
-              </Field>
-            </div>
-            {fxEquiv != null && fxEquiv > 0 && (
-              <p className="text-xs text-amber-700">
-                ≈ ₦{fxEquiv.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (auto-filled above)
-              </p>
-            )}
-          </div>
-        )}
-
         <Field label="Description" error={errors.description?.message}>
           <input type="text" placeholder="e.g. Sunday offering deposit"
             {...register('description')} className={inputCls(!!errors.description)} />
@@ -226,13 +172,13 @@ export default function BankDeposits() {
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
   const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
-  const [tabFilter,    setTabFilter]    = useState<'all' | 'fx'>('all')
   const [dateFrom,     setDateFrom]     = useState('')
   const [dateTo,       setDateTo]       = useState('')
   const [bankFilter,   setBankFilter]   = useState('')
   const [showModal,    setShowModal]    = useState(false)
   const [editRecord,   setEditRecord]   = useState<DepositRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DepositRow | null>(null)
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
   const [deleting,     setDeleting]     = useState(false)
   const [showRecon,    setShowRecon]    = useState(false)
   const [reconData,    setReconData]    = useState<{ depositsTotal: number; inflowTaggedTotal: number } | null>(null)
@@ -243,7 +189,7 @@ export default function BankDeposits() {
     setError(null)
     const { data, error: err } = await supabase
       .from('bank_deposits')
-      .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks, currency, fx_amount, fx_rate')
+      .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks')
       .order('date', { ascending: false })
     if (err) { setError(err.message); setLoading(false); return }
     setRows((data ?? []) as DepositRow[])
@@ -281,7 +227,6 @@ export default function BankDeposits() {
   }
 
   const filtered = rows.filter(r => {
-    if (tabFilter === 'fx' && (!r.currency || r.currency === 'NGN')) return false
     if (dateFrom   && r.date < dateFrom)        return false
     if (dateTo     && r.date > dateTo)          return false
     if (bankFilter && r.bank_id !== bankFilter) return false
@@ -289,12 +234,11 @@ export default function BankDeposits() {
   })
 
   const totalAmount = filtered.reduce((s, r) => s + r.amount, 0)
-  const fxCount     = rows.filter(r => r.currency && r.currency !== 'NGN').length
 
   const openAdd  = () => { setEditRecord(null); setShowModal(true) }
   const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
 
-  const colCount = admin ? 8 : 7
+  const colCount = admin ? 7 : 6
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -335,31 +279,6 @@ export default function BankDeposits() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit">
-        <button
-          onClick={() => setTabFilter('all')}
-          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-            tabFilter === 'all' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          All Deposits
-        </button>
-        <button
-          onClick={() => setTabFilter('fx')}
-          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${
-            tabFilter === 'fx' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          FX Deposits
-          {fxCount > 0 && (
-            <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
-              {fxCount}
-            </span>
-          )}
-        </button>
-      </div>
-
       {/* Filters */}
       <Card>
         <div className="flex flex-wrap gap-3 items-end">
@@ -375,11 +294,7 @@ export default function BankDeposits() {
             <label className="text-xs font-medium text-gray-500">Bank</label>
             <select value={bankFilter} onChange={e => setBankFilter(e.target.value)} className={filterInputCls}>
               <option value="">All banks</option>
-              {banks.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.name}{b.currency !== 'NGN' ? ` (${b.currency})` : ''}
-                </option>
-              ))}
+              {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           {(dateFrom || dateTo || bankFilter) && (
@@ -458,34 +373,30 @@ export default function BankDeposits() {
               <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                  <div className="flex items-center gap-2">
-                    {row.currency && row.currency !== 'NGN' && (
-                      <span className="text-xs font-mono font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
-                        {row.currency}
-                      </span>
-                    )}
-                    {admin && (
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(row)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => setDeleteTarget(row)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  {admin && (
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEdit(row)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(row)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <p className="text-base font-bold text-gray-900">{formatCurrency(row.amount)}</p>
-                {row.fx_amount != null && row.currency && row.currency !== 'NGN' && (
-                  <p className="text-xs text-amber-700 font-mono">
-                    {row.currency} {row.fx_amount.toLocaleString()} @ ₦{row.fx_rate?.toLocaleString()}
-                  </p>
-                )}
                 {row.bank_name       && <p className="text-xs text-gray-500">{row.bank_name}</p>}
-                {row.description     && <p className="text-xs text-gray-600 truncate">{row.description}</p>}
+                {row.description     && (
+                  <div className="text-xs text-gray-600">
+                    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  </div>
+                )}
                 {row.transaction_ref && <p className="text-xs text-gray-400 font-mono truncate">Ref: {row.transaction_ref}</p>}
-                {row.remarks         && <p className="text-xs text-gray-400 italic truncate">{row.remarks}</p>}
+                {row.remarks         && (
+                  <div className="text-xs text-gray-400 italic">
+                    <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -494,7 +405,7 @@ export default function BankDeposits() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'Bank', 'Amount (₦)', 'Currency', 'FX Amount', 'Description', 'Ref', ...(admin ? ['Actions'] : [])].map(h => (
+                  {['Date', 'Bank', 'Amount (₦)', 'Description', 'Transaction Ref', 'Remarks', ...(admin ? ['Actions'] : [])].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -518,22 +429,13 @@ export default function BankDeposits() {
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
-                    <td className="px-4 py-3 text-sm">
-                      {row.currency && row.currency !== 'NGN' ? (
-                        <span className="font-mono text-xs font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
-                          {row.currency}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">NGN</span>
-                      )}
+                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
+                      <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </td>
-                    <td className="px-4 py-3 text-sm font-mono text-gray-600 whitespace-nowrap">
-                      {row.fx_amount != null && row.currency && row.currency !== 'NGN'
-                        ? `${row.fx_amount.toLocaleString()} @ ₦${row.fx_rate?.toLocaleString()}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[180px] truncate">{row.description ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
+                      <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    </td>
                     {admin && (
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
@@ -569,6 +471,7 @@ export default function BankDeposits() {
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}
       />
+      <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
 }

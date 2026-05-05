@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react'
@@ -7,12 +7,10 @@ import { Modal } from '../ui/Modal'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
-import {
-  INFLOW_TYPES, INFLOW_TYPE_LABELS, autoAssignInflowType, type InflowType,
-} from '../../utils/inflowTypes'
 import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
+import { CurrencyInput } from '../ui/CurrencyInput'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
 
@@ -34,7 +32,6 @@ const TXN_TYPES = [
 const schema = z.object({
   date:                       z.string().min(1, 'Date is required'),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
-  inflow_type:                z.string().optional(),
   description:                z.string().optional(),
   stage_code_1:               z.string().optional(),
   stage_code_2:               z.string().optional(),
@@ -77,8 +74,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const loading = adding || updating
   const error   = addError || updateError
 
-  // Track inflow_type separately so we can auto-update when description changes
-  const [inflowType, setInflowType] = useState<InflowType>('general_giving')
   const [selectedConfigId,  setSelectedConfigId]  = useState('')
   const [configManuallySet, setConfigManuallySet] = useState(false)
   const [fxOpen,            setFxOpen]            = useState(false)
@@ -92,6 +87,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
     reset: resetForm,
@@ -103,14 +99,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const stageCode1      = watch('stage_code_1')
   const transactionType = watch('transaction_type')
   const watchedDate     = watch('date')
-
-  // Auto-assign legacy inflow type from description
-  const [typeManuallySet, setTypeManuallySet] = useState(false)
-  useEffect(() => {
-    if (!typeManuallySet && description) {
-      setInflowType(autoAssignInflowType(description))
-    }
-  }, [description, typeManuallySet])
 
   // Auto-classify income type from description + stage code
   useEffect(() => {
@@ -149,31 +137,21 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setSelectedConfigId(cfg?.id ?? '')
   }, [watchedDate, lockedConfigs, configManuallySet])
 
-  const handleTypeChange = useCallback((t: InflowType) => {
-    setInflowType(t)
-    setTypeManuallySet(true)
-    setValue('inflow_type', t)
-  }, [setValue])
-
   // Populate / clear form when modal opens
   useEffect(() => {
     if (!open) return
     resetAdd()
     resetUpdate()
-    setTypeManuallySet(false)
     setConfigManuallySet(false)
     setIncomeTypeAutoSet(false)
     setFxOpen(false)
     if (editRecord) {
-      setInflowType(editRecord.inflow_type ?? 'general_giving')
-      setTypeManuallySet(true)
       setSelectedConfigId((editRecord as Record<string, unknown>).allocation_config_id as string ?? '')
       setConfigManuallySet(true)
       setIncomeTypeId(editRecord.income_type_id ?? '')
       resetForm({
         date:                       editRecord.date,
         amount:                     editRecord.amount,
-        inflow_type:                editRecord.inflow_type ?? 'general_giving',
         description:                editRecord.description ?? '',
         stage_code_1:               editRecord.stage_code_1 ?? '',
         stage_code_2:               editRecord.stage_code_2 ?? '',
@@ -187,7 +165,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         original_transaction_id:    editRecord.original_transaction_id ?? '',
       })
     } else {
-      setInflowType('general_giving')
       setSelectedConfigId('')
       setIncomeTypeId('')
       resetForm({ date: new Date().toISOString().slice(0, 10), amount: undefined })
@@ -196,14 +173,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const onSubmit = async (values: FormValues) => {
     try {
-      const type = inflowType
       if (isEdit && editRecord) {
         await update({
           id: editRecord.id,
           updates: {
             date:                       values.date,
             amount:                     values.amount,
-            inflow_type:                type,
             description:                values.description  || null,
             allocation_config_id:       selectedConfigId   || null,
             stage_code_1:               values.stage_code_1 || null,
@@ -223,7 +198,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         const input: AddInflowInput = {
           date:                       values.date,
           amount:                     values.amount,
-          inflow_type:                type,
           description:                values.description  || undefined,
           allocation_config_id:       selectedConfigId   || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
@@ -267,7 +241,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
           <Field label="Amount (₦) *" error={errors.amount?.message}>
-            <input type="number" min="0" step="0.01" placeholder="0.00" {...register('amount')} className={inputCls(!!errors.amount)} />
+            <Controller control={control} name="amount" render={({ field }) => (
+              <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.amount)} />
+            )} />
           </Field>
         </div>
 
@@ -297,29 +273,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         )}
 
-        {/* Inflow Type — shown with auto-assigned label, fully editable */}
-        <Field label="Inflow Type">
-          <div className="grid grid-cols-3 gap-1.5">
-            {INFLOW_TYPES.map(t => (
-              <button
-                key={t} type="button"
-                onClick={() => handleTypeChange(t)}
-                className={`px-2 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                  inflowType === t
-                    ? 'bg-primary text-white border-primary'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {INFLOW_TYPE_LABELS[t]}
-              </button>
-            ))}
-          </div>
-          {!typeManuallySet && description && (
-            <p className="text-[10px] text-gray-400 mt-1">Auto-assigned from description · click to change</p>
-          )}
-        </Field>
-
-        {/* Custom Income Type */}
+        {/* Income Type */}
         {incomeTypes.length > 0 && (
           <Field label="Income Type">
             <div className="flex items-center gap-2">
@@ -442,12 +396,14 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <Field label="FX Amount" error={errors.fx_amount?.message}>
-                  <input type="number" min="0" step="0.0001" placeholder="0.0000"
-                    {...register('fx_amount')} className={inputCls(!!errors.fx_amount)} />
+                  <Controller control={control} name="fx_amount" render={({ field }) => (
+                    <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.0000" className={inputCls(!!errors.fx_amount)} />
+                  )} />
                 </Field>
                 <Field label="FX Rate" error={errors.fx_rate?.message}>
-                  <input type="number" min="0" step="0.000001" placeholder="0.000000"
-                    {...register('fx_rate')} className={inputCls(!!errors.fx_rate)} />
+                  <Controller control={control} name="fx_rate" render={({ field }) => (
+                    <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.000000" className={inputCls(!!errors.fx_rate)} />
+                  )} />
                 </Field>
               </div>
             </div>

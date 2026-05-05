@@ -34,9 +34,9 @@ export function getConfigForDate(
   configs: AllocationConfig[],
   date: string,
 ): AllocationConfig | null {
-  // ISO date strings compare correctly as plain strings (YYYY-MM-DD lexicographic order)
+  // Only locked (approved) configs are eligible — draft configs are never applied
   const eligible = configs
-    .filter(c => c.start_date <= date)
+    .filter(c => c.status === 'locked' && c.start_date <= date)
     .sort((a, b) => b.start_date.localeCompare(a.start_date))
 
   return eligible[0] ?? null
@@ -69,7 +69,6 @@ export const useAllocationStore = create<AllocationState>((set, get) => ({
     const { data, error } = await supabase
       .from('allocation_configs')
       .select('*')
-      .or('is_special.eq.false,is_special.is.null')
       .order('start_date', { ascending: true })
 
     if (error) {

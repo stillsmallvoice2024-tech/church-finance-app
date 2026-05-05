@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
 export interface StartingBalanceRow {
-  category_name:  string
-  budget_portion: string
-  percentage?:    number
-  amount?:        number
+  category_name:      string
+  budget_portion:     string
+  percentage?:        number
+  amount?:            number
+  apply_to_category?: boolean  // true (default) = add to category balance; false = already in records
 }
 
 export interface DbBank {

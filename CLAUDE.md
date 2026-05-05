@@ -217,7 +217,10 @@ const { isAdmin, canWrite, canDelete } = useRole()
 
 **Password reset:** `/reset-password` page listens for `PASSWORD_RECOVERY` auth event, then calls `supabase.auth.updateUser({ password })`.
 
-**Background-tab resilience:** When the app regains focus, Supabase fires `TOKEN_REFRESHED`. The auth handler awaits `fetchAndSetProfile()` to re-hydrate the store. If the browser has aborted the in-flight fetch (e.g. low-memory background kill), the Supabase client throws an `AbortError`. To prevent `loading` from staying `true` forever: `fetchAndSetProfile` wraps the query in `try/catch`, and `setLoading(false)` is in a `finally` block in the `onAuthStateChange` callback.
+**Background-tab resilience:** When the app regains focus, Supabase fires `TOKEN_REFRESHED`. The auth handler awaits `fetchAndSetProfile()` to re-hydrate the store. Race-condition safety and permanent-loading prevention are achieved via three mechanisms in `useAuth.ts`:
+1. Each auth event calls `currentController.abort()` to cancel any in-flight profile fetch from a previous event, then creates a fresh `AbortController`. The signal is passed to the Supabase query via `.abortSignal(signal)` and checked in `fetchAndSetProfile`'s catch block (distinguishes `AbortError` from real errors).
+2. `setLoading(false)` is in a `finally` block and only runs if `mounted && !signal.aborted` — so a superseded or unmounted event never clears the wrong loading state.
+3. A 10-second hard timeout (`PROFILE_FETCH_TIMEOUT_MS`) forces `setLoading(false)` if the fetch hangs, preventing a permanently stuck spinner.
 
 ---
 

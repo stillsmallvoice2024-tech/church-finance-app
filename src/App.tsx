@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthListener } from './hooks/useAuth'
 import { useAccountCodesStore } from './store/accountCodesStore'
 import './store/themeStore' // side-effect: applies stored theme class immediately
+import { supabase } from './lib/supabase'
 import { AuthGuard } from './components/auth/AuthGuard'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
@@ -30,6 +31,9 @@ import IntraBankTransfers   from './pages/IntraBankTransfers'
 import RefundTransactions   from './pages/RefundTransactions'
 import ReversalTransactions from './pages/ReversalTransactions'
 import Receipts             from './pages/Receipts'
+import ChangeLog            from './pages/ChangeLog'
+import ResetPassword        from './pages/ResetPassword'
+import AcceptInvite         from './pages/AcceptInvite'
 
 export default function App() {
   useAuthListener()
@@ -37,11 +41,34 @@ export default function App() {
   // Pre-fetch account codes so dropdowns are ready before any form page loads
   useEffect(() => { fetchCodes() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When the tab becomes visible again after being minimised or backgrounded,
+  // force a token refresh before any data queries fire so the JWT isn't stale.
+  // Also stop/start the SDK's own auto-refresh timer to match visibility state —
+  // this is the pattern Supabase recommends for browser apps.
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.startAutoRefresh()
+        // Force an actual server round-trip (not a cache read) to renew the JWT
+        await supabase.auth.refreshSession().catch(() => {
+          // If refresh fails the SDK will fire SIGNED_OUT via onAuthStateChange,
+          // which clearAuth() already handles — nothing extra needed here.
+        })
+      } else {
+        supabase.auth.stopAutoRefresh()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   return (
     <BrowserRouter>
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/invite/:token" element={<AcceptInvite />} />
 
         {/* Protected — AuthGuard checks auth + provides RoleContext */}
         <Route element={<AuthGuard />}>
@@ -69,6 +96,7 @@ export default function App() {
             <Route path="refunds"              element={<ErrorBoundary><RefundTransactions /></ErrorBoundary>} />
             <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
             <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
+            <Route path="change-log"           element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
           </Route>
         </Route>
 

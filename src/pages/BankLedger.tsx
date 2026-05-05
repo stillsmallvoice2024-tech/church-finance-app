@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
-import { BookOpen, LayoutGrid, LayoutList, AlertCircle, RefreshCw } from 'lucide-react'
+import { BookOpen, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
 import { Card }          from '../components/ui/Card'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { useBanks }      from '../hooks/useBanks'
+import { useRole }       from '../hooks/useRole'
 import { supabase }      from '../lib/supabase'
 import { ReceiptBadge }  from '../components/ui/ReceiptBadge'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { AddInflowModal }  from '../components/modals/AddInflowModal'
+import { AddOutflowModal } from '../components/modals/AddOutflowModal'
+import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -17,6 +23,8 @@ interface LedgerRow {
   outflow:     number
   balance:     number   // running
   entity_type: 'inflow' | 'outflow'
+  inflowData?:  InflowTransaction
+  outflowData?: OutflowTransaction
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -25,6 +33,7 @@ export default function BankLedger() {
   usePageTitle('Bank Ledger')
 
   const { banks } = useBanks()
+  const { canWrite } = useRole()
 
   const [selectedBank, setSelectedBank] = useState('')
   const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
@@ -33,6 +42,9 @@ export default function BankLedger() {
   const [error,        setError]        = useState<string | null>(null)
   const [dateFrom,     setDateFrom]     = useState('')
   const [dateTo,       setDateTo]       = useState('')
+  const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
+  const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
 
   const load = useCallback(async (bankName: string) => {
     if (!bankName) { setLedgerRows([]); return }
@@ -42,12 +54,12 @@ export default function BankLedger() {
     const [inflowRes, outflowRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
-        .select('id, date, description, amount')
+        .select('*')
         .eq('bank_name', bankName)
         .order('date', { ascending: true }),
       supabase
         .from('outflow_transactions')
-        .select('id, date, description, amount_disbursed')
+        .select('*')
         .eq('bank_name', bankName)
         .order('date', { ascending: true }),
     ])
@@ -59,17 +71,19 @@ export default function BankLedger() {
     }
 
     // Merge & sort chronologically
-    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; entity_type: 'inflow' | 'outflow' }
+    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; entity_type: 'inflow' | 'outflow'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
         inflow: r.amount as number, outflow: 0, entity_type: 'inflow' as const,
+        inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
         inflow: 0, outflow: r.amount_disbursed as number, entity_type: 'outflow' as const,
+        outflowData: r as unknown as OutflowTransaction,
       })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
 
@@ -213,11 +227,28 @@ export default function BankLedger() {
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                    <span className={`text-xs font-semibold ${row.inflow > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {row.inflow > 0 ? `+${formatCurrency(row.inflow)}` : `-${formatCurrency(row.outflow)}`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold ${row.inflow > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {row.inflow > 0 ? `+${formatCurrency(row.inflow)}` : `-${formatCurrency(row.outflow)}`}
+                      </span>
+                      {canWrite() && (
+                        <button
+                          onClick={() => row.entity_type === 'inflow' && row.inflowData
+                            ? setEditInflow(row.inflowData)
+                            : row.outflowData && setEditOutflow(row.outflowData)}
+                          className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Edit source record"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {row.description && <p className="text-xs text-gray-600 truncate">{row.description}</p>}
+                  {row.description && (
+                    <div className="text-xs text-gray-600">
+                      <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    </div>
+                  )}
                   <div className="flex items-center justify-between pt-1 border-t border-gray-50">
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-gray-400">Balance</span>
@@ -238,6 +269,7 @@ export default function BankLedger() {
                     {['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)', '📎'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
+                    {canWrite() && <th className="px-4 py-3 w-10" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -257,7 +289,9 @@ export default function BankLedger() {
                   ) : filtered.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 max-w-[280px] truncate">{row.description ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 max-w-[280px]">
+                        <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      </td>
                       <td className="px-4 py-3 text-sm font-medium text-green-700 whitespace-nowrap">
                         {row.inflow > 0 ? formatCurrency(row.inflow) : '—'}
                       </td>
@@ -270,6 +304,19 @@ export default function BankLedger() {
                       <td className="px-2 py-3">
                         <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
                       </td>
+                      {canWrite() && (
+                        <td className="px-2 py-3">
+                          <button
+                            onClick={() => row.entity_type === 'inflow' && row.inflowData
+                              ? setEditInflow(row.inflowData)
+                              : row.outflowData && setEditOutflow(row.outflowData)}
+                            className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                            title="Edit source record"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -278,6 +325,20 @@ export default function BankLedger() {
           )}
         </Card>
       )}
+
+      <AddInflowModal
+        open={!!editInflow}
+        onClose={() => setEditInflow(null)}
+        onSuccess={() => { setEditInflow(null); load(selectedBankName) }}
+        editRecord={editInflow}
+      />
+      <AddOutflowModal
+        open={!!editOutflow}
+        onClose={() => setEditOutflow(null)}
+        onSuccess={() => { setEditOutflow(null); load(selectedBankName) }}
+        editRecord={editOutflow}
+      />
+      <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
 }

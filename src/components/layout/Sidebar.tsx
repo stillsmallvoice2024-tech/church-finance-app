@@ -24,6 +24,7 @@ import {
   RotateCcw,
   Undo2,
   Paperclip,
+  ClipboardList,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -66,7 +67,8 @@ const BUDGET_NAV_ITEMS: NavItem[] = [
 ]
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
-  { label: 'User Management', path: '/users', icon: Users },
+  { label: 'User Management', path: '/users',      icon: Users         },
+  { label: 'Change Log',      path: '/change-log', icon: ClipboardList },
 ]
 
 // Church cross SVG
@@ -117,7 +119,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               <ChurchCross />
             </div>
             <div className="min-w-0">
-              <p className="text-white font-semibold text-sm leading-tight truncate">
+              <p className="text-white font-semibold text-sm leading-tight break-words">
                 The Standing Church International
               </p>
               <p className="text-accent text-xs font-semibold tracking-widest uppercase mt-0.5">

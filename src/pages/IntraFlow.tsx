@@ -19,6 +19,8 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }  from '../hooks/useCategories'
 import { useYearRange }   from '../hooks/useYearRange'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 const PAGE_SIZE = 25
 
@@ -94,6 +96,7 @@ export default function IntraFlow() {
   const [editRecord,   setEditRecord]   = useState<IntraFlowRow | null>(null)
   const [modalOpen,    setModalOpen]    = useState(false)
   const [deleteId,     setDeleteId]     = useState<string | null>(null)
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
   const [importOpen,   setImportOpen]   = useState(false)
   const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
 
@@ -268,8 +271,16 @@ export default function IntraFlow() {
                       <ArrowLeftRight className="w-3 h-3 text-gray-400 shrink-0" />
                       <span className="font-medium truncate max-w-[100px]">{row.account_to ?? '—'}</span>
                     </div>
-                    {row.description && <p className="text-xs text-gray-500 truncate">{row.description}</p>}
-                    {row.remark     && <p className="text-xs text-gray-400 italic truncate">{row.remark}</p>}
+                    {row.description && (
+                      <div className="text-xs text-gray-500">
+                        <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      </div>
+                    )}
+                    {row.remark     && (
+                      <div className="text-xs text-gray-400 italic">
+                        <DescriptionCell id={`card-rem-${row.id}`} text={row.remark} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      </div>
+                    )}
                     {(canWrite() || canDelete()) && (
                       <div className="flex gap-1 pt-1 border-t border-gray-50">
                         {canWrite() && (
@@ -329,7 +340,9 @@ export default function IntraFlow() {
                         <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(Number(row.total_amount))}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remark ?? undefined}>{row.remark ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
+                          <DescriptionCell id={`rem-${row.id}`} text={row.remark} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             {canWrite() && (
@@ -369,6 +382,7 @@ export default function IntraFlow() {
         label="this internal transfer"
       />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <DescriptionTooltip tooltip={descTooltip} />
 
       {/* Floating import button */}
       <CanWrite>

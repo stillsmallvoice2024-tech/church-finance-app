@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingUp, Plus, Download, Pencil, Trash2,
   ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw, FileSpreadsheet,
+  LayoutList, LayoutGrid,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
@@ -18,7 +19,9 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
-import { INFLOW_TYPE_LABELS, INFLOW_TYPE_BADGE } from '../utils/inflowTypes'
+import { useIncomeTypes }          from '../hooks/useIncomeTypes'
+import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
 const PAGE_SIZE = 25
 
@@ -95,11 +98,14 @@ export default function Inflows() {
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
   const [expandedId,  setExpandedId]  = useState<string | null>(null)
   const [importOpen,  setImportOpen]  = useState(false)
+  const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('inflow_transactions')
   const { categories } = useCategories()
+  const { incomeTypes } = useIncomeTypes()
 
   usePageTitle('Inflows')
 
@@ -168,6 +174,16 @@ export default function Inflows() {
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
+              <button onClick={() => setDisplayMode('table')} title="Table view"
+                className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button onClick={() => setDisplayMode('cards')} title="Card view"
+                className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
             <button
               onClick={handleExport} disabled={data.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
@@ -226,14 +242,62 @@ export default function Inflows() {
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
-        {/* Table */}
-        <Card padding={false}>
+        {/* Cards / Table */}
+        {displayMode === 'cards' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-2/3" /><div className="h-6 bg-gray-200 rounded w-1/2" />
+                </div>
+              ))
+            ) : data.length === 0 ? (
+              <div className="col-span-full py-16 text-center text-gray-400">
+                <TrendingUp className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+                <p className="text-sm">No inflow transactions match your filters.</p>
+              </div>
+            ) : data.map(row => {
+              const it = incomeTypes.find(t => t.id === row.income_type_id)
+              return (
+                <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+                    {it ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
+                    ) : null}
+                  </div>
+                  <p className="text-lg font-bold text-success">{formatCurrency(Number(row.amount))}</p>
+                  <div className="text-sm text-gray-700">
+                    <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  </div>
+                  {row.stage_code_1 && <p className="text-xs text-gray-400">{row.stage_code_1}{row.stage_code_2 ? ` / ${row.stage_code_2}` : ''}</p>}
+                  {row.remark && <p className="text-xs text-gray-400 italic truncate">{row.remark}</p>}
+                  <div className="flex gap-1 pt-1 border-t border-gray-50">
+                    {canWrite() && (
+                      <button onClick={() => openEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canDelete() && (
+                      <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+        {displayMode === 'cards' && <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />}
+
+        {displayMode === 'table' && <Card padding={false}>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
-                  {['Date', 'Type', 'Description', 'Stage Code 1', 'Stage Code 2', 'Specific Seed', 'Amount (₦)', 'Actions'].map(h => (
+                  {['Date', 'Type', 'Description', 'Amount (₦)', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -242,9 +306,9 @@ export default function Inflows() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
-                  Array.from({ length: 9 }).map((_, i) => (
+                  Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 6 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -253,7 +317,7 @@ export default function Inflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-16 text-center">
+                    <td colSpan={6} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <TrendingUp className="w-10 h-10 text-gray-200" />
                         <p className="text-sm">No inflow transactions match your filters.</p>
@@ -278,14 +342,22 @@ export default function Inflows() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${INFLOW_TYPE_BADGE[row.inflow_type] ?? 'bg-gray-100 text-gray-600'}`}>
-                            {INFLOW_TYPE_LABELS[row.inflow_type] ?? row.inflow_type}
-                          </span>
+                          {(() => {
+                            const it = incomeTypes.find(t => t.id === row.income_type_id)
+                            return it ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ backgroundColor: `${it.color}22`, color: it.color }}>
+                                {it.name}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-gray-100 text-gray-400">
+                                —
+                              </span>
+                            )
+                          })()}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate">{row.description ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.stage_code_2 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px] truncate">{row.specific_seed_description ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]" onClick={e => e.stopPropagation()}>
+                          <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        </td>
                         <td className="px-4 py-3 text-sm font-semibold text-success whitespace-nowrap">{formatCurrency(Number(row.amount))}</td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
@@ -306,7 +378,7 @@ export default function Inflows() {
                     if (expanded && row.remark) {
                       rows.push(
                         <tr key={`${row.id}-exp`} className="bg-blue-50/40">
-                          <td colSpan={9} className="px-8 py-3">
+                          <td colSpan={6} className="px-8 py-3">
                             <p className="text-xs font-semibold text-gray-500 mb-0.5">Remark</p>
                             <p className="text-sm text-gray-700">{row.remark}</p>
                           </td>
@@ -320,7 +392,7 @@ export default function Inflows() {
             </table>
           </div>
           <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
-        </Card>
+        </Card>}
       </div>
 
       <AddInflowModal
@@ -337,6 +409,7 @@ export default function Inflows() {
         label="this inflow transaction"
       />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <DescriptionTooltip tooltip={descTooltip} />
 
       {/* Floating import button */}
       <CanWrite>
