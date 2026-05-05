@@ -94,7 +94,7 @@ src/
 │       └── ...                # Badge, DataTable, EmptyState, ErrorBoundary, etc.
 │
 ├── hooks/
-│   ├── useAuth.ts             # Sets up supabase.auth.onAuthStateChange listener
+│   ├── useAuth.ts             # Sets up supabase.auth.onAuthStateChange listener; fetchAndSetProfile is try/catch-wrapped and setLoading(false) is in a finally block to prevent infinite spinner when background-tab fetch is aborted
 │   ├── useRole.ts             # Returns { isAdmin, isAccountant, canWrite, canDelete }
 │   ├── useMutations.ts        # ALL write mutations (add/update/delete for every entity)
 │   ├── useTransactions.ts     # useFetchInflows(), useFetchOutflows() with filters
@@ -216,6 +216,8 @@ const { isAdmin, canWrite, canDelete } = useRole()
 **Invite flow:** Admin generates token → copyable link `/invite/:token` → `AcceptInvite` page validates token, calls `signUp`, sets profile name/username/role, marks invitation `accepted`.
 
 **Password reset:** `/reset-password` page listens for `PASSWORD_RECOVERY` auth event, then calls `supabase.auth.updateUser({ password })`.
+
+**Background-tab resilience:** When the app regains focus, Supabase fires `TOKEN_REFRESHED`. The auth handler awaits `fetchAndSetProfile()` to re-hydrate the store. If the browser has aborted the in-flight fetch (e.g. low-memory background kill), the Supabase client throws an `AbortError`. To prevent `loading` from staying `true` forever: `fetchAndSetProfile` wraps the query in `try/catch`, and `setLoading(false)` is in a `finally` block in the `onAuthStateChange` callback.
 
 ---
 
