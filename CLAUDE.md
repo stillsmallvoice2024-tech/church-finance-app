@@ -94,7 +94,7 @@ src/
 │       └── ...                # Badge, DataTable, EmptyState, ErrorBoundary, etc.
 │
 ├── hooks/
-│   ├── useAuth.ts             # Sets up supabase.auth.onAuthStateChange listener; fetchAndSetProfile is try/catch-wrapped and setLoading(false) is in a finally block to prevent infinite spinner when background-tab fetch is aborted
+│   ├── useAuth.ts             # Sets up supabase.auth.onAuthStateChange listener; uses requestIdRef + AbortController per event to enforce request ownership; fetchProfile uses raw fetch with credentials: 'include'; window focus listener fires FOCUS_REVALIDATE; setLoading(false) guarded by requestId + signal in a finally block
 │   ├── useRole.ts             # Returns { isAdmin, isAccountant, canWrite, canDelete }
 │   ├── useMutations.ts        # ALL write mutations (add/update/delete for every entity)
 │   ├── useTransactions.ts     # useFetchInflows(), useFetchOutflows() with filters
@@ -217,12 +217,7 @@ const { isAdmin, canWrite, canDelete } = useRole()
 
 **Password reset:** `/reset-password` page listens for `PASSWORD_RECOVERY` auth event, then calls `supabase.auth.updateUser({ password })`.
 
-**Background-tab resilience:** When the app regains focus, Supabase fires `TOKEN_REFRESHED`. The auth handler awaits `fetchAndSetProfile()` to re-hydrate the store. Race-condition safety and permanent-loading prevention are achieved via three mechanisms in `useAuth.ts`:
-1. Each auth event calls `currentController.abort()` to cancel any in-flight profile fetch from a previous event, then creates a fresh `AbortController`. The signal is passed to the Supabase query via `.abortSignal(signal)` and checked in `fetchAndSetProfile`'s catch block (distinguishes `AbortError` from real errors).
-2. `setLoading(false)` is in a `finally` block and only runs if `mounted && !signal.aborted` — so a superseded or unmounted event never clears the wrong loading state.
-3. A 10-second hard timeout (`PROFILE_FETCH_TIMEOUT_MS`) forces `setLoading(false)` if the fetch hangs, preventing a permanently stuck spinner.
-
-**Full structural rewrite (request ownership model):** `useAuth.ts` uses a monotonically increasing `requestIdRef` (useRef) and an `AbortController` ref (`controllerRef`) to enforce strict request ownership. Every auth event — including a synthetic `FOCUS_REVALIDATE` fired by a `window focus` listener — increments `requestId`, aborts the previous controller, and creates a new one. State updates (profile, setLoading) only run when `requestIdRef.current === requestId && mounted && !signal.aborted`. `fetchProfile` uses a raw `fetch` with `credentials: 'include'` and the session Bearer token. All lifecycle transitions are logged with `[auth:N]` prefixes for tracing races.
+**Background-tab resilience (request ownership model):** `useAuth.ts` uses a monotonically increasing `requestIdRef` (useRef) and an `AbortController` ref (`controllerRef`) to enforce strict request ownership. Every auth event — including a synthetic `FOCUS_REVALIDATE` fired by a `window focus` listener — increments `requestId`, aborts the previous controller, and creates a new one. State updates (profile, setLoading) only run when `requestIdRef.current === requestId && mounted && !signal.aborted`. `fetchProfile` uses a raw `fetch` with `credentials: 'include'` and the session Bearer token. All lifecycle transitions are logged with `[auth:N]` prefixes for tracing races.
 
 ---
 
