@@ -739,10 +739,12 @@ CREATE TABLE IF NOT EXISTS public.category_opening_balances (
   UNIQUE (category_id, budget_portion)
 );
 ALTER TABLE public.category_opening_balances ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "cob_read" ON public.category_opening_balances
-  FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "cob_write" ON public.category_opening_balances
-  FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);`
+DO $$ BEGIN
+  CREATE POLICY "cob_read" ON public.category_opening_balances FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "cob_write" ON public.category_opening_balances FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────
 
