@@ -732,16 +732,16 @@ CREATE TABLE IF NOT EXISTS intrabank_transfers (
 -- Category opening balances (multi-portion per category)
 CREATE TABLE IF NOT EXISTS public.category_opening_balances (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  category_id    uuid NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,
+  category_id    uuid NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
   budget_portion text NOT NULL CHECK (budget_portion IN ('Percentage Allocation','Specific Seed','Savings')),
   amount         numeric(15,2) NOT NULL DEFAULT 0,
   created_at     timestamptz DEFAULT now(),
   UNIQUE (category_id, budget_portion)
 );
 ALTER TABLE public.category_opening_balances ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "cob_read" ON public.category_opening_balances
+CREATE POLICY "cob_read" ON public.category_opening_balances
   FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY IF NOT EXISTS "cob_write" ON public.category_opening_balances
+CREATE POLICY "cob_write" ON public.category_opening_balances
   FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────

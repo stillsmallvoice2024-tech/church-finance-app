@@ -601,7 +601,7 @@ create index if not exists idx_invitations_token on public.invitations(token);
 -- ============================================================
 create table if not exists public.category_opening_balances (
   id             uuid default gen_random_uuid() primary key,
-  category_id    uuid not null references public.categories(id) on delete cascade,
+  category_id    uuid not null references categories(id) on delete cascade,
   budget_portion text not null check (budget_portion in ('Percentage Allocation','Specific Seed','Savings')),
   amount         numeric(15,2) not null default 0,
   created_at     timestamptz default now(),
