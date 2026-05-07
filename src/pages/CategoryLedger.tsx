@@ -68,11 +68,12 @@ export default function CategoryLedger() {
     setLoading(true)
     setError(null)
 
-    const [seedRes, savInRes, savOutRes, allInflowRes] = await Promise.all([
+    const [seedRes, savInRes, savOutRes, allInflowRes, cobRes] = await Promise.all([
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed'),
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings'),
       supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Savings'),
       supabase.from('inflow_transactions').select('date, amount, stage_code_2'),
+      supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
     ])
 
     if (seedRes.error || savInRes.error || savOutRes.error || allInflowRes.error) {
@@ -83,6 +84,10 @@ export default function CategoryLedger() {
       setLoading(false)
       return
     }
+
+    // category_opening_balances (new table; falls back to categories.starting_balance if table absent)
+    const cobRows = cobRes.error ? [] : (cobRes.data ?? [])
+    const cobCatNames = new Set(cobRows.map(r => (r.categories as { name: string } | null)?.name ?? ''))
 
     // Active allocation config (most recent locked, on or before today)
     const today  = new Date().toISOString().slice(0, 10)
@@ -112,17 +117,23 @@ export default function CategoryLedger() {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.actual_amount ?? r.amount_disbursed ?? 0)
     }
 
-    // Add category starting balances into their respective portions
+    // Add opening balances from new table (category_opening_balances)
+    for (const ob of cobRows) {
+      const catName = (ob.categories as { name: string } | null)?.name ?? ''
+      if (!catName) continue
+      const row = ensure(catName)
+      if (ob.budget_portion === 'Specific Seed') row.specificSeed += Number(ob.amount)
+      else if (ob.budget_portion === 'Savings') row.savingsIn += Number(ob.amount)
+    }
+
+    // Fallback: categories not yet in new table use old starting_balance field
     for (const cat of categories) {
+      if (cobCatNames.has(cat.name)) continue
       if (!cat.starting_balance || cat.starting_balance === 0) continue
       const portion = cat.starting_balance_budget_portion ?? ''
       const row = ensure(cat.name)
-      if (portion === 'Specific Seed') {
-        row.specificSeed += cat.starting_balance
-      } else if (portion === 'Savings') {
-        row.savingsIn += cat.starting_balance
-      }
-      // 'Percentage Allocation' starting balances go into allocMap below
+      if (portion === 'Specific Seed') row.specificSeed += cat.starting_balance
+      else if (portion === 'Savings') row.savingsIn += cat.starting_balance
     }
 
     // Compute percentage-allocated amounts across all time
@@ -138,8 +149,16 @@ export default function CategoryLedger() {
       }
     }
 
-    // Add Percentage Allocation starting balances into allocMap
+    // Add Percentage Allocation opening balances (new table)
+    for (const ob of cobRows) {
+      if (ob.budget_portion !== 'Percentage Allocation') continue
+      const catName = (ob.categories as { name: string } | null)?.name ?? ''
+      if (!catName) continue
+      allocMap.set(catName, (allocMap.get(catName) ?? 0) + Number(ob.amount))
+    }
+    // Fallback Percentage Allocation
     for (const cat of categories) {
+      if (cobCatNames.has(cat.name)) continue
       if (!cat.starting_balance || cat.starting_balance === 0) continue
       if ((cat.starting_balance_budget_portion ?? '') === 'Percentage Allocation') {
         allocMap.set(cat.name, (allocMap.get(cat.name) ?? 0) + cat.starting_balance)
@@ -264,7 +283,7 @@ export default function CategoryLedger() {
         }
       }
 
-      // Prepend starting balance as first inflow if it matches the active portion
+      // Prepend opening balance (Balance Brought Forward) if it matches the active portion
       const catRecord = categories.find(c => c.name === activeCategory)
       const portionMap: Record<LedgerPortion, string> = {
         'Percentage':    'Percentage Allocation',
@@ -272,19 +291,27 @@ export default function CategoryLedger() {
         'Savings':       'Savings',
       }
       const bfRow: LedgerRow[] = []
-      if (
-        catRecord?.starting_balance &&
-        catRecord.starting_balance !== 0 &&
-        (catRecord.starting_balance_budget_portion ?? '') === portionMap[ledgerPortion]
-      ) {
-        bfRow.push({
-          id:          'bal-bf',
-          date:        '0000-01-01',
-          description: 'Balance Brought Forward',
-          inflow:      catRecord.starting_balance,
-          outflow:     0,
-          balance:     0,
-        })
+      if (catRecord) {
+        // Try new table first
+        const { data: cobLedger } = await supabase
+          .from('category_opening_balances')
+          .select('amount')
+          .eq('category_id', catRecord.id)
+          .eq('budget_portion', portionMap[ledgerPortion])
+          .maybeSingle()
+        const bfAmt = cobLedger?.amount
+          ? Number(cobLedger.amount)
+          : (catRecord.starting_balance_budget_portion === portionMap[ledgerPortion] ? (catRecord.starting_balance ?? 0) : 0)
+        if (bfAmt !== 0) {
+          bfRow.push({
+            id:          'bal-bf',
+            date:        '0000-01-01',
+            description: 'Balance Brought Forward',
+            inflow:      bfAmt,
+            outflow:     0,
+            balance:     0,
+          })
+        }
       }
 
       // Merge, sort by date, compute running balance
@@ -333,6 +360,15 @@ export default function CategoryLedger() {
     { inflow: 0, outflow: 0 },
   )
 
+  const globalTotals = rows.reduce(
+    (acc, r) => ({
+      alloc: acc.alloc + r.percentageAllocated,
+      seed:  acc.seed  + r.specificSeed,
+      sav:   acc.sav   + (r.savingsIn - r.savingsOut),
+    }),
+    { alloc: 0, seed: 0, sav: 0 },
+  )
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -378,6 +414,38 @@ export default function CategoryLedger() {
       {/* ── SUMMARY VIEW ──────────────────────────────────────────────────────── */}
       {viewMode === 'summary' && (
         <>
+          {/* Aggregate summary cards */}
+          {loading ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-20 rounded-xl bg-gray-100 animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl bg-primary/5 border border-primary/20 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1 flex items-center gap-1">
+                  <Percent className="w-3 h-3" /> % Allocated
+                </p>
+                <p className="text-base font-mono font-bold text-primary">{formatCurrency(globalTotals.alloc)}</p>
+              </div>
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1 flex items-center gap-1">
+                  <Gift className="w-3 h-3" /> Specific Seeds
+                </p>
+                <p className="text-base font-mono font-bold text-amber-700">{formatCurrency(globalTotals.seed)}</p>
+              </div>
+              <div className={`rounded-xl border px-4 py-3 ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-wide mb-1 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
+                  <Archive className="w-3 h-3" /> Savings Net
+                </p>
+                <p className={`text-base font-mono font-bold ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav)}</p>
+              </div>
+              <div className="rounded-xl bg-gray-800 border border-gray-700 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300 mb-1">Grand Total</p>
+                <p className="text-base font-mono font-bold text-white">{formatCurrency(globalTotals.alloc + globalTotals.seed + globalTotals.sav)}</p>
+              </div>
+            </div>
+          )}
+
           {/* Portion filter + Category selector */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">

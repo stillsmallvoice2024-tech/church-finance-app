@@ -25,7 +25,7 @@ export default function SavingsPortions() {
     setLoading(true)
     setError(null)
 
-    const [inflowRes, outflowRes] = await Promise.all([
+    const [inflowRes, outflowRes, cobRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
@@ -34,6 +34,10 @@ export default function SavingsPortions() {
         .from('outflow_transactions')
         .select('stage_code_1, actual_amount, amount_disbursed')
         .eq('stage_code_2', 'Savings'),
+      supabase
+        .from('category_opening_balances')
+        .select('amount, categories(name)')
+        .eq('budget_portion', 'Savings'),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -41,6 +45,9 @@ export default function SavingsPortions() {
       setLoading(false)
       return
     }
+
+    const cobData = cobRes.error ? [] : (cobRes.data ?? [])
+    const cobCatNames = new Set(cobData.map(r => (r.categories as { name: string } | null)?.name ?? ''))
 
     // Accumulate per category
     const map = new Map<string, { deposited: number; withdrawn: number }>()
@@ -59,8 +66,15 @@ export default function SavingsPortions() {
       ensure(cat).withdrawn += Number(r.actual_amount ?? r.amount_disbursed ?? 0)
     }
 
-    // Add starting balances for savings categories
+    // Opening balances from new table
+    for (const ob of cobData) {
+      const catName = (ob.categories as { name: string } | null)?.name ?? ''
+      if (!catName) continue
+      ensure(catName).deposited += Number(ob.amount)
+    }
+    // Fallback: old starting_balance field for categories not yet in new table
     for (const cat of categories) {
+      if (cobCatNames.has(cat.name)) continue
       if (!cat.starting_balance || cat.starting_balance === 0) continue
       if (cat.starting_balance_budget_portion !== 'Savings') continue
       ensure(cat.name).deposited += cat.starting_balance

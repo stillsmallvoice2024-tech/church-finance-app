@@ -133,7 +133,7 @@ export function useSpecialConfigOptions() {
   const [options,  setOptions]  = useState<SpecialConfigOption[]>([])
   const [loading,  setLoading]  = useState(true)
 
-  useEffect(() => {
+  const reload = () => {
     supabase
       .from('allocation_configs')
       .select('id, name')
@@ -143,9 +143,11 @@ export function useSpecialConfigOptions() {
         setOptions((data ?? []) as SpecialConfigOption[])
         setLoading(false)
       })
-  }, [])
+  }
 
-  return { options, loading }
+  useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { options, loading, reload }
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────────

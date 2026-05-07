@@ -1,6 +1,10 @@
 import { useState, useEffect, Fragment } from 'react'
 import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, LayoutList, LayoutGrid } from 'lucide-react'
-import { useCategories, useCategoryGroups, type Category, type CategoryGroup } from '../hooks/useCategories'
+import {
+  useCategories, useCategoryGroups,
+  fetchCategoryOpeningBalances, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance,
+  type Category, type CategoryGroup, type BudgetPortion,
+} from '../hooks/useCategories'
 import { CurrencyInput } from '../components/ui/CurrencyInput'
 import {
   useAddCategory,
@@ -73,29 +77,44 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   const { mutate: update,   loading: updating,  error: updateErr, reset: resetUpdate } = updateMutation
   const { mutate: addGroup, loading: addingGrp                                       } = addGroupMutation
 
-  const loading = adding || updating
+  const loading = adding || updating || obSaving
   const error   = addErr || updateErr
 
   const isMigrationError = !!error && /column.*does not exist|does not exist|relation.*does not exist/i.test(error)
 
-  const [name,           setName]           = useState('')
-  const [desc,           setDesc]           = useState('')
-  const [startingBalance, setStartingBalance] = useState<number | undefined>(undefined)
-  const [sbPortion,      setSbPortion]      = useState('')
-  const [groupId,        setGroupId]        = useState('')
-  const [newGroupName,   setNewGroupName]   = useState('')
-  const [showNewGroup,   setShowNewGroup]   = useState(false)
+  interface ObRow { budget_portion: BudgetPortion | ''; amount: string }
+
+  const [name,         setName]         = useState('')
+  const [desc,         setDesc]         = useState('')
+  const [groupId,      setGroupId]      = useState('')
+  const [newGroupName, setNewGroupName] = useState('')
+  const [showNewGroup, setShowNewGroup] = useState(false)
+  const [obRows,       setObRows]       = useState<ObRow[]>([])
+  const [obSaving,     setObSaving]     = useState(false)
 
   useEffect(() => {
     if (!open) return
     resetAdd(); resetUpdate()
     setName(editRecord?.name ?? '')
     setDesc(editRecord?.description ?? '')
-    setStartingBalance(editRecord?.starting_balance ?? undefined)
-    setSbPortion(editRecord?.starting_balance_budget_portion ?? '')
     setGroupId(editRecord?.group_id ?? '')
     setNewGroupName('')
     setShowNewGroup(false)
+    setObRows([])
+    if (editRecord?.id) {
+      fetchCategoryOpeningBalances(editRecord.id).then(rows => {
+        if (rows.length > 0) {
+          setObRows(rows.map(r => ({ budget_portion: r.budget_portion, amount: String(r.amount) })))
+        } else if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
+          // Migrate from old single-field
+          setObRows([{ budget_portion: editRecord.starting_balance_budget_portion as BudgetPortion, amount: String(editRecord.starting_balance) }])
+        }
+      }).catch(() => {
+        if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
+          setObRows([{ budget_portion: editRecord.starting_balance_budget_portion as BudgetPortion, amount: String(editRecord.starting_balance) }])
+        }
+      })
+    }
   }, [open, editRecord]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateGroup = async () => {
@@ -110,30 +129,55 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
+    setObSaving(true)
     try {
+      let savedId = editRecord?.id ?? ''
       if (isEdit && editRecord) {
         const input: UpdateCategoryInput = {
-          id: editRecord.id,
-          name: name.trim(),
+          id:          editRecord.id,
+          name:        name.trim(),
           description: desc.trim() || undefined,
-          starting_balance: startingBalance,
-          starting_balance_budget_portion: sbPortion || undefined,
+          // Preserve legacy fields; consumers prefer new table when category has entries there
+          starting_balance:                editRecord.starting_balance ?? undefined,
+          starting_balance_budget_portion: editRecord.starting_balance_budget_portion ?? undefined,
           group_id: groupId || null,
         }
         await update(input)
+        savedId = editRecord.id
       } else {
         const input: AddCategoryInput = {
-          name: name.trim(),
+          name:        name.trim(),
           description: desc.trim() || undefined,
-          starting_balance: startingBalance,
-          starting_balance_budget_portion: sbPortion || undefined,
-          group_id: groupId || null,
+          group_id:    groupId || null,
         }
-        await add(input)
+        savedId = await add(input)
       }
+
+      // Persist opening balances to new table (silently skip if table not yet migrated)
+      try {
+        const validRows = obRows.filter(r => r.budget_portion && r.amount && parseFloat(r.amount) > 0)
+        const usedPortions = new Set(validRows.map(r => r.budget_portion as BudgetPortion))
+
+        if (isEdit && editRecord) {
+          const existing = await fetchCategoryOpeningBalances(editRecord.id)
+          for (const ex of existing) {
+            if (!usedPortions.has(ex.budget_portion)) {
+              await deleteCategoryOpeningBalance(editRecord.id, ex.budget_portion)
+            }
+          }
+        }
+        for (const row of validRows) {
+          await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount))
+        }
+      } catch (obErr) {
+        if (!/does not exist/i.test(String(obErr))) throw obErr
+      }
+
       onSuccess()
       onClose()
-    } catch { /* surfaced via hook error */ }
+    } catch { /* surfaced via hook error */ } finally {
+      setObSaving(false)
+    }
   }
 
   return (
@@ -207,27 +251,57 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           />
         </div>
 
-        {/* Starting Balance */}
+        {/* Opening Balances by Portion */}
         <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balance (optional)</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">Starting Balance (₦)</label>
-              <CurrencyInput value={startingBalance} onChange={setStartingBalance} placeholder="0.00"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">Budget Portion *</label>
-              <select value={sbPortion} onChange={e => setSbPortion(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
-              >
-                <option value="">— Select —</option>
-                {BUDGET_PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balances by Portion</p>
+            <button
+              type="button"
+              onClick={() => setObRows(prev => [...prev, { budget_portion: '', amount: '' }])}
+              disabled={obRows.length >= BUDGET_PORTIONS.length}
+              className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium disabled:opacity-40"
+            >
+              <Plus className="w-3 h-3" /> Add
+            </button>
           </div>
-          <p className="text-[11px] text-gray-400">Balance brought forward — the opening balance for this category.</p>
+
+          {obRows.length === 0 && (
+            <p className="text-[11px] text-gray-400">No opening balances. Click Add to set a balance brought forward per budget portion.</p>
+          )}
+
+          <div className="space-y-2">
+            {obRows.map((row, i) => {
+              const usedPortions = new Set(obRows.filter((_, j) => j !== i).map(r => r.budget_portion))
+              return (
+                <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                  <select
+                    value={row.budget_portion}
+                    onChange={e => setObRows(prev => prev.map((r, j) => j === i ? { ...r, budget_portion: e.target.value as BudgetPortion | '' } : r))}
+                    className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                  >
+                    <option value="">— Portion —</option>
+                    {BUDGET_PORTIONS.map(p => (
+                      <option key={p} value={p} disabled={usedPortions.has(p)}>{p}</option>
+                    ))}
+                  </select>
+                  <CurrencyInput
+                    value={row.amount ? parseFloat(row.amount) : undefined}
+                    onChange={v => setObRows(prev => prev.map((r, j) => j === i ? { ...r, amount: v != null ? String(v) : '' } : r))}
+                    placeholder="0.00"
+                    className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setObRows(prev => prev.filter((_, j) => j !== i))}
+                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-gray-400">Balance brought forward per budget portion. Each portion can only appear once.</p>
         </div>
 
         <div className="flex justify-end gap-3 pt-1">

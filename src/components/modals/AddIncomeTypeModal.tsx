@@ -71,7 +71,7 @@ interface Props {
 
 export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props) {
   const isEdit = !!editRecord
-  const { options: configOptions } = useSpecialConfigOptions()
+  const { options: configOptions, reload: reloadSpecialConfigs } = useSpecialConfigOptions()
 
   const [name,           setName]           = useState('')
   const [description,    setDescription]    = useState('')
@@ -86,6 +86,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
   // Populate form when editing
   useEffect(() => {
     if (!open) return
+    reloadSpecialConfigs()
     setError(null)
     if (editRecord) {
       setName(editRecord.name)

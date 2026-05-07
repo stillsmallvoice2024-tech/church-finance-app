@@ -353,10 +353,12 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
 
 // ── Special Configs tab ────────────────────────────────────────────────────────
 
-function SpecialConfigsTab({ onNew, onEdit, onDelete }: {
-  onNew:    () => void
-  onEdit:   (c: AllocationConfig) => void
-  onDelete: (c: AllocationConfig) => void
+function SpecialConfigsTab({ onNew, onEdit, onEditLocked, onLock, onDelete }: {
+  onNew:        () => void
+  onEdit:       (c: AllocationConfig) => void
+  onEditLocked: (c: AllocationConfig) => void
+  onLock:       (c: AllocationConfig) => void
+  onDelete:     (c: AllocationConfig) => void
 }) {
   const [configs,  setConfigs]  = useState<AllocationConfig[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -418,14 +420,16 @@ function SpecialConfigsTab({ onNew, onEdit, onDelete }: {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Rows</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
-                <th className="px-4 py-3 w-20" />
+                <th className="px-4 py-3 w-24" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {configs.map(c => {
-                const isAmt = c.allocation_type === 'amount'
-                const total = c.rows.reduce((s, r) => s + (isAmt ? (r.amount ?? 0) : (r.percentage ?? 0)), 0)
+                const isAmt   = c.allocation_type === 'amount'
+                const isLocked = c.status === 'locked'
+                const total   = c.rows.reduce((s, r) => s + (isAmt ? (r.amount ?? 0) : (r.percentage ?? 0)), 0)
                 return (
                   <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
@@ -440,11 +444,30 @@ function SpecialConfigsTab({ onNew, onEdit, onDelete }: {
                       {isAmt ? `₦${total.toLocaleString()}` : `${total.toFixed(1)}%`}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-500">{c.rows.length}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        isLocked
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}>
+                        {isLocked ? <Lock className="w-3 h-3" /> : <FileEdit className="w-3 h-3" />}
+                        {isLocked ? 'Locked' : 'Draft'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(c.created_at?.slice(0, 10) ?? '')}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        {!isLocked && (
+                          <button
+                            onClick={() => onLock(c)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                            title="Lock config"
+                          >
+                            <Lock className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
-                          onClick={() => onEdit(c)}
+                          onClick={() => isLocked ? onEditLocked(c) : onEdit(c)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
                           title="Edit"
                         >
@@ -704,7 +727,22 @@ CREATE TABLE IF NOT EXISTS intrabank_transfers (
   transaction_ref     text,
   remarks             text,
   created_at          timestamptz DEFAULT now()
-);`
+);
+
+-- Category opening balances (multi-portion per category)
+CREATE TABLE IF NOT EXISTS public.category_opening_balances (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id    uuid NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,
+  budget_portion text NOT NULL CHECK (budget_portion IN ('Percentage Allocation','Specific Seed','Savings')),
+  amount         numeric(15,2) NOT NULL DEFAULT 0,
+  created_at     timestamptz DEFAULT now(),
+  UNIQUE (category_id, budget_portion)
+);
+ALTER TABLE public.category_opening_balances ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "cob_read" ON public.category_opening_balances
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY IF NOT EXISTS "cob_write" ON public.category_opening_balances
+  FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────
 
@@ -857,10 +895,12 @@ export default function SetupPage() {
   const [lockTarget,        setLockTarget]        = useState<AllocationConfig | null>(null)
   const [editLockedTarget,  setEditLockedTarget]  = useState<AllocationConfig | null>(null)
   const [deleteAllocTarget, setDeleteAllocTarget] = useState<AllocationConfig | null>(null)
-  const [specialModalOpen,  setSpecialModalOpen]  = useState(false)
-  const [editSpecialRecord, setEditSpecialRecord] = useState<AllocationConfig | null>(null)
-  const [deleteSpecialTarget, setDeleteSpecialTarget] = useState<AllocationConfig | null>(null)
-  const [specialRefetch,   setSpecialRefetch]   = useState(0)
+  const [specialModalOpen,      setSpecialModalOpen]      = useState(false)
+  const [editSpecialRecord,     setEditSpecialRecord]     = useState<AllocationConfig | null>(null)
+  const [deleteSpecialTarget,   setDeleteSpecialTarget]   = useState<AllocationConfig | null>(null)
+  const [specialLockTarget,     setSpecialLockTarget]     = useState<AllocationConfig | null>(null)
+  const [specialEditLocked,     setSpecialEditLocked]     = useState<AllocationConfig | null>(null)
+  const [specialRefetch,        setSpecialRefetch]        = useState(0)
   const [resetModalOpen,       setResetModalOpen]       = useState(false)
   const [incomeTypeModalOpen,  setIncomeTypeModalOpen]  = useState(false)
   const [editIncomeType,       setEditIncomeType]       = useState<IncomeType | null>(null)
@@ -937,6 +977,47 @@ export default function SetupPage() {
     setAllocModalOpen(true)
   }
 
+  const confirmSpecialLock = async () => {
+    if (!specialLockTarget) return
+    try {
+      await lockConfig(specialLockTarget.id)
+      toast(`"${specialLockTarget.name}" locked`, 'success')
+      setSpecialLockTarget(null)
+      setSpecialRefetch(n => n + 1)
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Lock failed', 'error')
+    }
+  }
+
+  const handleSpecialUnlockAndEdit = async () => {
+    if (!specialEditLocked) return
+    try {
+      await unlockConfig(specialEditLocked.id)
+      toast(`"${specialEditLocked.name}" unlocked`, 'success')
+      const target = specialEditLocked
+      setSpecialEditLocked(null)
+      setEditSpecialRecord(target)
+      setSpecialModalOpen(true)
+      setSpecialRefetch(n => n + 1)
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Unlock failed', 'error')
+    }
+  }
+
+  const handleSpecialCreateCopy = () => {
+    if (!specialEditLocked) return
+    const source = specialEditLocked
+    setSpecialEditLocked(null)
+    setEditSpecialRecord({
+      ...source,
+      id:         '',
+      name:       `${source.name} (copy)`,
+      status:     'draft',
+      created_at: '',
+    })
+    setSpecialModalOpen(true)
+  }
+
   const handleAddBank     = () => { setEditBankRecord(null); setBankModalOpen(true) }
   const handleEditBank    = (bank: DbBank) => { setEditBankRecord(bank); setBankModalOpen(true) }
   const handleDeleteBank  = (bank: DbBank) => { setDeleteBankRecord(bank) }
@@ -991,6 +1072,8 @@ export default function SetupPage() {
               key={specialRefetch}
               onNew={() => { setEditSpecialRecord(null); setSpecialModalOpen(true) }}
               onEdit={c => { setEditSpecialRecord(c); setSpecialModalOpen(true) }}
+              onEditLocked={c => setSpecialEditLocked(c)}
+              onLock={c => setSpecialLockTarget(c)}
               onDelete={c => setDeleteSpecialTarget(c)}
             />
           )}
@@ -1146,6 +1229,83 @@ export default function SetupPage() {
         loading={false}
         label={deleteSpecialTarget ? `"${deleteSpecialTarget.name}"` : 'this config'}
       />
+
+      {/* Special config lock confirmation */}
+      <Modal
+        open={!!specialLockTarget}
+        onClose={() => setSpecialLockTarget(null)}
+        title="Lock Special Config"
+        size="max-w-sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Lock <span className="font-semibold">"{specialLockTarget?.name}"</span>? Locked configs are read-only and will be used when matched by income type rules.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setSpecialLockTarget(null)}
+              disabled={locking}
+              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmSpecialLock}
+              disabled={locking}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60"
+            >
+              {locking && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              Lock Config
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Special config edit-locked choice */}
+      <Modal
+        open={!!specialEditLocked}
+        onClose={() => setSpecialEditLocked(null)}
+        title="Edit Locked Special Config"
+        size="max-w-sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            <span className="font-semibold">"{specialEditLocked?.name}"</span> is locked. How would you like to proceed?
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={handleSpecialUnlockAndEdit}
+              disabled={unlocking}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-60"
+            >
+              <LockOpen className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Unlock &amp; Edit</p>
+                <p className="text-xs text-gray-500">Reverts status to draft so you can make changes.</p>
+              </div>
+              {unlocking && <span className="ml-auto w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />}
+            </button>
+            <button
+              onClick={handleSpecialCreateCopy}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Copy className="w-5 h-5 text-gray-500 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Create a Copy</p>
+                <p className="text-xs text-gray-500">Opens a new draft pre-filled with this config's data.</p>
+              </div>
+            </button>
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={() => setSpecialEditLocked(null)}
+              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
       <ResetDataModal
         open={resetModalOpen}
         onClose={() => setResetModalOpen(false)}
