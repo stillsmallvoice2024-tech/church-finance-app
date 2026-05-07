@@ -595,3 +595,24 @@ create index if not exists idx_income_type_rules on public.income_type_rules(inc
 create index if not exists idx_inflow_income_type on public.inflow_transactions(income_type_id);
 create index if not exists idx_categories_group on public.categories(group_id);
 create index if not exists idx_invitations_token on public.invitations(token);
+
+-- ============================================================
+-- CATEGORY OPENING BALANCES
+-- ============================================================
+create table if not exists public.category_opening_balances (
+  id             uuid default gen_random_uuid() primary key,
+  category_id    uuid not null references public.categories(id) on delete cascade,
+  budget_portion text not null check (budget_portion in ('Percentage Allocation','Specific Seed','Savings')),
+  amount         numeric(15,2) not null default 0,
+  created_at     timestamptz default now(),
+  unique (category_id, budget_portion)
+);
+
+alter table public.category_opening_balances enable row level security;
+
+create policy "cob_read" on public.category_opening_balances
+  for select using (auth.uid() is not null);
+create policy "cob_write" on public.category_opening_balances
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
+create index if not exists idx_cob_category on public.category_opening_balances(category_id);

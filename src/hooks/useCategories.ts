@@ -1,6 +1,15 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
+export type BudgetPortion = 'Percentage Allocation' | 'Specific Seed' | 'Savings'
+
+export interface CategoryOpeningBalance {
+  id:             string
+  category_id:    string
+  budget_portion: BudgetPortion
+  amount:         number
+}
+
 export interface CategoryGroup {
   id:         string
   name:       string
@@ -39,6 +48,61 @@ export function useCategories() {
   useEffect(() => { fetch() }, [fetch])
 
   return { categories, loading, error, refetch: fetch }
+}
+
+export function useCategoryOpeningBalances(categoryId?: string) {
+  const [balances, setBalances] = useState<CategoryOpeningBalance[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    let query = supabase.from('category_opening_balances').select('*')
+    if (categoryId) query = query.eq('category_id', categoryId)
+    const { data, error: err } = await query.order('budget_portion')
+    if (err && !/does not exist/i.test(err.message)) setError(err.message)
+    else setBalances((data ?? []) as CategoryOpeningBalance[])
+    setLoading(false)
+  }, [categoryId])
+
+  useEffect(() => { fetch() }, [fetch])
+  return { balances, loading, error, refetch: fetch }
+}
+
+export async function upsertCategoryOpeningBalance(
+  categoryId: string,
+  budgetPortion: BudgetPortion,
+  amount: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from('category_opening_balances')
+    .upsert({ category_id: categoryId, budget_portion: budgetPortion, amount },
+             { onConflict: 'category_id,budget_portion' })
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteCategoryOpeningBalance(
+  categoryId: string,
+  budgetPortion: BudgetPortion,
+): Promise<void> {
+  const { error } = await supabase
+    .from('category_opening_balances')
+    .delete()
+    .eq('category_id', categoryId)
+    .eq('budget_portion', budgetPortion)
+  if (error) throw new Error(error.message)
+}
+
+export async function fetchCategoryOpeningBalances(categoryId: string): Promise<CategoryOpeningBalance[]> {
+  const { data, error } = await supabase
+    .from('category_opening_balances')
+    .select('*')
+    .eq('category_id', categoryId)
+    .order('budget_portion')
+  if (error && /does not exist/i.test(error.message)) return []
+  if (error) throw new Error(error.message)
+  return (data ?? []) as CategoryOpeningBalance[]
 }
 
 export function useCategoryGroups() {

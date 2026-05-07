@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Gift, AlertCircle, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAccountingYearStore } from '../store/accountingYearStore'
+import { useCategories } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
 
@@ -51,6 +52,7 @@ export default function SpecificGivings() {
   usePageTitle('Specific Givings')
 
   const year = useAccountingYearStore(s => s.year)
+  const { categories } = useCategories()
 
   const [rows,    setRows]    = useState<SpecificRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -77,10 +79,52 @@ export default function SpecificGivings() {
       return
     }
 
-    const all = (result.data ?? []) as SpecificRow[]
-    setRows(all)
+    const txRows = (result.data ?? []) as SpecificRow[]
+
+    // Opening balances from new table
+    const cobRes = await supabase
+      .from('category_opening_balances')
+      .select('amount, category_id, categories(name, id)')
+      .eq('budget_portion', 'Specific Seed')
+
+    const cobData = cobRes.error ? [] : (cobRes.data ?? [])
+    const cobCatNames = new Set(cobData.map(r => (r.categories as { name: string } | null)?.name ?? ''))
+
+    const cobOpeningRows: SpecificRow[] = cobData
+      .map(r => {
+        const catName = (r.categories as { name: string; id: string } | null)?.name ?? ''
+        const catId   = (r.categories as { name: string; id: string } | null)?.id ?? ''
+        if (!catName) return null
+        return {
+          id:                        `ob-${catId}`,
+          date:                      '0000-01-01',
+          stage_code_1:              catName,
+          specific_seed_description: 'Opening Balance',
+          description:               null,
+          amount:                    Number(r.amount),
+        }
+      })
+      .filter((r): r is SpecificRow => r !== null)
+
+    // Fallback: old starting_balance field for unmigrated categories
+    const legacyOpeningRows: SpecificRow[] = categories
+      .filter(c =>
+        !cobCatNames.has(c.name) &&
+        c.starting_balance_budget_portion === 'Specific Seed' &&
+        (c.starting_balance ?? 0) > 0,
+      )
+      .map(c => ({
+        id:                        `ob-${c.id}`,
+        date:                      '0000-01-01',
+        stage_code_1:              c.name,
+        specific_seed_description: 'Opening Balance',
+        description:               null,
+        amount:                    c.starting_balance!,
+      }))
+
+    setRows([...cobOpeningRows, ...legacyOpeningRows, ...txRows])
     setLoading(false)
-  }, [year])
+  }, [year, categories])
 
   useEffect(() => { load() }, [load])
 
