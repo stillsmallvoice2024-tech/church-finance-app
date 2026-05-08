@@ -77,6 +77,8 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   const { mutate: update,   loading: updating,  error: updateErr, reset: resetUpdate } = updateMutation
   const { mutate: addGroup, loading: addingGrp                                       } = addGroupMutation
 
+  const [obSaving,     setObSaving]     = useState(false)
+
   const loading = adding || updating || obSaving
   const error   = addErr || updateErr
 
@@ -90,7 +92,6 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
   const [obRows,       setObRows]       = useState<ObRow[]>([])
-  const [obSaving,     setObSaving]     = useState(false)
 
   useEffect(() => {
     if (!open) return

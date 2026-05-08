@@ -116,6 +116,7 @@ export interface AddOutflowInput {
   fx_rate?: number
   transaction_type?: string
   original_transaction_id?: string
+  bank_name?: string
 }
 
 export interface AddIntraFlowInput {
