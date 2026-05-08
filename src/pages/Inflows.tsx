@@ -17,7 +17,6 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
-import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -58,7 +57,6 @@ export default function Inflows() {
   // Filters
   const [dateFrom,        setDateFrom]        = useState(yearStart)
   const [dateTo,          setDateTo]          = useState(yearEnd)
-  const [stageCode,       setStageCode]       = useState('')
   const [searchInput,     setSearchInput]     = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page,            setPage]            = useState(0)
@@ -68,7 +66,7 @@ export default function Inflows() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  useEffect(() => { setPage(0) }, [dateFrom, dateTo, stageCode, debouncedSearch])
+  useEffect(() => { setPage(0) }, [dateFrom, dateTo, debouncedSearch])
 
   // Reset to new year range when accounting year changes
   useEffect(() => {
@@ -81,7 +79,6 @@ export default function Inflows() {
   const { data, count, loading, error, refetch } = useInflowTransactions({
     dateFrom:  dateFrom  || undefined,
     dateTo:    dateTo    || undefined,
-    stageCode: stageCode || undefined,
     search:    debouncedSearch || undefined,
     page,
     pageSize:  PAGE_SIZE,
@@ -104,7 +101,6 @@ export default function Inflows() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('inflow_transactions')
-  const { categories } = useCategories()
   const { incomeTypes } = useIncomeTypes()
 
   usePageTitle('Inflows')
@@ -144,9 +140,9 @@ export default function Inflows() {
   const handleExport = () => {
     exportCSV(
       `inflows-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Date', 'Description', 'Amount (₦)', 'Stage Code 1', 'Stage Code 2', 'Specific Seed', 'Txn Ref', 'Remark'],
+      ['Date', 'Description', 'Amount (₦)', 'Stage Code 2', 'Specific Seed', 'Txn Ref', 'Remark'],
       data.map(r => [
-        r.date, r.description, r.amount, r.stage_code_1,
+        r.date, r.description, r.amount,
         r.stage_code_2, r.specific_seed_description, r.transaction_ref, r.remark,
       ]),
     )
@@ -210,14 +206,6 @@ export default function Inflows() {
             <FilterGroup label="To">
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
             </FilterGroup>
-            <FilterGroup label="Stage Code 1" className="min-w-[180px]">
-              <select value={stageCode} onChange={e => setStageCode(e.target.value)} className={`${inputCls} bg-white`}>
-                <option value="">All categories</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-            </FilterGroup>
             <FilterGroup label="Search" className="flex-1 min-w-[180px]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -228,9 +216,9 @@ export default function Inflows() {
                 />
               </div>
             </FilterGroup>
-            {(dateFrom || dateTo || stageCode || searchInput) && (
+            {(dateFrom || dateTo || searchInput) && (
               <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setStageCode(''); setSearchInput('') }}
+                onClick={() => { setDateFrom(''); setDateTo(''); setSearchInput('') }}
                 className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Clear
@@ -270,7 +258,6 @@ export default function Inflows() {
                   <div className="text-sm text-gray-700">
                     <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                   </div>
-                  {row.stage_code_1 && <p className="text-xs text-gray-400">{row.stage_code_1}{row.stage_code_2 ? ` / ${row.stage_code_2}` : ''}</p>}
                   {row.remark && <p className="text-xs text-gray-400 italic truncate">{row.remark}</p>}
                   <div className="flex gap-1 pt-1 border-t border-gray-50">
                     {canWrite() && (
