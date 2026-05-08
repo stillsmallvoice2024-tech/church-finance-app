@@ -114,7 +114,7 @@ src/
 │
 ├── pages/
 │   ├── Dashboard.tsx
-│   ├── Inflows.tsx            # Table + card view, income type badges, tooltip/expand; Stage Code 1 filter and display removed
+│   ├── Inflows.tsx            # Display/management only — table + card view, income type badges, tooltip/expand; Stage Code 1 filter and display removed; import modal removed (imports come exclusively from Import page)
 │   ├── Outflows.tsx           # Table + card view, tooltip/expand
 │   ├── Categories.tsx         # Table + card view; CategoryModal supports dynamic multi-portion opening balances
 │   ├── ForeignCurrency.tsx    # Currency cards, rate calculator, conversion history
@@ -306,6 +306,8 @@ No true DB transaction — if step 2 fails, step 1 is committed. Acceptable trad
 
 ### Import Wizard (`Import.tsx`)
 Multi-step flow: upload file → parse → map columns → configure rows (allocation config, income type, FX fields per row) → bulk insert. Handles both Excel (xlsx) and PDF bank statements (pdfjs-dist). Also has a `ManualEntryForm` for single-transaction entry that resolves `bank_id` to `bank_name` before saving.
+
+**Import is the sole entry point for bulk-imported transactions.** The Inflows and Outflows pages are display/management only — they no longer contain an import modal or import trigger. All imported inflow/outflow records propagate to those pages via their normal data-fetch hooks.
 
 ### Tailwind Colours
 Custom semantic tokens in `tailwind.config.js`:
