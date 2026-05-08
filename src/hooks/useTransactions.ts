@@ -14,6 +14,7 @@ export interface InflowTransaction {
   transaction_ref: string | null
   specific_seed_description: string | null
   remark: string | null
+  bank_name: string | null
   fx_currency: string | null
   transaction_type: string | null
   original_transaction_id: string | null

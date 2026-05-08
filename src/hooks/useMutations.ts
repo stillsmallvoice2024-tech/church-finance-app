@@ -93,6 +93,7 @@ export interface AddInflowInput {
   transaction_type?: string
   original_transaction_id?: string
   income_type_id?: string
+  bank_name?: string
 }
 
 export interface AddOutflowInput {

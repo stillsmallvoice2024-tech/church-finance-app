@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
+import { useBanks } from '../../hooks/useBanks'
 import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
 import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
@@ -33,6 +34,7 @@ const schema = z.object({
   date:                       z.string().min(1, 'Date is required'),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   description:                z.string().optional(),
+  bank_name:                  z.string().optional(),
   stage_code_1:               z.string().optional(),
   stage_code_2:               z.string().optional(),
   transaction_ref:            z.string().optional(),
@@ -59,6 +61,7 @@ interface Props {
 export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
   const { categories } = useCategories()
+  const { banks } = useBanks()
   const { configs: allocConfigs, fetch: fetchAllocConfigs } = useAllocationStore()
   useEffect(() => { fetchAllocConfigs() }, [fetchAllocConfigs])
   const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
@@ -153,6 +156,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         date:                       editRecord.date,
         amount:                     editRecord.amount,
         description:                editRecord.description ?? '',
+        bank_name:                  editRecord.bank_name ?? '',
         stage_code_1:               editRecord.stage_code_1 ?? '',
         stage_code_2:               editRecord.stage_code_2 ?? '',
         transaction_ref:            editRecord.transaction_ref ?? '',
@@ -181,6 +185,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             amount:                     values.amount,
             description:                values.description  || null,
             allocation_config_id:       selectedConfigId   || null,
+            bank_name:                  values.bank_name   || null,
             stage_code_1:               values.stage_code_1 || null,
             stage_code_2:               values.stage_code_2 || null,
             transaction_ref:            values.transaction_ref           || null,
@@ -200,6 +205,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           amount:                     values.amount,
           description:                values.description  || undefined,
           allocation_config_id:       selectedConfigId   || undefined,
+          bank_name:                  values.bank_name   || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
           transaction_ref:            values.transaction_ref           || undefined,
@@ -250,6 +256,16 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         {/* Description — auto-assigns type on change */}
         <Field label="Description" error={errors.description?.message}>
           <input type="text" placeholder="e.g. Sunday offering" {...register('description')} className={inputCls(!!errors.description)} />
+        </Field>
+
+        {/* Bank */}
+        <Field label="Bank" error={errors.bank_name?.message}>
+          <select {...register('bank_name')} className={inputCls(!!errors.bank_name)}>
+            <option value="">— None —</option>
+            {banks.map(b => (
+              <option key={b.id} value={b.name}>{b.name}</option>
+            ))}
+          </select>
         </Field>
 
         {/* Transaction Type */}

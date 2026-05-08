@@ -36,7 +36,7 @@ export function getConfigForDate(
 ): AllocationConfig | null {
   // Only locked (approved) configs are eligible — draft configs are never applied
   const eligible = configs
-    .filter(c => c.status === 'locked' && c.start_date <= date)
+    .filter(c => c.status === 'locked' && !c.is_special && c.start_date <= date)
     .sort((a, b) => b.start_date.localeCompare(a.start_date))
 
   return eligible[0] ?? null
