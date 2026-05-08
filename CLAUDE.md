@@ -73,7 +73,7 @@ src/
 │   │   └── BottomTabBar.tsx   # Mobile nav
 │   ├── modals/                # All add/edit forms live here as Modal wrappers
 │   │   ├── AddInflowModal.tsx  # Includes Bank selector (stores bank_name); Stage Code 1 field kept for data entry but removed from Inflows list UI
-│   │   ├── AddOutflowModal.tsx
+│   │   ├── AddOutflowModal.tsx # Includes Bank selector (stores bank_name); outflows now propagate to BankLedger
 │   │   ├── AddIntraFlowModal.tsx
 │   │   ├── AddBankModal.tsx           # Multi-row starting-balance allocation builder
 │   │   ├── AddFXModal.tsx             # Add FX transaction (deposit/withdrawal)
@@ -95,9 +95,9 @@ src/
 │
 ├── hooks/
 │   ├── useAuth.ts             # Sets up supabase.auth.onAuthStateChange listener; uses requestIdRef + AbortController per event to enforce request ownership; fetchProfile uses raw fetch with credentials: 'include'; window focus listener fires FOCUS_REVALIDATE; setLoading(false) guarded by requestId + signal in a finally block
-│   ├── useRole.ts             # Returns { isAdmin, isAccountant, canWrite, canDelete } — all return !!role (true for any authenticated user)
+│   ├── useRole.ts             # Returns { isAdmin, isAccountant, canWrite, canDelete } — isAdmin/canWrite/canDelete all return !!user (true for any authenticated user); role is read from store for display only
 │   ├── useMutations.ts        # ALL write mutations (add/update/delete for every entity)
-│   ├── useTransactions.ts     # useFetchInflows(), useFetchOutflows() with filters; InflowTransaction includes bank_name
+│   ├── useTransactions.ts     # useFetchInflows(), useFetchOutflows() with filters; InflowTransaction and OutflowTransaction both include bank_name
 │   ├── useBanks.ts            # useBanks() → { banks: DbBank[], loading, error, refetch }
 │   ├── useCategories.ts       # useCategories(), useCategoryGroups(), useCategoryOpeningBalances(); exports upsertCategoryOpeningBalance(), deleteCategoryOpeningBalance(), fetchCategoryOpeningBalances()
 │   ├── useCurrencies.ts       # Dynamic currency list; falls back to 5 defaults if no DB table
@@ -207,14 +207,16 @@ Three roles stored in `profiles.role`: `admin`, `accountant`, `viewer`. Role lab
 `useRole()` in `src/hooks/useRole.ts`:
 ```ts
 const { isAdmin, canWrite, canDelete } = useRole()
-// isAdmin()   → !!role  (true for any signed-in user)
-// canWrite()  → !!role
-// canDelete() → !!role
+// isAdmin()   → !!user  (true for any signed-in user)
+// canWrite()  → !!user
+// canDelete() → !!user
 ```
 
-`<AdminOnly>` (RoleGates.tsx) and `<CanWrite>` gates still exist in the component tree but now pass through for all authenticated users since `isAdmin()` always returns true when signed in.
+**Important:** `canWrite`/`canDelete`/`isAdmin` gate on `!!user` (set synchronously at the start of every auth event), **not** `!!role` (which requires a successful `fetchProfile` round-trip). If `fetchProfile` fails or returns null, `user` is still set and buttons remain visible. Using `!!role` caused edit/delete buttons to be hidden for any user whose profile fetch failed.
 
-> **DB note:** Supabase RLS policies may still enforce `is_admin()` at the database level. If non-admin users get permission errors, update the relevant RLS policies in the Supabase SQL editor (e.g. change `USING (is_admin())` → `USING (auth.uid() IS NOT NULL)`).
+`<AdminOnly>` (RoleGates.tsx) and `<CanWrite>` gates still exist in the component tree but pass through for all authenticated users since `isAdmin()` always returns true when signed in.
+
+> **DB note:** Supabase RLS DELETE policies previously enforced `is_admin()`. The migration SQL in Setup → Database tab updates all three DELETE policies (`inflow_delete`, `outflow_delete`, `intraflow_delete`) to `auth.uid() IS NOT NULL`. **Run this migration in your Supabase SQL editor to enable deletes for all authenticated users.** Without it, deletes silently succeed on the client (no error returned) but no rows are actually removed — `useDeleteTransaction` now detects this via `count: 'exact'` and throws a descriptive error.
 
 **Login:** Accepts email or username. `resolveEmail()` in `LoginPage.tsx` queries `profiles.username` to map a username to email, then calls `supabase.auth.signInWithPassword`.
 
@@ -241,7 +243,7 @@ Every UPDATE hook:
 2. Calls `logAudit()` — whole-record snapshot to `audit_log`
 3. Calls `logFieldChanges()` — per-field diff to `field_changes`
 
-`useDeleteTransaction(table)` accepts `'inflow_transactions' | 'outflow_transactions' | 'intra_flows'`. Any signed-in user can delete; no client-side role check.
+`useDeleteTransaction(table)` accepts `'inflow_transactions' | 'outflow_transactions' | 'intra_flows'`. Any signed-in user can delete; no client-side role check. Uses `delete({ count: 'exact' })` and throws if `count === 0` — this catches silent Supabase RLS denials (PostgREST returns no error when a DELETE is blocked by RLS, just deletes 0 rows).
 
 ### Reading data
 Each entity has its own `use<Entity>.ts` hook that fetches from Supabase. Hooks return `{ data, loading, error, refetch }`. Mutations call `refetch` on success.
@@ -250,11 +252,13 @@ Each entity has its own `use<Entity>.ts` hook that fetches from Supabase. Hooks 
 `BankLedger.tsx` queries `inflow_transactions` and `outflow_transactions` filtered by `bank_name`. For a transaction to appear in the bank ledger, `bank_name` must be set at insert time.
 
 - **`AddInflowModal`** — has a Bank selector dropdown; stores the bank's `name` (not `id`) as `bank_name`
+- **`AddOutflowModal`** — has a Bank selector dropdown (added this session); stores `bank_name` on both add and edit; outflows now appear in BankLedger
 - **`Import.tsx` ManualEntryForm** — `doSaveInflow` and `doSaveOutflow` both resolve the selected `bank_id` to `bank_name` before calling the mutation
 - **`ImportModal.tsx` batch wizard** — sets `bank_name` from the `bank` prop passed from `Import.tsx` (the bank selected on the import page before opening the wizard)
-- **`AddOutflowModal`** — does NOT yet have a bank selector; outflows added via this modal will have `bank_name = NULL` and won't appear in BankLedger
 
-Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_name?: string`.
+Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_name?: string`. `OutflowTransaction` type in `useTransactions.ts` includes `bank_name: string | null`.
+
+> **Note:** Existing outflows saved before the bank selector was added have `bank_name = NULL` and will not appear in BankLedger. Edit and re-save them to assign a bank, or update them directly in Supabase.
 
 ### Special Configs (`allocation_configs` where `is_special = true`)
 - Created and managed via `CreateSpecialConfigModal` — two save modes: **Save as Draft** and **Save & Lock**
@@ -360,6 +364,12 @@ When a new column or table is needed, add the DDL to both:
 
 **FK references in migration SQL must NOT use the `public.` schema prefix** (e.g. `REFERENCES categories(id)` not `REFERENCES public.categories(id)`) — Supabase's SQL editor resolves via search_path. **`CREATE POLICY` has no `IF NOT EXISTS` clause** — use `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;` instead.
 
+To **replace** an existing RLS policy, use `DROP POLICY IF EXISTS` (natively supported) then `CREATE POLICY`:
+```sql
+DROP POLICY IF EXISTS "inflow_delete" ON inflow_transactions;
+CREATE POLICY "inflow_delete" ON inflow_transactions FOR DELETE USING (auth.uid() IS NOT NULL);
+```
+
 Some hooks detect "relation does not exist" errors and fall back to defaults (e.g. `useCurrencies`, `useCategoryOpeningBalances`).
 
 ---
@@ -370,7 +380,6 @@ These flows exist in the data model but are not fully wired in the UI — docume
 
 | Gap | Detail |
 |-----|--------|
-| `AddOutflowModal` missing bank selector | Outflows added via the modal have `bank_name = NULL` and don't appear in BankLedger |
 | FX conversion NGN inflow missing `bank_name` | `useAddFXConversion` doesn't accept a bank; the created inflow won't appear in any bank ledger |
 | Intrabank transfers invisible to BankLedger | `intrabank_transfers` records are not queried by BankLedger |
 | Bank deposits invisible to BankLedger | `bank_deposits` records are not queried by BankLedger |
