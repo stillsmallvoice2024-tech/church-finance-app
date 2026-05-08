@@ -113,7 +113,7 @@ const ALIAS_MAP: Record<string, string[]> = {
   bank_id:          ['bankid', 'banktxnid', 'banktransactionid', 'bankref', 'bankreference', 'banksessionid'],
 }
 
-function detectHeaderRow(rows: unknown[][]): number {
+export function detectHeaderRow(rows: unknown[][]): number {
   const allAliases = new Set(Object.values(ALIAS_MAP).flat())
   const scan = Math.min(15, rows.length)
   let bestScore = 0, bestIdx = 0

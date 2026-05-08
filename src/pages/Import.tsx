@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { ImportModal } from '../components/modals/ImportModal'
+import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useCategories } from '../hooks/useCategories'
@@ -128,8 +128,9 @@ export default function Import() {
       const wb     = XLSX.read(buffer, { type: 'array' })
       const ws     = wb.Sheets[wb.SheetNames[0]]
       const rows   = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][]
-      const headers = (rows[0] ?? []).map(h => String(h ?? '').trim())
-      const dataRows = rows.slice(1).filter(r => (r as unknown[]).some(c => c !== '' && c != null))
+      const headerIdx = detectHeaderRow(rows)
+      const headers = (rows[headerIdx] ?? []).map(h => String(h ?? '').trim())
+      const dataRows = rows.slice(headerIdx + 1).filter(r => (r as unknown[]).some(c => c !== '' && c != null))
       rowCount = dataRows.length
 
       const col = findTxnIdColumn(headers)
