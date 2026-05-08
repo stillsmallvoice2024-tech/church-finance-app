@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuthStore } from '../store/authStore'
 
 // ── DB row type (with joined profile) ─────────────────────────────────────────
 
@@ -35,15 +34,6 @@ export function useAuditLog(limit = 100): AuditLogResult {
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
-    // Read role at call-time so we don't need it as a dep
-    const { role } = useAuthStore.getState()
-
-    if (role !== 'admin') {
-      setError('Access denied: admin role required to view the audit log.')
-      setLoading(false)
-      return
-    }
-
     setLoading(true)
     setError(null)
 
@@ -72,7 +62,7 @@ export function useAuditLog(limit = 100): AuditLogResult {
       setEntries((data ?? []) as unknown as AuditLogEntry[])
     }
     setLoading(false)
-  }, [limit])  // role is read from store at call-time, not a dep
+  }, [limit])
 
   useEffect(() => { fetch() }, [fetch])
 

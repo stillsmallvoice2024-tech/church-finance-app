@@ -3,7 +3,6 @@ import { ClipboardList, Download, AlertCircle, RefreshCw } from 'lucide-react'
 import { Card }               from '../components/ui/Card'
 import { Pagination }         from '../components/ui/Pagination'
 import { useFieldChanges }    from '../hooks/useFieldChanges'
-import { useRole }            from '../hooks/useRole'
 import { usePageTitle }       from '../hooks/usePageTitle'
 import { exportCSV }          from '../utils/csvExport'
 
@@ -28,7 +27,6 @@ function fmtTs(ts: string) {
 }
 
 export default function ChangeLog() {
-  const { isAdmin } = useRole()
   usePageTitle('Change Log')
 
   const [tableFilter, setTableFilter] = useState('')
@@ -45,14 +43,6 @@ export default function ChangeLog() {
     page,
     pageSize:  PAGE_SIZE,
   })
-
-  if (!isAdmin()) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
-      <AlertCircle className="w-10 h-10 text-danger" />
-      <p className="font-semibold text-gray-800">Admin access required</p>
-      <p className="text-sm text-gray-500">Only administrators can view the change log.</p>
-    </div>
-  )
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">

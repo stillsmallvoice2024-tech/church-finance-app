@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuthStore } from '../store/authStore'
 
 export interface FieldChangeEntry {
   id:         string
@@ -35,13 +34,6 @@ export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
-    const { role } = useAuthStore.getState()
-    if (role !== 'admin') {
-      setError('Access denied: admin role required.')
-      setLoading(false)
-      return
-    }
-
     setLoading(true)
     setError(null)
 

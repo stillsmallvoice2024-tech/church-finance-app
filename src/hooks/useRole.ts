@@ -7,9 +7,9 @@ export function useRole() {
 
   return {
     role,
-    isAdmin: (): boolean => role === 'admin',
+    isAdmin: (): boolean => !!role,
     isAccountant: (): boolean => role === 'accountant',
-    canWrite: (): boolean => role === 'admin' || role === 'accountant',
-    canDelete: (): boolean => role === 'admin',
+    canWrite: (): boolean => !!role,
+    canDelete: (): boolean => !!role,
   }
 }

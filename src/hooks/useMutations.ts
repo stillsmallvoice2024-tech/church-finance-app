@@ -346,9 +346,7 @@ export function useDeleteTransaction(table: DeletableTable): MutationHook<string
   const mutate = useCallback(async (id: string): Promise<void> => {
     const { user, role } = useAuthStore.getState()
 
-    // Client-side guard (DB RLS provides the real enforcement)
-    if (role !== 'admin') throw new Error('Only administrators can delete records.')
-    if (!user?.id)        throw new Error('You must be signed in to delete records.')
+    if (!user?.id) throw new Error('You must be signed in to delete records.')
 
     setLoading(true)
     setError(null)
