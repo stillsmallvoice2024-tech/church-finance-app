@@ -1,14 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  TrendingDown, Plus, Download, Pencil, Trash2,
-  Search, AlertCircle, RefreshCw, FileSpreadsheet, LayoutList, LayoutGrid,
+  TrendingDown, Download, Pencil, Trash2,
+  Search, AlertCircle, RefreshCw, LayoutList, LayoutGrid,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
-import { ImportModal }             from '../components/modals/ImportModal'
-import { CanWrite }                from '../components/auth/RoleGates'
 import { ReceiptBadge }            from '../components/ui/ReceiptBadge'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction }    from '../hooks/useMutations'
@@ -96,8 +94,6 @@ export default function Outflows() {
   const [deleteId,     setDeleteId]    = useState<string | null>(null)
   const [displayMode,  setDisplayMode] = useState<'table' | 'cards'>('table')
   const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
-  const [importOpen,  setImportOpen]  = useState(false)
-
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
@@ -105,11 +101,10 @@ export default function Outflows() {
 
   usePageTitle('Outflows')
 
-  const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: OutflowTransaction) => { setEditRecord(r); setModalOpen(true) }
 
   const handleModalSuccess = () => {
-    toast(editRecord ? 'Transaction updated' : 'Outflow added successfully', 'success')
+    toast('Transaction updated', 'success')
     refetch()
   }
 
@@ -176,14 +171,6 @@ export default function Outflows() {
             >
               <Download className="w-4 h-4" /> Export CSV
             </button>
-            <CanWrite>
-              <button
-                onClick={openAdd}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Add Outflow
-              </button>
-            </CanWrite>
           </div>
         </div>
 
@@ -380,19 +367,7 @@ export default function Outflows() {
         loading={deleting}
         label="this outflow transaction"
       />
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <DescriptionTooltip tooltip={descTooltip} />
-
-      {/* Floating import button */}
-      <CanWrite>
-        <button
-          onClick={() => setImportOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-accent text-white text-sm font-medium rounded-full shadow-lg hover:bg-accent/90 transition-colors"
-          title="Import from Excel"
-        >
-          <FileSpreadsheet className="w-4 h-4" /> Import Excel
-        </button>
-      </CanWrite>
     </>
   )
 }
