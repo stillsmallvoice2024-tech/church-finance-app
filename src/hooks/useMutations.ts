@@ -359,12 +359,13 @@ export function useDeleteTransaction(table: DeletableTable): MutationHook<string
         .eq('id', id)
         .single()
 
-      const { error: err } = await supabase
+      const { error: err, count } = await supabase
         .from(table)
-        .delete()
+        .delete({ count: 'exact' })
         .eq('id', id)
 
       if (err) throw err
+      if (!count) throw new Error('Delete was blocked by a database policy. Run the RLS migration in Setup → Database tab to grant delete access.')
 
       logAudit({
         userId:    user.id,

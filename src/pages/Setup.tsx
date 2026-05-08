@@ -744,7 +744,17 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE POLICY "cob_write" ON public.category_opening_balances FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Allow all authenticated users to delete transactions (removes admin-only restriction)
+DROP POLICY IF EXISTS "inflow_delete" ON inflow_transactions;
+CREATE POLICY "inflow_delete" ON inflow_transactions FOR DELETE USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "outflow_delete" ON outflow_transactions;
+CREATE POLICY "outflow_delete" ON outflow_transactions FOR DELETE USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "intraflow_delete" ON intra_flows;
+CREATE POLICY "intraflow_delete" ON intra_flows FOR DELETE USING (auth.uid() IS NOT NULL);`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────
 

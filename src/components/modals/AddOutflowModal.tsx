@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
+import { useBanks } from '../../hooks/useBanks'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 
@@ -29,6 +30,7 @@ const optNum = z.union([
 const schema = z.object({
   date:                    z.string().min(1, 'Date is required'),
   amount_disbursed:        z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
+  bank_name:               z.string().optional(),
   description:             z.string().optional(),
   bank_description:        z.string().optional(),
   transaction_id:          z.string().optional(),
@@ -57,6 +59,7 @@ interface Props {
 
 export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const { categories } = useCategories()
+  const { banks }      = useBanks()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
   const [fxOpen,    setFxOpen]    = useState(false)
@@ -90,14 +93,15 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       resetForm({
         date:                    editRecord.date,
         amount_disbursed:        editRecord.amount_disbursed,
-        description:             editRecord.description       ?? '',
-        bank_description:        editRecord.bank_description  ?? '',
-        transaction_id:          editRecord.transaction_id    ?? '',
-        stage_code_1:            editRecord.stage_code_1      ?? '',
-        stage_code_2:            editRecord.stage_code_2      ?? '',
-        amount_refunded:         editRecord.amount_refunded   ?? '',
-        transfer_charge:         editRecord.transfer_charge   ?? '',
-        remarks:                 editRecord.remarks           ?? '',
+        bank_name:               editRecord.bank_name               ?? '',
+        description:             editRecord.description             ?? '',
+        bank_description:        editRecord.bank_description        ?? '',
+        transaction_id:          editRecord.transaction_id          ?? '',
+        stage_code_1:            editRecord.stage_code_1            ?? '',
+        stage_code_2:            editRecord.stage_code_2            ?? '',
+        amount_refunded:         editRecord.amount_refunded         ?? '',
+        transfer_charge:         editRecord.transfer_charge         ?? '',
+        remarks:                 editRecord.remarks                 ?? '',
         fx_currency:             editRecord.fx_currency             ?? '',
         fx_amount:               (editRecord as Record<string, unknown>).fx_amount as number ?? '',
         fx_rate:                 (editRecord as Record<string, unknown>).fx_rate   as number ?? '',
@@ -118,14 +122,15 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           updates: {
             date:                    values.date,
             amount_disbursed:        values.amount_disbursed,
-            description:             values.description      || null,
-            bank_description:        values.bank_description || null,
-            transaction_id:          values.transaction_id   || null,
-            stage_code_1:            values.stage_code_1     || null,
-            stage_code_2:            values.stage_code_2     || null,
-            amount_refunded:         values.amount_refunded  ?? null,
-            transfer_charge:         values.transfer_charge  ?? null,
-            remarks:                 values.remarks          || null,
+            bank_name:               values.bank_name               || null,
+            description:             values.description             || null,
+            bank_description:        values.bank_description        || null,
+            transaction_id:          values.transaction_id          || null,
+            stage_code_1:            values.stage_code_1            || null,
+            stage_code_2:            values.stage_code_2            || null,
+            amount_refunded:         values.amount_refunded         ?? null,
+            transfer_charge:         values.transfer_charge         ?? null,
+            remarks:                 values.remarks                 || null,
             is_pending_deduction:    isPending,
             fx_currency:             values.fx_currency             || null,
             fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : null,
@@ -139,14 +144,15 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           date:                    values.date,
           amount_disbursed:        values.amount_disbursed,
           is_pending_deduction:    isPending,
-          description:             values.description      || undefined,
-          bank_description:        values.bank_description || undefined,
-          transaction_id:          values.transaction_id   || undefined,
-          stage_code_1:            values.stage_code_1     || undefined,
-          stage_code_2:            values.stage_code_2     || undefined,
+          bank_name:               values.bank_name               || undefined,
+          description:             values.description             || undefined,
+          bank_description:        values.bank_description        || undefined,
+          transaction_id:          values.transaction_id          || undefined,
+          stage_code_1:            values.stage_code_1            || undefined,
+          stage_code_2:            values.stage_code_2            || undefined,
           amount_refunded:         typeof values.amount_refunded === 'number' ? values.amount_refunded : undefined,
           transfer_charge:         typeof values.transfer_charge === 'number' ? values.transfer_charge : undefined,
-          remarks:                 values.remarks          || undefined,
+          remarks:                 values.remarks                 || undefined,
           fx_currency:             values.fx_currency             || undefined,
           fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
           fx_rate:                 typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
@@ -187,6 +193,14 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             )} />
           </Field>
         </div>
+
+        {/* Bank Account */}
+        <Field label="Bank Account" error={errors.bank_name?.message}>
+          <select {...register('bank_name')} className={inputCls(!!errors.bank_name)}>
+            <option value="">— Select bank (optional) —</option>
+            {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+          </select>
+        </Field>
 
         {/* Description */}
         <Field label="Description" error={errors.description?.message}>

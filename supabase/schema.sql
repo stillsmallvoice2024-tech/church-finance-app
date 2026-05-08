@@ -453,7 +453,7 @@ create policy "inflow_write" on public.inflow_transactions
 create policy "inflow_update" on public.inflow_transactions
   for update using (public.is_finance_user());
 create policy "inflow_delete" on public.inflow_transactions
-  for delete using (public.is_admin());
+  for delete using (auth.uid() is not null);
 
 -- ── Outflow Transactions ───────────────────────────────────────────────────────
 
@@ -464,7 +464,7 @@ create policy "outflow_write" on public.outflow_transactions
 create policy "outflow_update" on public.outflow_transactions
   for update using (public.is_finance_user());
 create policy "outflow_delete" on public.outflow_transactions
-  for delete using (public.is_admin());
+  for delete using (auth.uid() is not null);
 
 -- ── Intra Flows ────────────────────────────────────────────────────────────────
 
@@ -475,7 +475,7 @@ create policy "intraflow_write" on public.intra_flows
 create policy "intraflow_update" on public.intra_flows
   for update using (public.is_finance_user());
 create policy "intraflow_delete" on public.intra_flows
-  for delete using (public.is_admin());
+  for delete using (auth.uid() is not null);
 
 -- ── Bank Deposits ──────────────────────────────────────────────────────────────
 

@@ -39,6 +39,7 @@ export interface OutflowTransaction {
   stage_code_2: string | null
   remarks: string | null
   is_pending_deduction: boolean
+  bank_name: string | null
   fx_currency: string | null
   transaction_type: string | null
   original_transaction_id: string | null
