@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  TrendingUp, Plus, Download, Pencil, Trash2,
+  TrendingUp, Download, Pencil, Trash2,
   ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw,
   LayoutList, LayoutGrid,
 } from 'lucide-react'
@@ -8,7 +8,6 @@ import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
-import { CanWrite }                from '../components/auth/RoleGates'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
@@ -103,23 +102,10 @@ export default function Inflows() {
 
   usePageTitle('Inflows')
 
-  const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: InflowTransaction) => { setEditRecord(r); setModalOpen(true) }
 
-  // Keyboard shortcut: Ctrl+N / Cmd+N opens Add modal
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && canWrite()) {
-        e.preventDefault()
-        openAdd()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [canWrite])
-
   const handleModalSuccess = () => {
-    toast(editRecord ? 'Transaction updated' : 'Inflow added successfully', 'success')
+    toast('Transaction updated', 'success')
     refetch()
   }
 
@@ -184,14 +170,6 @@ export default function Inflows() {
             >
               <Download className="w-4 h-4" /> Export CSV
             </button>
-            <CanWrite>
-              <button
-                onClick={openAdd}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Add Inflow
-              </button>
-            </CanWrite>
           </div>
         </div>
 

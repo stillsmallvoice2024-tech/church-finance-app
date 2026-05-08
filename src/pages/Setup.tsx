@@ -754,7 +754,14 @@ DROP POLICY IF EXISTS "outflow_delete" ON outflow_transactions;
 CREATE POLICY "outflow_delete" ON outflow_transactions FOR DELETE USING (auth.uid() IS NOT NULL);
 
 DROP POLICY IF EXISTS "intraflow_delete" ON intra_flows;
-CREATE POLICY "intraflow_delete" ON intra_flows FOR DELETE USING (auth.uid() IS NOT NULL);`
+CREATE POLICY "intraflow_delete" ON intra_flows FOR DELETE USING (auth.uid() IS NOT NULL);
+
+-- Fix field_changes FK so PostgREST can join profiles (was pointing to auth.users)
+ALTER TABLE public.field_changes
+  DROP CONSTRAINT IF EXISTS field_changes_user_id_fkey;
+ALTER TABLE public.field_changes
+  ADD CONSTRAINT field_changes_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────
 

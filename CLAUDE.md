@@ -114,8 +114,8 @@ src/
 │
 ├── pages/
 │   ├── Dashboard.tsx
-│   ├── Inflows.tsx            # Display/management only — table + card view, income type badges, tooltip/expand; Stage Code 1 filter and display removed; import modal removed (imports come exclusively from Import page)
-│   ├── Outflows.tsx           # Table + card view, tooltip/expand
+│   ├── Inflows.tsx            # Display-only — table + card view, income type badges, tooltip/expand; no Add/import buttons (all creation via Import page)
+│   ├── Outflows.tsx           # Display-only — table + card view, tooltip/expand; no Add/import buttons (all creation via Import page)
 │   ├── Categories.tsx         # Table + card view; CategoryModal supports dynamic multi-portion opening balances
 │   ├── ForeignCurrency.tsx    # Currency cards, rate calculator, conversion history
 │   ├── BankDeposits.tsx       # Table + card view, FX tab, FX fields on modal
@@ -194,7 +194,7 @@ All tables in `public` schema with RLS enabled. See `supabase/schema.sql` for co
 | `receipts` | File attachments; `entity_type` (inflow/outflow/bank_deposit), `entity_id` |
 | `invitations` | Token-based user invitations; `token` UUID, `expires_at` |
 | `audit_log` | Whole-record snapshots on INSERT/UPDATE/DELETE |
-| `field_changes` | Per-field old/new values on UPDATE (written by `logFieldChanges()`) |
+| `field_changes` | Per-field old/new values on UPDATE (written by `logFieldChanges()`); `user_id` FK references `public.profiles(id)` so PostgREST can join profiles |
 
 **Helper functions:** `is_admin()`, `is_finance_user()` — used in RLS policies.
 
@@ -307,7 +307,7 @@ No true DB transaction — if step 2 fails, step 1 is committed. Acceptable trad
 ### Import Wizard (`Import.tsx`)
 Multi-step flow: upload file → parse → map columns → configure rows (allocation config, income type, FX fields per row) → bulk insert. Handles both Excel (xlsx) and PDF bank statements (pdfjs-dist). Also has a `ManualEntryForm` for single-transaction entry that resolves `bank_id` to `bank_name` before saving.
 
-**Import is the sole entry point for bulk-imported transactions.** The Inflows and Outflows pages are display/management only — they no longer contain an import modal or import trigger. All imported inflow/outflow records propagate to those pages via their normal data-fetch hooks.
+**Import is the sole entry point for all transaction creation** (bulk and manual). The Inflows and Outflows pages are display-only — no Add buttons, no import triggers. Edit and delete remain available on both pages. All records propagate to those pages via their normal data-fetch hooks.
 
 ### Tailwind Colours
 Custom semantic tokens in `tailwind.config.js`:
