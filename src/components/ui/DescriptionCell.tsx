@@ -31,7 +31,7 @@ export function DescriptionCell({
         }}
         onMouseLeave={() => setTooltip(null)}
       >
-        <span className="truncate">{text || '—'}</span>
+        <span className="truncate min-w-0">{text || '—'}</span>
         {text && (
           <ChevronDown
             className={`w-3 h-3 shrink-0 text-gray-300 group-hover:text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`}

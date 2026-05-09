@@ -412,3 +412,45 @@ All other routes are behind `<AuthGuard>`.
 - **Platform:** Vercel
 - **`vercel.json`:** SPA rewrite (`*` → `index.html`) + security headers (X-Frame-Options: DENY, etc.)
 - **Build output:** `dist/` — single bundle ~1.7MB gzipped ~460KB (chunk size warning is expected, not an error)
+
+---
+
+## Table UX — Text Overflow & Mobile Scrolling
+
+### DescriptionCell pattern (`src/components/ui/DescriptionCell.tsx`)
+All long-text table columns use `DescriptionCell` + `useDescriptionExpand` hook:
+- **Hover** → dark tooltip via `DescriptionTooltip` portal (renders in `document.body`, `z-[9999]`)
+- **Click** → inline expand below the row text
+- **Chevron** (`ChevronDown`, `shrink-0`) — always visible; requires `min-w-0` on the inner `<span>` so the flex container truncates properly instead of hiding the icon behind `overflow: hidden`
+
+Usage in a page:
+```tsx
+const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+
+// In table cell:
+<td className="px-4 py-3 text-sm max-w-[200px]">
+  <DescriptionCell
+    id={row.id}
+    text={row.description}
+    expanded={descExpanded.has(row.id)}
+    onToggle={() => toggleDesc(row.id)}
+    tooltip={descTooltip}
+    setTooltip={setDescTooltip}
+  />
+</td>
+
+// At end of return (renders portal):
+<DescriptionTooltip tooltip={descTooltip} />
+```
+
+Use a prefixed id (e.g. `rem-${row.id}`) when a second DescriptionCell appears in the same row.
+
+Pages with DescriptionCell: Inflows, Outflows, BankLedger, IntraFlow, BankDeposits, ForeignCurrency, Categories, ReversalTransactions, IntraBankTransfers, RefundTransactions.
+
+### Mobile horizontal scrolling
+Tables must be inside an `overflow-x-auto` container. Two patterns are used:
+
+1. **Standard pattern** (most pages): `<div className="overflow-x-auto"><table ...>`
+2. **Rounded-card pattern** (CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions): `<div className="... rounded-xl overflow-x-auto">` — `overflow-x-auto` (not `overflow-hidden`) is used so the container both clips to `border-radius` AND allows horizontal scroll.
+
+Do **not** use `overflow-hidden` alone on a table container — it clips without scrolling, breaking mobile.

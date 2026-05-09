@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
 import { Card }            from '../components/ui/Card'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { usePageTitle }    from '../hooks/usePageTitle'
 import { supabase }        from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
@@ -26,6 +28,7 @@ export default function RefundTransactions() {
   usePageTitle('Refunds')
 
   const { canWrite } = useRole()
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
 
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -236,10 +239,14 @@ export default function RefundTransactions() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate">{row.description ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]">
+                      <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate">{row.remarks ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
+                      <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    </td>
                     {canWrite() && (
                       <td className="px-2 py-3">
                         <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
@@ -255,6 +262,7 @@ export default function RefundTransactions() {
         )}
       </Card>
 
+      <DescriptionTooltip tooltip={descTooltip} />
       <AddInflowModal
         open={!!editInflow}
         onClose={() => setEditInflow(null)}
