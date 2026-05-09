@@ -549,8 +549,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const inflowRows:  Record<string, unknown>[] = []
       const outflowRows: Record<string, unknown>[] = []
 
-      for (let ri = 0; ri < sheet.rows.length; ri++) {
-        const raw  = sheet.rows[ri] as unknown[]
+      // Merge continuation rows (no date, no amounts, but has text) into preceding primary row
+      const mergedRows = (sheet.rows as unknown[][]).map(r => [...r])
+      for (let ri = 1; ri < mergedRows.length; ri++) {
+        const row = mergedRows[ri]
+        if (parseDate(row[dateIdx], dateFormat) !== null) continue
+        if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseNumber(row[debitIdx]) > 0)) continue
+        const hasDesc = descIdx >= 0 && row[descIdx] != null && String(row[descIdx]).trim() !== ''
+        const hasRef  = refIdx  >= 0 && row[refIdx]  != null && String(row[refIdx]).trim()  !== ''
+        if (!hasDesc && !hasRef) continue
+        let prevRi = ri - 1
+        while (prevRi >= 0 && parseDate(mergedRows[prevRi][dateIdx], dateFormat) === null) prevRi--
+        if (prevRi < 0) continue
+        const prev = mergedRows[prevRi]
+        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).trim()
+        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).trim()
+      }
+
+      for (let ri = 0; ri < mergedRows.length; ri++) {
+        const raw  = mergedRows[ri]
         const date = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
         if (!date) { skipped++; continue }
 
