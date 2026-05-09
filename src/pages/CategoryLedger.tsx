@@ -502,7 +502,7 @@ export default function CategoryLedger() {
           )}
 
           {!loading && filteredRows.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -728,7 +728,7 @@ export default function CategoryLedger() {
 
               {/* TABLE display */}
               {ledgerRows.length > 0 && displayMode === 'table' && (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
