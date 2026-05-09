@@ -83,7 +83,7 @@ src/
 │   │   ├── AddSpecialProjectModal.tsx
 │   │   ├── AllocationConfigModal.tsx
 │   │   ├── CreateSpecialConfigModal.tsx  # "Save as Draft" + "Save & Lock" buttons
-│   │   ├── ImportModal.tsx            # 4-step Excel/PDF import wizard; sets bank_name from selected bank prop
+│   │   ├── ImportModal.tsx            # 4-step Excel/PDF import wizard; sets bank_name from selected bank prop; exports detectHeaderRow()
 │   │   └── ResetDataModal.tsx
 │   └── ui/
 │       ├── Modal.tsx          # Base modal wrapper (size prop: max-w-sm/md/lg/xl/2xl)
@@ -308,6 +308,8 @@ No true DB transaction — if step 2 fails, step 1 is committed. Acceptable trad
 Multi-step flow: upload file → parse → map columns → configure rows (allocation config, income type, FX fields per row) → bulk insert. Handles both Excel (xlsx) and PDF bank statements (pdfjs-dist). Also has a `ManualEntryForm` for single-transaction entry that resolves `bank_id` to `bank_name` before saving.
 
 **Import is the sole entry point for all transaction creation** (bulk and manual). The Inflows and Outflows pages are display-only — no Add buttons, no import triggers. Edit and delete remain available on both pages. All records propagate to those pages via their normal data-fetch hooks.
+
+**Header detection (`detectHeaderRow`):** Exported from `ImportModal.tsx` and used by both the modal and `Import.tsx`'s pre-modal duplicate check. Scans the first 15 rows, scores each by counting cell values that match known field aliases (date, description, credit, debit, balance, reference, etc.), and returns the index of the best-scoring row (minimum 2 alias matches). Falls back to row 0. Both parse paths must use this function — hardcoding `rows[0]` causes wrong row counts, missing column detection, and broken duplicate IDs for statements with title/metadata rows above the actual headers.
 
 ### Tailwind Colours
 Custom semantic tokens in `tailwind.config.js`:
