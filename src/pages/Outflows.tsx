@@ -325,7 +325,9 @@ export default function Outflows() {
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
+                          <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        </td>
                         <td className="px-2 py-3">
                           <ReceiptBadge entityType="outflow" entityId={row.id} />
                         </td>

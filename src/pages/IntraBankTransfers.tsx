@@ -9,6 +9,8 @@ import { z } from 'zod'
 import { Card }         from '../components/ui/Card'
 import { Modal }        from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useBanks }     from '../hooks/useBanks'
 import { useRole }      from '../hooks/useRole'
@@ -175,6 +177,7 @@ export default function IntraBankTransfers() {
   const { banks } = useBanks()
   const { canWrite, canDelete } = useRole()
   const { push: toast } = useToastStore()
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
 
   const [rows,        setRows]        = useState<TransferRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -373,9 +376,13 @@ export default function IntraBankTransfers() {
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.from_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.to_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(row.amount)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-[180px] truncate">{row.description ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
+                        <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      </td>
                       <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px] truncate">{row.remarks ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px]">
+                        <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10" title="Edit"><Pencil className="w-4 h-4" /></button>}
@@ -405,6 +412,7 @@ export default function IntraBankTransfers() {
         loading={deleting}
         label="this intrabank transfer"
       />
+      <DescriptionTooltip tooltip={descTooltip} />
     </>
   )
 }

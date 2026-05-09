@@ -188,7 +188,7 @@ export default function SpecificGivings() {
 
           {/* Per-category cards */}
           {grouped.map(group => (
-            <div key={group.category} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div key={group.category} className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               {/* Category header */}
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
                 <span className="font-semibold text-gray-800 text-sm">{group.category}</span>
