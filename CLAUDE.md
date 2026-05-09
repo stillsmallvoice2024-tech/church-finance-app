@@ -311,6 +311,8 @@ Multi-step flow: upload file → parse → map columns → configure rows (alloc
 
 **Header detection (`detectHeaderRow`):** Exported from `ImportModal.tsx` and used by both the modal and `Import.tsx`'s pre-modal duplicate check. Scans the first 15 rows, scores each by counting cell values that match known field aliases (date, description, credit, debit, balance, reference, etc.), and returns the index of the best-scoring row (minimum 2 alias matches). Falls back to row 0. Both parse paths must use this function — hardcoding `rows[0]` causes wrong row counts, missing column detection, and broken duplicate IDs for statements with title/metadata rows above the actual headers.
 
+**Continuation row merging (`ImportModal.tsx`, bank statement mode):** Some bank statement Excel files split a single transaction across two rows — the narration or reference overflows into the next row, which has no date and no amount. Before the main processing loop, a shallow copy of the sheet rows (`mergedRows`) is built. A pre-pass scans each row: if it has no valid date, no credit, and no debit, but has non-empty description or reference text, it is a continuation row — its text is appended (space-separated) to the nearest preceding row that has a valid date. The main loop then iterates `mergedRows`; continuation rows are still skipped (no date), but the primary row now carries the complete merged text. Row indices are preserved so per-row UI state (income type, stage codes, allocation config) remains correct. Normal imports with no continuation rows are unaffected.
+
 ### Tailwind Colours
 Custom semantic tokens in `tailwind.config.js`:
 - `primary` / `primary-light` / `primary-dark` — deep blue (`#1E3A8A`)
