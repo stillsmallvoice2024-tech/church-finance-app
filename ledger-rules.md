@@ -1,8 +1,21 @@
 # Ledger & Financial Rules
 
-## Bank Ledger Propagation
+## Bank Deposits Page (`BankDeposits.tsx`)
 
-`BankLedger.tsx` queries `inflow_transactions` + `outflow_transactions` filtered by `bank_name`.
+`BankDeposits.tsx` shows a **merged view** of three sources:
+1. `bank_deposits` table rows (physical deposit slips — editable/deletable)
+2. `inflow_transactions` where `transaction_type = 'bank_deposit'`
+3. `outflow_transactions` where `transaction_type = 'bank_deposit'`
+
+Each row carries a `source` field (`'bank_deposits' | 'inflow' | 'outflow'`). Edit/delete actions are restricted to `bank_deposits`-source rows only. Bank filter: `bank_deposits` rows matched by `bank_id`; tagged rows matched by `bank_name`.
+
+The reconciliation panel (collapsible) independently compares `bank_deposits` totals vs tagged-inflow totals — useful for spotting double-entry.
+
+> `bank_deposits` table rows do NOT appear in BankLedger — that gap remains open (see Known Propagation Gaps).
+
+---
+
+
 
 **Rule:** `bank_name` is plain text (not FK) and **must be set at insert time** — records with `bank_name = NULL` are invisible to BankLedger.
 
@@ -104,7 +117,20 @@ Uses `delete({ count: 'exact' })`; throws if `count === 0` — catches silent Su
 |-----|--------|
 | FX conversion NGN inflow missing `bank_name` | `useAddFXConversion` doesn't accept a bank; created inflow won't appear in any bank ledger |
 | Intrabank transfers invisible to BankLedger | `intrabank_transfers` not queried by BankLedger |
-| Bank deposits invisible to BankLedger | `bank_deposits` not queried by BankLedger |
+| Bank deposits invisible to BankLedger | `bank_deposits` table rows not queried by BankLedger |
 | FX inflow fields not synced to `fx_transactions` | Inflows with `fx_currency` set do NOT auto-create an `fx_transactions` row |
 | Project entries not linked to transactions | `project_entries` amounts are a parallel ledger; excluded from Reports and CategoryLedger totals |
 | Dashboard doesn't react to deletes | `useDashboard` subscribes to INSERT events only; delete won't update KPI cards until page reload |
+
+## Transaction-Type Page Routing
+
+Pages that show type-filtered views of `inflow_transactions` / `outflow_transactions`:
+
+| `transaction_type` value | Page | Query |
+|---|---|---|
+| `'reversal'` | `ReversalTransactions.tsx` | `.eq('transaction_type', 'reversal')` on both tables |
+| `'refund'` | `RefundTransactions.tsx` | `.eq('transaction_type', 'refund')` on both tables |
+| `'bank_deposit'` | `BankDeposits.tsx` | merged into page alongside `bank_deposits` table |
+| `'intrabank_transfer'` | *(IntraBankTransfers queries `intrabank_transfers` table — tagged txns not surfaced there)* | gap open |
+
+> If Reversals or Refunds pages show an error or empty results: verify the `transaction_type` column exists in the live DB (see `db-rules.md`). The application query logic is correct.

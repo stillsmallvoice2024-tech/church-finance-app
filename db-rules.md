@@ -39,6 +39,23 @@
 - Incremental patches live in `MIGRATION_SQL` constant in `Setup.tsx` (Database tab — run manually in Supabase SQL editor)
 - New column or table → update **both** `schema.sql` AND `Setup.tsx`
 
+### Live-DB Migration Notes
+
+| Columns | Tables | Required by |
+|---|---|---|
+| `transaction_type text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds, BankDeposits pages |
+| `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
+
+If `transaction_type` is missing, Reversals/Refunds pages will error on SELECT (PostgREST rejects the `.eq()` filter); the ImportModal silently strips it on INSERT and records are saved without it. Run in Supabase SQL editor:
+```sql
+ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS transaction_type text;
+ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS transaction_type text;
+ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS original_transaction_id text;
+ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS original_transaction_id text;
+CREATE INDEX IF NOT EXISTS idx_inflow_txn_type  ON inflow_transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_outflow_txn_type ON outflow_transactions(transaction_type);
+```
+
 ### SQL Authoring Rules
 
 - FK refs in migration SQL: **no `public.` prefix** — Supabase resolves via `search_path`
