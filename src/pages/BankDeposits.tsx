@@ -30,6 +30,7 @@ interface DepositRow {
   description:     string | null
   transaction_ref: string | null
   remarks:         string | null
+  source:          'bank_deposits' | 'inflow' | 'outflow'
 }
 
 // ── Modal schema ───────────────────────────────────────────────────────────────
@@ -187,12 +188,54 @@ export default function BankDeposits() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const { data, error: err } = await supabase
-      .from('bank_deposits')
-      .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks')
-      .order('date', { ascending: false })
-    if (err) { setError(err.message); setLoading(false); return }
-    setRows((data ?? []) as DepositRow[])
+    const [depRes, inflowRes, outflowRes] = await Promise.all([
+      supabase
+        .from('bank_deposits')
+        .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks')
+        .order('date', { ascending: false }),
+      supabase
+        .from('inflow_transactions')
+        .select('id, date, bank_name, amount, description, transaction_ref, remark')
+        .eq('transaction_type', 'bank_deposit')
+        .order('date', { ascending: false }),
+      supabase
+        .from('outflow_transactions')
+        .select('id, date, bank_name, amount_disbursed, description, transaction_id, remarks')
+        .eq('transaction_type', 'bank_deposit')
+        .order('date', { ascending: false }),
+    ])
+    if (depRes.error) { setError(depRes.error.message); setLoading(false); return }
+
+    const depositRows: DepositRow[] = (depRes.data ?? []).map(r => ({ ...r, source: 'bank_deposits' as const }))
+
+    const inflowRows: DepositRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+      id:              r.id as string,
+      date:            r.date as string,
+      bank_id:         null,
+      bank_name:       r.bank_name as string | null,
+      amount:          r.amount as number,
+      description:     r.description as string | null,
+      transaction_ref: r.transaction_ref as string | null,
+      remarks:         r.remark as string | null,
+      source:          'inflow' as const,
+    }))
+
+    const outflowRows: DepositRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+      id:              r.id as string,
+      date:            r.date as string,
+      bank_id:         null,
+      bank_name:       r.bank_name as string | null,
+      amount:          r.amount_disbursed as number,
+      description:     r.description as string | null,
+      transaction_ref: r.transaction_id as string | null,
+      remarks:         r.remarks as string | null,
+      source:          'outflow' as const,
+    }))
+
+    const merged = [...depositRows, ...inflowRows, ...outflowRows]
+      .sort((a, b) => b.date.localeCompare(a.date))
+
+    setRows(merged)
     setLoading(false)
   }, [])
 
@@ -226,10 +269,18 @@ export default function BankDeposits() {
     load()
   }
 
+  const selectedBankName = bankFilter ? (banks.find(b => b.id === bankFilter)?.name ?? null) : null
+
   const filtered = rows.filter(r => {
-    if (dateFrom   && r.date < dateFrom)        return false
-    if (dateTo     && r.date > dateTo)          return false
-    if (bankFilter && r.bank_id !== bankFilter) return false
+    if (dateFrom && r.date < dateFrom) return false
+    if (dateTo   && r.date > dateTo)   return false
+    if (bankFilter) {
+      if (r.source === 'bank_deposits') {
+        if (r.bank_id !== bankFilter) return false
+      } else {
+        if (selectedBankName && r.bank_name !== selectedBankName) return false
+      }
+    }
     return true
   })
 
@@ -238,7 +289,7 @@ export default function BankDeposits() {
   const openAdd  = () => { setEditRecord(null); setShowModal(true) }
   const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
 
-  const colCount = admin ? 7 : 6
+  const colCount = admin ? 8 : 7
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -370,10 +421,13 @@ export default function BankDeposits() {
                 <p className="text-sm">No bank deposits found.</p>
               </div>
             ) : filtered.map(row => (
-              <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
+              <div key={`${row.source}-${row.id}`} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                  {admin && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+                    <SourceBadge source={row.source} />
+                  </div>
+                  {admin && row.source === 'bank_deposits' && (
                     <div className="flex items-center gap-1">
                       <button onClick={() => openEdit(row)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors">
                         <Pencil className="w-3.5 h-3.5" />
@@ -405,7 +459,7 @@ export default function BankDeposits() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'Bank', 'Amount (₦)', 'Description', 'Transaction Ref', 'Remarks', ...(admin ? ['Actions'] : [])].map(h => (
+                  {['Date', 'Bank', 'Amount (₦)', 'Description', 'Transaction Ref', 'Remarks', 'Source', ...(admin ? ['Actions'] : [])].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -425,27 +479,32 @@ export default function BankDeposits() {
                     </div>
                   </td></tr>
                 ) : filtered.map(row => (
-                  <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={`${row.source}-${row.id}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
-                      <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <DescriptionCell id={`${row.source}-${row.id}`} text={row.description} expanded={descExpanded.has(`${row.source}-${row.id}`)} onToggle={() => toggleDesc(`${row.source}-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
-                      <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <DescriptionCell id={`rem-${row.source}-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.source}-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.source}-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <SourceBadge source={row.source} />
                     </td>
                     {admin && (
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {row.source === 'bank_deposits' && (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     )}
                   </tr>
@@ -477,6 +536,25 @@ export default function BankDeposits() {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+const SOURCE_LABEL: Record<DepositRow['source'], string> = {
+  bank_deposits: 'Deposit',
+  inflow:        'Inflow',
+  outflow:       'Outflow',
+}
+const SOURCE_CLS: Record<DepositRow['source'], string> = {
+  bank_deposits: 'bg-primary/10 text-primary',
+  inflow:        'bg-green-100 text-green-700',
+  outflow:       'bg-red-100 text-red-700',
+}
+
+function SourceBadge({ source }: { source: DepositRow['source'] }) {
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${SOURCE_CLS[source]}`}>
+      {SOURCE_LABEL[source]}
+    </span>
+  )
+}
 
 function ReconRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   const isNonZero = value !== 0

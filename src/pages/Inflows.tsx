@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  TrendingUp, Plus, Download, Pencil, Trash2,
-  ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw, FileSpreadsheet,
+  TrendingUp, Download, Pencil, Trash2,
+  ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw,
   LayoutList, LayoutGrid,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
-import { ImportModal }             from '../components/modals/ImportModal'
-import { CanWrite }                from '../components/auth/RoleGates'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
@@ -94,7 +92,6 @@ export default function Inflows() {
   const [modalOpen,   setModalOpen]   = useState(false)
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
   const [expandedId,  setExpandedId]  = useState<string | null>(null)
-  const [importOpen,  setImportOpen]  = useState(false)
   const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
   const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
 
@@ -105,23 +102,10 @@ export default function Inflows() {
 
   usePageTitle('Inflows')
 
-  const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: InflowTransaction) => { setEditRecord(r); setModalOpen(true) }
 
-  // Keyboard shortcut: Ctrl+N / Cmd+N opens Add modal
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && canWrite()) {
-        e.preventDefault()
-        openAdd()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [canWrite])
-
   const handleModalSuccess = () => {
-    toast(editRecord ? 'Transaction updated' : 'Inflow added successfully', 'success')
+    toast('Transaction updated', 'success')
     refetch()
   }
 
@@ -186,14 +170,6 @@ export default function Inflows() {
             >
               <Download className="w-4 h-4" /> Export CSV
             </button>
-            <CanWrite>
-              <button
-                onClick={openAdd}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Add Inflow
-              </button>
-            </CanWrite>
           </div>
         </div>
 
@@ -395,19 +371,7 @@ export default function Inflows() {
         loading={deleting}
         label="this inflow transaction"
       />
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <DescriptionTooltip tooltip={descTooltip} />
-
-      {/* Floating import button */}
-      <CanWrite>
-        <button
-          onClick={() => setImportOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-accent text-white text-sm font-medium rounded-full shadow-lg hover:bg-accent/90 transition-colors"
-          title="Import from Excel"
-        >
-          <FileSpreadsheet className="w-4 h-4" /> Import Excel
-        </button>
-      </CanWrite>
     </>
   )
 }
