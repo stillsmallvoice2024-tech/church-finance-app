@@ -1,81 +1,133 @@
-# Project Context System — Operating Manual
+# Project Context System
 
-> **Reusable across projects.** This document describes the AI memory architecture used in this repository. Adapt the domain files to match your project's subsystems.
+> **Executable skill.** When called on any project, follow the procedure below to analyze the codebase and generate a complete, project-specific context architecture.
+> This project's instantiation is recorded in the **Current Project File Map** section at the bottom.
 
 ---
 
-## System Purpose
+## Purpose
 
-A modular AI context architecture that:
-- Keeps startup token cost minimal
-- Loads domain knowledge only when needed
-- Separates permanent rules from archive/debugging content
-- Scales cleanly with project growth
+Generate a modular AI memory architecture for any software project that:
+- Minimizes startup token cost (lean `CLAUDE.md` only)
+- Loads domain knowledge on demand
+- Separates permanent rules from debugging archive
+- Scales cleanly as the project grows
 - Preserves reasoning precision across long sessions
 
 ---
 
-## File Map
+## Initialization Procedure
 
-| File | Role | Load Trigger |
-|---|---|---|
-| `CLAUDE.md` | Always-loaded startup context | Automatic (every session) |
-| `determine-domain.md` | Context routing skill | When scoping task domain |
-| `m-maintenance.md` | Memory governance skill | When updating project memory |
-| `ledger-rules.md` | Financial/ledger domain | Ledger, transactions, allocations, FX |
-| `ui-rules.md` | Frontend/UI domain | UI, components, styling, forms |
-| `import-rules.md` | Import pipeline domain | CSV/Excel/PDF import |
-| `auth-rules.md` | Auth & roles domain | Auth flows, roles, RLS, invites |
-| `db-rules.md` | Database & migration domain | Schema, migrations, audit trail |
-| `miscellaneous.md` | Archive / reference only | Debugging, history, edge cases only |
+When called on a new project, execute these steps in order.
 
----
+### Step 1 — Analyze the Codebase
 
-## Design Principles
+Read the following to understand the project architecture:
+- Root directory listing
+- `package.json` / `pyproject.toml` / `Cargo.toml` (or equivalent) — stack, scripts, dependencies
+- `README.md` if present
+- Source directory structure (2–3 levels deep)
+- Any existing `CLAUDE.md` or context files
+- Key entry points (router, main app file, server entrypoint)
+- Database schema file if present
+- CI/build config if present
 
-### 1. CLAUDE.md is the only always-loaded file
-Contains only: tech stack, build commands, project structure, global architecture principles.
-Everything subsystem-specific moves to a domain file.
+### Step 2 — Identify the Tech Stack
+
+Extract and record:
+- Language and version
+- UI framework (if any)
+- Backend framework or runtime
+- Database / storage layer
+- Build tool
+- Key libraries (state management, forms, auth, etc.)
+- Deployment platform
+
+### Step 3 — Identify Major Subsystems
+
+A subsystem qualifies for its own domain file if it meets **at least 3** of these:
+- Has distinct architectural rules not obvious from the code
+- Has non-trivial constraints that would surprise a new contributor
+- Has its own data flow, lifecycle, or propagation behavior
+- Has permanent conventions (naming, patterns, restrictions)
+- Has error-prone edge cases worth preserving
+- Spans multiple files and requires coordinated knowledge
+
+**Common subsystem candidates:**
+| Candidate | Create file if... |
+|---|---|
+| Authentication / Auth | Has roles, gating patterns, flows, session handling |
+| Database / Migrations | Has migration strategy, schema conventions, RLS/policy patterns |
+| Financial / Ledger | Has propagation logic, balance rules, audit requirements |
+| Import / Ingestion | Has parsing logic, deduplication, normalization rules |
+| UI / Frontend | Has component conventions, styling system, shared patterns |
+| Reporting / Analytics | Has aggregation logic, filter conventions, data shaping |
+| Notifications | Has delivery channels, trigger rules, deduplication |
+| Billing / Payments | Has provider integration, lifecycle, webhook handling |
+| API / Integrations | Has auth patterns, rate limits, error handling conventions |
+| Background Jobs | Has queue patterns, retry logic, idempotency rules |
+
+Do **not** create a domain file for:
+- Simple CRUD with no special logic
+- Features fully described by one or two obvious code patterns
+- Anything covered adequately in `CLAUDE.md` global principles
+
+### Step 4 — Generate `CLAUDE.md`
+
+Write a lean `CLAUDE.md` containing **only**:
+1. One-line app description + repo/deploy info
+2. Context Loading Rules — list each domain file with its load trigger
+3. Tech stack table
+4. Build/run commands
+5. Env variables (names only, not values)
+6. Project directory structure (condensed tree)
+7. Global architecture principles (6–10 universal bullets only)
+
+**Exclude from CLAUDE.md:** subsystem-specific logic, DB schema tables, auth flow details, migration instructions, debugging history, large examples, implementation walkthroughs.
+
 **Target: under 800 words.**
 
-### 2. Domain files are loaded on demand
-Each domain file contains the permanent, reusable rules for one architectural subsystem.
-They are never loaded speculatively — only when the task matches.
+### Step 5 — Generate Domain Files
 
-### 3. miscellaneous.md is archive, not context
-Debugging history, workarounds, implementation history, and TODOs go here.
-It is explicitly excluded from active reasoning unless the user requests it.
+For each identified subsystem, create `[subsystem]-rules.md` containing:
+- Load trigger line (top of file, italicized blockquote)
+- Subsystem-specific architecture rules
+- Permanent conventions and constraints
+- Critical relationships to other subsystems
+- Error-prone patterns worth flagging
 
-### 4. m-maintenance.md governs memory updates
-All new information is classified and routed before storage.
-Prevents CLAUDE.md bloat. Enforces deduplication and compression.
+Use the domain file template below. Write dense bullets — no prose paragraphs.
 
-### 5. determine-domain.md governs context loading
-Provides a trigger table and protocol for loading the minimum required domain files.
-Prevents over-loading context for narrow tasks.
+### Step 6 — Generate `determine-domain.md`
 
----
+Write a domain trigger table mapping keywords → domain files specific to this project. Include:
+- One row per domain file
+- Keywords drawn from actual project terminology
+- Multi-domain examples using real task descriptions from this codebase
+- Ambiguity protocol
 
-## Workflow
+### Step 7 — Generate `m-maintenance.md`
 
-### Starting a task
-1. Read the task description
-2. Use `determine-domain.md` to identify required domain files
-3. Load only those files
-4. Complete the task
+Write the memory governance skill with a routing table specific to this project's domain files. Include:
+- Full routing table (all domain files + miscellaneous)
+- CLAUDE.md threshold rules
+- Compression and deduplication rules
+- Maintenance behavior checklist
 
-### After a task
-1. Identify any new architectural knowledge gained
-2. Use `m-maintenance.md` routing table to classify it
-3. Store in the correct domain file
-4. Compress before writing — bullets, not prose
-5. Never add implementation noise to CLAUDE.md
+### Step 8 — Generate `miscellaneous.md`
+
+Create a minimal `miscellaneous.md` with:
+- Header warning (archive only, do not load as startup context)
+- Reference to all active domain files
+- Any edge cases or workarounds already discovered during analysis
+
+### Step 9 — Update This File
+
+Add this project's generated file map to the **Current Project File Map** section below.
 
 ---
 
 ## Domain File Template
-
-Use this structure for any new domain file:
 
 ```markdown
 # [Domain Name] Rules
@@ -84,75 +136,65 @@ Use this structure for any new domain file:
 
 ---
 
-## [Section 1]
-- bullet
-- bullet
+## [Section Title]
+- rule
+- rule
 
-## [Section 2]
-- bullet
-- bullet
+## [Section Title]
+- rule
+- rule
 ```
 
 ---
 
-## Adapting to a New Project
+## Design Principles (Apply to Every Project)
 
-1. **Copy these governance files as-is:**
-   - `project-context-system.md` (this file)
-   - `m-maintenance.md`
-   - `determine-domain.md`
-   - `miscellaneous.md`
-
-2. **Write a project-specific `CLAUDE.md`** with:
-   - Tech stack
-   - Build commands
-   - Project structure
-   - 6–10 global architecture principles
-
-3. **Analyze the codebase for major subsystems.** For each one that has meaningful, stable rules:
-   - Create a `[subsystem]-rules.md` domain file
-   - Add it to the routing table in `determine-domain.md`
-   - Add it to the routing table in `m-maintenance.md`
-   - Add the load trigger to the `CLAUDE.md` Context Loading Rules
-
-4. **Only create domain files for real subsystems** — avoid files for trivial features.
+- **CLAUDE.md** is the only always-loaded file — keep it global and lean
+- **Domain files** load on demand — never speculatively
+- **miscellaneous.md** is archive only — never active reasoning context
+- **m-maintenance.md** governs all memory writes — classify before storing
+- **determine-domain.md** governs all context loads — load minimum required
+- One domain file per subsystem — avoid overlap
+- Dense bullets over prose in all files
+- Conclusions over reasoning history
 
 ---
 
-## Estimated Token Budget
+## Session Workflow (Apply to Every Project)
 
-| File | Approx. Tokens | Load Frequency |
+**Starting any task:**
+1. Read task description
+2. Use `determine-domain.md` to identify required domain files
+3. Load only those files
+4. Complete the task
+
+**After any task:**
+1. Identify new architectural knowledge gained
+2. Use `m-maintenance.md` routing table to classify it
+3. Write to the correct domain file — compressed, deduplicated
+4. Never add to `CLAUDE.md` unless it is truly global
+
+---
+
+## Growth Rules (Apply to Every Project)
+
+- Domain file exceeds ~1,000 tokens → consider splitting
+- `CLAUDE.md` exceeds ~800 words → audit and push content to domain files
+- `miscellaneous.md` exceeds ~1,500 tokens → delete resolved items
+- New subsystem reaches 5+ distinct permanent rules → create a domain file
+
+---
+
+## Current Project File Map — Church Finance App
+
+| File | Role | Load Trigger |
 |---|---|---|
-| `CLAUDE.md` | ~450 | Every session |
-| `ledger-rules.md` | ~650 | Financial tasks |
-| `ui-rules.md` | ~550 | UI tasks |
-| `import-rules.md` | ~450 | Import tasks |
-| `auth-rules.md` | ~400 | Auth tasks |
-| `db-rules.md` | ~500 | Schema/migration tasks |
-| `determine-domain.md` | ~300 | Domain scoping |
-| `m-maintenance.md` | ~350 | Memory updates |
-| `miscellaneous.md` | ~650 | Debugging only |
-
-**Typical session cost:** ~450 (CLAUDE.md) + 1–2 domain files (~500–1,000) = **~1,000–1,500 tokens of context**
-vs. loading everything: ~4,300 tokens
-
-**Estimated reduction: ~65–75% of context tokens per session** vs. a monolithic CLAUDE.md.
-
----
-
-## Growth Rules
-
-- If any domain file exceeds ~1,000 tokens: consider splitting it
-- If CLAUDE.md exceeds ~800 words: audit and move domain content out
-- If miscellaneous.md exceeds ~1,500 tokens: archive old entries or delete resolved items
-- Review domain file routing quarterly as the project evolves
-
----
-
-## Recommended Workflow Going Forward
-
-1. **Always start from `determine-domain.md`** — don't load files speculatively
-2. **Always end with `m-maintenance.md`** — classify and store new knowledge
-3. **Never write prose in domain files** — dense bullets only
-4. **Never add debugging history to CLAUDE.md** — that's what miscellaneous.md is for
-5. **Add new domains when a subsystem reaches ~5+ distinct permanent rules**
+| `CLAUDE.md` | Always-loaded startup context | Automatic (every session) |
+| `determine-domain.md` | Context routing skill | When scoping task domain |
+| `m-maintenance.md` | Memory governance skill | When updating project memory |
+| `ledger-rules.md` | Financial/ledger domain | Ledger, transactions, allocations, FX, propagation |
+| `ui-rules.md` | Frontend/UI domain | UI, components, styling, forms, modals |
+| `import-rules.md` | Import pipeline domain | CSV/Excel/PDF import, parsing, deduplication |
+| `auth-rules.md` | Auth & roles domain | Auth flows, roles, RLS, invites, password reset |
+| `db-rules.md` | Database & migration domain | Schema, migrations, audit trail, Supabase setup |
+| `miscellaneous.md` | Archive / reference only | Debugging, history, edge cases — explicit request only |
