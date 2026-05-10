@@ -1,6 +1,9 @@
 # Miscellaneous — Archive & Reference
 
-> **Do not load as active startup context.** Load only when explicitly needed for debugging, historical reference, or edge-case investigation.
+> **Do not load as active startup context.**
+> Load only when explicitly needed for: debugging, historical reference, edge-case investigation, or "why did we do X" questions.
+>
+> Active domain rules live in: `ledger-rules.md`, `ui-rules.md`, `import-rules.md`, `auth-rules.md`, `db-rules.md`
 
 ---
 
@@ -69,7 +72,7 @@ Stage Code 1 is kept in `AddInflowModal` for data entry but **removed from the I
 
 ## Import Entry Point Change (History)
 
-Inflows and Outflows pages previously had Add buttons and import triggers. These were removed so that `Import.tsx` is the single entry point for all transaction creation. Edit and delete remain on both pages. This was done to centralize the import logic and avoid duplication.
+Inflows and Outflows pages previously had Add buttons and import triggers. These were removed so that `Import.tsx` is the single entry point for all transaction creation. Edit and delete remain on both pages. Centralized to avoid duplication of import logic.
 
 ---
 
@@ -79,11 +82,11 @@ Using `!!role` (instead of `!!user`) in `canWrite`/`canDelete`/`isAdmin` caused 
 
 ---
 
-## Known Propagation Gaps (Cross-Reference)
+## Known Propagation Gaps (Not Yet Fixed)
 
-Full table is in `ledger-rules.md`. Summary of what's NOT wired:
+Full table lives in `ledger-rules.md`. Summary of what is NOT wired:
 - FX conversion inflows have no `bank_name` → invisible to BankLedger
 - `intrabank_transfers` and `bank_deposits` not queried by BankLedger
 - Inflows with `fx_currency` don't auto-create `fx_transactions` rows
-- `project_entries` are a parallel ledger; not in Reports or CategoryLedger
-- `useDashboard` uses INSERT-only Supabase subscription; deletes don't update KPI cards
+- `project_entries` are a parallel ledger; not included in Reports or CategoryLedger totals
+- `useDashboard` uses INSERT-only Supabase subscription; deletes don't update KPI cards until page reload
