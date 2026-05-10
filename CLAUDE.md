@@ -10,6 +10,8 @@ Load domain files only when relevant to the active task:
 - UI/frontend conventions → `ui-rules.md`
 - Import behavior → `import-rules.md`
 - History/debugging/edge cases → `miscellaneous.md` (**do not load unless explicitly needed**)
+- Updating project memory → `m-maintenance.md`
+- Scoping active domain context → `determine.domain.md`
 
 ---
 
