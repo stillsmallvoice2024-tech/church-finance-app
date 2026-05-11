@@ -592,8 +592,10 @@ create index if not exists idx_project_entries  on public.project_entries(projec
 create index if not exists idx_receipts_entity  on public.receipts(entity_type, entity_id);
 create index if not exists idx_field_changes    on public.field_changes(table_name, record_id);
 create index if not exists idx_income_type_rules on public.income_type_rules(income_type_id);
-create index if not exists idx_inflow_income_type on public.inflow_transactions(income_type_id);
-create index if not exists idx_categories_group on public.categories(group_id);
+create index if not exists idx_inflow_income_type   on public.inflow_transactions(income_type_id);
+create index if not exists idx_inflow_txn_type     on public.inflow_transactions(transaction_type);
+create index if not exists idx_outflow_txn_type    on public.outflow_transactions(transaction_type);
+create index if not exists idx_categories_group    on public.categories(group_id);
 create index if not exists idx_invitations_token on public.invitations(token);
 
 -- ============================================================
