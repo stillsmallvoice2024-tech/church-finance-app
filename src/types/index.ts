@@ -74,7 +74,7 @@ export interface IntraFlowTransaction {
   created_at: string
 }
 
-// ── Financial Report Types ────────────────────────────────────────────────────
+// ── Financial Report Types ──────────────────────────────────────────────────────────────────────────────
 
 export type ReportPortion = 'All' | 'Percentage' | 'Specific Seed' | 'Savings'
 
