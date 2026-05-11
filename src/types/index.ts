@@ -73,3 +73,43 @@ export interface IntraFlowTransaction {
   date: string
   created_at: string
 }
+
+// ── Financial Report Types ────────────────────────────────────────────────────
+
+export type ReportPortion = 'All' | 'Percentage' | 'Specific Seed' | 'Savings'
+
+export interface ReportItem {
+  id: string
+  categoryName: string
+  displayLabel: string
+  portion: ReportPortion
+  visible: boolean
+}
+
+export interface ReportGroup {
+  id: string
+  label: string
+  visible: boolean
+  items: ReportItem[]
+}
+
+export interface ReportLayout {
+  groups: ReportGroup[]
+}
+
+export interface ReportTemplate {
+  id: string
+  name: string
+  description?: string
+  layout: ReportLayout
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ReportCategoryBalance {
+  categoryName: string
+  percentageAllocated: number
+  specificSeed: number
+  savingsNet: number
+}

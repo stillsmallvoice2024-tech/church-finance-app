@@ -618,3 +618,25 @@ create policy "cob_write" on public.category_opening_balances
   for all using (auth.uid() is not null) with check (auth.uid() is not null);
 
 create index if not exists idx_cob_category on public.category_opening_balances(category_id);
+
+-- ============================================================
+-- REPORT TEMPLATES
+-- ============================================================
+create table if not exists public.report_templates (
+  id          uuid default gen_random_uuid() primary key,
+  name        text not null,
+  description text,
+  layout      jsonb not null default '{}',
+  created_by  uuid references profiles(id) on delete set null,
+  created_at  timestamptz default now(),
+  updated_at  timestamptz default now()
+);
+
+alter table public.report_templates enable row level security;
+
+create policy "report_templates_select" on public.report_templates
+  for select using (auth.uid() is not null);
+create policy "report_templates_all" on public.report_templates
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
+create index if not exists idx_report_templates_user on public.report_templates(created_by);

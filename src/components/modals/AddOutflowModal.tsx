@@ -29,6 +29,7 @@ const optNum = z.union([
 
 const schema = z.object({
   date:                    z.string().min(1, 'Date is required'),
+  created_at_date:         z.string().optional(),
   amount_disbursed:        z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   bank_name:               z.string().optional(),
   description:             z.string().optional(),
@@ -92,6 +93,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       setIsPending(editRecord.is_pending_deduction ?? false)
       resetForm({
         date:                    editRecord.date,
+        created_at_date:         editRecord.created_at ? editRecord.created_at.slice(0, 10) : '',
         amount_disbursed:        editRecord.amount_disbursed,
         bank_name:               editRecord.bank_name               ?? '',
         description:             editRecord.description             ?? '',
@@ -137,6 +139,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             fx_rate:                 typeof values.fx_rate   === 'number' ? values.fx_rate   : null,
             transaction_type:        values.transaction_type        || null,
             original_transaction_id: values.original_transaction_id || null,
+            ...(values.created_at_date ? { created_at: `${values.created_at_date}T00:00:00.000Z` } : {}),
           },
         })
       } else {
@@ -193,6 +196,13 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             )} />
           </Field>
         </div>
+
+        {/* Date Added (created_at) — edit mode only */}
+        {isEdit && (
+          <Field label="Date Added (affects reports)" error={errors.created_at_date?.message}>
+            <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
+          </Field>
+        )}
 
         {/* Bank Account */}
         <Field label="Bank Account" error={errors.bank_name?.message}>

@@ -25,6 +25,7 @@ import {
   Undo2,
   Paperclip,
   ClipboardList,
+  FileText,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -47,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Pending Deductions',    path: '/pending-deductions',    icon: Clock            },
   { label: 'Setup',                 path: '/setup',                 icon: SlidersHorizontal},
   { label: 'Reports',               path: '/reports',               icon: BarChart3        },
+  { label: 'Financial Report',      path: '/financial-report',      icon: FileText         },
   { label: 'Settings',              path: '/settings',              icon: Settings         },
 ]
 
