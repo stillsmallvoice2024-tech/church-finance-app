@@ -122,6 +122,34 @@ Uses `delete({ count: 'exact' })`; throws if `count === 0` — catches silent Su
 | Project entries not linked to transactions | `project_entries` amounts are a parallel ledger; excluded from Reports and CategoryLedger totals |
 | Dashboard doesn't react to deletes | `useDashboard` subscribes to INSERT events only; delete won't update KPI cards until page reload |
 
+## Financial Report (`FinancialReport.tsx`)
+
+**Date axis:** Uses `created_at` (date added to system), **not** the transaction `date` field.
+
+**Query pattern** — cumulative up-to-date:
+- `.lte('created_at', `${reportDate}T23:59:59.999Z`)` on both tables
+
+**Balance engine:** `src/hooks/useReportEngine.ts` → `useReportEngine(reportDate)`
+- Same computation as `CategoryLedger.loadSummary` (percentage allocation, specific seed, savings net)
+- Opening balances from `category_opening_balances` always included (no date filter on them)
+- Config resolution: per-inflow `allocation_config_id` first, else `getConfigForDate(configs, inflow.date)` ← still uses inflow `date` for config lookup, not `created_at`
+- Returns `Map<categoryName, { percentageAllocated, specificSeed, savingsNet }>`
+
+**`created_at` editing:**
+- Both `AddInflowModal` and `AddOutflowModal` show "Date Added (affects reports)" in **edit mode only**
+- Form field `created_at_date` (YYYY-MM-DD) → saved as `created_at: YYYY-MM-DDT00:00:00.000Z` in update payload
+- Changing it instantly shifts which report date the transaction belongs to
+
+**Template storage:** `report_templates` Supabase table; `layout` JSONB holds `{ groups: ReportGroup[] }`
+- Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, `useDeleteReportTemplate` in `src/hooks/useReportTemplates.ts`
+
+**Export:** `src/utils/reportExport.ts`
+- `exportReportPDF(layout, balances, reportDate)` — jsPDF + jspdf-autotable
+- `exportReportExcel(layout, balances, reportDate)` — xlsx
+- `computeGroupTotal / computeGrandTotal` — shared helpers used by both page and export
+
+---
+
 ## Transaction-Type Page Routing
 
 Pages that show type-filtered views of `inflow_transactions` / `outflow_transactions`:

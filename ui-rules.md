@@ -76,7 +76,7 @@ push('Saved successfully', 'success')  // types: success | error | info
 
 All nav items visible to all authenticated users.
 
-- **Main:** Dashboard, Inflows, Outflows, Categories, Special Projects, Foreign Currency, Intra-Account Flows, Import, Pending Deductions, Setup, Reports, Settings
+- **Main:** Dashboard, Inflows, Outflows, Categories, Special Projects, Foreign Currency, Intra-Account Flows, Import, Pending Deductions, Setup, Reports, **Financial Report**, Settings
 - **Banking:** Bank Ledger, Bank Deposits, Intrabank Transfers, Refunds, Reversals, Receipts
 - **Allocations:** Category Ledger, Percentage Allocations, Specific Givings, Savings Portions
 - **Admin:** User Management, Change Log
@@ -113,3 +113,15 @@ All nav items visible to all authenticated users.
 - `Inflows.tsx` and `Outflows.tsx` are **display-only** — no Add/import triggers; edit and delete remain
 - Card view and table view are both present on most list pages (toggle between them)
 - Income type badges shown on Inflows page
+
+## Financial Report Page (`src/pages/FinancialReport.tsx`)
+
+Two modes toggled by "Edit Layout" button:
+- **View mode** — rendered report table with group headers, items, subtotals, grand total; PDF + Excel export buttons shown
+- **Edit mode** — drag-and-drop builder (`@dnd-kit/core` + `@dnd-kit/sortable`); category picker panel on left, sortable groups/items on right
+
+Layout state is local until "Save Template" is clicked → opens `SaveReportTemplateModal`.
+
+Groups and items both use `useSortable` with prefixed IDs (`group::{id}` vs `{groupId}::{itemId}`) to distinguish them in `DndContext` handlers. Cross-group item drag handled in `onDragOver`; within-group reorder in `onDragEnd`.
+
+Dependencies: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `jspdf`, `jspdf-autotable`.
