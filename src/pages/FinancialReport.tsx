@@ -66,7 +66,7 @@ function today(): string {
 
 const PORTIONS: ReportPortion[] = ['All', 'Percentage', 'Specific Seed', 'Savings']
 
-// ── Sortable Item ─────────────────────────────────────────────────────────────
+// ── Sortable Item ───────────────────────────────────────────────────────────────────
 
 function SortableItem({
   item,
@@ -173,7 +173,7 @@ function SortableItem({
   )
 }
 
-// ── Sortable Group ────────────────────────────────────────────────────────────
+// ── Sortable Group ────────────────────────────────────────────────────────────────
 
 function SortableGroup({
   group,
@@ -272,7 +272,7 @@ function SortableGroup({
   )
 }
 
-// ── Category Picker ───────────────────────────────────────────────────────────
+// ── Category Picker ───────────────────────────────────────────────────────────────
 
 function CategoryPicker({
   categories,
@@ -360,7 +360,7 @@ function CategoryPicker({
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Main Page ───────────────────────────────────────────────────────────────────
 
 export default function FinancialReport() {
   usePageTitle('Financial Report')
@@ -386,7 +386,7 @@ export default function FinancialReport() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   )
 
-  // ── Layout mutation helpers ─────────────────────────────────────────────────
+  // ── Layout mutation helpers ───────────────────────────────────────────────────────
 
   const addGroup = () => {
     const label = `Group ${layout.groups.length + 1}`
@@ -469,7 +469,7 @@ export default function FinancialReport() {
     }))
   }
 
-  // ── Template actions ────────────────────────────────────────────────────────
+  // ── Template actions ───────────────────────────────────────────────────────────────
 
   const loadTemplate = (tpl: ReportTemplate) => {
     setLayout(tpl.layout)
@@ -497,7 +497,7 @@ export default function FinancialReport() {
     }
   }
 
-  // ── Drag-and-drop ───────────────────────────────────────────────────────────
+  // ── Drag-and-drop ─────────────────────────────────────────────────────────────────
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id))
@@ -577,7 +577,7 @@ export default function FinancialReport() {
   const grandTotal = computeGrandTotal(layout, balances)
   const selectedTpl = templates.find(t => t.id === selectedTplId) ?? null
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────────
 
   const renderReportView = () => {
     if (layout.groups.length === 0) {
