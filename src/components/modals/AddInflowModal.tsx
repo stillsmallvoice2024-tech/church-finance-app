@@ -13,7 +13,7 @@ import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 
-// ── Zod schema ─────────────────────────────────────────────────────────────────
+// ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
 const FX_CURRENCIES = ['USD', 'GBP', 'EUR', 'CNY', 'AED', 'CAD', 'CHF', 'ZAR']
 
@@ -50,7 +50,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean

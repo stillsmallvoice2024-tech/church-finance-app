@@ -20,7 +20,7 @@ const TXN_TYPES = [
   { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
 ]
 
-// ── Zod schema ─────────────────────────────────────────────────────────────────
+// ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
 const optNum = z.union([
   z.coerce.number().min(0),
@@ -49,7 +49,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean
@@ -376,7 +376,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   )
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────────────────
 
 function inputCls(hasError: boolean) {
   return `w-full px-3 py-2 text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
