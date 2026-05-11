@@ -13,7 +13,7 @@ import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 
-// ── Zod schema ─────────────────────────────────────────────────────────────────
+// ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
 const FX_CURRENCIES = ['USD', 'GBP', 'EUR', 'CNY', 'AED', 'CAD', 'CHF', 'ZAR']
 
@@ -32,6 +32,7 @@ const TXN_TYPES = [
 
 const schema = z.object({
   date:                       z.string().min(1, 'Date is required'),
+  created_at_date:            z.string().optional(),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   description:                z.string().optional(),
   bank_name:                  z.string().optional(),
@@ -49,7 +50,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean
@@ -154,6 +155,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       setIncomeTypeId(editRecord.income_type_id ?? '')
       resetForm({
         date:                       editRecord.date,
+        created_at_date:            editRecord.created_at ? editRecord.created_at.slice(0, 10) : '',
         amount:                     editRecord.amount,
         description:                editRecord.description ?? '',
         bank_name:                  editRecord.bank_name ?? '',
@@ -197,6 +199,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             transaction_type:           values.transaction_type        || null,
             original_transaction_id:    values.original_transaction_id || null,
             income_type_id:             incomeTypeId || null,
+            ...(values.created_at_date ? { created_at: `${values.created_at_date}T00:00:00.000Z` } : {}),
           },
         })
       } else {
@@ -252,6 +255,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             )} />
           </Field>
         </div>
+
+        {/* Date Added (created_at) — edit mode only */}
+        {isEdit && (
+          <Field label="Date Added (affects reports)" error={errors.created_at_date?.message}>
+            <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
+          </Field>
+        )}
 
         {/* Description — auto-assigns type on change */}
         <Field label="Description" error={errors.description?.message}>

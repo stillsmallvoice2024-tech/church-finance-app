@@ -30,6 +30,7 @@
 | `invitations` | Token-based invites; `token` UUID, `expires_at` |
 | `audit_log` | Whole-record snapshots on INSERT/UPDATE/DELETE |
 | `field_changes` | Per-field old/new on UPDATE; `user_id` FK → `profiles(id)` |
+| `report_templates` | Saved report layouts; `layout` JSONB, `created_by` FK → `profiles(id)` |
 
 ---
 

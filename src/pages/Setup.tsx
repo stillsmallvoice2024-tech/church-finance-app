@@ -761,7 +761,25 @@ ALTER TABLE public.field_changes
   DROP CONSTRAINT IF EXISTS field_changes_user_id_fkey;
 ALTER TABLE public.field_changes
   ADD CONSTRAINT field_changes_user_id_fkey
-  FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;`
+  FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+-- Report Templates table
+CREATE TABLE IF NOT EXISTS public.report_templates (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text NOT NULL,
+  description text,
+  layout      jsonb NOT NULL DEFAULT '{}',
+  created_by  uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at  timestamptz DEFAULT now(),
+  updated_at  timestamptz DEFAULT now()
+);
+ALTER TABLE public.report_templates ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "report_templates_select" ON public.report_templates FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "report_templates_all" ON public.report_templates FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────
 

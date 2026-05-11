@@ -16,6 +16,7 @@ import SpecialProjects from './pages/SpecialProjects'
 import ForeignCurrency from './pages/ForeignCurrency'
 import IntraFlow from './pages/IntraFlow'
 import Reports from './pages/Reports'
+import FinancialReport from './pages/FinancialReport'
 import Settings from './pages/Settings'
 import UserManagement from './pages/UserManagement'
 import Import from './pages/Import'
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="foreign-currency" element={<ErrorBoundary><ForeignCurrency /></ErrorBoundary>} />
             <Route path="intra-flow" element={<ErrorBoundary><IntraFlow /></ErrorBoundary>} />
             <Route path="reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
+            <Route path="financial-report" element={<ErrorBoundary><FinancialReport /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
             <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
             <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
