@@ -113,6 +113,23 @@ All nav items visible to all authenticated users.
 - `Inflows.tsx` and `Outflows.tsx` are **display-only** — no Add/import triggers; edit and delete remain
 - Card view and table view are both present on most list pages (toggle between them)
 - Income type badges shown on Inflows page
+- Transaction type badges shown on Inflows, Outflows, and BankLedger (see Transaction Type Badge below)
+
+## Transaction Type Badge
+
+Slate-grey pill (`bg-slate-100 text-slate-500`, `rounded-full`, `text-[10px] font-semibold`) displayed on:
+- **Inflows** — in the "Type" column (alongside or below the income type badge); card top-right
+- **Outflows** — inline in description cell before text (alongside "Pending" badge); card top-right
+- **BankLedger** — inline in description cell before text; card between amount row and description
+
+Normal transactions (`transaction_type = null`) show nothing. Each page defines a local `TXN_TYPE_LABELS` map:
+```ts
+{ refund: 'Refund', reversal: 'Reversal', bank_deposit: 'Bank Deposit', intrabank_transfer: 'Intrabank Transfer' }
+```
+
+BankLedger carries `transaction_type: string | null` in its `LedgerRow` interface, populated from source inflow/outflow `select('*')` data.
+
+---
 
 ## Financial Report Page (`src/pages/FinancialReport.tsx`)
 

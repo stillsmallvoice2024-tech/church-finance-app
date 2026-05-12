@@ -64,3 +64,18 @@ Row indices are preserved — per-row UI state (income type, stage codes, alloca
 ## Auto-Classification
 
 `classifyIncomeType.ts` exports `matchIncomeType()` — a rule engine that auto-classifies inflows during import based on keyword/stage-code rules defined in `income_type_rules`.
+
+---
+
+## Non-Normal Transaction Import Rule
+
+**Transaction types:** `''` = Normal | `'refund'` | `'reversal'` | `'bank_deposit'` | `'intrabank_transfer'`
+
+**Rule:** If `transactionType !== ''` (i.e. any non-Normal type):
+- Skip all allocation — do **not** set `allocation_config_id` (no general config, no income-type-linked config, no date-based fallback)
+- Save the transaction record only
+- Account assignment can be done later via the inflow/outflow edit modal
+
+Applies to both:
+- `ImportModal.tsx` batch wizard — guarded with `if (!txnType)` before config resolution block (inflow) and `if (!txnType && cfg)` (outflow)
+- `Import.tsx` ManualEntryForm — `effectiveConfigId` set to `undefined` when `txnType` is set (inflow); `txnType ? undefined : getConfigForDate(...)` (outflow)
