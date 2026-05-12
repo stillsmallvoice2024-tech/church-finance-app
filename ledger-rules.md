@@ -57,10 +57,13 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 - **Grand Total** — sum of all three
 
 Per-inflow allocation config resolution (used in both `loadSummary` and `loadLedger`):
-1. If inflow has `allocation_config_id` set → use that specific config
-2. Otherwise → `getConfigForDate(configs, inflow.date)`
+1. **If `transaction_type` is set → skip entirely** (refund, reversal, bank_deposit, intrabank_transfer are never allocated)
+2. If inflow has `allocation_config_id` set → use that specific config
+3. Otherwise → `getConfigForDate(configs, inflow.date)`
 
 This ensures special-config inflows (e.g. Easter offering) use the correct percentages rather than the date-based general config.
+
+> `transaction_type` must be included in the SELECT for both `loadSummary` and `loadLedger` queries — the guard uses `(r as Record<string, unknown>).transaction_type`.
 
 ---
 
@@ -132,7 +135,7 @@ Uses `delete({ count: 'exact' })`; throws if `count === 0` — catches silent Su
 **Balance engine:** `src/hooks/useReportEngine.ts` → `useReportEngine(reportDate)`
 - Same computation as `CategoryLedger.loadSummary` (percentage allocation, specific seed, savings net)
 - Opening balances from `category_opening_balances` always included (no date filter on them)
-- Config resolution: per-inflow `allocation_config_id` first, else `getConfigForDate(configs, inflow.date)` ← still uses inflow `date` for config lookup, not `created_at`
+- Config resolution: skip if `transaction_type` set; per-inflow `allocation_config_id` first; else `getConfigForDate(configs, inflow.date)` ← still uses inflow `date` for config lookup, not `created_at`
 - Returns `Map<categoryName, { percentageAllocated, specificSeed, savingsNet }>`
 
 **`created_at` editing:**
