@@ -556,9 +556,11 @@ function ManualEntryForm() {
     setSaving(true)
     try {
       const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
-      const effectiveConfigId  = configOverride
+      const effectiveConfigId  = txnType ? undefined : (
+        configOverride
         || selectedIncomeType?.special_config_id
         || getConfigForDate(configs, v('date'))?.id
+      )
       const selectedBank = banks.find(b => b.id === v('bank_id'))
       await addInflow.mutate({
         date:                       v('date'),
@@ -600,7 +602,7 @@ function ManualEntryForm() {
         date:                    v('date'),
         amount_disbursed:        parseFloat(v('amount_disbursed')),
         description:             v('description')      || undefined,
-        allocation_config_id:    getConfigForDate(configs, v('date'))?.id,
+        allocation_config_id:    txnType ? undefined : getConfigForDate(configs, v('date'))?.id,
         bank_name:               selectedBank?.name    || undefined,
         bank_description:        v('bank_description') || undefined,
         transaction_id:          v('transaction_id')   || undefined,
