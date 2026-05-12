@@ -589,17 +589,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const effIncomeTypeId = rowIncomeTypes[ri]
             ?? (desc ? classifyIncomeType(desc, '', incomeTypes)?.id : undefined)
           if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
-          // Resolve config: per-row override → income type's linked config → date-based config
-          const overrideCfgId = rowConfigs[ri]
-          const linkedCfgId   = effIncomeTypeId
-            ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
-            : null
-          if (overrideCfgId) {
-            row.allocation_config_id = overrideCfgId
-          } else if (linkedCfgId) {
-            row.allocation_config_id = linkedCfgId
-          } else if (cfg) {
-            row.allocation_config_id = cfg.id
+          // Non-Normal transactions skip allocation entirely
+          if (!txnType) {
+            const overrideCfgId = rowConfigs[ri]
+            const linkedCfgId   = effIncomeTypeId
+              ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
+              : null
+            if (overrideCfgId) {
+              row.allocation_config_id = overrideCfgId
+            } else if (linkedCfgId) {
+              row.allocation_config_id = linkedCfgId
+            } else if (cfg) {
+              row.allocation_config_id = cfg.id
+            }
           }
           if (internalBank) row.bank_name = internalBank.name
           if (txnType) row.transaction_type = txnType
@@ -609,7 +611,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (debit > 0) {
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
           if (userId) row.created_by = userId
-          if (cfg)    row.allocation_config_id = cfg.id
+          if (!txnType && cfg) row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
           const sc = rowStageCodes[ri]
           if (sc) {
