@@ -72,7 +72,7 @@ export default function CategoryLedger() {
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed'),
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings'),
       supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Savings'),
-      supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id'),
+      supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type'),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
     ])
 
@@ -140,6 +140,7 @@ export default function CategoryLedger() {
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+      if ((r as Record<string, unknown>).transaction_type) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
@@ -206,7 +207,7 @@ export default function CategoryLedger() {
       if (ledgerPortion === 'Percentage') {
         const [inflowRes, outflowRes] = await Promise.all([
           supabase.from('inflow_transactions')
-            .select('id, date, description, amount, stage_code_2, allocation_config_id')
+            .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type')
             .order('date'),
           supabase.from('outflow_transactions')
             .select('id, date, description, actual_amount, amount_disbursed, stage_code_2')
@@ -218,6 +219,7 @@ export default function CategoryLedger() {
 
         for (const r of inflowRes.data ?? []) {
           if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+          if ((r as Record<string, unknown>).transaction_type) continue
           const configId = r.allocation_config_id as string | null
           const cfg = configId
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
