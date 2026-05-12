@@ -49,7 +49,7 @@ export function useReportEngine(reportDate: string | null): {
         .lte('created_at', endOfDay),
       supabase
         .from('inflow_transactions')
-        .select('date, amount, stage_code_2, allocation_config_id')
+        .select('date, amount, stage_code_2, allocation_config_id, transaction_type')
         .lte('created_at', endOfDay),
       supabase
         .from('outflow_transactions')
@@ -119,6 +119,7 @@ export function useReportEngine(reportDate: string | null): {
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+      if ((r as Record<string, unknown>).transaction_type) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
