@@ -22,6 +22,13 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 
 const PAGE_SIZE = 25
 
+const TXN_TYPE_LABELS: Record<string, string> = {
+  refund:              'Refund',
+  reversal:            'Reversal',
+  bank_deposit:        'Bank Deposit',
+  intrabank_transfer:  'Intrabank Transfer',
+}
+
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
 function SummaryStrip({ total, count, largest, average, loading }: {
@@ -235,9 +242,16 @@ export default function Outflows() {
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                    {row.is_pending_deduction && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {row.is_pending_deduction && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
+                      )}
+                      {row.transaction_type && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                          {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-lg font-bold text-danger">{formatCurrency(Number(row.amount_disbursed))}</p>
                   <div className="text-sm text-gray-700">
@@ -311,6 +325,11 @@ export default function Outflows() {
                             {row.is_pending_deduction && (
                               <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
                                 Pending
+                              </span>
+                            )}
+                            {row.transaction_type && (
+                              <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                                {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                               </span>
                             )}
                             <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />

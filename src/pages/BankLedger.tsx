@@ -15,16 +15,24 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+const TXN_TYPE_LABELS: Record<string, string> = {
+  refund:              'Refund',
+  reversal:            'Reversal',
+  bank_deposit:        'Bank Deposit',
+  intrabank_transfer:  'Intrabank Transfer',
+}
+
 interface LedgerRow {
-  id:          string
-  date:        string
-  description: string | null
-  inflow:      number
-  outflow:     number
-  balance:     number   // running
-  entity_type: 'inflow' | 'outflow'
-  inflowData?:  InflowTransaction
-  outflowData?: OutflowTransaction
+  id:               string
+  date:             string
+  description:      string | null
+  inflow:           number
+  outflow:          number
+  balance:          number   // running
+  transaction_type: string | null
+  entity_type:      'inflow' | 'outflow'
+  inflowData?:      InflowTransaction
+  outflowData?:     OutflowTransaction
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -71,18 +79,22 @@ export default function BankLedger() {
     }
 
     // Merge & sort chronologically
-    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; entity_type: 'inflow' | 'outflow'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
+    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
-        inflow: r.amount as number, outflow: 0, entity_type: 'inflow' as const,
+        inflow: r.amount as number, outflow: 0,
+        transaction_type: (r.transaction_type as string | null) ?? null,
+        entity_type: 'inflow' as const,
         inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
-        inflow: 0, outflow: r.amount_disbursed as number, entity_type: 'outflow' as const,
+        inflow: 0, outflow: r.amount_disbursed as number,
+        transaction_type: (r.transaction_type as string | null) ?? null,
+        entity_type: 'outflow' as const,
         outflowData: r as unknown as OutflowTransaction,
       })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
@@ -244,6 +256,11 @@ export default function BankLedger() {
                       )}
                     </div>
                   </div>
+                  {row.transaction_type && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                      {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                    </span>
+                  )}
                   {row.description && (
                     <div className="text-xs text-gray-600">
                       <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
@@ -290,7 +307,14 @@ export default function BankLedger() {
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 max-w-[280px]">
-                        <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <div className="flex items-start gap-1.5 min-w-0">
+                          {row.transaction_type && (
+                            <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                              {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                            </span>
+                          )}
+                          <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-green-700 whitespace-nowrap">
                         {row.inflow > 0 ? formatCurrency(row.inflow) : '—'}

@@ -22,6 +22,13 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 
 const PAGE_SIZE = 25
 
+const TXN_TYPE_LABELS: Record<string, string> = {
+  refund:              'Refund',
+  reversal:            'Reversal',
+  bank_deposit:        'Bank Deposit',
+  intrabank_transfer:  'Intrabank Transfer',
+}
+
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
 function SummaryStrip({ total, count, largest, average, loading }: {
@@ -226,9 +233,16 @@ export default function Inflows() {
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                    {it ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
-                    ) : null}
+                    <div className="flex items-center gap-1">
+                      {it && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
+                      )}
+                      {row.transaction_type && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                          {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-lg font-bold text-success">{formatCurrency(Number(row.amount))}</p>
                   <div className="text-sm text-gray-700">
@@ -305,18 +319,24 @@ export default function Inflows() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3">
-                          {(() => {
-                            const it = incomeTypes.find(t => t.id === row.income_type_id)
-                            return it ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ backgroundColor: `${it.color}22`, color: it.color }}>
-                                {it.name}
+                          <div className="flex flex-col items-start gap-1">
+                            {(() => {
+                              const it = incomeTypes.find(t => t.id === row.income_type_id)
+                              return it ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ backgroundColor: `${it.color}22`, color: it.color }}>
+                                  {it.name}
+                                </span>
+                              ) : null
+                            })()}
+                            {row.transaction_type ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-slate-100 text-slate-500">
+                                {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-gray-100 text-gray-400">
-                                —
-                              </span>
-                            )
-                          })()}
+                            ) : null}
+                            {!incomeTypes.find(t => t.id === row.income_type_id) && !row.transaction_type && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-gray-100 text-gray-400">—</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]" onClick={e => e.stopPropagation()}>
                           <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
