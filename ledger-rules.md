@@ -127,29 +127,36 @@ Uses `delete({ count: 'exact' })`; throws if `count === 0` — catches silent Su
 
 ## Financial Report (`FinancialReport.tsx`)
 
-**Date axis:** Uses `created_at` (date added to system), **not** the transaction `date` field.
+### Balance Engine: `useReportEngine(reportDate, reportBasis)`
 
-**Query pattern** — cumulative up-to-date:
-- `.lte('created_at', `${reportDate}T23:59:59.999Z`)` on both tables
+Two date axes (`ReportBasis`): `'transaction_date'` (cumulative financial, filters by `date`) | `'recorded_at'` (cumulative operational, filters by `recorded_at`).
+- Config resolution: skip if `transaction_type` set; per-inflow `allocation_config_id` first; else `getConfigForDate(configs, inflow.date)` — always uses `inflow.date` for config regardless of basis
+- Opening balances from `category_opening_balances` always included (no date filter)
+- Returns `balances: Map<categoryName, ReportCategoryBalance>` and `operationalBalances: OperationalBalanceMap`
 
-**Balance engine:** `src/hooks/useReportEngine.ts` → `useReportEngine(reportDate)`
-- Same computation as `CategoryLedger.loadSummary` (percentage allocation, specific seed, savings net)
-- Opening balances from `category_opening_balances` always included (no date filter on them)
-- Config resolution: skip if `transaction_type` set; per-inflow `allocation_config_id` first; else `getConfigForDate(configs, inflow.date)` ← still uses inflow `date` for config lookup, not `created_at`
-- Returns `Map<categoryName, { percentageAllocated, specificSeed, savingsNet }>`
+**Operational balance keys** (always exact-day filter on `recorded_at`):
+- Income type rows: `it::${incomeTypeId}`
+- Tagged transaction-type rows: `tt::${transactionType}` (reversal, refund, bank_deposit, intrabank_transfer)
+- Normal inflow rows: `tt::normal` — inflows where `transaction_type IS NULL`
 
-**`created_at` editing:**
-- Both `AddInflowModal` and `AddOutflowModal` show "Date Added (affects reports)" in **edit mode only**
-- Form field `created_at_date` (YYYY-MM-DD) → saved as `created_at: YYYY-MM-DDT00:00:00.000Z` in update payload
-- Changing it instantly shifts which report date the transaction belongs to
+### `ReportTable` Fields
 
-**Template storage:** `report_templates` Supabase table; `layout` JSONB holds `{ groups: ReportGroup[] }`
-- Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, `useDeleteReportTemplate` in `src/hooks/useReportTemplates.ts`
+- `include_in_combined_total?: boolean` — defaults `true`; when `false`, table is excluded from the combined grand total
+- `computeGrandTotal()` and both export functions only sum tables where this flag is not `false`
+- `normaliseTables()` sets `include_in_combined_total: true` for legacy single-table layouts
 
-**Export:** `src/utils/reportExport.ts`
-- `exportReportPDF(layout, balances, reportDate)` — jsPDF + jspdf-autotable
-- `exportReportExcel(layout, balances, reportDate)` — xlsx
-- `computeGroupTotal / computeGrandTotal` — shared helpers used by both page and export
+### Template Storage
+
+`report_templates` table; `layout` JSONB stores `{ tables: ReportTable[], basis: ReportBasis }`.
+Legacy templates (`{ groups: [...] }`) auto-migrated by `normaliseTables()` on load.
+Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, `useDeleteReportTemplate`.
+
+### Export (`src/utils/reportExport.ts`)
+
+- `exportReportPDF()` — per-table title bars, subgroup sub-totals, per-table totals; combined grand total appended when ≥2 visible tables and at least one is opted in
+- `exportReportExcel()` — one sheet per table; Summary sheet added when combined total applies
+- `computeGroupTotal / computeTableTotal / computeGrandTotal` — `computeGrandTotal` only sums opted-in visible tables
+- `getItemBalance(item, balances, opBalances)` — dispatches by `rowType` (category / inflow_type / transaction_type)
 
 ---
 

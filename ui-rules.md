@@ -218,3 +218,28 @@ Layout state is local until "Save Template" is clicked → opens `SaveReportTemp
 Groups and items both use `useSortable` with prefixed IDs (`group::{id}` vs `{groupId}::{itemId}`) to distinguish them in `DndContext` handlers. Cross-group item drag handled in `onDragOver`; within-group reorder in `onDragEnd`.
 
 Dependencies: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `jspdf`, `jspdf-autotable`.
+
+### Table Reorder Controls (Edit Mode)
+
+Each table title bar has ↑/↓ buttons (`ChevronUp`/`ChevronDown`) alongside the drag handle:
+- Up → `arrayMove(tables, idx, idx-1)`; disabled + greyed when first
+- Down → `arrayMove(tables, idx, idx+1)`; disabled + greyed when last
+- Both methods use `useCallback`; complement existing DnD
+
+### Combined Total Toggle (Edit Mode)
+
+Each table has a `∑` button in the title bar toggling `include_in_combined_total`:
+- Active (blue bg) = included in combined grand total (default)
+- Inactive (grey) = excluded; table stays independent
+- Combined grand total row hides entirely when no tables are opted in
+
+### CategoryPicker TXN_TYPES
+
+Full list: `normal` (Normal Transactions), `reversal`, `refund`, `bank_deposit`, `intrabank_transfer`.
+`tt::normal` maps to inflows where `transaction_type IS NULL`.
+
+### Subgroup Drag-and-Drop Rules
+
+- Items **inside a subgroup** cannot be moved to a different parent group — `handleDragOver` returns early when `activeLoc.subgroupId` is set
+- Subgroups can be reordered within the same parent group via `sgp→sgp` branch in `handleDragEnd`
+- Cross-group subgroup moves are naturally prevented (same-group `findIndex` won't match across groups)
