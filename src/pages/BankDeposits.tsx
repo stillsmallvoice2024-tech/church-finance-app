@@ -182,7 +182,7 @@ export default function BankDeposits() {
   const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
   const [deleting,     setDeleting]     = useState(false)
   const [showRecon,    setShowRecon]    = useState(false)
-  const [reconData,    setReconData]    = useState<{ depositsTotal: number; inflowTaggedTotal: number } | null>(null)
+  const [reconData,    setReconData]    = useState<{ inflowTaggedTotal: number; outflowTaggedTotal: number } | null>(null)
   const [reconLoading, setReconLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -243,13 +243,13 @@ export default function BankDeposits() {
 
   const loadRecon = async () => {
     setReconLoading(true)
-    const [depRes, infRes] = await Promise.all([
-      supabase.from('bank_deposits').select('amount'),
+    const [infRes, outRes] = await Promise.all([
       supabase.from('inflow_transactions').select('amount').eq('transaction_type', 'bank_deposit'),
+      supabase.from('outflow_transactions').select('amount_disbursed').eq('transaction_type', 'bank_deposit'),
     ])
-    const depositsTotal     = (depRes.data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0)
-    const inflowTaggedTotal = (infRes.data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0)
-    setReconData({ depositsTotal, inflowTaggedTotal })
+    const inflowTaggedTotal  = (infRes.data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0)
+    const outflowTaggedTotal = (outRes.data ?? []).reduce((s, r) => s + (r.amount_disbursed ?? 0), 0)
+    setReconData({ inflowTaggedTotal, outflowTaggedTotal })
     setReconLoading(false)
   }
 
@@ -379,7 +379,7 @@ export default function BankDeposits() {
           className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
           <span className="flex items-center gap-2">
             <Landmark className="w-4 h-4 text-primary" />
-            Reconciliation — Bank Deposits vs Tagged Inflows
+            Reconciliation — Tagged Inflows vs Tagged Outflows
           </span>
           {showRecon ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
         </button>
@@ -391,10 +391,10 @@ export default function BankDeposits() {
               </div>
             ) : reconData ? (
               <div className="mt-3 space-y-2">
-                <ReconRow label="Bank Deposits table total"         value={reconData.depositsTotal} />
-                <ReconRow label="Inflow rows tagged 'bank_deposit'" value={reconData.inflowTaggedTotal} />
+                <ReconRow label="Inflow rows tagged 'bank_deposit'"  value={reconData.inflowTaggedTotal} />
+                <ReconRow label="Outflow rows tagged 'bank_deposit'" value={reconData.outflowTaggedTotal} />
                 <div className="border-t border-gray-200 pt-2">
-                  <ReconRow label="Variance" value={reconData.depositsTotal - reconData.inflowTaggedTotal} highlight />
+                  <ReconRow label="Net (Inflows − Outflows)" value={reconData.inflowTaggedTotal - reconData.outflowTaggedTotal} highlight />
                 </div>
                 <button onClick={loadRecon} className="mt-2 text-xs text-primary hover:underline flex items-center gap-1">
                   <RefreshCw className="w-3 h-3" /> Refresh
