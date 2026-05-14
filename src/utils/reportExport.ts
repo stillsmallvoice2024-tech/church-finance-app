@@ -1,7 +1,14 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
-import type { ReportGroup, ReportLayout, ReportCategoryBalance, ReportPortion } from '../types'
+import type {
+  ReportGroup,
+  ReportTable,
+  ReportLayout,
+  ReportCategoryBalance,
+  ReportPortion,
+  OperationalBalanceMap,
+} from '../types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -9,7 +16,7 @@ function fmt(n: number): string {
   return new Intl.NumberFormat('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 }
 
-function getBalance(
+function getCategoryBalance(
   bal: ReportCategoryBalance | undefined,
   portion: ReportPortion,
 ): number {
@@ -23,31 +30,82 @@ function getBalance(
   }
 }
 
+// ── Balance helpers ───────────────────────────────────────────────────────────
+
+export function getItemBalance(
+  item: ReportGroup['items'][number],
+  balances: Map<string, ReportCategoryBalance>,
+  opBalances: OperationalBalanceMap,
+): number {
+  const rowType = item.rowType ?? 'category'
+  if (rowType === 'inflow_type') {
+    return opBalances.get(`it::${item.incomeTypeId ?? ''}`) ?? 0
+  }
+  if (rowType === 'transaction_type') {
+    return opBalances.get(`tt::${item.transactionTypeKey ?? ''}`) ?? 0
+  }
+  return getCategoryBalance(balances.get(item.categoryName), item.portion)
+}
+
 export function computeGroupTotal(
   group: ReportGroup,
   balances: Map<string, ReportCategoryBalance>,
+  opBalances: OperationalBalanceMap = new Map(),
 ): number {
-  return group.items
-    .filter(i => i.visible)
-    .reduce((sum, item) => sum + getBalance(balances.get(item.categoryName), item.portion), 0)
+  let total = 0
+  for (const item of group.items) {
+    if (item.visible) total += getItemBalance(item, balances, opBalances)
+  }
+  for (const sg of group.subgroups ?? []) {
+    if (!sg.visible) continue
+    for (const item of sg.items) {
+      if (item.visible) total += getItemBalance(item, balances, opBalances)
+    }
+  }
+  return total
 }
 
+export function computeTableTotal(
+  table: ReportTable,
+  balances: Map<string, ReportCategoryBalance>,
+  opBalances: OperationalBalanceMap = new Map(),
+): number {
+  return table.groups
+    .filter(g => g.visible)
+    .reduce((sum, g) => sum + computeGroupTotal(g, balances, opBalances), 0)
+}
+
+/** Backward-compat: compute grand total across all visible tables */
 export function computeGrandTotal(
   layout: ReportLayout,
   balances: Map<string, ReportCategoryBalance>,
+  opBalances: OperationalBalanceMap = new Map(),
 ): number {
-  return layout.groups
-    .filter(g => g.visible)
-    .reduce((sum, g) => sum + computeGroupTotal(g, balances), 0)
+  const tables = normaliseTables(layout)
+  return tables
+    .filter(t => t.visible)
+    .reduce((sum, t) => sum + computeTableTotal(t, balances, opBalances), 0)
+}
+
+/** Coerce old single-table layout to the new multi-table format */
+export function normaliseTables(layout: ReportLayout): ReportTable[] {
+  if (layout.tables && layout.tables.length > 0) return layout.tables
+  if (layout.groups && layout.groups.length > 0) {
+    return [{ id: 'legacy', title: 'Financial Report', visible: true, groups: layout.groups }]
+  }
+  return []
 }
 
 // ── PDF Export ────────────────────────────────────────────────────────────────
+
+type Cell = string | { content: string; styles: object }
 
 export function exportReportPDF(
   layout: ReportLayout,
   balances: Map<string, ReportCategoryBalance>,
   reportDate: string,
   orgName = 'Financial Report',
+  opBalances: OperationalBalanceMap = new Map(),
 ): void {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
@@ -55,7 +113,6 @@ export function exportReportPDF(
     day: '2-digit', month: 'long', year: 'numeric',
   })
 
-  // Header
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
   doc.text(orgName, 105, 18, { align: 'center' })
@@ -63,52 +120,106 @@ export function exportReportPDF(
   doc.setFont('helvetica', 'normal')
   doc.text(`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`, 105, 25, { align: 'center' })
 
-  const tableBody: (string | { content: string; styles: object })[][] = []
+  const tables = normaliseTables(layout)
+  let startY = 32
 
-  for (const group of layout.groups) {
-    if (!group.visible) continue
+  for (let ti = 0; ti < tables.length; ti++) {
+    const table = tables[ti]
+    if (!table.visible) continue
 
-    // Group header row
-    tableBody.push([
-      { content: group.label, styles: { fontStyle: 'bold', fillColor: [230, 230, 230] as [number, number, number] } },
-      { content: '', styles: { fillColor: [230, 230, 230] as [number, number, number] } },
-    ])
+    const tableBody: Cell[][] = []
 
-    for (const item of group.items) {
-      if (!item.visible) continue
-      const val = getBalance(balances.get(item.categoryName), item.portion)
-      tableBody.push([item.displayLabel, `₦${fmt(val)}`])
+    // Table title header (for multi-table layouts)
+    if (tables.length > 1) {
+      tableBody.push([
+        {
+          content: table.title.toUpperCase(),
+          styles: {
+            fontStyle: 'bold',
+            fillColor: [30, 58, 138] as [number, number, number],
+            textColor: [255, 255, 255] as [number, number, number],
+            fontSize: 10,
+          },
+        },
+        { content: '', styles: { fillColor: [30, 58, 138] as [number, number, number] } },
+      ])
     }
 
-    // Group subtotal
-    const groupTotal = computeGroupTotal(group, balances)
+    for (const group of table.groups) {
+      if (!group.visible) continue
+
+      // Group header
+      tableBody.push([
+        { content: group.label, styles: { fontStyle: 'bold', fillColor: [230, 230, 230] as [number, number, number] } },
+        { content: '', styles: { fillColor: [230, 230, 230] as [number, number, number] } },
+      ])
+
+      // Direct items in group
+      for (const item of group.items) {
+        if (!item.visible) continue
+        const val = getItemBalance(item, balances, opBalances)
+        tableBody.push([item.displayLabel, `₦${fmt(val)}`])
+      }
+
+      // Subgroups
+      for (const sg of group.subgroups ?? []) {
+        if (!sg.visible) continue
+        tableBody.push([
+          { content: `  ${sg.label}`, styles: { fontStyle: 'italic', fillColor: [245, 245, 245] as [number, number, number] } },
+          { content: '', styles: { fillColor: [245, 245, 245] as [number, number, number] } },
+        ])
+        for (const item of sg.items) {
+          if (!item.visible) continue
+          const val = getItemBalance(item, balances, opBalances)
+          tableBody.push([`    ${item.displayLabel}`, `₦${fmt(val)}`])
+        }
+        // Subgroup subtotal
+        const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
+        tableBody.push([
+          { content: `  ${sg.label} Sub-Total`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
+          { content: `₦${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
+        ])
+      }
+
+      // Group subtotal
+      const groupTotal = computeGroupTotal(group, balances, opBalances)
+      tableBody.push([
+        { content: `${group.label} Sub-Total`, styles: { fontStyle: 'bold' } },
+        { content: `₦${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
+      ])
+
+      tableBody.push([{ content: '', styles: { cellPadding: 1 } }, ''])
+    }
+
+    // Table grand total
+    const tableTotal = computeTableTotal(table, balances, opBalances)
+    const totalLabel = tables.length > 1 ? `${table.title} TOTAL` : 'GRAND TOTAL'
     tableBody.push([
-      { content: `${group.label} Sub-Total`, styles: { fontStyle: 'bold' } },
-      { content: `₦${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
+      { content: totalLabel, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
+      { content: `₦${fmt(tableTotal)}`, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
     ])
 
-    tableBody.push([{ content: '', styles: { cellPadding: 1 } }, ''])
+    autoTable(doc, {
+      startY,
+      head: [['Account / Description', 'Amount']],
+      body: tableBody,
+      headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 130 },
+        1: { cellWidth: 50, halign: 'right' },
+      },
+      styles: { fontSize: 9, cellPadding: 2.5 },
+      margin: { left: 14, right: 14 },
+    })
+
+    startY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
+
+    // Page break between tables if not the last
+    if (ti < tables.length - 1 && startY > 220) {
+      doc.addPage()
+      startY = 20
+    }
   }
-
-  // Grand total
-  const grand = computeGrandTotal(layout, balances)
-  tableBody.push([
-    { content: 'GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
-    { content: `₦${fmt(grand)}`, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
-  ])
-
-  autoTable(doc, {
-    startY: 32,
-    head: [['Account / Description', 'Amount']],
-    body: tableBody,
-    headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold' },
-    columnStyles: {
-      0: { cellWidth: 130 },
-      1: { cellWidth: 50, halign: 'right' },
-    },
-    styles: { fontSize: 9, cellPadding: 2.5 },
-    margin: { left: 14, right: 14 },
-  })
 
   doc.save(`Financial_Report_${reportDate}.pdf`)
 }
@@ -120,42 +231,62 @@ export function exportReportExcel(
   balances: Map<string, ReportCategoryBalance>,
   reportDate: string,
   orgName = 'Financial Report',
+  opBalances: OperationalBalanceMap = new Map(),
 ): void {
   const wb = XLSX.utils.book_new()
-  const rows: (string | number)[][] = []
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
     day: '2-digit', month: 'long', year: 'numeric',
   })
 
-  rows.push([orgName])
-  rows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
-  rows.push([])
-  rows.push(['Account / Description', 'Amount (₦)'])
+  const tables = normaliseTables(layout)
 
-  for (const group of layout.groups) {
-    if (!group.visible) continue
+  for (let ti = 0; ti < tables.length; ti++) {
+    const table = tables[ti]
+    if (!table.visible) continue
 
-    rows.push([group.label, ''])
+    const rows: (string | number)[][] = []
+    rows.push([orgName])
+    rows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
+    if (tables.length > 1) rows.push([table.title.toUpperCase()])
+    rows.push([])
+    rows.push(['Account / Description', 'Amount (₦)'])
 
-    for (const item of group.items) {
-      if (!item.visible) continue
-      const val = getBalance(balances.get(item.categoryName), item.portion)
-      rows.push([`  ${item.displayLabel}`, val])
+    for (const group of table.groups) {
+      if (!group.visible) continue
+
+      rows.push([group.label, ''])
+
+      for (const item of group.items) {
+        if (!item.visible) continue
+        rows.push([`  ${item.displayLabel}`, getItemBalance(item, balances, opBalances)])
+      }
+
+      for (const sg of group.subgroups ?? []) {
+        if (!sg.visible) continue
+        rows.push([`  ${sg.label}`, ''])
+        for (const item of sg.items) {
+          if (!item.visible) continue
+          rows.push([`    ${item.displayLabel}`, getItemBalance(item, balances, opBalances)])
+        }
+        const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
+        rows.push([`  ${sg.label} Sub-Total`, sgTotal])
+      }
+
+      rows.push([`${group.label} Sub-Total`, computeGroupTotal(group, balances, opBalances)])
+      rows.push([])
     }
 
-    const groupTotal = computeGroupTotal(group, balances)
-    rows.push([`${group.label} Sub-Total`, groupTotal])
-    rows.push([])
+    const tableTotal = computeTableTotal(table, balances, opBalances)
+    const totalLabel = tables.length > 1 ? `${table.title} TOTAL` : 'GRAND TOTAL'
+    rows.push([totalLabel, tableTotal])
+
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [{ wch: 50 }, { wch: 20 }]
+
+    const sheetName = tables.length > 1 ? table.title.slice(0, 31) : 'Report'
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
   }
 
-  rows.push(['GRAND TOTAL', computeGrandTotal(layout, balances)])
-
-  const ws = XLSX.utils.aoa_to_sheet(rows)
-
-  // Column widths
-  ws['!cols'] = [{ wch: 50 }, { wch: 20 }]
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Report')
   XLSX.writeFile(wb, `Financial_Report_${reportDate}.xlsx`)
 }

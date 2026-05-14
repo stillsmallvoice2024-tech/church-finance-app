@@ -2,17 +2,22 @@ import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useCategories } from './useCategories'
-import type { ReportCategoryBalance } from '../types'
+import type { ReportCategoryBalance, ReportBasis, OperationalBalanceMap } from '../types'
 
-export function useReportEngine(reportDate: string | null): {
+export function useReportEngine(
+  reportDate: string | null,
+  reportBasis: ReportBasis = 'transaction_date',
+): {
   balances: Map<string, ReportCategoryBalance>
+  operationalBalances: OperationalBalanceMap
   loading: boolean
   error: string | null
   refetch: () => void
 } {
-  const [balances, setBalances] = useState<Map<string, ReportCategoryBalance>>(new Map())
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
+  const [balances,            setBalances]            = useState<Map<string, ReportCategoryBalance>>(new Map())
+  const [operationalBalances, setOperationalBalances] = useState<OperationalBalanceMap>(new Map())
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
 
   const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
   const { categories } = useCategories()
@@ -22,44 +27,68 @@ export function useReportEngine(reportDate: string | null): {
   const compute = useCallback(async () => {
     if (!reportDate) {
       setBalances(new Map())
+      setOperationalBalances(new Map())
       return
     }
 
     setLoading(true)
     setError(null)
 
-    // All transactions with created_at <= end of reportDate (cumulative up-to-date)
+    // ── Date filters based on basis ─────────────────────────────────────────
+    // Financial (transaction_date): cumulative up-to date using the transaction date field
+    // Operational (recorded_at): cumulative up-to date using recorded_at
     const endOfDay = `${reportDate}T23:59:59.999Z`
 
-    const [seedRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes] = await Promise.all([
+    const dateField   = reportBasis === 'recorded_at' ? 'recorded_at' : 'date'
+    const dateValue   = reportBasis === 'recorded_at' ? endOfDay : reportDate
+
+    // For operational inflow row totals: exact day filter on recorded_at
+    const dayStart = `${reportDate}T00:00:00.000Z`
+
+    const [seedRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
+           opInflowTypeRes, opTxnTypeRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
         .eq('stage_code_2', 'Specific Seed')
-        .lte('created_at', endOfDay),
+        .lte(dateField, dateValue),
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
         .eq('stage_code_2', 'Savings')
-        .lte('created_at', endOfDay),
+        .lte(dateField, dateValue),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, actual_amount, amount_disbursed')
         .eq('stage_code_2', 'Savings')
-        .lte('created_at', endOfDay),
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
       supabase
         .from('inflow_transactions')
         .select('date, amount, stage_code_2, allocation_config_id, transaction_type')
-        .lte('created_at', endOfDay),
+        .lte(dateField, dateValue),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, actual_amount, amount_disbursed, stage_code_2')
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')
-        .lte('created_at', endOfDay),
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
       supabase
         .from('category_opening_balances')
         .select('budget_portion, amount, categories(name)'),
+      // Operational inflow by income_type: exact day using recorded_at
+      supabase
+        .from('inflow_transactions')
+        .select('income_type_id, amount')
+        .gte('recorded_at', dayStart)
+        .lte('recorded_at', endOfDay)
+        .not('income_type_id', 'is', null),
+      // Operational inflow by transaction_type: exact day using recorded_at
+      supabase
+        .from('inflow_transactions')
+        .select('transaction_type, amount')
+        .gte('recorded_at', dayStart)
+        .lte('recorded_at', endOfDay)
+        .not('transaction_type', 'is', null),
     ])
 
     const firstErr =
@@ -72,9 +101,9 @@ export function useReportEngine(reportDate: string | null): {
       return
     }
 
-    // Opening balances
-    const cobRows      = cobRes.error ? [] : (cobRes.data ?? [])
-    const cobCatNames  = new Set(cobRows.map(r => (r.categories as { name: string } | null)?.name ?? ''))
+    // ── Opening balances ────────────────────────────────────────────────────
+    const cobRows     = cobRes.error ? [] : (cobRes.data ?? [])
+    const cobCatNames = new Set(cobRows.map(r => (r.categories as { name: string } | null)?.name ?? ''))
 
     const map = new Map<string, { specificSeed: number; savingsIn: number; savingsOut: number }>()
     const ensure = (cat: string) => {
@@ -82,21 +111,17 @@ export function useReportEngine(reportDate: string | null): {
       return map.get(cat)!
     }
 
-    // Specific Seed inflows
     for (const r of seedRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed += Number(r.amount)
     }
-    // Savings inflows
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
     }
-    // Savings outflows
     for (const r of savOutRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut +=
         Number(r.actual_amount ?? r.amount_disbursed ?? 0)
     }
 
-    // Opening balances from category_opening_balances
     for (const ob of cobRows) {
       const catName = (ob.categories as { name: string } | null)?.name ?? ''
       if (!catName) continue
@@ -105,7 +130,6 @@ export function useReportEngine(reportDate: string | null): {
       else if (ob.budget_portion === 'Savings')  row.savingsIn    += Number(ob.amount)
     }
 
-    // Legacy starting_balance fallback
     for (const cat of categories) {
       if (cobCatNames.has(cat.name)) continue
       if (!cat.starting_balance || cat.starting_balance === 0) continue
@@ -115,7 +139,7 @@ export function useReportEngine(reportDate: string | null): {
       else if (portion === 'Savings')  row.savingsIn    += cat.starting_balance
     }
 
-    // Percentage-allocated inflows
+    // ── Percentage-allocated inflows ────────────────────────────────────────
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
@@ -132,7 +156,6 @@ export function useReportEngine(reportDate: string | null): {
       }
     }
 
-    // Percentage Allocation opening balances
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
       const catName = (ob.categories as { name: string } | null)?.name ?? ''
@@ -147,14 +170,14 @@ export function useReportEngine(reportDate: string | null): {
       }
     }
 
-    // Percentage outflows
+    // ── Percentage outflows ─────────────────────────────────────────────────
     const pctOutMap = new Map<string, number>()
     for (const r of pctOutRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
       pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.actual_amount ?? r.amount_disbursed ?? 0))
     }
 
-    // Build result map
+    // ── Build category balance result ───────────────────────────────────────
     const allNames = new Set<string>([
       ...categories.map(c => c.name),
       ...map.keys(),
@@ -173,10 +196,24 @@ export function useReportEngine(reportDate: string | null): {
     }
 
     setBalances(result)
+
+    // ── Operational inflow balances (always by recorded_at exact day) ───────
+    const opMap = new Map<string, number>()
+
+    for (const r of opInflowTypeRes.data ?? []) {
+      const key = `it::${r.income_type_id as string}`
+      opMap.set(key, (opMap.get(key) ?? 0) + Number(r.amount))
+    }
+    for (const r of opTxnTypeRes.data ?? []) {
+      const key = `tt::${r.transaction_type as string}`
+      opMap.set(key, (opMap.get(key) ?? 0) + Number(r.amount))
+    }
+
+    setOperationalBalances(opMap)
     setLoading(false)
-  }, [reportDate, configs, categories])
+  }, [reportDate, reportBasis, configs, categories])
 
   useEffect(() => { compute() }, [compute])
 
-  return { balances, loading, error, refetch: compute }
+  return { balances, operationalBalances, loading, error, refetch: compute }
 }

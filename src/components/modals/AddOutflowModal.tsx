@@ -30,6 +30,7 @@ const optNum = z.union([
 const schema = z.object({
   date:                    z.string().min(1, 'Date is required'),
   created_at_date:         z.string().optional(),
+  recorded_at_date:        z.string().optional(),
   amount_disbursed:        z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   bank_name:               z.string().optional(),
   description:             z.string().optional(),
@@ -94,6 +95,9 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       resetForm({
         date:                    editRecord.date,
         created_at_date:         editRecord.created_at ? editRecord.created_at.slice(0, 10) : '',
+        recorded_at_date:        (editRecord as Record<string, unknown>).recorded_at
+          ? ((editRecord as Record<string, unknown>).recorded_at as string).slice(0, 10)
+          : '',
         amount_disbursed:        editRecord.amount_disbursed,
         bank_name:               editRecord.bank_name               ?? '',
         description:             editRecord.description             ?? '',
@@ -140,6 +144,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             transaction_type:        values.transaction_type        || null,
             original_transaction_id: values.original_transaction_id || null,
             ...(values.created_at_date ? { created_at: `${values.created_at_date}T00:00:00.000Z` } : {}),
+            ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
           },
         })
       } else {
@@ -161,6 +166,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           fx_rate:                 typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
           transaction_type:        values.transaction_type        || undefined,
           original_transaction_id: values.original_transaction_id || undefined,
+          ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
         }
         await add(input)
       }
@@ -197,9 +203,14 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           </Field>
         </div>
 
-        {/* Date Added (created_at) — edit mode only */}
+        {/* Recorded Date — editable reporting/upload date */}
+        <Field label={isEdit ? 'Recorded Date (operational reports)' : 'Recorded Date (optional)'} error={errors.recorded_at_date?.message}>
+          <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
+        </Field>
+
+        {/* Date Added (created_at) — edit mode only, legacy */}
         {isEdit && (
-          <Field label="Date Added (affects reports)" error={errors.created_at_date?.message}>
+          <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
             <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
           </Field>
         )}

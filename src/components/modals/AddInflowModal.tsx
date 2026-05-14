@@ -33,6 +33,7 @@ const TXN_TYPES = [
 const schema = z.object({
   date:                       z.string().min(1, 'Date is required'),
   created_at_date:            z.string().optional(),
+  recorded_at_date:           z.string().optional(),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   description:                z.string().optional(),
   bank_name:                  z.string().optional(),
@@ -156,6 +157,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       resetForm({
         date:                       editRecord.date,
         created_at_date:            editRecord.created_at ? editRecord.created_at.slice(0, 10) : '',
+        recorded_at_date:           (editRecord as Record<string, unknown>).recorded_at
+          ? ((editRecord as Record<string, unknown>).recorded_at as string).slice(0, 10)
+          : '',
         amount:                     editRecord.amount,
         description:                editRecord.description ?? '',
         bank_name:                  editRecord.bank_name ?? '',
@@ -200,6 +204,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             original_transaction_id:    values.original_transaction_id || null,
             income_type_id:             incomeTypeId || null,
             ...(values.created_at_date ? { created_at: `${values.created_at_date}T00:00:00.000Z` } : {}),
+            ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
           },
         })
       } else {
@@ -220,6 +225,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           transaction_type:           values.transaction_type        || undefined,
           original_transaction_id:    values.original_transaction_id || undefined,
           income_type_id:             incomeTypeId || undefined,
+          ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
         }
         await add(input)
       }
@@ -256,9 +262,14 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         </div>
 
-        {/* Date Added (created_at) — edit mode only */}
+        {/* Recorded Date — editable reporting/upload date */}
+        <Field label={isEdit ? 'Recorded Date (operational reports)' : 'Recorded Date (optional)'} error={errors.recorded_at_date?.message}>
+          <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
+        </Field>
+
+        {/* Date Added (created_at) — edit mode only, legacy */}
         {isEdit && (
-          <Field label="Date Added (affects reports)" error={errors.created_at_date?.message}>
+          <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
             <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
           </Field>
         )}

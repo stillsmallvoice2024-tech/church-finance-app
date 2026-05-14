@@ -78,12 +78,29 @@ export interface IntraFlowTransaction {
 
 export type ReportPortion = 'All' | 'Percentage' | 'Specific Seed' | 'Savings'
 
+export type ReportBasis = 'transaction_date' | 'recorded_at'
+
+/** Discriminated row type within a report group/subgroup */
+export type ReportRowType = 'category' | 'inflow_type' | 'transaction_type'
+
 export interface ReportItem {
   id: string
-  categoryName: string
+  rowType?: ReportRowType       // defaults to 'category' when absent (backward compat)
+  categoryName: string          // category name for category rows; display key for other row types
   displayLabel: string
   portion: ReportPortion
   visible: boolean
+  // For inflow_type rows
+  incomeTypeId?: string
+  // For transaction_type rows
+  transactionTypeKey?: string
+}
+
+export interface ReportSubgroup {
+  id: string
+  label: string
+  visible: boolean
+  items: ReportItem[]
 }
 
 export interface ReportGroup {
@@ -91,10 +108,22 @@ export interface ReportGroup {
   label: string
   visible: boolean
   items: ReportItem[]
+  subgroups?: ReportSubgroup[]
+}
+
+export interface ReportTable {
+  id: string
+  title: string
+  visible: boolean
+  groups: ReportGroup[]
 }
 
 export interface ReportLayout {
-  groups: ReportGroup[]
+  /** Multi-table layout (new format) */
+  tables?: ReportTable[]
+  /** Legacy single-table format — auto-migrated on load */
+  groups?: ReportGroup[]
+  basis?: ReportBasis
 }
 
 export interface ReportTemplate {
@@ -113,3 +142,6 @@ export interface ReportCategoryBalance {
   specificSeed: number
   savingsNet: number
 }
+
+/** Operational inflow balance keyed by incomeTypeId or transactionTypeKey */
+export type OperationalBalanceMap = Map<string, number>
