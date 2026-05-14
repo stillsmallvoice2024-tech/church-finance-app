@@ -25,6 +25,15 @@ Also contains `ManualEntryForm` for single-transaction entry.
 - `ImportModal.tsx` batch wizard — sets `bank_name` from the `bank` prop passed in from `Import.tsx` (the bank selected on the import page before opening the wizard)
 - Transactions without `bank_name` set will **not appear in BankLedger**
 
+## `stage_code_1` / `stage_code_2` in ManualEntryForm Outflow
+
+- ManualEntryForm outflow form includes a **Budget Allocation** panel with:
+  - `stage_code_1` — category dropdown (populated from live `categories` table)
+  - `stage_code_2` — budget portion dropdown (`Percentage Allocation` | `Specific Seed` | `Savings`)
+- Both passed to `doSaveOutflow` → `AddOutflowInput`; omitted if blank
+- Setting `stage_code_1` is what links a manually-entered outflow to **CategoryLedger**
+- Batch wizard outflow tab already has per-row stage code dropdowns (unchanged)
+
 ---
 
 ## Header Detection (`detectHeaderRow`)

@@ -107,6 +107,23 @@ All nav items visible to all authenticated users.
 
 ---
 
+## Inline Rename Pattern (Category Groups)
+
+Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName`, `savingGroup`.
+
+- Pencil icon sets `editGroupId = g.id` and seeds `editGroupName = g.name`
+- While editing: render `<form>` with input + confirm (`Check`) + cancel (`X`) buttons
+- On submit: trim, bail if unchanged, call `useUpdateCategoryGroup`, `refetchGroups()`, clear `editGroupId`
+- Reuse this pattern for any other inline-rename list items
+
+## Realtime Search Pattern (Categories page)
+
+- Single `search` string state; cleared by an `X` button when non-empty
+- Filter applied inside the `visible` derivation — matches against category name **or** group name (resolved from `groups` array via `cat.group_id`)
+- No debounce needed for local in-memory arrays
+
+---
+
 ## Page Architecture Conventions
 
 - Pages are display-first; data fetching via `use<Entity>.ts` hook at the top of each page component
