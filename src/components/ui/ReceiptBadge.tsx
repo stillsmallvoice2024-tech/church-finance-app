@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Paperclip, X, Download, Trash2, Loader2, Upload, AlertTriangle, Terminal } from 'lucide-react'
 import { useReceipts, type ReceiptEntityType, type Receipt } from '../../hooks/useReceipts'
+import { useToastStore } from '../../store/toastStore'
 
 const MIGRATION_SQL =
 `CREATE TABLE IF NOT EXISTS public.receipts (
@@ -30,11 +31,13 @@ interface Props {
 
 export function ReceiptBadge({ entityType, entityId }: Props) {
   const { receipts, loading, error, upload, remove, getDownloadUrl } = useReceipts(entityType, entityId)
+  const { push: toast } = useToastStore()
   const [open,      setOpen]      = useState(false)
   const [uploading, setUploading] = useState(false)
   const [panelPos,  setPanelPos]  = useState({ top: 0, left: 0 })
   const btnRef    = useRef<HTMLButtonElement>(null)
   const panelRef  = useRef<HTMLDivElement>(null)
+  const inputRef  = useRef<HTMLInputElement>(null)
 
   const reposition = useCallback(() => {
     if (!btnRef.current) return
@@ -75,10 +78,27 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
     setUploading(true)
+    let failed = 0
     for (const file of Array.from(files)) {
-      await upload(file).catch(() => {})
+      try {
+        await upload(file)
+      } catch (e) {
+        failed++
+        console.error('[ReceiptBadge] upload failed:', e)
+      }
     }
+    if (inputRef.current) inputRef.current.value = ''
     setUploading(false)
+    if (failed > 0) {
+      toast(
+        failed === files.length
+          ? 'Upload failed — check storage permissions or bucket setup'
+          : `${failed} of ${files.length} file(s) failed to upload`,
+        'error',
+      )
+    } else {
+      toast(`${files.length} receipt${files.length > 1 ? 's' : ''} uploaded`, 'success')
+    }
   }
 
   const handleDownload = async (r: Receipt) => {
@@ -193,6 +213,7 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
                   : <><Upload className="w-3.5 h-3.5" /> Attach files</>
                 }
                 <input
+                  ref={inputRef}
                   type="file" multiple accept="image/*,.pdf"
                   className="hidden" disabled={uploading}
                   onChange={e => handleFiles(e.target.files)}
