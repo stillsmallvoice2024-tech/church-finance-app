@@ -805,6 +805,12 @@ ALTER TABLE banks
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
   ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
   ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';
+-- Helper view: reads information_schema directly, bypasses PostgREST schema cache
+CREATE OR REPLACE VIEW public.bank_schema_check AS
+  SELECT column_name::text
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'banks';
+GRANT SELECT ON public.bank_schema_check TO anon, authenticated;
 
 -- Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';`
