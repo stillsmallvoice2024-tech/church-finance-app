@@ -6,7 +6,7 @@ import { useCategories, useCategoryGroups } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency, formatDate } from '../utils/formatters'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────────
 
 interface CategoryRow {
   name:                string
@@ -62,7 +62,7 @@ export default function CategoryLedger() {
 
   useEffect(() => { if (!loaded) fetchConfigs() }, [loaded, fetchConfigs])
 
-  // ── Summary load ─────────────────────────────────────────────────────────────
+  // ── Summary load ─────────────────────────────────────────────────────────────────
 
   const loadSummary = useCallback(async () => {
     setLoading(true)
@@ -140,7 +140,7 @@ export default function CategoryLedger() {
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
-      if ((r as Record<string, unknown>).transaction_type) continue
+      if (r.transaction_type) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
@@ -193,7 +193,7 @@ export default function CategoryLedger() {
 
   useEffect(() => { loadSummary() }, [loadSummary])
 
-  // ── Ledger load ──────────────────────────────────────────────────────────────
+  // ── Ledger load ──────────────────────────────────────────────────────────────────
 
   const loadLedger = useCallback(async () => {
     if (!activeCategory) return
@@ -219,7 +219,7 @@ export default function CategoryLedger() {
 
         for (const r of inflowRes.data ?? []) {
           if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
-          if ((r as Record<string, unknown>).transaction_type) continue
+          if (r.transaction_type) continue
           const configId = r.allocation_config_id as string | null
           const cfg = configId
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
@@ -341,7 +341,7 @@ export default function CategoryLedger() {
     if (viewMode === 'ledger' && activeCategory) loadLedger()
   }, [viewMode, activeCategory, ledgerPortion, loadLedger])
 
-  // ── Derived ──────────────────────────────────────────────────────────────────
+  // ── Derived ────────────────────────────────────────────────────────────────────
 
   const filteredRows = rows.filter(r => {
     const catOk = !activeCategory || r.name === activeCategory
@@ -377,7 +377,7 @@ export default function CategoryLedger() {
     { alloc: 0, seed: 0, sav: 0 },
   )
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-5">
@@ -419,7 +419,7 @@ export default function CategoryLedger() {
         </div>
       </div>
 
-      {/* ── SUMMARY VIEW ──────────────────────────────────────────────────────── */}
+      {/* ── SUMMARY VIEW ──────────────────────────────────────────────────────────────── */}
       {viewMode === 'summary' && (
         <>
           {/* Aggregate summary cards */}
@@ -621,7 +621,7 @@ export default function CategoryLedger() {
         </>
       )}
 
-      {/* ── LEDGER VIEW ───────────────────────────────────────────────────────── */}
+      {/* ── LEDGER VIEW ────────────────────────────────────────────────────────────────── */}
       {viewMode === 'ledger' && (
         <>
           {/* Controls row */}
