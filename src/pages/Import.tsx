@@ -481,7 +481,9 @@ function ManualEntryForm() {
   const [txnType, setTxnType] = useState('')
 
   // Outflow-specific state
-  const [isPending, setIsPending] = useState(false)
+  const [isPending,      setIsPending]      = useState(false)
+  const [outflowS1,      setOutflowS1]      = useState('')
+  const [outflowS2,      setOutflowS2]      = useState('')
 
   // Form field values
   const [fields, setFields] = useState<Record<string, string>>({
@@ -524,6 +526,8 @@ function ManualEntryForm() {
     setConfigOverride('')
     setTxnType('')
     setIsPending(false)
+    setOutflowS1('')
+    setOutflowS2('')
     setDupWarning(null)
     setPendingSave(null)
   }
@@ -609,6 +613,8 @@ function ManualEntryForm() {
         amount_refunded:         v('amount_refunded')  ? parseFloat(v('amount_refunded'))  : undefined,
         transfer_charge:         v('transfer_charge')  ? parseFloat(v('transfer_charge'))  : undefined,
         is_pending_deduction:    isPending,
+        stage_code_1:            outflowS1             || undefined,
+        stage_code_2:            outflowS2             || undefined,
         remarks:                 v('remarks')          || undefined,
         transaction_type:        txnType               || undefined,
         original_transaction_id: v('original_transaction_id') || undefined,
@@ -619,6 +625,8 @@ function ManualEntryForm() {
       toast('Outflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setIsPending(false)
+      setOutflowS1('')
+      setOutflowS2('')
       setTxnType('')
       setErrors({})
     } catch (e: unknown) {
@@ -927,6 +935,28 @@ function ManualEntryForm() {
             <Field label="Transaction ID">
               <input type="text" placeholder="Bank Txn ID" value={v('transaction_id')} onChange={e => set('transaction_id', e.target.value)} className={iCls} />
             </Field>
+          </div>
+
+          {/* Category (Stage Code 1 + 2) */}
+          <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Budget Allocation (optional)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Category (Stage Code 1)">
+                <select value={outflowS1} onChange={e => setOutflowS1(e.target.value)} className={iCls}>
+                  <option value="">— None —</option>
+                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Budget Portion (Stage Code 2)">
+                <select value={outflowS2} onChange={e => setOutflowS2(e.target.value)} className={iCls}>
+                  <option value="">— None —</option>
+                  <option value="Percentage Allocation">Percentage Allocation</option>
+                  <option value="Specific Seed">Specific Seed</option>
+                  <option value="Savings">Savings</option>
+                </select>
+              </Field>
+            </div>
+            <p className="text-[11px] text-gray-400">Links this outflow to the category ledger for tracking.</p>
           </div>
 
           {/* Pending Deduction */}

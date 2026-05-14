@@ -655,6 +655,26 @@ export function useDeleteCategoryGroup(): MutationHook<string> {
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
 
+export function useUpdateCategoryGroup(): MutationHook<{ id: string; name: string }> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: { id: string; name: string }): Promise<void> => {
+    setLoading(true); setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('category_groups')
+        .update({ name: input.name })
+        .eq('id', input.id)
+      if (err) throw err
+    } catch (err) {
+      const msg = extractMessage(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
 // ── useAddFXTransaction ────────────────────────────────────────────────────────
 
 export interface AddFXTransactionInput {
