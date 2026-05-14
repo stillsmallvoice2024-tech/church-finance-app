@@ -341,7 +341,7 @@ export default function CategoryLedger() {
 
   useEffect(() => {
     if (viewMode === 'ledger' && activeCategory) loadLedger()
-  }, [viewMode, activeCategory, ledgerPortion, loadLedger])
+  }, [viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion])
 
   // ── Derived ────────────────────────────────────────────────────────────────────
 
