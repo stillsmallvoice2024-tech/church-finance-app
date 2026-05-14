@@ -140,36 +140,57 @@ Uses `delete({ count: 'exact' })`; throws if `count === 0` — catches silent Su
 
 ## Financial Report (`FinancialReport.tsx`)
 
+### Report Basis
+
+Two date axes, toggled via UI selector (`ReportBasis`):
+- `'transaction_date'` (default) — cumulative financial reports; filters by transaction `date` field (`.lte('date', reportDate)`)
+- `'recorded_at'` — operational upload reports; filters by `recorded_at` field (`.lte('recorded_at', ...)`)
+
+Config resolution always uses `inflow.date` regardless of basis (allocation config is financial, not operational).
+
 ### Balance Engine: `useReportEngine(reportDate, reportBasis)`
 
-Two date axes (`ReportBasis`): `'transaction_date'` (cumulative financial, filters by `date`) | `'recorded_at'` (cumulative operational, filters by `recorded_at`).
-- Config resolution: skip if `transaction_type` set; per-inflow `allocation_config_id` first; else `getConfigForDate(configs, inflow.date)` — always uses `inflow.date` for config regardless of basis
-- Opening balances from `category_opening_balances` always included (no date filter)
-- Returns `balances: Map<categoryName, ReportCategoryBalance>` and `operationalBalances: OperationalBalanceMap`
+`src/hooks/useReportEngine.ts` returns:
+- `balances: Map<categoryName, ReportCategoryBalance>` — standard category balances (percentage allocated, specific seed, savings net)
+- `operationalBalances: OperationalBalanceMap` — `Map<string, number>` for income-type and transaction-type rows
+  - Income type: keyed `it::${incomeTypeId}` — exact-day filter on `recorded_at` (`dayStart` to `endOfDay`)
+  - Transaction type: keyed `tt::${transactionType}` — same day filter
 
-**Operational balance keys** (always exact-day filter on `recorded_at`):
-- Income type rows: `it::${incomeTypeId}`
-- Tagged transaction-type rows: `tt::${transactionType}` (reversal, refund, bank_deposit, intrabank_transfer)
-- Normal inflow rows: `tt::normal` — inflows where `transaction_type IS NULL`
+### Multi-Table Layout
 
-### `ReportTable` Fields
+`ReportLayout = { tables?: ReportTable[], groups?: ReportGroup[], basis?: ReportBasis }`
+- New format: `tables` array (multi-table, each table independent)
+- Legacy format: `groups` array (auto-migrated by `normaliseTables()` → wraps into single table with `id: 'legacy'`)
+- `normaliseTables(layout)` in `reportExport.ts` and `FinancialReport.tsx` provides backward compat on load
 
-- `include_in_combined_total?: boolean` — defaults `true`; when `false`, table is excluded from the combined grand total
-- `computeGrandTotal()` and both export functions only sum tables where this flag is not `false`
-- `normaliseTables()` sets `include_in_combined_total: true` for legacy single-table layouts
+Hierarchy: **Table → Group → Subgroup (optional) → Item**
+
+Item row types (`ReportRowType`): `'category'` | `'inflow_type'` | `'transaction_type'`
+- Category rows: use `balances` map keyed by `categoryName`
+- Income type rows: use `operationalBalances` keyed `it::${incomeTypeId}`
+- Transaction type rows: use `operationalBalances` keyed `tt::${transactionTypeKey}`
+
+`itemKey(item)` — canonical dedup key: `it::${id}` / `tt::${key}` / `cat::${name}::${portion}`
+Same category may appear with different portions; each is a distinct item.
+
+### `recorded_at` Field
+
+- `recorded_at timestamptz` — editable business/upload date; exposed in AddInflowModal and AddOutflowModal as "Recorded Date (operational reports)"
+- `created_at` — immutable audit timestamp; **not used for report filtering** (old behaviour removed)
+- Migration backfills `recorded_at = created_at` for existing rows
 
 ### Template Storage
 
-`report_templates` table; `layout` JSONB stores `{ tables: ReportTable[], basis: ReportBasis }`.
-Legacy templates (`{ groups: [...] }`) auto-migrated by `normaliseTables()` on load.
-Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, `useDeleteReportTemplate`.
+`report_templates` table; `layout` JSONB now stores `{ tables: ReportTable[], basis: ReportBasis }`.
+Legacy templates with `{ groups: [...] }` are auto-migrated on load via `normaliseTables()`.
+Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, `useDeleteReportTemplate` in `src/hooks/useReportTemplates.ts`
 
 ### Export (`src/utils/reportExport.ts`)
 
-- `exportReportPDF()` — per-table title bars, subgroup sub-totals, per-table totals; combined grand total appended when ≥2 visible tables and at least one is opted in
-- `exportReportExcel()` — one sheet per table; Summary sheet added when combined total applies
-- `computeGroupTotal / computeTableTotal / computeGrandTotal` — `computeGrandTotal` only sums opted-in visible tables
-- `getItemBalance(item, balances, opBalances)` — dispatches by `rowType` (category / inflow_type / transaction_type)
+- `exportReportPDF(layout, balances, opBalances, reportDate)` — per-table title bars, subgroup sub-totals, per-table grand totals
+- `exportReportExcel(layout, balances, opBalances, reportDate)` — one sheet per table
+- `computeGroupTotal / computeTableTotal / computeGrandTotal` — independent per-table totals; totals never bleed across tables
+- `getItemBalance(item, balances, opBalances)` — dispatches by `rowType`
 
 ---
 
