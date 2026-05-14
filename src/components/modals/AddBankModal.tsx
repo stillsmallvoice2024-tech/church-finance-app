@@ -23,6 +23,12 @@ const MIGRATION_SQL =
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
   ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
   ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';
+-- Helper view: reads information_schema directly, bypasses PostgREST schema cache
+CREATE OR REPLACE VIEW public.bank_schema_check AS
+  SELECT column_name::text
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'banks';
+GRANT SELECT ON public.bank_schema_check TO anon, authenticated;
 -- Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';`
 
@@ -61,12 +67,14 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
   const loading = adding || updating
   const error   = addError || updateError
+  const isSchemaCacheError = !!error && /schema cache/i.test(error)
 
-  const [allocType,      setAllocType]      = useState<AllocType>('percentage')
-  const [rows,           setRows]           = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
-  const [allocError,     setAllocError]     = useState<string | null>(null)
-  const [newCatMode,     setNewCatMode]     = useState<NewCatMode | null>(null)
+  const [allocType,       setAllocType]       = useState<AllocType>('percentage')
+  const [rows,            setRows]            = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
+  const [allocError,      setAllocError]      = useState<string | null>(null)
+  const [newCatMode,      setNewCatMode]      = useState<NewCatMode | null>(null)
   const [migrationNeeded, setMigrationNeeded] = useState(false)
+  const [checkingSchema,  setCheckingSchema]  = useState(false)
   const newCatInputRef = useRef<HTMLInputElement>(null)
 
   const { register, control, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
@@ -98,7 +106,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     setAllocError(null)
     setNewCatMode(null)
     setMigrationNeeded(false)
-    checkBankStartingBalanceMigration().then(setMigrationNeeded)
+
+    // Populate form fields synchronously
     if (editRecord) {
       resetForm({
         name:             editRecord.name,
@@ -135,7 +144,41 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       setAllocType('percentage')
       setRows([{ category_name: '', budget_portion: '', value: '' }])
     }
+
+    // Schema check with one retry — handles stale PostgREST cache immediately
+    // after a migration is applied before the cache has fully reloaded.
+    let active = true
+    setCheckingSchema(true)
+    ;(async () => {
+      let needed = await checkBankStartingBalanceMigration()
+      if (active && needed) {
+        await new Promise(r => setTimeout(r, 1500))
+        needed = await checkBankStartingBalanceMigration()
+      }
+      if (active) {
+        setMigrationNeeded(needed)
+        setCheckingSchema(false)
+      }
+    })()
+    return () => { active = false }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
+
+  // When a save attempt returns a schema-cache error, auto-recheck after a
+  // brief delay and clear the error state if the cache has now refreshed.
+  useEffect(() => {
+    if (!isSchemaCacheError) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      if (cancelled) return
+      const stillNeeded = await checkBankStartingBalanceMigration()
+      if (!cancelled && !stillNeeded) {
+        resetAdd()
+        resetUpdate()
+        setMigrationNeeded(false)
+      }
+    }, 2000)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [isSchemaCacheError, resetAdd, resetUpdate])
 
   const confirmNewCategory = async (rowIndex: number) => {
     if (!newCatMode) return
@@ -203,30 +246,54 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     } catch { /* surfaced via hook error */ }
   }
 
-  const isSchemaCacheError = !!error && /schema cache/i.test(error)
-  const showMigrationBanner = migrationNeeded || isSchemaCacheError
+  const showMigrationBanner = (!checkingSchema && migrationNeeded) || isSchemaCacheError
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Bank' : 'Add Bank'}>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
 
+        {checkingSchema && (
+          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            <span>Verifying schema…</span>
+          </div>
+        )}
+
         {showMigrationBanner && (
           <div className="space-y-2">
             <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <span>
-                {isSchemaCacheError
-                  ? 'Migration was applied but the schema cache has not refreshed yet. Wait a moment, then close and reopen this modal to retry.'
-                  : 'Database migration required — run the SQL below in your Supabase SQL Editor, then close and reopen this modal.'}
-              </span>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
-                <Terminal className="w-3 h-3 text-gray-400" />
-                <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+              <div className="flex-1 space-y-1">
+                <p>
+                  {isSchemaCacheError
+                    ? 'Schema cache is refreshing — checking automatically, you can try saving again in a moment.'
+                    : 'Database migration required — run the SQL below in your Supabase SQL Editor.'}
+                </p>
+                {!isSchemaCacheError && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setCheckingSchema(true)
+                      const needed = await checkBankStartingBalanceMigration()
+                      setMigrationNeeded(needed)
+                      setCheckingSchema(false)
+                    }}
+                    className="underline hover:text-amber-900"
+                  >
+                    Re-check now
+                  </button>
+                )}
               </div>
-              <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
             </div>
+            {!isSchemaCacheError && (
+              <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                  <Terminal className="w-3 h-3 text-gray-400" />
+                  <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+                </div>
+                <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+              </div>
+            )}
           </div>
         )}
 
@@ -484,7 +551,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           </button>
           <button
             type="submit"
-            disabled={loading || migrationNeeded || (hasBalance && !balanced)}
+            disabled={loading || checkingSchema || migrationNeeded || (hasBalance && !balanced)}
             className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
           >
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}

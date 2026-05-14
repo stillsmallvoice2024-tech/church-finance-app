@@ -31,6 +31,17 @@ export interface BanksResult {
 }
 
 export async function checkBankStartingBalanceMigration(): Promise<boolean> {
+  // Prefer the schema-check view — it reads information_schema directly,
+  // bypassing PostgREST's table schema cache, so it's accurate immediately
+  // after a migration even before the cache has fully reloaded.
+  const { data, error: viewErr } = await supabase
+    .from('bank_schema_check')
+    .select('column_name')
+  if (!viewErr && data) {
+    const cols = new Set(data.map((r: { column_name: string }) => r.column_name))
+    return !cols.has('starting_balance') || !cols.has('starting_balance_allocations')
+  }
+  // Fallback when the view doesn't exist yet (pre-migration): test columns directly.
   const { error } = await supabase
     .from('banks')
     .select('starting_balance, starting_balance_allocations')
