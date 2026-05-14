@@ -46,7 +46,7 @@ export function useReportEngine(
     const dayStart = `${reportDate}T00:00:00.000Z`
 
     const [seedRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
-           opInflowTypeRes, opTxnTypeRes] = await Promise.all([
+           opInflowTypeRes, opTxnTypeRes, opNormalRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
@@ -89,6 +89,13 @@ export function useReportEngine(
         .gte('recorded_at', dayStart)
         .lte('recorded_at', endOfDay)
         .not('transaction_type', 'is', null),
+      // Normal inflow (no transaction_type): exact day using recorded_at
+      supabase
+        .from('inflow_transactions')
+        .select('amount')
+        .gte('recorded_at', dayStart)
+        .lte('recorded_at', endOfDay)
+        .is('transaction_type', null),
     ])
 
     const firstErr =
@@ -207,6 +214,9 @@ export function useReportEngine(
     for (const r of opTxnTypeRes.data ?? []) {
       const key = `tt::${r.transaction_type as string}`
       opMap.set(key, (opMap.get(key) ?? 0) + Number(r.amount))
+    }
+    for (const r of opNormalRes.data ?? []) {
+      opMap.set('tt::normal', (opMap.get('tt::normal') ?? 0) + Number(r.amount))
     }
 
     setOperationalBalances(opMap)

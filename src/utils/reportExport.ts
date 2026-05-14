@@ -75,7 +75,7 @@ export function computeTableTotal(
     .reduce((sum, g) => sum + computeGroupTotal(g, balances, opBalances), 0)
 }
 
-/** Backward-compat: compute grand total across all visible tables */
+/** Sum only visible tables opted into the combined total */
 export function computeGrandTotal(
   layout: ReportLayout,
   balances: Map<string, ReportCategoryBalance>,
@@ -83,7 +83,7 @@ export function computeGrandTotal(
 ): number {
   const tables = normaliseTables(layout)
   return tables
-    .filter(t => t.visible)
+    .filter(t => t.visible && (t.include_in_combined_total ?? true))
     .reduce((sum, t) => sum + computeTableTotal(t, balances, opBalances), 0)
 }
 
@@ -91,7 +91,7 @@ export function computeGrandTotal(
 export function normaliseTables(layout: ReportLayout): ReportTable[] {
   if (layout.tables && layout.tables.length > 0) return layout.tables
   if (layout.groups && layout.groups.length > 0) {
-    return [{ id: 'legacy', title: 'Financial Report', visible: true, groups: layout.groups }]
+    return [{ id: 'legacy', title: 'Financial Report', visible: true, groups: layout.groups, include_in_combined_total: true }]
   }
   return []
 }
@@ -221,6 +221,22 @@ export function exportReportPDF(
     }
   }
 
+  // Combined grand total (only tables opted in, and only when >1 table)
+  const combinedTables = tables.filter(t => t.visible && (t.include_in_combined_total ?? true))
+  if (tables.filter(t => t.visible).length > 1 && combinedTables.length > 0) {
+    const combinedTotal = combinedTables.reduce((s, t) => s + computeTableTotal(t, balances, opBalances), 0)
+    autoTable(doc, {
+      startY,
+      body: [[
+        { content: 'COMBINED GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10 } },
+        { content: `₦${fmt(combinedTotal)}`, styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10, halign: 'right' } },
+      ]],
+      columnStyles: { 0: { cellWidth: 130 }, 1: { cellWidth: 50, halign: 'right' } },
+      styles: { fontSize: 9, cellPadding: 2.5 },
+      margin: { left: 14, right: 14 },
+    })
+  }
+
   doc.save(`Financial_Report_${reportDate}.pdf`)
 }
 
@@ -286,6 +302,24 @@ export function exportReportExcel(
 
     const sheetName = tables.length > 1 ? table.title.slice(0, 31) : 'Report'
     XLSX.utils.book_append_sheet(wb, ws, sheetName)
+  }
+
+  // Combined grand total sheet (only when >1 table and at least one opted in)
+  const combinedTbls = tables.filter(t => t.visible && (t.include_in_combined_total ?? true))
+  if (tables.filter(t => t.visible).length > 1 && combinedTbls.length > 0) {
+    const summaryRows: (string | number)[][] = []
+    summaryRows.push([orgName])
+    summaryRows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
+    summaryRows.push([])
+    summaryRows.push(['Table', 'Total (₦)'])
+    for (const t of combinedTbls) {
+      summaryRows.push([t.title, computeTableTotal(t, balances, opBalances)])
+    }
+    summaryRows.push([])
+    summaryRows.push(['COMBINED GRAND TOTAL', combinedTbls.reduce((s, t) => s + computeTableTotal(t, balances, opBalances), 0)])
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
+    wsSummary['!cols'] = [{ wch: 50 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
   }
 
   XLSX.writeFile(wb, `Financial_Report_${reportDate}.xlsx`)
