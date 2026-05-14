@@ -15,6 +15,7 @@ import { formatCurrency, parseCurrency } from '../../utils/currency'
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
 const NEW_SENTINEL = '__new__'
+const MAX_CACHE_RETRIES = 3
 
 const MIGRATION_SQL =
 `ALTER TABLE banks
@@ -75,7 +76,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [newCatMode,      setNewCatMode]      = useState<NewCatMode | null>(null)
   const [migrationNeeded, setMigrationNeeded] = useState(false)
   const [checkingSchema,  setCheckingSchema]  = useState(false)
-  const newCatInputRef = useRef<HTMLInputElement>(null)
+  const [cacheWaiting,    setCacheWaiting]    = useState(false)
+  const newCatInputRef    = useRef<HTMLInputElement>(null)
+  const cacheRetryCount   = useRef(0)
 
   const { register, control, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -106,6 +109,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     setAllocError(null)
     setNewCatMode(null)
     setMigrationNeeded(false)
+    setCacheWaiting(false)
+    cacheRetryCount.current = 0
 
     // Populate form fields synchronously
     if (editRecord) {
@@ -163,22 +168,33 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     return () => { active = false }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
-  // When a save attempt returns a schema-cache error, auto-recheck after a
-  // brief delay and clear the error state if the cache has now refreshed.
+  // When a save fails with a schema-cache error: verify columns via information_schema,
+  // then give PostgREST 3 s to settle before clearing the error and re-enabling save.
+  // Capped at MAX_CACHE_RETRIES to prevent an infinite refresh loop.
   useEffect(() => {
-    if (!isSchemaCacheError) return
+    if (!error || !/schema cache/i.test(error)) return
+    cacheRetryCount.current++
+    if (cacheRetryCount.current > MAX_CACHE_RETRIES) return  // give up — show stuck state
     let cancelled = false
-    const timer = setTimeout(async () => {
-      if (cancelled) return
+    setCacheWaiting(true)
+    ;(async () => {
       const stillNeeded = await checkBankStartingBalanceMigration()
-      if (!cancelled && !stillNeeded) {
-        resetAdd()
-        resetUpdate()
-        setMigrationNeeded(false)
+      if (cancelled) return
+      if (!stillNeeded) {
+        // Columns confirmed via information_schema — PostgREST just needs more time
+        await new Promise(r => setTimeout(r, 3000))
+        if (!cancelled) {
+          resetAdd()
+          resetUpdate()
+          setMigrationNeeded(false)
+        }
+      } else {
+        setMigrationNeeded(true)
       }
-    }, 2000)
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [isSchemaCacheError, resetAdd, resetUpdate])
+      if (!cancelled) setCacheWaiting(false)
+    })()
+    return () => { cancelled = true; setCacheWaiting(false) }
+  }, [error])  // fires on each new error value; resetAdd/resetUpdate are stable refs
 
   const confirmNewCategory = async (rowIndex: number) => {
     if (!newCatMode) return
@@ -246,7 +262,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     } catch { /* surfaced via hook error */ }
   }
 
-  const showMigrationBanner = (!checkingSchema && migrationNeeded) || isSchemaCacheError
+  const schemaStuck       = isSchemaCacheError && cacheRetryCount.current > MAX_CACHE_RETRIES
+  const showMigrationBanner = (!checkingSchema && migrationNeeded) || cacheWaiting || schemaStuck
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Bank' : 'Add Bank'}>
@@ -260,44 +277,50 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         )}
 
         {showMigrationBanner && (
-          <div className="space-y-2">
-            <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <div className="flex-1 space-y-1">
-                <p>
-                  {isSchemaCacheError
-                    ? 'Schema cache is refreshing — checking automatically, you can try saving again in a moment.'
-                    : 'Database migration required — run the SQL below in your Supabase SQL Editor.'}
-                </p>
-                {!isSchemaCacheError && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setCheckingSchema(true)
-                      const needed = await checkBankStartingBalanceMigration()
-                      setMigrationNeeded(needed)
-                      setCheckingSchema(false)
-                    }}
-                    className="underline hover:text-amber-900"
-                  >
-                    Re-check now
-                  </button>
-                )}
+          <>
+            {cacheWaiting ? (
+              <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                <span>Columns verified — PostgREST cache settling, save will re-enable in a moment.</span>
               </div>
-            </div>
-            {!isSchemaCacheError && (
-              <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
-                  <Terminal className="w-3 h-3 text-gray-400" />
-                  <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+            ) : schemaStuck ? (
+              <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>Schema cache failed to refresh after multiple attempts — please close and reopen this modal.</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-1">
+                    <p>Database migration required — run the SQL below in your Supabase SQL Editor.</p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setCheckingSchema(true)
+                        const needed = await checkBankStartingBalanceMigration()
+                        setMigrationNeeded(needed)
+                        setCheckingSchema(false)
+                      }}
+                      className="underline hover:text-amber-900"
+                    >
+                      Re-check now
+                    </button>
+                  </div>
                 </div>
-                <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+                <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                    <Terminal className="w-3 h-3 text-gray-400" />
+                    <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+                  </div>
+                  <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+                </div>
               </div>
             )}
-          </div>
+          </>
         )}
 
-        {error && !showMigrationBanner && (
+        {error && !isSchemaCacheError && !showMigrationBanner && (
           <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <span>{error}</span>
@@ -551,7 +574,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           </button>
           <button
             type="submit"
-            disabled={loading || checkingSchema || migrationNeeded || (hasBalance && !balanced)}
+            disabled={loading || checkingSchema || migrationNeeded || cacheWaiting || schemaStuck || (hasBalance && !balanced)}
             className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
           >
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
