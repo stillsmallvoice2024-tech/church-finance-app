@@ -227,11 +227,34 @@ disabled={loading || checkingSchema || schemaStatus !== 'ok' || schemaStuck || (
 ## Financial Report Page (`src/pages/FinancialReport.tsx`)
 
 Two modes toggled by "Edit Layout" button:
-- **View mode** — rendered report table with group headers, items, subtotals, grand total; PDF + Excel export buttons shown
-- **Edit mode** — drag-and-drop builder (`@dnd-kit/core` + `@dnd-kit/sortable`); category picker panel on left, sortable groups/items on right
+- **View mode** — rendered multi-table report; each table has independent subtotals and grand total; combined grand total shown when >1 table; PDF + Excel export buttons
+- **Edit mode** — DnD builder; CategoryPicker panel (3 tabs: Category / Income Type / Txn Type); sortable Table → Group → Subgroup → Item hierarchy on right
 
-Layout state is local until "Save Template" is clicked → opens `SaveReportTemplateModal`.
+Layout state (`tables: ReportTable[]`) is local until "Save Template" → `SaveReportTemplateModal`.
 
-Groups and items both use `useSortable` with prefixed IDs (`group::{id}` vs `{groupId}::{itemId}`) to distinguish them in `DndContext` handlers. Cross-group item drag handled in `onDragOver`; within-group reorder in `onDragEnd`.
+### DnD ID Conventions
+
+All `useSortable` IDs use a prefix to distinguish hierarchy level:
+- Tables: `tbl-{uuid}`
+- Groups: `grp-{uuid}`
+- Subgroups: `sgp-{uuid}`
+- Items: `itm-{uuid}`
+
+`stripPrefix(id)` removes prefix; `prefixType(id)` returns `'table'|'group'|'subgroup'|'item'`.
+Locators `findItem(tables, itemId)` and `findGroup(tables, groupId)` scan the entire `tables` array.
+Cross-group item moves handled in `onDragOver`; table/group/subgroup/item reorder in `onDragEnd`.
+
+### CategoryPicker
+
+3 tabs: **Category** (standard budget categories + portion selector), **Income Type** (from `useIncomeTypes`), **Txn Type** (hardcoded keys: reversal, refund, bank_deposit, intrabank_transfer).
+`usedKeys` set (keyed by `itemKey()`) prevents duplicate rows — same category + same portion = blocked; same category + different portion = allowed.
+
+### Report Basis Selector
+
+Controls toggle `reportBasis: ReportBasis` → `'transaction_date'` (financial) | `'recorded_at'` (operational). Passed to `useReportEngine`.
+
+### Backward Compat
+
+`ensureMultiTable(layout)` = `normaliseTables(layout)` — wraps legacy `{ groups: [...] }` templates into `{ tables: [{ id: 'legacy', ... }] }` on template load.
 
 Dependencies: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `jspdf`, `jspdf-autotable`.

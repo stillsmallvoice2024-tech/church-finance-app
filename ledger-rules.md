@@ -127,29 +127,57 @@ Uses `delete({ count: 'exact' })`; throws if `count === 0` — catches silent Su
 
 ## Financial Report (`FinancialReport.tsx`)
 
-**Date axis:** Uses `created_at` (date added to system), **not** the transaction `date` field.
+### Report Basis
 
-**Query pattern** — cumulative up-to-date:
-- `.lte('created_at', `${reportDate}T23:59:59.999Z`)` on both tables
+Two date axes, toggled via UI selector (`ReportBasis`):
+- `'transaction_date'` (default) — cumulative financial reports; filters by transaction `date` field (`.lte('date', reportDate)`)
+- `'recorded_at'` — operational upload reports; filters by `recorded_at` field (`.lte('recorded_at', ...)`)
 
-**Balance engine:** `src/hooks/useReportEngine.ts` → `useReportEngine(reportDate)`
-- Same computation as `CategoryLedger.loadSummary` (percentage allocation, specific seed, savings net)
-- Opening balances from `category_opening_balances` always included (no date filter on them)
-- Config resolution: skip if `transaction_type` set; per-inflow `allocation_config_id` first; else `getConfigForDate(configs, inflow.date)` ← still uses inflow `date` for config lookup, not `created_at`
-- Returns `Map<categoryName, { percentageAllocated, specificSeed, savingsNet }>`
+Config resolution always uses `inflow.date` regardless of basis (allocation config is financial, not operational).
 
-**`created_at` editing:**
-- Both `AddInflowModal` and `AddOutflowModal` show "Date Added (affects reports)" in **edit mode only**
-- Form field `created_at_date` (YYYY-MM-DD) → saved as `created_at: YYYY-MM-DDT00:00:00.000Z` in update payload
-- Changing it instantly shifts which report date the transaction belongs to
+### Balance Engine: `useReportEngine(reportDate, reportBasis)`
 
-**Template storage:** `report_templates` Supabase table; `layout` JSONB holds `{ groups: ReportGroup[] }`
-- Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, `useDeleteReportTemplate` in `src/hooks/useReportTemplates.ts`
+`src/hooks/useReportEngine.ts` returns:
+- `balances: Map<categoryName, ReportCategoryBalance>` — standard category balances (percentage allocated, specific seed, savings net)
+- `operationalBalances: OperationalBalanceMap` — `Map<string, number>` for income-type and transaction-type rows
+  - Income type: keyed `it::${incomeTypeId}` — exact-day filter on `recorded_at` (`dayStart` to `endOfDay`)
+  - Transaction type: keyed `tt::${transactionType}` — same day filter
 
-**Export:** `src/utils/reportExport.ts`
-- `exportReportPDF(layout, balances, reportDate)` — jsPDF + jspdf-autotable
-- `exportReportExcel(layout, balances, reportDate)` — xlsx
-- `computeGroupTotal / computeGrandTotal` — shared helpers used by both page and export
+### Multi-Table Layout
+
+`ReportLayout = { tables?: ReportTable[], groups?: ReportGroup[], basis?: ReportBasis }`
+- New format: `tables` array (multi-table, each table independent)
+- Legacy format: `groups` array (auto-migrated by `normaliseTables()` → wraps into single table with `id: 'legacy'`)
+- `normaliseTables(layout)` in `reportExport.ts` and `FinancialReport.tsx` provides backward compat on load
+
+Hierarchy: **Table → Group → Subgroup (optional) → Item**
+
+Item row types (`ReportRowType`): `'category'` | `'inflow_type'` | `'transaction_type'`
+- Category rows: use `balances` map keyed by `categoryName`
+- Income type rows: use `operationalBalances` keyed `it::${incomeTypeId}`
+- Transaction type rows: use `operationalBalances` keyed `tt::${transactionTypeKey}`
+
+`itemKey(item)` — canonical dedup key: `it::${id}` / `tt::${key}` / `cat::${name}::${portion}`
+Same category may appear with different portions; each is a distinct item.
+
+### `recorded_at` Field
+
+- `recorded_at timestamptz` — editable business/upload date; exposed in AddInflowModal and AddOutflowModal as "Recorded Date (operational reports)"
+- `created_at` — immutable audit timestamp; **not used for report filtering** (old behaviour removed)
+- Migration backfills `recorded_at = created_at` for existing rows
+
+### Template Storage
+
+`report_templates` table; `layout` JSONB now stores `{ tables: ReportTable[], basis: ReportBasis }`.
+Legacy templates with `{ groups: [...] }` are auto-migrated on load via `normaliseTables()`.
+Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, `useDeleteReportTemplate` in `src/hooks/useReportTemplates.ts`
+
+### Export (`src/utils/reportExport.ts`)
+
+- `exportReportPDF(layout, balances, opBalances, reportDate)` — per-table title bars, subgroup sub-totals, per-table grand totals
+- `exportReportExcel(layout, balances, opBalances, reportDate)` — one sheet per table
+- `computeGroupTotal / computeTableTotal / computeGrandTotal` — independent per-table totals; totals never bleed across tables
+- `getItemBalance(item, balances, opBalances)` — dispatches by `rowType`
 
 ---
 
