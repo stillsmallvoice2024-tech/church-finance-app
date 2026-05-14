@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import type { StartingBalanceRow } from './useBanks'
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
@@ -222,6 +223,8 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
         newData:   input as unknown as Record<string, unknown>,
       })
 
+      useTransactionSyncStore.getState().bumpOutflow()
+
       return data.id
     } catch (err) {
       const msg = extractMessage(err)
@@ -324,6 +327,10 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
       })
       if (oldData) {
         logFieldChanges(user.id, table, id, oldData as Record<string, unknown>, updates)
+      }
+
+      if (table === 'outflow_transactions') {
+        useTransactionSyncStore.getState().bumpOutflow()
       }
     } catch (err) {
       const msg = extractMessage(err)

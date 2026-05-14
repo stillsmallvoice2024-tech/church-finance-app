@@ -5,6 +5,7 @@ import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useCategories, useCategoryGroups } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency, formatDate } from '../utils/formatters'
+import { useTransactionSyncStore } from '../store/transactionSyncStore'
 
 // ── Types ────────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ export default function CategoryLedger() {
   const { categories }                           = useCategories()
   const { groups }                               = useCategoryGroups()
   const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
+  const outflowVersion                           = useTransactionSyncStore(s => s.outflowVersion)
 
   // Summary state
   const [rows,    setRows]    = useState<CategoryRow[]>([])
@@ -191,7 +193,7 @@ export default function CategoryLedger() {
     setLoading(false)
   }, [categories, configs])
 
-  useEffect(() => { loadSummary() }, [loadSummary])
+  useEffect(() => { loadSummary() }, [loadSummary, outflowVersion])
 
   // ── Ledger load ──────────────────────────────────────────────────────────────────
 

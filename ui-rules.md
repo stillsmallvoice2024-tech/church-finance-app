@@ -95,6 +95,23 @@ All nav items visible to all authenticated users.
 
 ---
 
+## ReceiptBadge Upload Behaviour
+
+- `inputRef` resets `input.value = ''` after each upload batch — allows re-selecting the same file
+- Errors surfaced via `useToastStore`: full failure → "Upload failed — check storage permissions or bucket setup"; partial → "N of M file(s) failed to upload"
+- Success toast shown on clean upload
+- Upload errors from `useReceipts.upload()` are caught per-file; count tracked; never silently swallowed
+
+---
+
+## PendingDeductions Resolve Guard
+
+`handleResolve` in `PendingDeductions.tsx` checks `stage_code_1` and `stage_code_2` before updating `is_pending_deduction`:
+- If either is blank/null → error toast + `openEdit(row)` — DB update is NOT called
+- Only proceeds to mark resolved when both stage codes are filled
+
+---
+
 ## Key Component Locations
 
 | Component | Location |
@@ -258,3 +275,28 @@ Controls toggle `reportBasis: ReportBasis` → `'transaction_date'` (financial) 
 `ensureMultiTable(layout)` = `normaliseTables(layout)` — wraps legacy `{ groups: [...] }` templates into `{ tables: [{ id: 'legacy', ... }] }` on template load.
 
 Dependencies: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `jspdf`, `jspdf-autotable`.
+
+### Table Reorder Controls (Edit Mode)
+
+Each table title bar has ↑/↓ buttons (`ChevronUp`/`ChevronDown`) alongside the drag handle:
+- Up → `arrayMove(tables, idx, idx-1)`; disabled + greyed when first
+- Down → `arrayMove(tables, idx, idx+1)`; disabled + greyed when last
+- Both methods use `useCallback`; complement existing DnD
+
+### Combined Total Toggle (Edit Mode)
+
+Each table has a `∑` button in the title bar toggling `include_in_combined_total`:
+- Active (blue bg) = included in combined grand total (default)
+- Inactive (grey) = excluded; table stays independent
+- Combined grand total row hides entirely when no tables are opted in
+
+### CategoryPicker TXN_TYPES
+
+Full list: `normal` (Normal Transactions), `reversal`, `refund`, `bank_deposit`, `intrabank_transfer`.
+`tt::normal` maps to inflows where `transaction_type IS NULL`.
+
+### Subgroup Drag-and-Drop Rules
+
+- Items **inside a subgroup** cannot be moved to a different parent group — `handleDragOver` returns early when `activeLoc.subgroupId` is set
+- Subgroups can be reordered within the same parent group via `sgp→sgp` branch in `handleDragEnd`
+- Cross-group subgroup moves are naturally prevented (same-group `findIndex` won't match across groups)

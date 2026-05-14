@@ -1,5 +1,7 @@
 # Church Finance App — Claude Context
 
+> **Always load and follow `token-mode.md` for every task in this project.**
+
 **App:** Multi-user church finance SPA. Tracks inflows, outflows, banks, FX, budget allocations, categories, special projects, receipts.
 **Repo:** `stillsmallvoice2024-tech/church-finance-app` | **Branch:** `main` | **Deploy:** Vercel (SPA rewrite via `vercel.json`)
 

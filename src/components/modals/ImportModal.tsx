@@ -14,6 +14,7 @@ import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
+import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -693,6 +694,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           errors.push(msg); skipped += batch.length
         } else imported += batch.length
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
+      }
+
+      if (outflowToInsert.length > 0) {
+        useTransactionSyncStore.getState().bumpOutflow()
       }
 
       setResult({ imported, skipped, errors })

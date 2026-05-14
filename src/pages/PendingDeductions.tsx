@@ -37,6 +37,11 @@ export default function PendingDeductions() {
   usePageTitle('Pending Deductions')
 
   const handleResolve = async (row: OutflowTransaction) => {
+    if (!row.stage_code_1?.trim() || !row.stage_code_2?.trim()) {
+      toast('Fill in both stage codes before resolving', 'error')
+      openEdit(row)
+      return
+    }
     setResolvingId(row.id)
     try {
       await updateMutation.mutate({
