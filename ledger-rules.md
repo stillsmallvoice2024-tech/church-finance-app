@@ -96,6 +96,19 @@ No DB transaction — step 1 commits even if step 2 fails. Accepted trade-off.
 
 ---
 
+## Category Ledger Auto-Sync
+
+`src/store/transactionSyncStore.ts` holds an `outflowVersion` counter.
+
+Bumped after every outflow write:
+- `useAddOutflow` — after successful insert
+- `useUpdateTransaction` — when `table === 'outflow_transactions'`
+- `ImportModal` — after outflow batch loop if `outflowToInsert.length > 0`
+
+`CategoryLedger` subscribes via `useTransactionSyncStore(s => s.outflowVersion)` and adds it to the `useEffect([loadSummary, outflowVersion])` dep array — triggers `loadSummary()` without double-calling.
+
+---
+
 ## Mutations & Audit Trail
 
 All writes via `useMutations.ts`:

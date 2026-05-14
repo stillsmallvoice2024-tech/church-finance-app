@@ -95,6 +95,23 @@ All nav items visible to all authenticated users.
 
 ---
 
+## ReceiptBadge Upload Behaviour
+
+- `inputRef` resets `input.value = ''` after each upload batch — allows re-selecting the same file
+- Errors surfaced via `useToastStore`: full failure → "Upload failed — check storage permissions or bucket setup"; partial → "N of M file(s) failed to upload"
+- Success toast shown on clean upload
+- Upload errors from `useReceipts.upload()` are caught per-file; count tracked; never silently swallowed
+
+---
+
+## PendingDeductions Resolve Guard
+
+`handleResolve` in `PendingDeductions.tsx` checks `stage_code_1` and `stage_code_2` before updating `is_pending_deduction`:
+- If either is blank/null → error toast + `openEdit(row)` — DB update is NOT called
+- Only proceeds to mark resolved when both stage codes are filled
+
+---
+
 ## Key Component Locations
 
 | Component | Location |
