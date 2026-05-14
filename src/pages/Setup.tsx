@@ -26,7 +26,7 @@ import { supabase } from '../lib/supabase'
 const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Currencies', 'Database'] as const
 type Tab = typeof TABS[number]
 
-// ── General tab ────────────────────────────────────────────────────────────────
+// ── General tab ──────────────────────────────────────────────────────────────────
 
 function buildYearOptions(): number[] {
   const current = new Date().getFullYear()
@@ -97,7 +97,7 @@ function GeneralTab() {
   )
 }
 
-// ── Banks tab ──────────────────────────────────────────────────────────────────
+// ── Banks tab ────────────────────────────────────────────────────────────────────
 
 function BanksTab({ onAdd, onEdit, onDelete }: {
   onAdd:    () => void
@@ -205,7 +205,7 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
-// ── Allocation tab ─────────────────────────────────────────────────────────────
+// ── Allocation tab ─────────────────────────────────────────────────────────────────
 
 function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
   onNew:        () => void
@@ -351,7 +351,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
   )
 }
 
-// ── Special Configs tab ────────────────────────────────────────────────────────
+// ── Special Configs tab ────────────────────────────────────────────────────────────
 
 function SpecialConfigsTab({ onNew, onEdit, onEditLocked, onLock, onDelete }: {
   onNew:        () => void
@@ -494,7 +494,7 @@ function SpecialConfigsTab({ onNew, onEdit, onEditLocked, onLock, onDelete }: {
   )
 }
 
-// ── Currencies tab ─────────────────────────────────────────────────────────────
+// ── Currencies tab ───────────────────────────────────────────────────────────────────
 
 const CURRENCIES_MIGRATION_SQL =
 `-- Create currencies table
@@ -672,7 +672,7 @@ function CurrenciesTab() {
   )
 }
 
-// ── Database tab ───────────────────────────────────────────────────────────────
+// ── Database tab ───────────────────────────────────────────────────────────────────
 
 const MIGRATION_SQL = `-- Add bank_name to inflow/outflow
 ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS bank_name text;
@@ -739,12 +739,12 @@ CREATE TABLE IF NOT EXISTS public.category_opening_balances (
   UNIQUE (category_id, budget_portion)
 );
 ALTER TABLE public.category_opening_balances ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
+DO $\$ BEGIN
   CREATE POLICY "cob_read" ON public.category_opening_balances FOR SELECT USING (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
   CREATE POLICY "cob_write" ON public.category_opening_balances FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
 
 -- Allow all authenticated users to delete transactions (removes admin-only restriction)
 DROP POLICY IF EXISTS "inflow_delete" ON inflow_transactions;
@@ -774,14 +774,31 @@ CREATE TABLE IF NOT EXISTS public.report_templates (
   updated_at  timestamptz DEFAULT now()
 );
 ALTER TABLE public.report_templates ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
+DO $\$ BEGIN
   CREATE POLICY "report_templates_select" ON public.report_templates FOR SELECT USING (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
   CREATE POLICY "report_templates_all" ON public.report_templates FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
 
-// ── Income Types tab ───────────────────────────────────────────────────────────
+-- Fix RLS infinite recursion on profiles
+-- profiles_admin_all called is_admin() which queries profiles causing infinite recursion
+DROP POLICY IF EXISTS "profiles_admin_all" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
+DO $\$ BEGIN
+  CREATE POLICY "profiles_insert" ON public.profiles
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
+  CREATE POLICY "profiles_update" ON public.profiles
+    FOR UPDATE USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
+  CREATE POLICY "profiles_delete" ON public.profiles
+    FOR DELETE USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;`
+
+// ── Income Types tab ───────────────────────────────────────────────────────────────────
 
 function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
   onAdd:    () => void
@@ -919,7 +936,7 @@ function DatabaseTab() {
   )
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
   const [activeTab,      setActiveTab]      = useState<Tab>('General')
