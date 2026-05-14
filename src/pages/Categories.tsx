@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, LayoutList, LayoutGrid } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, LayoutList, LayoutGrid, Search, Check } from 'lucide-react'
 import {
   useCategories, useCategoryGroups,
   fetchCategoryOpeningBalances, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance,
@@ -12,6 +12,7 @@ import {
   useDeleteCategory,
   useAddCategoryGroup,
   useDeleteCategoryGroup,
+  useUpdateCategoryGroup,
   type AddCategoryInput,
   type UpdateCategoryInput,
 } from '../hooks/useMutations'
@@ -331,6 +332,7 @@ export default function Categories() {
   const { mutate: deleteCategory }                  = useDeleteCategory()
   const { mutate: updateCategory }                  = useUpdateCategory()
   const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
+  const { mutate: updateGroup }                     = useUpdateCategoryGroup()
   const toast = useToast()
 
   const [modalOpen,    setModalOpen]    = useState(false)
@@ -340,6 +342,12 @@ export default function Categories() {
   const [showHidden,   setShowHidden]   = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(false)
   const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
+  const [search,       setSearch]       = useState('')
+
+  // Group inline editing
+  const [editGroupId,   setEditGroupId]   = useState<string | null>(null)
+  const [editGroupName, setEditGroupName] = useState('')
+  const [savingGroup,   setSavingGroup]   = useState(false)
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (c: Category) => { setEditRecord(c); setModalOpen(true) }
@@ -391,7 +399,30 @@ export default function Categories() {
     }
   }
 
-  const visible  = categories.filter(c => showHidden || !c.is_hidden)
+  const handleRenameGroup = async (g: CategoryGroup) => {
+    const name = editGroupName.trim()
+    if (!name || name === g.name) { setEditGroupId(null); return }
+    setSavingGroup(true)
+    try {
+      await updateGroup({ id: g.id, name })
+      toast.success(`Group renamed to "${name}".`)
+      refetchGroups()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Rename failed.')
+    } finally {
+      setSavingGroup(false)
+      setEditGroupId(null)
+    }
+  }
+
+  const q = search.trim().toLowerCase()
+  const visible  = categories.filter(c => {
+    if (!showHidden && c.is_hidden) return false
+    if (!q) return true
+    if (c.name.toLowerCase().includes(q)) return true
+    const groupName = groups.find(g => g.id === c.group_id)?.name ?? ''
+    return groupName.toLowerCase().includes(q)
+  })
   const hiddenCt = categories.filter(c => c.is_hidden).length
 
   // Bucket categories by group
@@ -438,6 +469,23 @@ export default function Categories() {
             Add Category
           </button>
         </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Search by category or group name…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {(error || groupsError) && (
@@ -532,12 +580,44 @@ export default function Categories() {
                 <Fragment key={g.id}>
                   <tr className="bg-gray-50">
                     <td colSpan={5} className="px-5 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{g.name}</span>
-                        <button onClick={() => handleDeleteGroup(g)}
-                          className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors" title="Remove group">
-                          <X className="w-3 h-3" />
-                        </button>
+                      <div className="flex items-center justify-between gap-2">
+                        {editGroupId === g.id ? (
+                          <form
+                            className="flex items-center gap-2 flex-1"
+                            onSubmit={e => { e.preventDefault(); handleRenameGroup(g) }}
+                          >
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editGroupName}
+                              onChange={e => setEditGroupName(e.target.value)}
+                              className="flex-1 text-xs px-2 py-0.5 border border-primary/40 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white font-semibold uppercase tracking-wider"
+                            />
+                            <button type="submit" disabled={savingGroup || !editGroupName.trim()}
+                              className="p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-40" title="Save">
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button type="button" onClick={() => setEditGroupId(null)}
+                              className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors" title="Cancel">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{g.name}</span>
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                onClick={() => { setEditGroupId(g.id); setEditGroupName(g.name) }}
+                                className="p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors" title="Rename group">
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button onClick={() => handleDeleteGroup(g)}
+                                className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors" title="Remove group">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
