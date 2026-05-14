@@ -18,6 +18,7 @@ export interface DbBank {
   starting_balance:               number | null
   starting_balance_category:      string | null
   starting_balance_budget_portion: string | null
+  starting_balance_alloc_type:    string | null
   starting_balance_allocations:   StartingBalanceRow[]
   created_at:     string
 }
@@ -27,6 +28,14 @@ export interface BanksResult {
   loading: boolean
   error:   string | null
   refetch: () => void
+}
+
+export async function checkBankStartingBalanceMigration(): Promise<boolean> {
+  const { error } = await supabase
+    .from('banks')
+    .select('starting_balance, starting_balance_allocations')
+    .limit(0)
+  return !!error
 }
 
 export function useBanks(): BanksResult {

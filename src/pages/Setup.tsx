@@ -796,7 +796,18 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
 DO $\$ BEGIN
   CREATE POLICY "profiles_delete" ON public.profiles
     FOR DELETE USING (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $\$;`
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+
+-- Bank starting balance columns
+ALTER TABLE banks
+  ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS starting_balance_category text,
+  ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
+  ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
+  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';
+
+-- Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
 

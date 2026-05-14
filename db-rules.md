@@ -12,7 +12,7 @@
 | `categories` | Budget categories; `starting_balance`, `group_id`, `is_hidden` |
 | `category_groups` | Groups categories for ledger display |
 | `category_opening_balances` | Multi-portion opening balances; supersedes `categories.starting_balance` |
-| `banks` | Bank accounts; `currency` (default NGN) |
+| `banks` | Bank accounts; `currency` (default NGN); starting balance cols: `starting_balance`, `starting_balance_category`, `starting_balance_budget_portion`, `starting_balance_alloc_type`, `starting_balance_allocations jsonb` |
 | `currencies` | User-managed currency list; code PK, name, symbol, flag emoji |
 | `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type` |
 | `income_types` | Inflow labels; `color`, `special_config_id` |
@@ -46,6 +46,7 @@
 |---|---|---|
 | `transaction_type text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds, BankDeposits pages |
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
+| `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section |
 
 If `transaction_type` is missing, Reversals/Refunds pages will error on SELECT (PostgREST rejects the `.eq()` filter); the ImportModal silently strips it on INSERT and records are saved without it. Run in Supabase SQL editor:
 ```sql
@@ -68,6 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_outflow_txn_type ON outflow_transactions(transact
   END $$;
   ```
 - To replace a policy: `DROP POLICY IF EXISTS "name" ON table;` then `CREATE POLICY`
+- After any `ALTER TABLE ... ADD COLUMN`: append `NOTIFY pgrst, 'reload schema';` so PostgREST schema cache reloads immediately without user having to wait
 
 ---
 
@@ -88,6 +90,7 @@ Every UPDATE in the app must:
 - Helper functions: `is_admin()`, `is_finance_user()` (defined in schema)
 - DELETE policies must use `auth.uid() IS NOT NULL` — see `auth-rules.md` and `miscellaneous.md`
 - `useDeleteTransaction(table)` passes `count: 'exact'` and throws if `count === 0` — catches silent RLS denials
+- `profiles` table: uses three separate non-recursive policies (`profiles_insert`, `profiles_update`, `profiles_delete`) — all `auth.uid() IS NOT NULL`. The old `profiles_admin_all` policy called `is_admin()` which re-queried `profiles`, causing infinite recursion — do not re-introduce helper-function-based policies on `profiles`
 
 ---
 

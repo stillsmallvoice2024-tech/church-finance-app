@@ -8,6 +8,7 @@ import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '..
 import { useCategories } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import type { DbBank, StartingBalanceRow } from '../../hooks/useBanks'
+import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { formatCurrency, parseCurrency } from '../../utils/currency'
 
@@ -21,7 +22,9 @@ const MIGRATION_SQL =
   ADD COLUMN IF NOT EXISTS starting_balance_category text,
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
   ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
-  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';`
+  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';
+-- Reload PostgREST schema cache immediately
+NOTIFY pgrst, 'reload schema';`
 
 const schema = z.object({
   name:             z.string().min(1, 'Bank name is required'),
@@ -59,10 +62,11 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const loading = adding || updating
   const error   = addError || updateError
 
-  const [allocType,  setAllocType]  = useState<AllocType>('percentage')
-  const [rows,       setRows]       = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
-  const [allocError, setAllocError] = useState<string | null>(null)
-  const [newCatMode, setNewCatMode] = useState<NewCatMode | null>(null)
+  const [allocType,      setAllocType]      = useState<AllocType>('percentage')
+  const [rows,           setRows]           = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
+  const [allocError,     setAllocError]     = useState<string | null>(null)
+  const [newCatMode,     setNewCatMode]     = useState<NewCatMode | null>(null)
+  const [migrationNeeded, setMigrationNeeded] = useState(false)
   const newCatInputRef = useRef<HTMLInputElement>(null)
 
   const { register, control, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
@@ -93,6 +97,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     resetUpdate()
     setAllocError(null)
     setNewCatMode(null)
+    setMigrationNeeded(false)
+    checkBankStartingBalanceMigration().then(setMigrationNeeded)
     if (editRecord) {
       resetForm({
         name:             editRecord.name,
@@ -197,31 +203,37 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     } catch { /* surfaced via hook error */ }
   }
 
-  const isMigrationError = !!error && /starting_balance|Could not find|column.*bank/i.test(error)
+  const isSchemaCacheError = !!error && /schema cache/i.test(error)
+  const showMigrationBanner = migrationNeeded || isSchemaCacheError
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Bank' : 'Add Bank'}>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
 
-        {error && (
+        {showMigrationBanner && (
           <div className="space-y-2">
-            <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <span>
-                {isMigrationError
-                  ? 'Database migration required — run the SQL below in your Supabase SQL Editor, then try again.'
-                  : error}
+                {isSchemaCacheError
+                  ? 'Migration was applied but the schema cache has not refreshed yet. Wait a moment, then close and reopen this modal to retry.'
+                  : 'Database migration required — run the SQL below in your Supabase SQL Editor, then close and reopen this modal.'}
               </span>
             </div>
-            {isMigrationError && (
-              <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
-                  <Terminal className="w-3 h-3 text-gray-400" />
-                  <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
-                </div>
-                <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+            <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                <Terminal className="w-3 h-3 text-gray-400" />
+                <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
               </div>
-            )}
+              <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+            </div>
+          </div>
+        )}
+
+        {error && !showMigrationBanner && (
+          <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>{error}</span>
           </div>
         )}
 
@@ -472,7 +484,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           </button>
           <button
             type="submit"
-            disabled={loading || (hasBalance && !balanced)}
+            disabled={loading || migrationNeeded || (hasBalance && !balanced)}
             className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
           >
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
