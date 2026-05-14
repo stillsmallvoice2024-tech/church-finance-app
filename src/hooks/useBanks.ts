@@ -30,23 +30,31 @@ export interface BanksResult {
   refetch: () => void
 }
 
-export async function checkBankStartingBalanceMigration(): Promise<boolean> {
-  // Prefer the schema-check view — it reads information_schema directly,
-  // bypassing PostgREST's table schema cache, so it's accurate immediately
-  // after a migration even before the cache has fully reloaded.
+export type SchemaStatus = 'ok' | 'migration_needed' | 'cache_stale'
+
+export async function checkBankStartingBalanceMigration(): Promise<SchemaStatus> {
+  // Try information_schema via the helper view — unaffected by PostgREST column cache
   const { data, error: viewErr } = await supabase
     .from('bank_schema_check')
     .select('column_name')
   if (!viewErr && data) {
     const cols = new Set(data.map((r: { column_name: string }) => r.column_name))
-    return !cols.has('starting_balance') || !cols.has('starting_balance_allocations')
+    if (!cols.has('starting_balance') || !cols.has('starting_balance_allocations')) {
+      return 'migration_needed'
+    }
+    // Columns exist in DB — verify PostgREST's table cache also knows about them
+    const { error: pgErr } = await supabase
+      .from('banks')
+      .select('starting_balance, starting_balance_allocations')
+      .limit(0)
+    return pgErr ? 'cache_stale' : 'ok'
   }
-  // Fallback when the view doesn't exist yet (pre-migration): test columns directly.
+  // View not created yet — fall back to PostgREST-only check
   const { error } = await supabase
     .from('banks')
     .select('starting_balance, starting_balance_allocations')
     .limit(0)
-  return !!error
+  return error ? 'migration_needed' : 'ok'
 }
 
 export function useBanks(): BanksResult {
