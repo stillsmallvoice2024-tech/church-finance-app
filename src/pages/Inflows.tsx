@@ -274,7 +274,7 @@ export default function Inflows() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
-                  {['Date', 'Type', 'Description', 'Amount (₦)', 'Actions'].map(h => (
+                  {['Date', 'Recorded', 'Type', 'Description', 'Amount (₦)', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -285,7 +285,7 @@ export default function Inflows() {
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -294,7 +294,7 @@ export default function Inflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center">
+                    <td colSpan={7} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <TrendingUp className="w-10 h-10 text-gray-200" />
                         <p className="text-sm">No inflow transactions match your filters.</p>
@@ -318,6 +318,9 @@ export default function Inflows() {
                             : null}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                          {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col items-start gap-1">
                             {(() => {
@@ -361,7 +364,7 @@ export default function Inflows() {
                     if (expanded && row.remark) {
                       rows.push(
                         <tr key={`${row.id}-exp`} className="bg-blue-50/40">
-                          <td colSpan={6} className="px-8 py-3">
+                          <td colSpan={7} className="px-8 py-3">
                             <p className="text-xs font-semibold text-gray-500 mb-0.5">Remark</p>
                             <p className="text-sm text-gray-700">{row.remark}</p>
                           </td>

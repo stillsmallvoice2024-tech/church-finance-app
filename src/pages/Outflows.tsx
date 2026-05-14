@@ -286,7 +286,7 @@ export default function Outflows() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', '📎', 'Actions'].map(h => (
+                  {['Date', 'Recorded', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', '📎', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -297,7 +297,7 @@ export default function Outflows() {
                 {loading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 10 }).map((_, j) => (
+                      {Array.from({ length: 12 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -306,7 +306,7 @@ export default function Outflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-16 text-center">
+                    <td colSpan={12} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <TrendingDown className="w-10 h-10 text-gray-200" />
                         <p className="text-sm">No outflow transactions match your filters.</p>
@@ -319,6 +319,9 @@ export default function Outflows() {
                     return (
                       <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                          {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.transaction_id ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
                           <div className="flex items-start gap-1.5 min-w-0">

@@ -812,6 +812,19 @@ CREATE OR REPLACE VIEW public.bank_schema_check AS
   WHERE table_schema = 'public' AND table_name = 'banks';
 GRANT SELECT ON public.bank_schema_check TO anon, authenticated;
 
+-- recorded_at: editable business reporting/upload date
+-- Backfilled from created_at for existing rows
+ALTER TABLE inflow_transactions
+  ADD COLUMN IF NOT EXISTS recorded_at timestamptz;
+UPDATE inflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;
+
+ALTER TABLE outflow_transactions
+  ADD COLUMN IF NOT EXISTS recorded_at timestamptz;
+UPDATE outflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_inflow_recorded_at  ON inflow_transactions(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_outflow_recorded_at ON outflow_transactions(recorded_at);
+
 -- Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';`
 

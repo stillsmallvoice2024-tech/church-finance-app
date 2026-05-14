@@ -94,6 +94,7 @@ export interface AddInflowInput {
   original_transaction_id?: string
   income_type_id?: string
   bank_name?: string
+  recorded_at?: string
 }
 
 export interface AddOutflowInput {
@@ -117,6 +118,7 @@ export interface AddOutflowInput {
   transaction_type?: string
   original_transaction_id?: string
   bank_name?: string
+  recorded_at?: string
 }
 
 export interface AddIntraFlowInput {
