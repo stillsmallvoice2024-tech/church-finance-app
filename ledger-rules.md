@@ -153,8 +153,11 @@ Config resolution always uses `inflow.date` regardless of basis (allocation conf
 `src/hooks/useReportEngine.ts` returns:
 - `balances: Map<categoryName, ReportCategoryBalance>` — standard category balances (percentage allocated, specific seed, savings net)
 - `operationalBalances: OperationalBalanceMap` — `Map<string, number>` for income-type and transaction-type rows
-  - Income type: keyed `it::${incomeTypeId}` — exact-day filter on `recorded_at` (`dayStart` to `endOfDay`)
-  - Transaction type: keyed `tt::${transactionType}` — same day filter
+
+**Operational balance keys** (always exact-day filter on `recorded_at`):
+- Income type rows: `it::${incomeTypeId}`
+- Tagged transaction-type rows: `tt::${transactionType}` (reversal, refund, bank_deposit, intrabank_transfer)
+- Normal inflow rows: `tt::normal` — inflows where `transaction_type IS NULL`
 
 ### Multi-Table Layout
 
@@ -173,6 +176,8 @@ Item row types (`ReportRowType`): `'category'` | `'inflow_type'` | `'transaction
 `itemKey(item)` — canonical dedup key: `it::${id}` / `tt::${key}` / `cat::${name}::${portion}`
 Same category may appear with different portions; each is a distinct item.
 
+`ReportTable.include_in_combined_total?: boolean` — defaults `true`; when `false`, table excluded from combined grand total. `computeGrandTotal()` and both export functions only sum opted-in tables. `normaliseTables()` sets `true` for legacy layouts.
+
 ### `recorded_at` Field
 
 - `recorded_at timestamptz` — editable business/upload date; exposed in AddInflowModal and AddOutflowModal as "Recorded Date (operational reports)"
@@ -187,10 +192,10 @@ Hooks: `useReportTemplates`, `useAddReportTemplate`, `useUpdateReportTemplate`, 
 
 ### Export (`src/utils/reportExport.ts`)
 
-- `exportReportPDF(layout, balances, opBalances, reportDate)` — per-table title bars, subgroup sub-totals, per-table grand totals
-- `exportReportExcel(layout, balances, opBalances, reportDate)` — one sheet per table
-- `computeGroupTotal / computeTableTotal / computeGrandTotal` — independent per-table totals; totals never bleed across tables
-- `getItemBalance(item, balances, opBalances)` — dispatches by `rowType`
+- `exportReportPDF()` — per-table title bars, subgroup sub-totals, per-table totals; combined grand total appended when ≥2 visible tables and at least one is opted in
+- `exportReportExcel()` — one sheet per table; Summary sheet added when combined total applies
+- `computeGroupTotal / computeTableTotal / computeGrandTotal` — `computeGrandTotal` only sums opted-in visible tables
+- `getItemBalance(item, balances, opBalances)` — dispatches by `rowType` (category / inflow_type / transaction_type)
 
 ---
 
