@@ -9,7 +9,7 @@
 
 Each row carries a `source` field (`'bank_deposits' | 'inflow' | 'outflow'`). Edit/delete actions are restricted to `bank_deposits`-source rows only. Bank filter: `bank_deposits` rows matched by `bank_id`; tagged rows matched by `bank_name`.
 
-The reconciliation panel (collapsible) independently compares `bank_deposits` totals vs tagged-inflow totals — useful for spotting double-entry.
+The reconciliation panel (collapsible) computes `SUM(inflow.amount WHERE transaction_type='bank_deposit') − SUM(outflow.amount_disbursed WHERE transaction_type='bank_deposit')`. Uses tagged transaction rows only — the `bank_deposits` table is not part of this calculation.
 
 > `bank_deposits` table rows do NOT appear in BankLedger — that gap remains open (see Known Propagation Gaps).
 
