@@ -116,6 +116,8 @@ export interface ReportTable {
   title: string
   visible: boolean
   groups: ReportGroup[]
+  /** When false, excludes this table from the combined grand total. Defaults to true. */
+  include_in_combined_total?: boolean
 }
 
 export interface ReportLayout {

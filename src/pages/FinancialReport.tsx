@@ -524,9 +524,14 @@ function SortableTableBlock({
   balances,
   opBalances,
   editing,
+  isFirst,
+  isLast,
   onRenameTable,
   onToggleTable,
   onDeleteTable,
+  onMoveUp,
+  onMoveDown,
+  onToggleCombined,
   onAddGroup,
   onRenameGroup,
   onToggleGroup,
@@ -544,9 +549,14 @@ function SortableTableBlock({
   balances:           Map<string, ReportCategoryBalance>
   opBalances:         OperationalBalanceMap
   editing:            boolean
+  isFirst:            boolean
+  isLast:             boolean
   onRenameTable:      (tId: string, title: string) => void
   onToggleTable:      (tId: string) => void
   onDeleteTable:      (tId: string) => void
+  onMoveUp:           (tId: string) => void
+  onMoveDown:         (tId: string) => void
+  onToggleCombined:   (tId: string) => void
   onAddGroup:         (tId: string) => void
   onRenameGroup:      (gId: string, label: string) => void
   onToggleGroup:      (gId: string) => void
@@ -600,6 +610,36 @@ function SortableTableBlock({
         )}
         {editing && (
           <>
+            <button
+              type="button"
+              onClick={() => onMoveUp(table.id)}
+              disabled={isFirst}
+              className={`shrink-0 ${isFirst ? 'text-gray-200 dark:text-gray-700 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
+              title="Move table up"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onMoveDown(table.id)}
+              disabled={isLast}
+              className={`shrink-0 ${isLast ? 'text-gray-200 dark:text-gray-700 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600'}`}
+              title="Move table down"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleCombined(table.id)}
+              className={`text-xs font-bold px-1.5 py-0.5 rounded border shrink-0 transition-colors ${
+                (table.include_in_combined_total ?? true)
+                  ? 'bg-primary/10 text-primary border-primary/30'
+                  : 'text-gray-400 border-gray-300 hover:text-gray-600 dark:border-gray-600'
+              }`}
+              title={(table.include_in_combined_total ?? true) ? 'Included in Combined Total (click to exclude)' : 'Excluded from Combined Total (click to include)'}
+            >
+              ∑
+            </button>
             <button type="button" onClick={() => onAddGroup(table.id)} className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark border border-primary/30 rounded px-2 py-1 shrink-0 hover:bg-primary/5">
               <Plus className="w-3 h-3" /> Group
             </button>
@@ -687,6 +727,7 @@ function CategoryPicker({
   )
 
   const TXN_TYPES = [
+    { key: 'normal',              label: 'Normal Transactions' },
     { key: 'reversal',            label: 'Reversal' },
     { key: 'refund',              label: 'Refund' },
     { key: 'bank_deposit',        label: 'Bank Deposit' },
@@ -874,7 +915,7 @@ export default function FinancialReport() {
   // ── Table mutations ───────────────────────────────────────────────────────
 
   const addTable = () => {
-    setTables(prev => [...prev, { id: uid(), title: `Table ${prev.length + 1}`, visible: true, groups: [] }])
+    setTables(prev => [...prev, { id: uid(), title: `Table ${prev.length + 1}`, visible: true, groups: [], include_in_combined_total: true }])
   }
 
   const renameTable = useCallback((tId: string, title: string) => {
@@ -887,6 +928,28 @@ export default function FinancialReport() {
 
   const deleteTable = useCallback((tId: string) => {
     setTables(prev => prev.filter(t => t.id !== tId))
+  }, [])
+
+  const moveTableUp = useCallback((tId: string) => {
+    setTables(prev => {
+      const idx = prev.findIndex(t => t.id === tId)
+      if (idx <= 0) return prev
+      return arrayMove(prev, idx, idx - 1)
+    })
+  }, [])
+
+  const moveTableDown = useCallback((tId: string) => {
+    setTables(prev => {
+      const idx = prev.findIndex(t => t.id === tId)
+      if (idx === -1 || idx >= prev.length - 1) return prev
+      return arrayMove(prev, idx, idx + 1)
+    })
+  }, [])
+
+  const toggleTableCombined = useCallback((tId: string) => {
+    setTables(prev => prev.map(t =>
+      t.id === tId ? { ...t, include_in_combined_total: !(t.include_in_combined_total ?? true) } : t
+    ))
   }, [])
 
   // ── Group mutations ───────────────────────────────────────────────────────
@@ -1074,6 +1137,9 @@ export default function FinancialReport() {
       const loc    = findItem(tables, itemId)
       if (!loc) return
 
+      // Items in a subgroup may not be moved to a different parent group
+      if (loc.subgroupId) return
+
       // Find destination group
       let destGroupId: string | null = null
       if (overType === 'grp') {
@@ -1164,6 +1230,23 @@ export default function FinancialReport() {
       return
     }
 
+    // Reorder subgroups within the same parent group
+    if (activeType === 'sgp' && overType === 'sgp') {
+      const activeSgId = stripPrefix(activeStr)
+      const overSgId   = stripPrefix(overStr)
+      setTables(prev => prev.map(t => ({
+        ...t,
+        groups: t.groups.map(g => {
+          const sgs = g.subgroups ?? []
+          const ai2 = sgs.findIndex(sg => sg.id === activeSgId)
+          const oi2 = sgs.findIndex(sg => sg.id === overSgId)
+          if (ai2 !== -1 && oi2 !== -1) return { ...g, subgroups: arrayMove(sgs, ai2, oi2) }
+          return g
+        }),
+      })))
+      return
+    }
+
     // Reorder items within same group
     if (activeType === 'itm' && overType === 'itm') {
       const activeItemId = stripPrefix(activeStr)
@@ -1197,9 +1280,9 @@ export default function FinancialReport() {
     }
   }
 
-  const grandTotal = tables
-    .filter(t => t.visible)
-    .reduce((s, t) => s + computeTableTotal(t, balances, operationalBalances), 0)
+  const combinedTables = tables.filter(t => t.visible && (t.include_in_combined_total ?? true))
+  const grandTotal = combinedTables.reduce((s, t) => s + computeTableTotal(t, balances, operationalBalances), 0)
+  const showCombinedTotal = tables.filter(t => t.visible).length > 1 && combinedTables.length > 0
 
   const selectedTpl = templates.find(t => t.id === selectedTplId) ?? null
 
@@ -1320,7 +1403,7 @@ export default function FinancialReport() {
           </div>
         ))}
 
-        {tables.length > 1 && (
+        {showCombinedTotal && (
           <div className="flex justify-between items-center px-6 py-4 rounded-xl bg-primary/5 border-2 border-primary/20 font-bold">
             <span className="text-primary uppercase tracking-widest text-sm">Combined Grand Total</span>
             <span className="font-mono text-lg text-primary">₦{fmt(grandTotal)}</span>
@@ -1383,16 +1466,21 @@ export default function FinancialReport() {
             </div>
           ) : (
             <SortableContext items={allSortableIds} strategy={verticalListSortingStrategy}>
-              {tables.map(table => (
+              {tables.map((table, i) => (
                 <SortableTableBlock
                   key={table.id}
                   table={table}
                   balances={balances}
                   opBalances={operationalBalances}
                   editing={true}
+                  isFirst={i === 0}
+                  isLast={i === tables.length - 1}
                   onRenameTable={renameTable}
                   onToggleTable={toggleTable}
                   onDeleteTable={deleteTable}
+                  onMoveUp={moveTableUp}
+                  onMoveDown={moveTableDown}
+                  onToggleCombined={toggleTableCombined}
                   onAddGroup={addGroup}
                   onRenameGroup={renameGroup}
                   onToggleGroup={toggleGroup}
@@ -1410,7 +1498,7 @@ export default function FinancialReport() {
             </SortableContext>
           )}
 
-          {tables.length > 1 && (
+          {showCombinedTotal && (
             <div className="flex justify-between items-center px-4 py-3 rounded-xl bg-primary/5 border-2 border-primary/20 font-bold text-primary">
               <span className="uppercase tracking-widest text-sm">Combined Grand Total</span>
               <span className="font-mono text-lg">₦{fmt(grandTotal)}</span>
