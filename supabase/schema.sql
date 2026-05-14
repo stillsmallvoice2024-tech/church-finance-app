@@ -394,11 +394,14 @@ $$ language sql security definer stable;
 create policy "profiles_select" on public.profiles
   for select using (auth.uid() is not null);
 
-create policy "profiles_update_own" on public.profiles
-  for update using (auth.uid() = id);
+create policy "profiles_insert" on public.profiles
+  for insert with check (auth.uid() is not null);
 
-create policy "profiles_admin_all" on public.profiles
-  for all using (public.is_admin());
+create policy "profiles_update" on public.profiles
+  for update using (auth.uid() is not null);
+
+create policy "profiles_delete" on public.profiles
+  for delete using (auth.uid() is not null);
 
 -- ── Category Groups ────────────────────────────────────────────────────────────
 
