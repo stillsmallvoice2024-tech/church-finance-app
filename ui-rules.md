@@ -131,6 +131,82 @@ BankLedger carries `transaction_type: string | null` in its `LedgerRow` interfac
 
 ---
 
+## Migration-Gated Modals (`AddBankModal` pattern)
+
+For modals that depend on optional DB columns, gate the save button on schema state rather than crashing on INSERT.
+
+**State:**
+```ts
+const [schemaStatus,   setSchemaStatus]   = useState<SchemaStatus>('ok')  // 'ok' | 'migration_needed' | 'cache_stale'
+const [checkingSchema, setCheckingSchema] = useState(false)
+const cacheRetryCount = useRef(0)
+const MAX_CACHE_RETRIES = 3
+```
+
+**On modal open** — reset counter, run check with one 1.5 s retry before surfacing non-ok status:
+```ts
+useEffect(() => {
+  if (!open) return
+  setSchemaStatus('ok')
+  cacheRetryCount.current = 0
+  setCheckingSchema(true)
+  let active = true
+  ;(async () => {
+    let status = await checkBankStartingBalanceMigration()
+    if (active && status !== 'ok') {
+      await new Promise(r => setTimeout(r, 1500))
+      status = await checkBankStartingBalanceMigration()
+    }
+    if (active) { setSchemaStatus(status); setCheckingSchema(false) }
+  })()
+  return () => { active = false }
+}, [open, ...otherDeps])
+```
+
+**On schema-cache save error** — auto-retry (capped), clear mutation error so it doesn't block UI:
+```ts
+const isSchemaCacheError = !!error && /schema cache/i.test(error)   // hoist above all useEffects
+
+useEffect(() => {
+  if (!error || !/schema cache/i.test(error)) return
+  cacheRetryCount.current++
+  if (cacheRetryCount.current > MAX_CACHE_RETRIES) return
+  let cancelled = false
+  ;(async () => {
+    const status = await checkBankStartingBalanceMigration()
+    if (cancelled) return
+    setSchemaStatus(status)
+    resetAdd(); resetUpdate()   // clears mutation error
+  })()
+  return () => { cancelled = true }
+}, [error])
+```
+
+**Derived flags:**
+```ts
+const schemaStuck         = isSchemaCacheError && cacheRetryCount.current > MAX_CACHE_RETRIES
+const showMigrationBanner = (!checkingSchema && schemaStatus !== 'ok') || schemaStuck
+```
+
+**Banner — three cases:**
+- `schemaStuck` → red; tell user to reload page
+- `cache_stale` → amber; show `NOTIFY pgrst, 'reload schema';` only
+- `migration_needed` → amber; show full `ALTER TABLE` + view SQL
+
+**Save button:**
+```ts
+disabled={loading || checkingSchema || schemaStatus !== 'ok' || schemaStuck || (hasBalance && !balanced)}
+```
+
+**Suppress raw error** when schema banner already explains it:
+```tsx
+{error && !isSchemaCacheError && !showMigrationBanner && <p className="text-red-600">{error}</p>}
+```
+
+**Key rule:** Define `isSchemaCacheError` immediately after `const error = addError || updateError`, before any `useEffect` that references it — avoids React TDZ crash.
+
+---
+
 ## Financial Report Page (`src/pages/FinancialReport.tsx`)
 
 Two modes toggled by "Edit Layout" button:

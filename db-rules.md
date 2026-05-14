@@ -31,6 +31,7 @@
 | `audit_log` | Whole-record snapshots on INSERT/UPDATE/DELETE |
 | `field_changes` | Per-field old/new on UPDATE; `user_id` FK → `profiles(id)` |
 | `report_templates` | Saved report layouts; `layout` JSONB, `created_by` FK → `profiles(id)` |
+| `bank_schema_check` | Helper view; `SELECT column_name::text FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'banks'`; queried by `checkBankStartingBalanceMigration()` to bypass PostgREST column cache |
 
 ---
 
@@ -46,7 +47,7 @@
 |---|---|---|
 | `transaction_type text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds, BankDeposits pages |
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
-| `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section |
+| `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section — also requires `bank_schema_check` view + GRANT (see SQL below) |
 
 If `transaction_type` is missing, Reversals/Refunds pages will error on SELECT (PostgREST rejects the `.eq()` filter); the ImportModal silently strips it on INSERT and records are saved without it. Run in Supabase SQL editor:
 ```sql
@@ -57,6 +58,41 @@ ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS original_transaction_i
 CREATE INDEX IF NOT EXISTS idx_inflow_txn_type  ON inflow_transactions(transaction_type);
 CREATE INDEX IF NOT EXISTS idx_outflow_txn_type ON outflow_transactions(transaction_type);
 ```
+
+The `banks` starting balance migration must also include the helper view so `checkBankStartingBalanceMigration()` can query live schema state:
+```sql
+ALTER TABLE banks
+  ADD COLUMN IF NOT EXISTS starting_balance               numeric(15,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS starting_balance_category      text,
+  ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
+  ADD COLUMN IF NOT EXISTS starting_balance_alloc_type    text,
+  ADD COLUMN IF NOT EXISTS starting_balance_allocations   jsonb NOT NULL DEFAULT '[]';
+CREATE OR REPLACE VIEW public.bank_schema_check AS
+  SELECT column_name::text
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'banks';
+GRANT SELECT ON public.bank_schema_check TO anon, authenticated;
+NOTIFY pgrst, 'reload schema';
+```
+
+### Two-Phase Schema Check (`SchemaStatus`)
+
+`checkBankStartingBalanceMigration()` in `src/hooks/useBanks.ts` returns `SchemaStatus = 'ok' | 'migration_needed' | 'cache_stale'`:
+
+| Status | Meaning | Required action |
+|---|---|---|
+| `ok` | Columns exist in DB and PostgREST cache knows them | None — save proceeds |
+| `migration_needed` | Columns absent from DB | Run full `ALTER TABLE` + view SQL |
+| `cache_stale` | Columns exist in DB but PostgREST INSERT cache is stale | Run `NOTIFY pgrst, 'reload schema';` only |
+
+Check flow:
+1. Query `bank_schema_check` view → reflects live `information_schema` (unaffected by PostgREST table cache)
+2. If columns confirmed in DB, do a zero-row SELECT via PostgREST to verify its INSERT cache
+3. PostgREST SELECT error → `cache_stale`; success → `ok`; view query error or missing columns → `migration_needed`
+
+This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no DDL), while `migration_needed` requires a full `ALTER TABLE`. Showing the wrong SQL wastes a DDL operation on an already-migrated DB.
+
+---
 
 ### SQL Authoring Rules
 
