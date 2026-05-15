@@ -105,7 +105,11 @@ Bumped after every outflow write:
 - `useUpdateTransaction` — when `table === 'outflow_transactions'`
 - `ImportModal` — after outflow batch loop if `outflowToInsert.length > 0`
 
-`CategoryLedger` subscribes via `useTransactionSyncStore(s => s.outflowVersion)` and adds it to the `useEffect([loadSummary, outflowVersion])` dep array — triggers `loadSummary()` without double-calling.
+`CategoryLedger` subscribes via `useTransactionSyncStore(s => s.outflowVersion)` and adds it to **both** useEffect dep arrays:
+- `useEffect([loadSummary, outflowVersion])` — re-runs summary cards
+- `useEffect([viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion])` — re-runs per-category ledger view
+
+Both effects must include `outflowVersion`; omitting it from either causes the corresponding view to go stale after outflow writes.
 
 ---
 
