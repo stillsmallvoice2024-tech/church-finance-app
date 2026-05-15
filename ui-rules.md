@@ -141,6 +141,30 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 ---
 
+## Categories Page — Opening Balance Display
+
+`useCategoryOpeningBalances()` (no `categoryId` arg) is called at page level to fetch all rows from `category_opening_balances`.
+
+**Per-category display logic** (applied in both `CategoryRow` and card view):
+1. Filter `allOpeningBalances` by `category_id` → `catBalances`
+2. If `catBalances.length > 0` → use new-table data (multiple portions possible)
+3. Else fall back to legacy `cat.starting_balance` + `cat.starting_balance_budget_portion` (single row)
+
+**Rendering:** Multiple portions stack vertically — `flex-col gap-0.5` for both the Portion pill column and the Bal. B/F amount column.
+
+---
+
+## AddOutflowModal — Removed Fields
+
+The **Optional Banking Details** section has been removed from `AddOutflowModal.tsx`. Fields no longer shown in the UI:
+- Amount Refunded (`amount_refunded`)
+- Transfer Charge (`transfer_charge`)
+- FX Currency (`fx_currency`)
+
+The Zod schema and `onSubmit` handler retain these fields for backward compat with existing records. The **FX Details** collapsible (fx_amount, fx_rate) remains.
+
+---
+
 ## Page Architecture Conventions
 
 - Pages are display-first; data fetching via `use<Entity>.ts` hook at the top of each page component
