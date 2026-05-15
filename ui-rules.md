@@ -178,6 +178,7 @@ The Zod schema and `onSubmit` handler retain these fields for backward compat wi
   - Inflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `income_type_id` (select, shown only when income types exist) + `stage_code_1` (category select) + `stage_code_2` (select: Percentage Allocation / Specific Seed / Savings); calls `useCategories()` + `useIncomeTypes()` internally
   - Outflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `stage_code_1` (category select, from `categories` prop) + `stage_code_2` (select)
   - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID; no way to bulk-clear `transaction_type` (individual edit only)
+  - **Strip-and-retry pattern**: `handleApply` uses `let updates` + `MISSING_COL_RE` — on first schema cache error for a column, strips that column from `updates` for the current row AND all subsequent rows (prevents cascade failures). Per-column warning toast emitted once after loop. Toast order: column warnings → success/fail count.
 - colSpan for loading/empty/expanded rows must equal total column count (8 for Inflows, 13 for Outflows)
 - Multi-select is **table view only** — cards view unchanged
 
@@ -190,18 +191,18 @@ Lighter alternative to full Migration-Gated Modal when a column is optional and 
   <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
     {/schema cache/i.test(error) ? (
       <div className="space-y-2">
-        <p className="font-semibold">Schema not yet updated — run this in Supabase SQL editor, then retry:</p>
+        <p className="font-semibold">Schema cache out of sync — run this in Supabase SQL editor, then retry:</p>
         <code className="block font-mono text-xs bg-white border border-red-200 rounded p-2 whitespace-pre-wrap break-all select-all">
-          {`ALTER TABLE <table>\n  ADD COLUMN IF NOT EXISTS <col> <type>;\nNOTIFY pgrst, 'reload schema';`}
+          {`NOTIFY pgrst, 'reload schema';`}
         </code>
-        <p className="text-xs">Or run the full migration in <strong>Setup → Database tab</strong>.</p>
+        <p className="text-xs">If the column is also missing, run the full migration in <strong>Setup → Database tab</strong>.</p>
       </div>
     ) : error}
   </div>
 )}
 ```
 
-Applied in `AddInflowModal` and `AddOutflowModal` for `recorded_at` schema cache failures.
+Applied in `AddInflowModal` and `AddOutflowModal`. Shows only `NOTIFY pgrst` (cache-stale fix) — do NOT hardcode column-specific `ALTER TABLE` SQL here, as the column is stable; full migration is in Setup → Database tab.
 
 ---
 
@@ -384,9 +385,17 @@ Each item has a `— Root —` + subgroup `<select>` dropdown (shown only when p
 - **Cross-group moves are blocked**: `moveItemToSubgroup` validates `targetSgId` is in the item's current parent group; cross-group is a two-step flow (DnD to group header to move to group root, then assign subgroup)
 - Callbacks thread through: `SortableTableBlock` → `SortableGroup` → `SortableSubgroup` → `SortableItem`
 
+### Subgroup Reorder Controls (Edit Mode)
+
+Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside grip + eye + trash):
+- `onMoveSubgroupUp?` / `onMoveSubgroupDown?` are `undefined` (greyed, disabled) at boundaries
+- Callbacks: `moveSubgroupUp(gId, sgId)` / `moveSubgroupDown(gId, sgId)` — `arrayMove` within `g.subgroups`, constrained to same parent group
+- Threaded: main component → `SortableTableBlock` → `SortableGroup` (curries `group.id` and passes index-aware `undefined` at boundaries) → `SortableSubgroup`
+- No cross-group subgroup movement (DnD or buttons)
+
 ### Subgroup Drag-and-Drop Rules
 
 - Items inside a subgroup can be reordered within that subgroup via DnD or ▲/▼ buttons
 - Items in group root can be dragged to another group via group header (DnD over `grp-{id}` triggers `handleDragOver` cross-group move)
 - Direct cross-subgroup DnD blocked — assign via dropdown instead
-- Subgroups reorder within same parent group via `sgp→sgp` branch in `handleDragEnd`
+- Subgroups reorder within same parent group via `sgp→sgp` branch in `handleDragEnd`, or via ↑/↓ buttons
