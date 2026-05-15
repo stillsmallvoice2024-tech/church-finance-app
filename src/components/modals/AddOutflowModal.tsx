@@ -302,33 +302,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           <span className="text-sm font-medium text-gray-700">Mark as Pending Deduction</span>
         </label>
 
-        {/* Optional banking extras */}
-        <div className="border border-gray-100 rounded-lg p-4 space-y-4 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Optional Banking Details
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Amount Refunded (₦)" error={errors.amount_refunded?.message}>
-              <Controller control={control} name="amount_refunded" render={({ field }) => (
-                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.amount_refunded)} />
-              )} />
-            </Field>
-            <Field label="Transfer Charge (₦)" error={errors.transfer_charge?.message}>
-              <Controller control={control} name="transfer_charge" render={({ field }) => (
-                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.transfer_charge)} />
-              )} />
-            </Field>
-          </div>
-          <Field label="FX Currency (if applicable)" error={errors.fx_currency?.message}>
-            <select {...register('fx_currency')} className={inputCls(!!errors.fx_currency)}>
-              <option value="">— None —</option>
-              {FX_CURRENCIES.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
         {/* FX Details collapsible */}
         <div className="border border-gray-100 rounded-lg overflow-hidden">
           <button
