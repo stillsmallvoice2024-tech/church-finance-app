@@ -11,7 +11,7 @@ import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useCategories } from '../hooks/useCategories'
-import { useAddInflow, useAddOutflow } from '../hooks/useMutations'
+import { useAddInflow, useAddOutflow, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
@@ -556,6 +556,8 @@ function ManualEntryForm() {
 
   // ── Save functions ───────────────────────────────────────────────────────
 
+  const MISSING_COL_RE = /Could not find (?:the ')?(\w+)'? column/
+
   const doSaveInflow = async () => {
     setSaving(true)
     try {
@@ -566,7 +568,7 @@ function ManualEntryForm() {
         || getConfigForDate(configs, v('date'))?.id
       )
       const selectedBank = banks.find(b => b.id === v('bank_id'))
-      await addInflow.mutate({
+      let input: AddInflowInput = {
         date:                       v('date'),
         amount:                     parseFloat(v('amount')),
         description:                v('description')               || undefined,
@@ -582,7 +584,20 @@ function ManualEntryForm() {
         fx_amount:                  v('fx_amount')  ? parseFloat(v('fx_amount'))  : undefined,
         fx_rate:                    v('fx_rate')    ? parseFloat(v('fx_rate'))    : undefined,
         recorded_at:                new Date().toISOString(),
-      })
+      }
+      try {
+        await addInflow.mutate(input)
+      } catch (firstErr: unknown) {
+        const col = (firstErr instanceof Error ? firstErr.message : '').match(MISSING_COL_RE)?.[1]
+        if (col && col in input) {
+          const retry = { ...input } as Record<string, unknown>
+          delete retry[col]
+          await addInflow.mutate(retry as AddInflowInput)
+          toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
+        } else {
+          throw firstErr
+        }
+      }
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setIncomeTypeId('')
@@ -603,7 +618,7 @@ function ManualEntryForm() {
     setSaving(true)
     try {
       const selectedBank = banks.find(b => b.id === v('bank_id'))
-      await addOutflow.mutate({
+      let input: AddOutflowInput = {
         date:                    v('date'),
         amount_disbursed:        parseFloat(v('amount_disbursed')),
         description:             v('description')      || undefined,
@@ -623,7 +638,20 @@ function ManualEntryForm() {
         fx_amount:               v('fx_amount') ? parseFloat(v('fx_amount')) : undefined,
         fx_rate:                 v('fx_rate')   ? parseFloat(v('fx_rate'))   : undefined,
         recorded_at:             new Date().toISOString(),
-      })
+      }
+      try {
+        await addOutflow.mutate(input)
+      } catch (firstErr: unknown) {
+        const col = (firstErr instanceof Error ? firstErr.message : '').match(MISSING_COL_RE)?.[1]
+        if (col && col in input) {
+          const retry = { ...input } as Record<string, unknown>
+          delete retry[col]
+          await addOutflow.mutate(retry as AddOutflowInput)
+          toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
+        } else {
+          throw firstErr
+        }
+      }
       toast('Outflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setIsPending(false)

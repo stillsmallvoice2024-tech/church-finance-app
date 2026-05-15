@@ -650,6 +650,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         income_type_id:
           'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS income_type_id uuid;\n' +
           'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS income_type_id uuid;',
+        recorded_at:
+          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\n' +
+          'UPDATE inflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
+          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\n' +
+          'UPDATE outflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
+          "NOTIFY pgrst, 'reload schema';",
       }
       const missingColMsg = (col: string) => {
         const sql = MISSING_COL_SQL[col]
@@ -661,7 +667,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       for (let i = 0; i < inflowToInsert.length; i += BATCH) {
         const batch = inflowToInsert.slice(i, i + BATCH)
         let { error: err } = await supabase.from('inflow_transactions').insert(batch)
-        const missingInflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
+        const missingInflow = err?.message.match(/Could not find (?:the ')?(\w+)'? column/)?.[1]
         if (missingInflow) {
           const stripped = batch.map(row => { const r = { ...row }; delete r[missingInflow]; return r })
           const { error: retryErr } = await supabase.from('inflow_transactions').insert(stripped)
@@ -681,7 +687,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       for (let i = 0; i < outflowToInsert.length; i += BATCH) {
         const batch = outflowToInsert.slice(i, i + BATCH)
         let { error: err } = await supabase.from('outflow_transactions').insert(batch)
-        const missingOutflow = err?.message.match(/Could not find the '(\w+)' column/)?.[1]
+        const missingOutflow = err?.message.match(/Could not find (?:the ')?(\w+)'? column/)?.[1]
         if (missingOutflow) {
           const stripped = batch.map(row => { const r = { ...row }; delete r[missingOutflow]; return r })
           const { error: retryErr } = await supabase.from('outflow_transactions').insert(stripped)
