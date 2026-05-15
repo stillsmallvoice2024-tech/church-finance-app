@@ -152,15 +152,25 @@ function SortableItem({
   onChangePortion,
   onDelete,
   editing,
+  onMoveUp,
+  onMoveDown,
+  subgroups,
+  currentSubgroupId,
+  onAssignSubgroup,
 }: {
-  item:            ReportItem
-  balances:        Map<string, ReportCategoryBalance>
-  opBalances:      OperationalBalanceMap
-  onToggleVisible: (itemId: string) => void
-  onRename:        (itemId: string, label: string) => void
-  onChangePortion: (itemId: string, portion: ReportPortion) => void
-  onDelete:        (itemId: string) => void
-  editing:         boolean
+  item:              ReportItem
+  balances:          Map<string, ReportCategoryBalance>
+  opBalances:        OperationalBalanceMap
+  onToggleVisible:   (itemId: string) => void
+  onRename:          (itemId: string, label: string) => void
+  onChangePortion:   (itemId: string, portion: ReportPortion) => void
+  onDelete:          (itemId: string) => void
+  editing:           boolean
+  onMoveUp?:         () => void
+  onMoveDown?:       () => void
+  subgroups?:        { id: string; label: string }[]
+  currentSubgroupId?: string
+  onAssignSubgroup?: (sgId: string) => void
 }) {
   const dId = itmId(item.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -228,6 +238,39 @@ function SortableItem({
 
       {editing && (
         <>
+          {subgroups && subgroups.length > 0 && onAssignSubgroup && (
+            <select
+              value={currentSubgroupId ?? ''}
+              onChange={e => onAssignSubgroup(e.target.value)}
+              className="text-[10px] border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 shrink-0 max-w-[88px]"
+              title="Move to subgroup / group root"
+            >
+              <option value="">— Root —</option>
+              {subgroups.map(sg => (
+                <option key={sg.id} value={sg.id}>{sg.label}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex flex-col shrink-0">
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={!onMoveUp}
+              className={`text-gray-400 hover:text-gray-600 ${!onMoveUp ? 'opacity-25 cursor-not-allowed' : ''}`}
+              title="Move up"
+            >
+              <ChevronUp className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={!onMoveDown}
+              className={`text-gray-400 hover:text-gray-600 ${!onMoveDown ? 'opacity-25 cursor-not-allowed' : ''}`}
+              title="Move down"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => onToggleVisible(item.id)}
@@ -264,19 +307,29 @@ function SortableSubgroup({
   onRenameItem,
   onChangeItemPortion,
   onDeleteItem,
+  allSubgroups,
+  onMoveItemUp,
+  onMoveItemDown,
+  onMoveItemToSubgroup,
+  onRemoveItemFromSubgroup,
 }: {
-  sg:                 ReportSubgroup
-  groupId:            string
-  balances:           Map<string, ReportCategoryBalance>
-  opBalances:         OperationalBalanceMap
-  editing:            boolean
-  onRenameSubgroup:   (sgId: string, label: string) => void
-  onToggleSubgroup:   (sgId: string) => void
-  onDeleteSubgroup:   (sgId: string) => void
-  onToggleItem:       (itemId: string) => void
-  onRenameItem:       (itemId: string, label: string) => void
-  onChangeItemPortion:(itemId: string, portion: ReportPortion) => void
-  onDeleteItem:       (itemId: string) => void
+  sg:                      ReportSubgroup
+  groupId:                 string
+  balances:                Map<string, ReportCategoryBalance>
+  opBalances:              OperationalBalanceMap
+  editing:                 boolean
+  onRenameSubgroup:        (sgId: string, label: string) => void
+  onToggleSubgroup:        (sgId: string) => void
+  onDeleteSubgroup:        (sgId: string) => void
+  onToggleItem:            (itemId: string) => void
+  onRenameItem:            (itemId: string, label: string) => void
+  onChangeItemPortion:     (itemId: string, portion: ReportPortion) => void
+  onDeleteItem:            (itemId: string) => void
+  allSubgroups:            { id: string; label: string }[]
+  onMoveItemUp:            (itemId: string) => void
+  onMoveItemDown:          (itemId: string) => void
+  onMoveItemToSubgroup:    (itemId: string, sgId: string) => void
+  onRemoveItemFromSubgroup:(itemId: string) => void
 }) {
   const dId = sgpId(sg.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -330,7 +383,7 @@ function SortableSubgroup({
       {/* Items */}
       <div className="p-1.5 space-y-1">
         <SortableContext items={sg.items.map(i => itmId(i.id))} strategy={verticalListSortingStrategy}>
-          {sg.items.map(item => (
+          {sg.items.map((item, idx) => (
             <SortableItem
               key={item.id}
               item={item}
@@ -341,6 +394,14 @@ function SortableSubgroup({
               onChangePortion={onChangeItemPortion}
               onDelete={onDeleteItem}
               editing={editing}
+              onMoveUp={idx > 0 ? () => onMoveItemUp(item.id) : undefined}
+              onMoveDown={idx < sg.items.length - 1 ? () => onMoveItemDown(item.id) : undefined}
+              subgroups={allSubgroups}
+              currentSubgroupId={sg.id}
+              onAssignSubgroup={(targetSgId) => {
+                if (!targetSgId) onRemoveItemFromSubgroup(item.id)
+                else onMoveItemToSubgroup(item.id, targetSgId)
+              }}
             />
           ))}
         </SortableContext>
@@ -376,23 +437,31 @@ function SortableGroup({
   onRenameItem,
   onChangeItemPortion,
   onDeleteItem,
+  onMoveItemUp,
+  onMoveItemDown,
+  onMoveItemToSubgroup,
+  onRemoveItemFromSubgroup,
 }: {
-  group:              ReportGroup
-  tableId:            string
-  balances:           Map<string, ReportCategoryBalance>
-  opBalances:         OperationalBalanceMap
-  editing:            boolean
-  onRenameGroup:      (gId: string, label: string) => void
-  onToggleGroup:      (gId: string) => void
-  onDeleteGroup:      (gId: string) => void
-  onAddSubgroup:      (gId: string) => void
-  onRenameSubgroup:   (gId: string, sgId: string, label: string) => void
-  onToggleSubgroup:   (gId: string, sgId: string) => void
-  onDeleteSubgroup:   (gId: string, sgId: string) => void
-  onToggleItem:       (itemId: string) => void
-  onRenameItem:       (itemId: string, label: string) => void
-  onChangeItemPortion:(itemId: string, portion: ReportPortion) => void
-  onDeleteItem:       (itemId: string) => void
+  group:                   ReportGroup
+  tableId:                 string
+  balances:                Map<string, ReportCategoryBalance>
+  opBalances:              OperationalBalanceMap
+  editing:                 boolean
+  onRenameGroup:           (gId: string, label: string) => void
+  onToggleGroup:           (gId: string) => void
+  onDeleteGroup:           (gId: string) => void
+  onAddSubgroup:           (gId: string) => void
+  onRenameSubgroup:        (gId: string, sgId: string, label: string) => void
+  onToggleSubgroup:        (gId: string, sgId: string) => void
+  onDeleteSubgroup:        (gId: string, sgId: string) => void
+  onToggleItem:            (itemId: string) => void
+  onRenameItem:            (itemId: string, label: string) => void
+  onChangeItemPortion:     (itemId: string, portion: ReportPortion) => void
+  onDeleteItem:            (itemId: string) => void
+  onMoveItemUp:            (itemId: string) => void
+  onMoveItemDown:          (itemId: string) => void
+  onMoveItemToSubgroup:    (itemId: string, sgId: string) => void
+  onRemoveItemFromSubgroup:(itemId: string) => void
 }) {
   const dId = grpId(group.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -403,7 +472,7 @@ function SortableGroup({
 
   const allItemIds = [
     ...group.items.map(i => itmId(i.id)),
-    ...(group.subgroups ?? []).flatMap(sg => [sgpId(sg.id), ...sg.items.map(i => itmId(i.id))]),
+    ...(group.subgroups ?? []).map(sg => sgpId(sg.id)),
   ]
 
   return (
@@ -471,7 +540,7 @@ function SortableGroup({
       <div className="p-2 space-y-1">
         <SortableContext items={allItemIds} strategy={verticalListSortingStrategy}>
           {/* Direct items */}
-          {group.items.map(item => (
+          {group.items.map((item, idx) => (
             <SortableItem
               key={item.id}
               item={item}
@@ -482,6 +551,11 @@ function SortableGroup({
               onChangePortion={onChangeItemPortion}
               onDelete={onDeleteItem}
               editing={editing}
+              onMoveUp={idx > 0 ? () => onMoveItemUp(item.id) : undefined}
+              onMoveDown={idx < group.items.length - 1 ? () => onMoveItemDown(item.id) : undefined}
+              subgroups={(group.subgroups ?? []).map(sg => ({ id: sg.id, label: sg.label }))}
+              currentSubgroupId={undefined}
+              onAssignSubgroup={(sgId) => { if (sgId) onMoveItemToSubgroup(item.id, sgId) }}
             />
           ))}
 
@@ -501,6 +575,11 @@ function SortableGroup({
               onRenameItem={onRenameItem}
               onChangeItemPortion={onChangeItemPortion}
               onDeleteItem={onDeleteItem}
+              allSubgroups={(group.subgroups ?? []).map(s => ({ id: s.id, label: s.label }))}
+              onMoveItemUp={onMoveItemUp}
+              onMoveItemDown={onMoveItemDown}
+              onMoveItemToSubgroup={onMoveItemToSubgroup}
+              onRemoveItemFromSubgroup={onRemoveItemFromSubgroup}
             />
           ))}
         </SortableContext>
@@ -544,6 +623,10 @@ function SortableTableBlock({
   onRenameItem,
   onChangeItemPortion,
   onDeleteItem,
+  onMoveItemUp,
+  onMoveItemDown,
+  onMoveItemToSubgroup,
+  onRemoveItemFromSubgroup,
 }: {
   table:              ReportTable
   balances:           Map<string, ReportCategoryBalance>
@@ -551,24 +634,28 @@ function SortableTableBlock({
   editing:            boolean
   isFirst:            boolean
   isLast:             boolean
-  onRenameTable:      (tId: string, title: string) => void
-  onToggleTable:      (tId: string) => void
-  onDeleteTable:      (tId: string) => void
-  onMoveUp:           (tId: string) => void
-  onMoveDown:         (tId: string) => void
-  onToggleCombined:   (tId: string) => void
-  onAddGroup:         (tId: string) => void
-  onRenameGroup:      (gId: string, label: string) => void
-  onToggleGroup:      (gId: string) => void
-  onDeleteGroup:      (gId: string) => void
-  onAddSubgroup:      (gId: string) => void
-  onRenameSubgroup:   (gId: string, sgId: string, label: string) => void
-  onToggleSubgroup:   (gId: string, sgId: string) => void
-  onDeleteSubgroup:   (gId: string, sgId: string) => void
-  onToggleItem:       (itemId: string) => void
-  onRenameItem:       (itemId: string, label: string) => void
-  onChangeItemPortion:(itemId: string, portion: ReportPortion) => void
-  onDeleteItem:       (itemId: string) => void
+  onRenameTable:           (tId: string, title: string) => void
+  onToggleTable:           (tId: string) => void
+  onDeleteTable:           (tId: string) => void
+  onMoveUp:                (tId: string) => void
+  onMoveDown:              (tId: string) => void
+  onToggleCombined:        (tId: string) => void
+  onAddGroup:              (tId: string) => void
+  onRenameGroup:           (gId: string, label: string) => void
+  onToggleGroup:           (gId: string) => void
+  onDeleteGroup:           (gId: string) => void
+  onAddSubgroup:           (gId: string) => void
+  onRenameSubgroup:        (gId: string, sgId: string, label: string) => void
+  onToggleSubgroup:        (gId: string, sgId: string) => void
+  onDeleteSubgroup:        (gId: string, sgId: string) => void
+  onToggleItem:            (itemId: string) => void
+  onRenameItem:            (itemId: string, label: string) => void
+  onChangeItemPortion:     (itemId: string, portion: ReportPortion) => void
+  onDeleteItem:            (itemId: string) => void
+  onMoveItemUp:            (itemId: string) => void
+  onMoveItemDown:          (itemId: string) => void
+  onMoveItemToSubgroup:    (itemId: string, sgId: string) => void
+  onRemoveItemFromSubgroup:(itemId: string) => void
 }) {
   const dId = tblId(table.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -683,6 +770,10 @@ function SortableTableBlock({
                 onRenameItem={onRenameItem}
                 onChangeItemPortion={onChangeItemPortion}
                 onDeleteItem={onDeleteItem}
+                onMoveItemUp={onMoveItemUp}
+                onMoveItemDown={onMoveItemDown}
+                onMoveItemToSubgroup={onMoveItemToSubgroup}
+                onRemoveItemFromSubgroup={onRemoveItemFromSubgroup}
               />
             ))
           )}
@@ -1116,6 +1207,91 @@ export default function FinancialReport() {
     })))
   }, [])
 
+  const moveItemUp = useCallback((itemId: string) => {
+    setTables(prev => prev.map(t => ({
+      ...t,
+      groups: t.groups.map(g => {
+        const idx = g.items.findIndex(i => i.id === itemId)
+        if (idx > 0) return { ...g, items: arrayMove(g.items, idx, idx - 1) }
+        return {
+          ...g,
+          subgroups: (g.subgroups ?? []).map(sg => {
+            const si = sg.items.findIndex(i => i.id === itemId)
+            if (si > 0) return { ...sg, items: arrayMove(sg.items, si, si - 1) }
+            return sg
+          }),
+        }
+      }),
+    })))
+  }, [])
+
+  const moveItemDown = useCallback((itemId: string) => {
+    setTables(prev => prev.map(t => ({
+      ...t,
+      groups: t.groups.map(g => {
+        const idx = g.items.findIndex(i => i.id === itemId)
+        if (idx !== -1 && idx < g.items.length - 1) return { ...g, items: arrayMove(g.items, idx, idx + 1) }
+        return {
+          ...g,
+          subgroups: (g.subgroups ?? []).map(sg => {
+            const si = sg.items.findIndex(i => i.id === itemId)
+            if (si !== -1 && si < sg.items.length - 1) return { ...sg, items: arrayMove(sg.items, si, si + 1) }
+            return sg
+          }),
+        }
+      }),
+    })))
+  }, [])
+
+  const moveItemToSubgroup = useCallback((itemId: string, targetSgId: string) => {
+    setTables(prev => prev.map(t => ({
+      ...t,
+      groups: t.groups.map(g => {
+        if (!(g.subgroups ?? []).some(sg => sg.id === targetSgId)) return g
+        let item: ReportItem | undefined
+        let newItems = g.items
+        let newSubgroups = g.subgroups ?? []
+        const directIdx = g.items.findIndex(i => i.id === itemId)
+        if (directIdx !== -1) {
+          item = g.items[directIdx]
+          newItems = g.items.filter(i => i.id !== itemId)
+        } else {
+          for (const sg of newSubgroups) {
+            const si = sg.items.findIndex(i => i.id === itemId)
+            if (si !== -1) {
+              item = sg.items[si]
+              newSubgroups = newSubgroups.map(s =>
+                s.id === sg.id ? { ...s, items: s.items.filter(i => i.id !== itemId) } : s
+              )
+              break
+            }
+          }
+        }
+        if (!item) return g
+        newSubgroups = newSubgroups.map(sg =>
+          sg.id === targetSgId ? { ...sg, items: [...sg.items, item!] } : sg
+        )
+        return { ...g, items: newItems, subgroups: newSubgroups }
+      }),
+    })))
+  }, [])
+
+  const removeItemFromSubgroup = useCallback((itemId: string) => {
+    setTables(prev => prev.map(t => ({
+      ...t,
+      groups: t.groups.map(g => {
+        let item: ReportItem | undefined
+        const newSubgroups = (g.subgroups ?? []).map(sg => {
+          const si = sg.items.findIndex(i => i.id === itemId)
+          if (si !== -1) { item = sg.items[si]; return { ...sg, items: sg.items.filter(i => i.id !== itemId) } }
+          return sg
+        })
+        if (!item) return g
+        return { ...g, items: [...g.items, item], subgroups: newSubgroups }
+      }),
+    })))
+  }, [])
+
   // ── Drag-and-drop ─────────────────────────────────────────────────────────
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -1420,7 +1596,8 @@ export default function FinancialReport() {
     ...tables.flatMap(t => t.groups.map(g => grpId(g.id))),
     ...tables.flatMap(t => t.groups.flatMap(g => [
       ...g.items.map(i => itmId(i.id)),
-      ...(g.subgroups ?? []).flatMap(sg => [sgpId(sg.id), ...sg.items.map(i => itmId(i.id))]),
+      ...(g.subgroups ?? []).map(sg => sgpId(sg.id)),
+      // subgroup items are in their own SortableContext — excluded here to prevent DnD conflicts
     ])),
   ]
 
@@ -1493,6 +1670,10 @@ export default function FinancialReport() {
                   onRenameItem={renameItem}
                   onChangeItemPortion={changeItemPortion}
                   onDeleteItem={deleteItem}
+                  onMoveItemUp={moveItemUp}
+                  onMoveItemDown={moveItemDown}
+                  onMoveItemToSubgroup={moveItemToSubgroup}
+                  onRemoveItemFromSubgroup={removeItemFromSubgroup}
                 />
               ))}
             </SortableContext>

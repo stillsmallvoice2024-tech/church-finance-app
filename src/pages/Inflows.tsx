@@ -19,6 +19,7 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { exportCSV }               from '../utils/csvExport'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useIncomeTypes }          from '../hooks/useIncomeTypes'
+import { useCategories }           from '../hooks/useCategories'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
@@ -515,24 +516,39 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
 }) {
   const { mutate: update } = useUpdateTransaction('inflow_transactions')
   const { push: toast }    = useToastStore()
-  const [bankName,   setBankName]   = useState('')
-  const [stageCode2, setStageCode2] = useState('')
-  const [saving,     setSaving]     = useState(false)
+  const { categories }     = useCategories()
+  const { incomeTypes }    = useIncomeTypes()
+
+  const [bankName,     setBankName]     = useState('')
+  const [recordedAt,   setRecordedAt]   = useState('')
+  const [txnType,      setTxnType]      = useState('')
+  const [incomeTypeId, setIncomeTypeId] = useState('')
+  const [stageCode1,   setStageCode1]   = useState('')
+  const [stageCode2,   setStageCode2]   = useState('')
+  const [saving,       setSaving]       = useState(false)
 
   useEffect(() => {
     if (!open) return
     setBankName('')
+    setRecordedAt('')
+    setTxnType('')
+    setIncomeTypeId('')
+    setStageCode1('')
     setStageCode2('')
   }, [open])
 
-  const hasChanges = !!bankName || !!stageCode2
+  const hasChanges = !!bankName || !!recordedAt || !!txnType || !!incomeTypeId || !!stageCode1 || !!stageCode2
 
   const handleApply = async () => {
     if (!hasChanges) return
     setSaving(true)
     const updates: Record<string, unknown> = {}
-    if (bankName)   updates.bank_name    = bankName
-    if (stageCode2) updates.stage_code_2 = stageCode2
+    if (bankName)     updates.bank_name      = bankName
+    if (recordedAt)   updates.recorded_at    = `${recordedAt}T00:00:00.000Z`
+    if (txnType)      updates.transaction_type = txnType
+    if (incomeTypeId) updates.income_type_id  = incomeTypeId
+    if (stageCode1)   updates.stage_code_1   = stageCode1
+    if (stageCode2)   updates.stage_code_2   = stageCode2
     let failed = 0
     for (const id of ids) {
       try { await update({ id, updates }) } catch { failed++ }
@@ -548,6 +564,7 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
     <Modal open={open} onClose={onClose} title={`Bulk Edit ${ids.length} Transaction${ids.length !== 1 ? 's' : ''}`} size="max-w-md">
       <div className="space-y-4">
         <p className="text-sm text-gray-500">Only filled fields will be applied. Leave blank to keep existing values.</p>
+
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Bank Name</label>
           <select value={bankName} onChange={e => setBankName(e.target.value)} className={inputCls}>
@@ -555,16 +572,51 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
             {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
           </select>
         </div>
+
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Stage Code 2</label>
-          <input
-            type="text"
-            value={stageCode2}
-            onChange={e => setStageCode2(e.target.value)}
-            placeholder="Leave blank to keep existing"
-            className={inputCls}
-          />
+          <label className="text-xs font-medium text-gray-500">Recorded Date</label>
+          <input type="date" value={recordedAt} onChange={e => setRecordedAt(e.target.value)} className={inputCls} />
         </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">Transaction Type</label>
+          <select value={txnType} onChange={e => setTxnType(e.target.value)} className={inputCls}>
+            <option value="">— Keep existing —</option>
+            <option value="refund">Refund</option>
+            <option value="reversal">Reversal</option>
+            <option value="bank_deposit">Bank Deposit</option>
+            <option value="intrabank_transfer">Intrabank Transfer</option>
+          </select>
+        </div>
+
+        {incomeTypes.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Income Type</label>
+            <select value={incomeTypeId} onChange={e => setIncomeTypeId(e.target.value)} className={inputCls}>
+              <option value="">— Keep existing —</option>
+              {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
+          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={inputCls}>
+            <option value="">— Keep existing —</option>
+            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">Stage Code 2 (Portion Type)</label>
+          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={inputCls}>
+            <option value="">— Keep existing —</option>
+            <option value="Percentage Allocation">Percentage Allocation</option>
+            <option value="Specific Seed">Specific Seed</option>
+            <option value="Savings">Savings</option>
+          </select>
+        </div>
+
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             Cancel
