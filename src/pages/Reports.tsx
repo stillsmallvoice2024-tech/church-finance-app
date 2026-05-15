@@ -94,7 +94,7 @@ function AnnualSummaryPanel() {
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions').select('date, amount')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
-      supabase.from('outflow_transactions').select('date, actual_amount')
+      supabase.from('outflow_transactions').select('date, actual_amount, amount_disbursed')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
     ])
 
@@ -114,7 +114,7 @@ function AnnualSummaryPanel() {
       ensure(parseInt((r.date as string).slice(0, 4))).totalInflow += Number(r.amount)
     }
     for (const r of outflowRes.data ?? []) {
-      ensure(parseInt((r.date as string).slice(0, 4))).totalOutflow += Number(r.actual_amount)
+      ensure(parseInt((r.date as string).slice(0, 4))).totalOutflow += Number(r.actual_amount || r.amount_disbursed || 0)
     }
     for (const row of byYear.values()) row.net = row.totalInflow - row.totalOutflow
 
@@ -192,7 +192,7 @@ function MonthlyBreakdownPanel() {
         .lte('date', `${y}-12-31`),
       supabase
         .from('outflow_transactions')
-        .select('date, actual_amount')
+        .select('date, actual_amount, amount_disbursed')
         .gte('date', `${y}-01-01`)
         .lte('date', `${y}-12-31`),
     ])
@@ -213,7 +213,7 @@ function MonthlyBreakdownPanel() {
     }
     for (const r of outflowRes.data ?? []) {
       const m = parseInt((r.date as string).slice(5, 7)) - 1
-      byMonth[m].totalOutflow += Number(r.actual_amount)
+      byMonth[m].totalOutflow += Number(r.actual_amount || r.amount_disbursed || 0)
     }
     for (const row of byMonth) row.net = row.totalInflow - row.totalOutflow
 

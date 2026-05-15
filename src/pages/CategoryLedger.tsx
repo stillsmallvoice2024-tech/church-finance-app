@@ -116,7 +116,7 @@ export default function CategoryLedger() {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
     }
     for (const r of savOutRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.actual_amount ?? r.amount_disbursed ?? 0)
+      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.actual_amount || r.amount_disbursed || 0)
     }
 
     // Add opening balances from new table (category_opening_balances)
@@ -242,7 +242,7 @@ export default function CategoryLedger() {
 
         for (const r of outflowRes.data ?? []) {
           if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
-          const amt = Number(r.actual_amount ?? r.amount_disbursed ?? 0)
+          const amt = Number(r.actual_amount || r.amount_disbursed || 0)
           if (amt <= 0) continue
           outRows.push({
             id:          r.id as string,
@@ -281,7 +281,7 @@ export default function CategoryLedger() {
           })
         }
         for (const r of outflowRes.data ?? []) {
-          const amt = Number(r.actual_amount ?? r.amount_disbursed ?? 0)
+          const amt = Number(r.actual_amount || r.amount_disbursed || 0)
           outRows.push({
             id:          r.id as string,
             date:        r.date as string,

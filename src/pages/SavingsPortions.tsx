@@ -63,7 +63,7 @@ export default function SavingsPortions() {
     for (const r of outflowRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
       // prefer actual_amount (net after refunds/charges), fall back to amount_disbursed
-      ensure(cat).withdrawn += Number(r.actual_amount ?? r.amount_disbursed ?? 0)
+      ensure(cat).withdrawn += Number(r.actual_amount || r.amount_disbursed || 0)
     }
 
     // Opening balances from new table

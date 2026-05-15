@@ -126,7 +126,7 @@ export function useReportEngine(
     }
     for (const r of savOutRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut +=
-        Number(r.actual_amount ?? r.amount_disbursed ?? 0)
+        Number(r.actual_amount || r.amount_disbursed || 0)
     }
 
     for (const ob of cobRows) {
@@ -181,7 +181,7 @@ export function useReportEngine(
     const pctOutMap = new Map<string, number>()
     for (const r of pctOutRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.actual_amount ?? r.amount_disbursed ?? 0))
+      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.actual_amount || r.amount_disbursed || 0))
     }
 
     // ── Build category balance result ───────────────────────────────────────
