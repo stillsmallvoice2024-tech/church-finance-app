@@ -42,9 +42,15 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
     const ext  = file.name.split('.').pop() ?? 'bin'
     const path = `${entityType}/${entityId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
+    console.log('[receipts] upload start', { entityType, entityId, fileName: file.name, size: file.size, path })
+
     const { error: storageErr } = await supabase.storage
       .from('receipts').upload(path, file)
-    if (storageErr) throw new Error(storageErr.message)
+    if (storageErr) {
+      console.error('[receipts] storage upload failed:', storageErr)
+      throw new Error(storageErr.message)
+    }
+    console.log('[receipts] storage upload ok, writing db row')
 
     const { error: dbErr } = await supabase.from('receipts').insert({
       entity_type: entityType,
@@ -55,7 +61,11 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
       mime_type:   file.type || null,
       uploaded_by: user?.id ?? null,
     })
-    if (dbErr) throw new Error(dbErr.message)
+    if (dbErr) {
+      console.error('[receipts] db insert failed:', dbErr)
+      throw new Error(dbErr.message)
+    }
+    console.log('[receipts] db row ok, refreshing list')
     await fetch()
   }, [entityType, entityId, fetch])
 

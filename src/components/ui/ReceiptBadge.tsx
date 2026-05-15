@@ -77,18 +77,21 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
+    console.log('[ReceiptBadge] uploading', files.length, 'file(s) for', entityType, entityId)
     setUploading(true)
     let failed = 0
     for (const file of Array.from(files)) {
       try {
         await upload(file)
+        console.log('[ReceiptBadge] upload ok:', file.name)
       } catch (e) {
         failed++
-        console.error('[ReceiptBadge] upload failed:', e)
+        console.error('[ReceiptBadge] upload failed:', file.name, e)
       }
     }
     if (inputRef.current) inputRef.current.value = ''
     setUploading(false)
+    console.log('[ReceiptBadge] done —', files.length - failed, 'ok,', failed, 'failed')
     if (failed > 0) {
       toast(
         failed === files.length
