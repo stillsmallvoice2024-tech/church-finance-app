@@ -177,7 +177,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     } else {
       setSelectedConfigId('')
       setIncomeTypeId('')
-      resetForm({ date: new Date().toISOString().slice(0, 10), amount: undefined })
+      resetForm({ date: new Date().toISOString().slice(0, 10), recorded_at_date: new Date().toISOString().slice(0, 10), amount: undefined })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
@@ -271,7 +271,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </div>
 
         {/* Recorded Date — editable reporting/upload date */}
-        <Field label={isEdit ? 'Recorded Date (operational reports)' : 'Recorded Date (optional)'} error={errors.recorded_at_date?.message}>
+        <Field label="Recorded Date" error={errors.recorded_at_date?.message}>
           <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
         </Field>
 
