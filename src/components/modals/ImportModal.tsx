@@ -549,6 +549,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       const inflowRows:  Record<string, unknown>[] = []
       const outflowRows: Record<string, unknown>[] = []
+      const importTimestamp = new Date().toISOString()
 
       // Merge continuation rows (no date, no amounts, but has text) into preceding primary row
       const mergedRows = (sheet.rows as unknown[][]).map(r => [...r])
@@ -607,6 +608,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (internalBank) row.bank_name = internalBank.name
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
+          row.recorded_at = importTimestamp
           inflowRows.push(row)
         }
         if (debit > 0) {
@@ -622,6 +624,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (batchPendingDeduction) row.is_pending_deduction = true
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
+          row.recorded_at = importTimestamp
           outflowRows.push(row)
         }
         if (credit === 0 && debit === 0) skipped++

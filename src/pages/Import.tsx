@@ -581,6 +581,7 @@ function ManualEntryForm() {
         fx_currency:                v('fx_currency')               || undefined,
         fx_amount:                  v('fx_amount')  ? parseFloat(v('fx_amount'))  : undefined,
         fx_rate:                    v('fx_rate')    ? parseFloat(v('fx_rate'))    : undefined,
+        recorded_at:                new Date().toISOString(),
       })
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
@@ -621,6 +622,7 @@ function ManualEntryForm() {
         fx_currency:             v('fx_currency')      || undefined,
         fx_amount:               v('fx_amount') ? parseFloat(v('fx_amount')) : undefined,
         fx_rate:                 v('fx_rate')   ? parseFloat(v('fx_rate'))   : undefined,
+        recorded_at:             new Date().toISOString(),
       })
       toast('Outflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
