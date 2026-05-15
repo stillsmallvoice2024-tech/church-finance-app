@@ -76,6 +76,26 @@ Row indices are preserved — per-row UI state (income type, stage codes, alloca
 
 ---
 
+## Missing Column / Schema Cache Error Handling
+
+Both import paths use a **strip-and-retry** pattern when PostgREST rejects an INSERT due to a missing or cache-invisible column.
+
+### `ImportModal.tsx` (batch wizard)
+- `MISSING_COL_SQL` map: keyed by column name → migration SQL string shown in the results panel after retry
+  - Entries: `allocation_config_id`, `income_type_id`, `recorded_at` (full ALTER + backfill + indexes + NOTIFY)
+- Regex: `/Could not find (?:the ')?(\w+)'? column/` — matches both PostgREST formats:
+  - Old: `Could not find the 'col' column of 'table' in the schema cache`
+  - v12+: `Could not find col column in table schema cache`
+- On match: strips the column from the batch, retries INSERT, pushes migration hint into `errors[]`
+
+### `Import.tsx` ManualEntryForm (`doSaveInflow` / `doSaveOutflow`)
+- Same regex (`MISSING_COL_RE`) defined at component scope
+- Input built as typed `AddInflowInput` / `AddOutflowInput` variable (not inline object literal)
+- On catch: extracts missing column name → deletes from a spread copy → retries mutation → toasts warning directing user to Setup → Database migration
+- Only strips columns present in the input object; unrelated errors re-throw
+
+---
+
 ## Non-Normal Transaction Import Rule
 
 **Transaction types:** `''` = Normal | `'refund'` | `'reversal'` | `'bank_deposit'` | `'intrabank_transfer'`
