@@ -26,7 +26,7 @@
 | `fx_conversions` | Links FX withdrawal → NGN inflow; `is_partial`, `exchange_rate` |
 | `special_projects` | Named fundraising projects |
 | `project_entries` | Entries per project |
-| `receipts` | File attachments; `entity_type`, `entity_id` |
+| `receipts` | File attachments; `entity_type`, `entity_id`; RLS: SELECT=any auth user, INSERT/DELETE=any auth user (migration) |
 | `invitations` | Token-based invites; `token` UUID, `expires_at` |
 | `audit_log` | Whole-record snapshots on INSERT/UPDATE/DELETE |
 | `field_changes` | Per-field old/new on UPDATE; `user_id` FK → `profiles(id)` |
@@ -40,6 +40,7 @@
 - `supabase/schema.sql` = complete DDL for fresh installs — **not auto-run** against existing projects
 - Incremental patches live in `MIGRATION_SQL` constant in `Setup.tsx` (Database tab — run manually in Supabase SQL editor)
 - New column or table → update **both** `schema.sql` AND `Setup.tsx`
+- **Receipts feature** has its own separate `MIGRATION_SQL` displayed inline on the Receipts page and in the ReceiptBadge error panel — it is **not** in `Setup.tsx`. Includes: table creation, RLS enable + policies, storage bucket, and `storage.objects` INSERT/SELECT/DELETE policies. Users who ran an older version of this migration (pre-storage-policies) must re-run just the `DO $$ ... storage.objects ...` blocks manually.
 
 ### Live-DB Migration Notes
 

@@ -5,7 +5,8 @@ import { useReceipts, type ReceiptEntityType, type Receipt } from '../../hooks/u
 import { useToastStore } from '../../store/toastStore'
 
 const MIGRATION_SQL =
-`CREATE TABLE IF NOT EXISTS public.receipts (
+`-- Receipts table
+CREATE TABLE IF NOT EXISTS public.receipts (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   entity_type text NOT NULL CHECK (entity_type IN ('outflow','inflow','bank_deposit')),
   entity_id   uuid NOT NULL,
@@ -19,10 +20,39 @@ const MIGRATION_SQL =
 CREATE INDEX IF NOT EXISTS receipts_entity
   ON public.receipts(entity_type, entity_id);
 
--- Storage bucket (run in SQL editor):
+-- Enable RLS on receipts table
+ALTER TABLE public.receipts ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "receipts_read" ON public.receipts
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "receipts_write" ON public.receipts
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "receipts_delete" ON public.receipts
+    FOR DELETE USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Storage bucket
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('receipts', 'receipts', false)
-ON CONFLICT (id) DO NOTHING;`
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage object policies (allow authenticated users to upload/download/delete)
+DO $$ BEGIN
+  CREATE POLICY "receipts_objects_insert" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'receipts' AND auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "receipts_objects_select" ON storage.objects
+    FOR SELECT USING (bucket_id = 'receipts' AND auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "receipts_objects_delete" ON storage.objects
+    FOR DELETE USING (bucket_id = 'receipts' AND auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
 
 interface Props {
   entityType: ReceiptEntityType
@@ -77,21 +107,21 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
-    console.log('[ReceiptBadge] uploading', files.length, 'file(s) for', entityType, entityId)
     setUploading(true)
     let failed = 0
-    for (const file of Array.from(files)) {
-      try {
-        await upload(file)
-        console.log('[ReceiptBadge] upload ok:', file.name)
-      } catch (e) {
-        failed++
-        console.error('[ReceiptBadge] upload failed:', file.name, e)
+    try {
+      for (const file of Array.from(files)) {
+        try {
+          await upload(file)
+        } catch (e) {
+          failed++
+          console.error('[ReceiptBadge] upload failed:', file.name, e)
+        }
       }
+    } finally {
+      if (inputRef.current) inputRef.current.value = ''
+      setUploading(false)
     }
-    if (inputRef.current) inputRef.current.value = ''
-    setUploading(false)
-    console.log('[ReceiptBadge] done —', files.length - failed, 'ok,', failed, 'failed')
     if (failed > 0) {
       toast(
         failed === files.length
