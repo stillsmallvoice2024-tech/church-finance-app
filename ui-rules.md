@@ -165,10 +165,50 @@ The Zod schema and `onSubmit` handler retain these fields for backward compat wi
 
 ---
 
+## Multi-Select Rows + Bulk Operations (Inflows / Outflows table view)
+
+- `selectedIds: Set<string>` state; cleared on page change, filter change, and year reset
+- Checkbox column is first in table header and each row (`w-10 pl-4 pr-2`); header checkbox = select/deselect all on current page
+- Selected rows get `bg-primary/5 hover:bg-primary/10` highlight
+- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0`:
+  - "Edit selected" (canWrite) → opens `BulkEditInflowModal` / `BulkEditOutflowModal`
+  - "Delete selected" (canDelete) → `DeleteDialog` with count-aware label → sequential `deleteRecord` loop → `refetch()`
+  - "Clear" → `setSelectedIds(new Set())`
+- **BulkEdit modal** (inline function component at bottom of page file):
+  - Inflows: `bank_name` (banks select) + `stage_code_2` (text)
+  - Outflows: `bank_name` (banks select) + `stage_code_1` (categories select)
+  - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID
+- colSpan for loading/empty/expanded rows must equal total column count (8 for Inflows, 13 for Outflows)
+- Multi-select is **table view only** — cards view unchanged
+
+## Schema Cache Error — Inline Display (Inflows / Outflows modals)
+
+Lighter alternative to full Migration-Gated Modal when a column is optional and the save is not gated:
+
+```tsx
+{error && (
+  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+    {/schema cache/i.test(error) ? (
+      <div className="space-y-2">
+        <p className="font-semibold">Schema not yet updated — run this in Supabase SQL editor, then retry:</p>
+        <code className="block font-mono text-xs bg-white border border-red-200 rounded p-2 whitespace-pre-wrap break-all select-all">
+          {`ALTER TABLE <table>\n  ADD COLUMN IF NOT EXISTS <col> <type>;\nNOTIFY pgrst, 'reload schema';`}
+        </code>
+        <p className="text-xs">Or run the full migration in <strong>Setup → Database tab</strong>.</p>
+      </div>
+    ) : error}
+  </div>
+)}
+```
+
+Applied in `AddInflowModal` and `AddOutflowModal` for `recorded_at` schema cache failures.
+
+---
+
 ## Page Architecture Conventions
 
 - Pages are display-first; data fetching via `use<Entity>.ts` hook at the top of each page component
-- `Inflows.tsx` and `Outflows.tsx` are **display-only** — no Add/import triggers; edit and delete remain
+- `Inflows.tsx` and `Outflows.tsx` are **display-only** — no Add/import triggers; edit and delete remain; multi-select + bulk ops available in table view
 - Card view and table view are both present on most list pages (toggle between them)
 - Income type badges shown on Inflows page
 - Transaction type badges shown on Inflows, Outflows, and BankLedger (see Transaction Type Badge below)
