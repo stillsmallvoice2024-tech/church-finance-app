@@ -4,12 +4,14 @@ import {
   Search, AlertCircle, RefreshCw, LayoutList, LayoutGrid,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
+import { Modal }                   from '../components/ui/Modal'
 import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
 import { ReceiptBadge }            from '../components/ui/ReceiptBadge'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
-import { useDeleteTransaction }    from '../hooks/useMutations'
+import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
+import { useBanks }                from '../hooks/useBanks'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
@@ -72,13 +74,17 @@ export default function Outflows() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  useEffect(() => { setPage(0) }, [dateFrom, dateTo, stageCode, debouncedSearch])
+  useEffect(() => { setPage(0); setSelectedIds(new Set()) }, [dateFrom, dateTo, stageCode, debouncedSearch])
 
   useEffect(() => {
     setDateFrom(`${year}-01-01`)
     setDateTo(`${year}-12-31`)
     setPage(0)
+    setSelectedIds(new Set())
   }, [year])
+
+  // Clear selection on page change
+  useEffect(() => { setSelectedIds(new Set()) }, [page])
 
   // Data
   const { data, count, loading, error, refetch } = useOutflowTransactions({
@@ -96,15 +102,21 @@ export default function Outflows() {
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
 
   // UI state
-  const [editRecord,   setEditRecord]  = useState<OutflowTransaction | null>(null)
-  const [modalOpen,    setModalOpen]   = useState(false)
-  const [deleteId,     setDeleteId]    = useState<string | null>(null)
-  const [displayMode,  setDisplayMode] = useState<'table' | 'cards'>('table')
+  const [editRecord,        setEditRecord]        = useState<OutflowTransaction | null>(null)
+  const [modalOpen,         setModalOpen]         = useState(false)
+  const [deleteId,          setDeleteId]          = useState<string | null>(null)
+  const [displayMode,       setDisplayMode]       = useState<'table' | 'cards'>('table')
+  const [selectedIds,       setSelectedIds]       = useState<Set<string>>(new Set())
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkDeleting,      setBulkDeleting]      = useState(false)
+  const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
+
   const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
-  const { categories } = useCategories()
+  const { banks }                                   = useBanks()
+  const { categories }                              = useCategories()
 
   usePageTitle('Outflows')
 
@@ -125,6 +137,21 @@ export default function Outflows() {
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Delete failed', 'error')
     }
+  }
+
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds]
+    setBulkDeleting(true)
+    let failed = 0
+    for (const id of ids) {
+      try { await deleteRecord(id) } catch { failed++ }
+    }
+    setBulkDeleting(false)
+    setConfirmBulkDelete(false)
+    setSelectedIds(new Set())
+    refetch()
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
+    else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
   const handleExport = () => {
@@ -150,6 +177,8 @@ export default function Outflows() {
       </button>
     </div>
   )
+
+  const allOnPageSelected = data.length > 0 && data.every(r => selectedIds.has(r.id))
 
   return (
     <>
@@ -282,10 +311,46 @@ export default function Outflows() {
         {displayMode === 'cards' && <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />}
 
         {displayMode === 'table' && <Card padding={false}>
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/10 bg-primary/5">
+              <span className="text-sm font-medium text-primary">{selectedIds.size} selected</span>
+              {canWrite() && (
+                <button
+                  onClick={() => setBulkEditOpen(true)}
+                  className="px-3 py-1.5 text-sm font-medium text-primary bg-white border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+                >
+                  Edit selected
+                </button>
+              )}
+              {canDelete() && (
+                <button
+                  onClick={() => setConfirmBulkDelete(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete selected
+                </button>
+              )}
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="ml-auto px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th className="w-10 pl-4 pr-2 py-3">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-gray-300"
+                      checked={allOnPageSelected}
+                      onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())}
+                    />
+                  </th>
                   {['Date', 'Recorded', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', '📎', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
@@ -297,7 +362,7 @@ export default function Outflows() {
                 {loading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 12 }).map((_, j) => (
+                      {Array.from({ length: 13 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -306,7 +371,7 @@ export default function Outflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-16 text-center">
+                    <td colSpan={13} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <TrendingDown className="w-10 h-10 text-gray-200" />
                         <p className="text-sm">No outflow transactions match your filters.</p>
@@ -317,7 +382,23 @@ export default function Outflows() {
                   data.map(row => {
                     const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
                     return (
-                      <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                      <tr
+                        key={row.id}
+                        className={`hover:bg-gray-50 transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
+                      >
+                        <td className="pl-4 pr-2 py-3 w-10">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded border-gray-300"
+                            checked={selectedIds.has(row.id)}
+                            onChange={e => {
+                              const next = new Set(selectedIds)
+                              if (e.target.checked) next.add(row.id)
+                              else next.delete(row.id)
+                              setSelectedIds(next)
+                            }}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
                           {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
@@ -391,6 +472,21 @@ export default function Outflows() {
         loading={deleting}
         label="this outflow transaction"
       />
+      <DeleteDialog
+        open={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={handleBulkDelete}
+        loading={bulkDeleting}
+        label={`these ${selectedIds.size} outflow transaction${selectedIds.size !== 1 ? 's' : ''}`}
+      />
+      <BulkEditOutflowModal
+        open={bulkEditOpen}
+        onClose={() => setBulkEditOpen(false)}
+        ids={[...selectedIds]}
+        banks={banks}
+        categories={categories}
+        onSuccess={() => { setSelectedIds(new Set()); refetch() }}
+      />
       <DescriptionTooltip tooltip={descTooltip} />
     </>
   )
@@ -406,5 +502,82 @@ function FilterGroup({ label, children, className = '' }: { label: string; child
       <label className="text-xs font-medium text-gray-500">{label}</label>
       {children}
     </div>
+  )
+}
+
+// ── BulkEditOutflowModal ───────────────────────────────────────────────────────
+
+function BulkEditOutflowModal({ open, onClose, ids, banks, categories, onSuccess }: {
+  open: boolean
+  onClose: () => void
+  ids: string[]
+  banks: { id: string; name: string }[]
+  categories: { id: string; name: string }[]
+  onSuccess: () => void
+}) {
+  const { mutate: update } = useUpdateTransaction('outflow_transactions')
+  const { push: toast }    = useToastStore()
+  const [bankName,    setBankName]    = useState('')
+  const [stageCode1,  setStageCode1]  = useState('')
+  const [saving,      setSaving]      = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setBankName('')
+    setStageCode1('')
+  }, [open])
+
+  const hasChanges = !!bankName || !!stageCode1
+
+  const handleApply = async () => {
+    if (!hasChanges) return
+    setSaving(true)
+    const updates: Record<string, unknown> = {}
+    if (bankName)   updates.bank_name   = bankName
+    if (stageCode1) updates.stage_code_1 = stageCode1
+    let failed = 0
+    for (const id of ids) {
+      try { await update({ id, updates }) } catch { failed++ }
+    }
+    setSaving(false)
+    if (failed === 0) toast(`Updated ${ids.length} transaction${ids.length !== 1 ? 's' : ''}`, 'success')
+    else toast(`${ids.length - failed} updated, ${failed} failed`, 'error')
+    onSuccess()
+    onClose()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Bulk Edit ${ids.length} Transaction${ids.length !== 1 ? 's' : ''}`} size="max-w-md">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-500">Only filled fields will be applied. Leave blank to keep existing values.</p>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">Bank Name</label>
+          <select value={bankName} onChange={e => setBankName(e.target.value)} className={inputCls}>
+            <option value="">— Keep existing —</option>
+            {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
+          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={inputCls}>
+            <option value="">— Keep existing —</option>
+            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={saving || !hasChanges}
+            className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Applying…' : `Apply to ${ids.length} record${ids.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
