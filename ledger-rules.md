@@ -113,6 +113,20 @@ Both effects must include `outflowVersion`; omitting it from either causes the c
 
 ---
 
+## Outflow Amount Calculation
+
+`outflow_transactions.actual_amount` has `DEFAULT 0` — it is **never NULL** for rows inserted without that field (manual entry via `AddOutflowModal` never sets it).
+
+**Always use `||` (not `??`) when falling back to `amount_disbursed`:**
+```ts
+Number(r.actual_amount || r.amount_disbursed || 0)
+```
+`??` only replaces `null`/`undefined`; `0 ?? 500` = `0`. Using `??` makes every manually-entered outflow compute as zero, hiding it from CategoryLedger, SavingsPortions, useReportEngine, and Reports.
+
+Affected call sites: `CategoryLedger.tsx` (loadSummary + both loadLedger loops), `SavingsPortions.tsx`, `useReportEngine.ts` (savingsOut + pctOut), `Reports.tsx` (annual + monthly — also requires `amount_disbursed` in SELECT).
+
+---
+
 ## Mutations & Audit Trail
 
 All writes via `useMutations.ts`:
