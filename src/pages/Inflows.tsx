@@ -539,21 +539,40 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
 
   const hasChanges = !!bankName || !!recordedAt || !!txnType || !!incomeTypeId || !!stageCode1 || !!stageCode2
 
+  const MISSING_COL_RE = /Could not find (?:the ')?(\w+)'? column/
+
   const handleApply = async () => {
     if (!hasChanges) return
     setSaving(true)
-    const updates: Record<string, unknown> = {}
-    if (bankName)     updates.bank_name      = bankName
-    if (recordedAt)   updates.recorded_at    = `${recordedAt}T00:00:00.000Z`
+    let updates: Record<string, unknown> = {}
+    if (bankName)     updates.bank_name       = bankName
+    if (recordedAt)   updates.recorded_at     = `${recordedAt}T00:00:00.000Z`
     if (txnType)      updates.transaction_type = txnType
-    if (incomeTypeId) updates.income_type_id  = incomeTypeId
-    if (stageCode1)   updates.stage_code_1   = stageCode1
-    if (stageCode2)   updates.stage_code_2   = stageCode2
+    if (incomeTypeId) updates.income_type_id   = incomeTypeId
+    if (stageCode1)   updates.stage_code_1    = stageCode1
+    if (stageCode2)   updates.stage_code_2    = stageCode2
     let failed = 0
+    const strippedCols: string[] = []
     for (const id of ids) {
-      try { await update({ id, updates }) } catch { failed++ }
+      try {
+        await update({ id, updates })
+      } catch (err: unknown) {
+        const col = (err instanceof Error ? err.message : '').match(MISSING_COL_RE)?.[1]
+        if (col && col in updates) {
+          const stripped = { ...updates }
+          delete stripped[col]
+          updates = stripped
+          if (!strippedCols.includes(col)) strippedCols.push(col)
+          try { await update({ id, updates }) } catch { failed++ }
+        } else {
+          failed++
+        }
+      }
     }
     setSaving(false)
+    for (const col of strippedCols) {
+      toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
+    }
     if (failed === 0) toast(`Updated ${ids.length} transaction${ids.length !== 1 ? 's' : ''}`, 'success')
     else toast(`${ids.length - failed} updated, ${failed} failed`, 'error')
     onSuccess()
