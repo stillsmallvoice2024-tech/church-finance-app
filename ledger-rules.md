@@ -198,7 +198,9 @@ Same category may appear with different portions; each is a distinct item.
 
 ### `recorded_at` Field
 
-- `recorded_at timestamptz` — editable business/upload date; exposed in AddInflowModal and AddOutflowModal as "Recorded Date (operational reports)"
+- `recorded_at timestamptz` — editable business/upload date; field label is "Recorded Date" in both AddInflowModal and AddOutflowModal
+- **Defaults to current date/time on all creation paths:** AddInflowModal, AddOutflowModal (date picker pre-filled), ManualEntryForm in Import.tsx (`new Date().toISOString()`), ImportModal batch insert (single `importTimestamp` stamped on all rows in the batch)
+- Fully editable after creation in both modals
 - `created_at` — immutable audit timestamp; **not used for report filtering** (old behaviour removed)
 - Migration backfills `recorded_at = created_at` for existing rows
 
