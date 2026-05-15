@@ -175,9 +175,9 @@ The Zod schema and `onSubmit` handler retain these fields for backward compat wi
   - "Delete selected" (canDelete) → `DeleteDialog` with count-aware label → sequential `deleteRecord` loop → `refetch()`
   - "Clear" → `setSelectedIds(new Set())`
 - **BulkEdit modal** (inline function component at bottom of page file):
-  - Inflows: `bank_name` (banks select) + `stage_code_2` (text)
-  - Outflows: `bank_name` (banks select) + `stage_code_1` (categories select)
-  - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID
+  - Inflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `income_type_id` (select, shown only when income types exist) + `stage_code_1` (category select) + `stage_code_2` (select: Percentage Allocation / Specific Seed / Savings); calls `useCategories()` + `useIncomeTypes()` internally
+  - Outflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `stage_code_1` (category select, from `categories` prop) + `stage_code_2` (select)
+  - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID; no way to bulk-clear `transaction_type` (individual edit only)
 - colSpan for loading/empty/expanded rows must equal total column count (8 for Inflows, 13 for Outflows)
 - Multi-select is **table view only** — cards view unchanged
 
@@ -359,8 +359,34 @@ Each table has a `∑` button in the title bar toggling `include_in_combined_tot
 Full list: `normal` (Normal Transactions), `reversal`, `refund`, `bank_deposit`, `intrabank_transfer`.
 `tt::normal` maps to inflows where `transaction_type IS NULL`.
 
+### SortableContext Isolation (DnD reliability)
+
+Each level has its own `SortableContext` to prevent cross-level collision interference:
+- **Top-level**: `tblId`s + `grpId`s + direct `itmId`s + `sgpId`s (no subgroup items) — used by the outer `SortableContext` in `renderEditMode`
+- **Per-table**: `grpId`s only — inside `SortableTableBlock`
+- **Per-group**: direct `itmId`s + `sgpId`s only — inside `SortableGroup` (`allItemIds` must NOT include subgroup item IDs)
+- **Per-subgroup**: `itmId`s of that subgroup only — inside `SortableSubgroup`
+
+Subgroup items are intentionally excluded from `allSortableIds` and `allItemIds`; they live only in their subgroup-level context. Breaking this isolation causes unreliable same-subgroup reordering.
+
+### Item Reorder Controls (Edit Mode)
+
+Each item row shows ▲/▼ buttons (`ChevronUp`/`ChevronDown`) alongside drag handle:
+- Up/Down swap item with adjacent item **within the same container** (group root or subgroup)
+- `onMoveUp` is `undefined` (disabled) when item is first; `onMoveDown` is `undefined` when last
+- Callbacks: `moveItemUp(itemId)` / `moveItemDown(itemId)` — locate item in direct items or subgroup items, apply `arrayMove`
+
+### Subgroup Assignment (Edit Mode)
+
+Each item has a `— Root —` + subgroup `<select>` dropdown (shown only when parent group has ≥1 subgroup):
+- Changing to a subgroup ID → `moveItemToSubgroup(itemId, targetSgId)` — removes from current location, appends to target subgroup
+- Changing to `''` (Root) → `removeItemFromSubgroup(itemId)` — removes from subgroup, appends to group's direct items
+- **Cross-group moves are blocked**: `moveItemToSubgroup` validates `targetSgId` is in the item's current parent group; cross-group is a two-step flow (DnD to group header to move to group root, then assign subgroup)
+- Callbacks thread through: `SortableTableBlock` → `SortableGroup` → `SortableSubgroup` → `SortableItem`
+
 ### Subgroup Drag-and-Drop Rules
 
-- Items **inside a subgroup** cannot be moved to a different parent group — `handleDragOver` returns early when `activeLoc.subgroupId` is set
-- Subgroups can be reordered within the same parent group via `sgp→sgp` branch in `handleDragEnd`
-- Cross-group subgroup moves are naturally prevented (same-group `findIndex` won't match across groups)
+- Items inside a subgroup can be reordered within that subgroup via DnD or ▲/▼ buttons
+- Items in group root can be dragged to another group via group header (DnD over `grp-{id}` triggers `handleDragOver` cross-group move)
+- Direct cross-subgroup DnD blocked — assign via dropdown instead
+- Subgroups reorder within same parent group via `sgp→sgp` branch in `handleDragEnd`
