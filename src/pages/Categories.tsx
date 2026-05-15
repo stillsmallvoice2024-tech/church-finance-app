@@ -1,9 +1,9 @@
 import { useState, useEffect, Fragment } from 'react'
 import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, LayoutList, LayoutGrid, Search, Check } from 'lucide-react'
 import {
-  useCategories, useCategoryGroups,
+  useCategories, useCategoryGroups, useCategoryOpeningBalances,
   fetchCategoryOpeningBalances, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance,
-  type Category, type CategoryGroup, type BudgetPortion,
+  type Category, type CategoryGroup, type CategoryOpeningBalance, type BudgetPortion,
 } from '../hooks/useCategories'
 import { CurrencyInput } from '../components/ui/CurrencyInput'
 import {
@@ -329,6 +329,7 @@ export default function Categories() {
 
   const { categories, loading, error, refetch }    = useCategories()
   const { groups, error: groupsError, refetch: refetchGroups } = useCategoryGroups()
+  const { balances: allOpeningBalances } = useCategoryOpeningBalances()
   const { mutate: deleteCategory }                  = useDeleteCategory()
   const { mutate: updateCategory }                  = useUpdateCategory()
   const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
@@ -525,24 +526,38 @@ export default function Categories() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visible.map(cat => {
             const group = groups.find(g => g.id === cat.group_id)
+            const catBalances = allOpeningBalances.filter(b => b.category_id === cat.id)
+            const displayBalances: { budget_portion: string; amount: number }[] = catBalances.length > 0
+              ? catBalances
+              : (cat.starting_balance_budget_portion && cat.starting_balance != null && cat.starting_balance !== 0
+                  ? [{ budget_portion: cat.starting_balance_budget_portion, amount: cat.starting_balance }]
+                  : [])
             return (
               <div key={cat.id} className={`rounded-xl border border-gray-200 bg-white p-4 space-y-2 hover:shadow-md transition-shadow ${cat.is_hidden ? 'opacity-50' : ''}`}>
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-gray-800">{cat.name}
                       {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
                     </p>
                     {group && <p className="text-xs text-gray-400">{group.name}</p>}
                   </div>
-                  {cat.starting_balance_budget_portion && (
-                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{cat.starting_balance_budget_portion}</span>
+                  {displayBalances.length > 0 && (
+                    <div className="flex flex-col items-end gap-0.5 shrink-0">
+                      {displayBalances.map(b => (
+                        <span key={b.budget_portion} className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{b.budget_portion}</span>
+                      ))}
+                    </div>
                   )}
                 </div>
                 {cat.description && <p className="text-xs text-gray-500 break-words">{cat.description}</p>}
-                {cat.starting_balance != null && cat.starting_balance !== 0 && (
-                  <p className="text-xs text-gray-600 font-mono">
-                    Bal. B/F: ₦{cat.starting_balance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                  </p>
+                {displayBalances.length > 0 && (
+                  <div className="space-y-0.5">
+                    {displayBalances.map(b => (
+                      <p key={b.budget_portion} className="text-xs text-gray-600 font-mono">
+                        Bal. B/F: ₦{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                      </p>
+                    ))}
+                  </div>
                 )}
                 <div className="flex gap-1 pt-1 border-t border-gray-50">
                   <button onClick={() => openEdit(cat)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
@@ -621,7 +636,7 @@ export default function Categories() {
                       </div>
                     </td>
                   </tr>
-                  {(groupMap.get(g.id) ?? []).map(cat => <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDeleteClick} onToggleHide={handleToggleHide} checking={checkingDeps} />)}
+                  {(groupMap.get(g.id) ?? []).map(cat => <CategoryRow key={cat.id} cat={cat} openingBalances={allOpeningBalances} onEdit={openEdit} onDelete={handleDeleteClick} onToggleHide={handleToggleHide} checking={checkingDeps} />)}
                 </Fragment>
               ))}
               {/* Ungrouped categories */}
@@ -632,7 +647,7 @@ export default function Categories() {
                   </td>
                 </tr>
               )}
-              {ungrouped.map(cat => <CategoryRow key={cat.id} cat={cat} onEdit={openEdit} onDelete={handleDeleteClick} onToggleHide={handleToggleHide} checking={checkingDeps} />)}
+              {ungrouped.map(cat => <CategoryRow key={cat.id} cat={cat} openingBalances={allOpeningBalances} onEdit={openEdit} onDelete={handleDeleteClick} onToggleHide={handleToggleHide} checking={checkingDeps} />)}
             </tbody>
           </table>
         </div>
@@ -683,14 +698,23 @@ export default function Categories() {
 
 // ── Category row ───────────────────────────────────────────────────────────────
 
-function CategoryRow({ cat, onEdit, onDelete, onToggleHide, checking }: {
-  cat:           Category
-  onEdit:        (c: Category) => void
-  onDelete:      (c: Category) => void
-  onToggleHide:  (c: Category, hide: boolean) => void
-  checking:      boolean
+function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, checking }: {
+  cat:             Category
+  openingBalances: CategoryOpeningBalance[]
+  onEdit:          (c: Category) => void
+  onDelete:        (c: Category) => void
+  onToggleHide:    (c: Category, hide: boolean) => void
+  checking:        boolean
 }) {
   const { expandedIds, tooltip, setTooltip, toggle } = useDescriptionExpand()
+
+  const catBalances = openingBalances.filter(b => b.category_id === cat.id)
+  const displayBalances: { budget_portion: string; amount: number }[] = catBalances.length > 0
+    ? catBalances
+    : (cat.starting_balance_budget_portion && cat.starting_balance != null && cat.starting_balance !== 0
+        ? [{ budget_portion: cat.starting_balance_budget_portion, amount: cat.starting_balance }]
+        : [])
+
   return (
     <tr className={`hover:bg-gray-50 transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
       <td className="px-5 py-3 font-medium text-gray-800">
@@ -702,13 +726,21 @@ function CategoryRow({ cat, onEdit, onDelete, onToggleHide, checking }: {
         <DescriptionTooltip tooltip={tooltip} />
       </td>
       <td className="px-5 py-3 hidden md:table-cell">
-        {cat.starting_balance_budget_portion
-          ? <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{cat.starting_balance_budget_portion}</span>
+        {displayBalances.length > 0
+          ? <div className="flex flex-col gap-0.5">
+              {displayBalances.map(b => (
+                <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full w-fit">{b.budget_portion}</span>
+              ))}
+            </div>
           : <span className="text-gray-300">—</span>}
       </td>
       <td className="px-5 py-3 text-right hidden sm:table-cell font-mono text-sm text-gray-700">
-        {cat.starting_balance != null && cat.starting_balance !== 0
-          ? `₦${cat.starting_balance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
+        {displayBalances.length > 0
+          ? <div className="flex flex-col gap-0.5 items-end">
+              {displayBalances.map(b => (
+                <span key={b.budget_portion}>₦{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+              ))}
+            </div>
           : <span className="text-gray-300">—</span>}
       </td>
       <td className="px-5 py-3">
