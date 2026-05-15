@@ -189,11 +189,11 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
             {/schema cache/i.test(error) ? (
               <div className="space-y-2">
-                <p className="font-semibold">Schema not yet updated — run this in Supabase SQL editor, then retry:</p>
+                <p className="font-semibold">Schema cache out of sync — run this in Supabase SQL editor, then retry:</p>
                 <code className="block font-mono text-xs bg-white border border-red-200 rounded p-2 whitespace-pre-wrap break-all select-all">
-                  {`ALTER TABLE outflow_transactions\n  ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\nNOTIFY pgrst, 'reload schema';`}
+                  {`NOTIFY pgrst, 'reload schema';`}
                 </code>
-                <p className="text-xs">Or run the full migration in <strong>Setup → Database tab</strong>.</p>
+                <p className="text-xs">If the column is also missing, run the full migration in <strong>Setup → Database tab</strong>.</p>
               </div>
             ) : error}
           </div>
