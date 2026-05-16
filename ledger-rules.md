@@ -76,6 +76,18 @@ This ensures special-config inflows (e.g. Easter offering) use the correct perce
 - `CategoryModal` pre-populates from new table on edit; migrates from legacy field if no new-table rows exist
 - Helper functions in `useCategories.ts`: `upsertCategoryOpeningBalance()`, `deleteCategoryOpeningBalance()`, `fetchCategoryOpeningBalances()`
 
+### Bank Opening Balance Propagation
+
+`AddBankModal` propagates allocations into `category_opening_balances` after saving the bank record:
+- Each allocation row has `apply_to_category: boolean` — `true` = new/unrecorded amount, `false` = already in transaction records (skip)
+- For `apply_to_category = true` rows: upsert `(category_id, budget_portion, amount)` resolved as:
+  - Percentage mode: `Math.round((pct / 100) × starting_balance × 100) / 100`
+  - Amount mode: direct `amount` value
+- For `apply_to_category = false` rows: no write — amount is already captured in existing transactions, no double-count
+- Category is resolved by name: `categories.find(c => c.name === row.category_name)?.id`
+- Propagation runs after successful bank INSERT/UPDATE; partial failure → warning toast (bank save not rolled back)
+- No cleanup of stale `category_opening_balances` rows on edit — if a row switches to `apply_to_category = false`, remove the stale entry via the Categories page
+
 ---
 
 ## Specific Givings (`SpecificGivings.tsx`)

@@ -132,11 +132,15 @@ This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no 
 ## Audit Trail Pattern
 
 Every UPDATE in the app must:
-1. Fetch the old record from Supabase
-2. Call `logAudit()` → inserts whole-record snapshot into `audit_log`
-3. Call `logFieldChanges()` → inserts per-field diff rows into `field_changes`
+1. Fetch the old record from Supabase (`.select('*').eq('id', id).single()`)
+2. Call `logAudit()` → inserts whole-record snapshot into `audit_log` — pass both `oldData` and `newData`
+3. Call `logFieldChanges()` → inserts per-field diff rows into `field_changes` — call only if `oldData` exists
 
 `field_changes.user_id` is a FK → `profiles(id)` — must be the currently authenticated user's ID.
+
+Build the `updates` object as a named const before calling `.update()` so the same object can be passed to both `logAudit` and `logFieldChanges` without re-expressing the payload.
+
+Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `useUpdateBank`. Any new UPDATE hook must follow the same pattern.
 
 ---
 
