@@ -465,6 +465,8 @@ function SortableGroup({
   onRemoveItemFromSubgroup,
   onMoveSubgroupUp,
   onMoveSubgroupDown,
+  onMoveGroupUp,
+  onMoveGroupDown,
 }: {
   group:                   ReportGroup
   tableId:                 string
@@ -488,6 +490,8 @@ function SortableGroup({
   onRemoveItemFromSubgroup:(itemId: string) => void
   onMoveSubgroupUp:        (gId: string, sgId: string) => void
   onMoveSubgroupDown:      (gId: string, sgId: string) => void
+  onMoveGroupUp?:          () => void
+  onMoveGroupDown?:        () => void
 }) {
   const dId = grpId(group.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -535,6 +539,24 @@ function SortableGroup({
 
         {editing && (
           <>
+            <button
+              type="button"
+              onClick={onMoveGroupUp}
+              disabled={!onMoveGroupUp}
+              className={`shrink-0 ${!onMoveGroupUp ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Move group up"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveGroupDown}
+              disabled={!onMoveGroupDown}
+              className={`shrink-0 ${!onMoveGroupDown ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Move group down"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
             <button
               type="button"
               onClick={() => onAddSubgroup(group.id)}
@@ -643,6 +665,8 @@ function SortableTableBlock({
   onMoveDown,
   onToggleCombined,
   onAddGroup,
+  onMoveGroupUp,
+  onMoveGroupDown,
   onRenameGroup,
   onToggleGroup,
   onDeleteGroup,
@@ -674,6 +698,8 @@ function SortableTableBlock({
   onMoveDown:              (tId: string) => void
   onToggleCombined:        (tId: string) => void
   onAddGroup:              (tId: string) => void
+  onMoveGroupUp:           (gId: string) => void
+  onMoveGroupDown:         (gId: string) => void
   onRenameGroup:           (gId: string, label: string) => void
   onToggleGroup:           (gId: string) => void
   onDeleteGroup:           (gId: string) => void
@@ -786,7 +812,7 @@ function SortableTableBlock({
               {editing ? 'No groups yet. Click "+ Group" to add one.' : 'No groups configured.'}
             </div>
           ) : (
-            table.groups.map(group => (
+            table.groups.map((group, gIdx) => (
               <SortableGroup
                 key={group.id}
                 group={group}
@@ -811,6 +837,8 @@ function SortableTableBlock({
                 onRemoveItemFromSubgroup={onRemoveItemFromSubgroup}
                 onMoveSubgroupUp={onMoveSubgroupUp}
                 onMoveSubgroupDown={onMoveSubgroupDown}
+                onMoveGroupUp={gIdx > 0 ? () => onMoveGroupUp(group.id) : undefined}
+                onMoveGroupDown={gIdx < table.groups.length - 1 ? () => onMoveGroupDown(group.id) : undefined}
               />
             ))
           )}
@@ -1107,6 +1135,22 @@ export default function FinancialReport() {
 
   const deleteGroup = useCallback((gId: string) => {
     setTables(prev => prev.map(t => ({ ...t, groups: t.groups.filter(g => g.id !== gId) })))
+  }, [])
+
+  const moveGroupUp = useCallback((gId: string) => {
+    setTables(prev => prev.map(t => {
+      const idx = t.groups.findIndex(g => g.id === gId)
+      if (idx <= 0) return t
+      return { ...t, groups: arrayMove(t.groups, idx, idx - 1) }
+    }))
+  }, [])
+
+  const moveGroupDown = useCallback((gId: string) => {
+    setTables(prev => prev.map(t => {
+      const idx = t.groups.findIndex(g => g.id === gId)
+      if (idx === -1 || idx >= t.groups.length - 1) return t
+      return { ...t, groups: arrayMove(t.groups, idx, idx + 1) }
+    }))
   }, [])
 
   // ── Subgroup mutations ────────────────────────────────────────────────────
@@ -1722,6 +1766,8 @@ export default function FinancialReport() {
                   onMoveDown={moveTableDown}
                   onToggleCombined={toggleTableCombined}
                   onAddGroup={addGroup}
+                  onMoveGroupUp={moveGroupUp}
+                  onMoveGroupDown={moveGroupDown}
                   onRenameGroup={renameGroup}
                   onToggleGroup={toggleGroup}
                   onDeleteGroup={deleteGroup}
