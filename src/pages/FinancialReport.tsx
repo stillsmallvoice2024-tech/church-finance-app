@@ -300,7 +300,7 @@ function SortableItem({
 
 function SortableSubgroup({
   sg,
-  groupId,
+  groupId: _groupId,
   balances,
   opBalances,
   editing,
@@ -320,7 +320,7 @@ function SortableSubgroup({
   onMoveSubgroupDown,
 }: {
   sg:                      ReportSubgroup
-  groupId:                 string
+  groupId:                 string // passed for caller convenience, not used internally
   balances:                Map<string, ReportCategoryBalance>
   opBalances:              OperationalBalanceMap
   editing:                 boolean
@@ -448,7 +448,7 @@ function SortableSubgroup({
 
 function SortableGroup({
   group,
-  tableId,
+  tableId: _tableId,
   balances,
   opBalances,
   editing,
@@ -473,7 +473,7 @@ function SortableGroup({
   onMoveGroupDown,
 }: {
   group:                   ReportGroup
-  tableId:                 string
+  tableId:                 string // passed for caller convenience, not used internally
   balances:                Map<string, ReportCategoryBalance>
   opBalances:              OperationalBalanceMap
   editing:                 boolean
