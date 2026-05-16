@@ -23,18 +23,15 @@ CREATE INDEX IF NOT EXISTS receipts_entity
 
 -- Enable RLS on receipts table
 ALTER TABLE public.receipts ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "receipts_read" ON public.receipts
-    FOR SELECT USING (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "receipts_write" ON public.receipts
-    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "receipts_delete" ON public.receipts
-    FOR DELETE USING (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DROP POLICY IF EXISTS "receipts_read"   ON public.receipts;
+CREATE POLICY "receipts_read" ON public.receipts
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "receipts_write"  ON public.receipts;
+CREATE POLICY "receipts_write" ON public.receipts
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "receipts_delete" ON public.receipts;
+CREATE POLICY "receipts_delete" ON public.receipts
+  FOR DELETE USING (auth.uid() IS NOT NULL);
 
 -- Storage bucket
 INSERT INTO storage.buckets (id, name, public)

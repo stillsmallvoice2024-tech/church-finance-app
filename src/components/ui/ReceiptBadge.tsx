@@ -22,18 +22,15 @@ CREATE INDEX IF NOT EXISTS receipts_entity
 
 -- Enable RLS on receipts table
 ALTER TABLE public.receipts ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "receipts_read" ON public.receipts
-    FOR SELECT USING (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "receipts_write" ON public.receipts
-    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "receipts_delete" ON public.receipts
-    FOR DELETE USING (auth.uid() IS NOT NULL);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DROP POLICY IF EXISTS "receipts_read"   ON public.receipts;
+CREATE POLICY "receipts_read" ON public.receipts
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "receipts_write"  ON public.receipts;
+CREATE POLICY "receipts_write" ON public.receipts
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+DROP POLICY IF EXISTS "receipts_delete" ON public.receipts;
+CREATE POLICY "receipts_delete" ON public.receipts
+  FOR DELETE USING (auth.uid() IS NOT NULL);
 
 -- Storage bucket
 INSERT INTO storage.buckets (id, name, public)
@@ -128,10 +125,11 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
       setUploading(false)
     }
     if (failed > 0) {
+      const msg = friendlyUploadError(lastError)
       toast(
         failed === total
-          ? `Upload failed: ${lastError ?? 'check storage permissions or bucket setup'}`
-          : `${failed} of ${total} file(s) failed to upload${lastError ? `: ${lastError}` : ''}`,
+          ? `Upload failed: ${msg}`
+          : `${failed} of ${total} file(s) failed to upload: ${msg}`,
         'error',
       )
     } else {
@@ -147,6 +145,13 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
   }
 
   const isMigrationError = !!error && /relation.*does not exist|receipts|Could not find/i.test(error)
+
+function friendlyUploadError(msg: string | null): string {
+  if (!msg) return 'check storage permissions or bucket setup'
+  if (/row.level security/i.test(msg)) return 'permission denied — re-run the receipts migration SQL in Supabase'
+  if (/storage.*not.*found|no such bucket|bucket.*not/i.test(msg)) return 'storage bucket not configured — run migration SQL'
+  return msg
+}
 
   return (
     <>
