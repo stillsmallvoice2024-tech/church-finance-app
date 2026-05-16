@@ -351,7 +351,7 @@ export default function Outflows() {
                       onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())}
                     />
                   </th>
-                  {['Date', 'Recorded', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', '📎', 'Actions'].map(h => (
+                  {['Date', 'Recorded', 'Bank', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', '📎', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -403,6 +403,7 @@ export default function Outflows() {
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
                           {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
                         </td>
+                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.transaction_id ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
                           <div className="flex items-start gap-1.5 min-w-0">
@@ -422,9 +423,6 @@ export default function Outflows() {
                         <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
                           {Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded)) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                          {Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
