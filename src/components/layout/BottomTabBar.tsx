@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, TrendingUp, TrendingDown, Layers,
-  Target, Globe, ArrowLeftRight, BarChart3,
+  Globe, ArrowLeftRight, BarChart3,
   Settings, Users, MoreHorizontal, X,
   Percent, Gift, Archive, LayoutList,
 } from 'lucide-react'
@@ -16,7 +16,6 @@ const PRIMARY_TABS = [
 ]
 
 const MORE_ITEMS = [
-  { label: 'Special Projects',      path: '/special-projects',      icon: Target         },
   { label: 'Foreign Currency',      path: '/foreign-currency',      icon: Globe          },
   { label: 'Intra-Account Flows',   path: '/intra-flow',            icon: ArrowLeftRight },
   { label: 'Category Ledger',       path: '/category-ledger',       icon: LayoutList     },

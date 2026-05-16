@@ -76,7 +76,7 @@ push('Saved successfully', 'success')  // types: success | error | info
 
 All nav items visible to all authenticated users.
 
-- **Main:** Dashboard, Inflows, Outflows, Categories, Special Projects, Foreign Currency, Intra-Account Flows, Import, Pending Deductions, Setup, Reports, **Financial Report**, Settings
+- **Main:** Dashboard, Inflows, Outflows, Categories, Foreign Currency, Intra-Account Flows, Import, Pending Deductions, Setup, Reports, **Financial Report**, Settings
 - **Banking:** Bank Ledger, Bank Deposits, Intrabank Transfers, Refunds, Reversals, Receipts
 - **Allocations:** Category Ledger, Percentage Allocations, Specific Givings, Savings Portions
 - **Admin:** User Management, Change Log

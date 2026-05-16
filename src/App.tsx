@@ -12,7 +12,6 @@ import Dashboard from './pages/Dashboard'
 import Inflows from './pages/Inflows'
 import Outflows from './pages/Outflows'
 import Categories from './pages/Categories'
-import SpecialProjects from './pages/SpecialProjects'
 import ForeignCurrency from './pages/ForeignCurrency'
 import IntraFlow from './pages/IntraFlow'
 import Reports from './pages/Reports'
@@ -78,7 +77,6 @@ export default function App() {
             <Route path="inflows" element={<ErrorBoundary><Inflows /></ErrorBoundary>} />
             <Route path="outflows" element={<ErrorBoundary><Outflows /></ErrorBoundary>} />
             <Route path="categories" element={<ErrorBoundary><Categories /></ErrorBoundary>} />
-            <Route path="special-projects" element={<ErrorBoundary><SpecialProjects /></ErrorBoundary>} />
             <Route path="foreign-currency" element={<ErrorBoundary><ForeignCurrency /></ErrorBoundary>} />
             <Route path="intra-flow" element={<ErrorBoundary><IntraFlow /></ErrorBoundary>} />
             <Route path="reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
