@@ -43,7 +43,9 @@
 - `supabase/schema.sql` = complete DDL for fresh installs — **not auto-run** against existing projects
 - Incremental patches live in `MIGRATION_SQL` constant in `Setup.tsx` (Database tab — run manually in Supabase SQL editor)
 - New column or table → update **both** `schema.sql` AND `Setup.tsx`
-- **Receipts feature** has its own separate `MIGRATION_SQL` displayed inline on the Receipts page and in the ReceiptBadge error panel — it is **not** in `Setup.tsx`. Includes: table creation, RLS enable + policies, storage bucket, and `storage.objects` INSERT/SELECT/DELETE policies. Users who ran an older version of this migration (pre-storage-policies) must re-run just the `DO $$ ... storage.objects ...` blocks manually.
+- **Receipts feature** has its own separate `MIGRATION_SQL` displayed inline on the Receipts page and in the ReceiptBadge error panel — it is **not** in `Setup.tsx`. Includes: table creation, RLS enable + policies, storage bucket, and `storage.objects` INSERT/SELECT/DELETE policies.
+  - Policy blocks use `DROP POLICY IF EXISTS` + `CREATE POLICY` (not `DO $$ EXCEPTION duplicate_object`) — re-running the migration replaces any pre-existing wrong policies
+  - If receipts INSERT is rejected with an RLS error, re-run the full receipts migration SQL; older schema installs had `is_finance_user()` / `is_admin()` on those policies
 
 ### Live-DB Migration Notes
 

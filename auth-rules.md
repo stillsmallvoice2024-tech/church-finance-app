@@ -57,6 +57,7 @@ Using `!!role` causes edit/delete UI to disappear when profile fetch fails. Alwa
 - Helper DB functions: `is_admin()`, `is_finance_user()`
 - DELETE policies must check `auth.uid() IS NOT NULL`, not `is_admin()`
   - Legacy deployments may have admin-only DELETE policies that silently fail — migration SQL in `miscellaneous.md`
+- **`receipts` policies** must use `auth.uid() IS NOT NULL` for SELECT/INSERT/DELETE — never `is_finance_user()` or `is_admin()` (all authenticated users can upload/view/delete receipts)
 - **`profiles` policies must never call `is_admin()` or `is_finance_user()`** — both functions query `public.profiles`, causing infinite recursion
   - `profiles` policy set: all four operations use `auth.uid() IS NOT NULL` directly
   - Policies: `profiles_select`, `profiles_insert`, `profiles_update`, `profiles_delete`
