@@ -63,6 +63,8 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
     })
     if (dbErr) {
       console.error('[receipts] db insert failed:', dbErr)
+      const { error: cleanupErr } = await supabase.storage.from('receipts').remove([path])
+      if (cleanupErr) console.warn('[receipts] orphan storage cleanup failed:', cleanupErr)
       throw new Error(dbErr.message)
     }
     console.log('[receipts] db row ok, refreshing list')

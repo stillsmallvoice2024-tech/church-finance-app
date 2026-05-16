@@ -554,9 +554,9 @@ create policy "project_entries_delete" on public.project_entries
 create policy "receipts_read" on public.receipts
   for select using (auth.uid() is not null);
 create policy "receipts_write" on public.receipts
-  for insert with check (public.is_finance_user());
+  for insert with check (auth.uid() is not null);
 create policy "receipts_delete" on public.receipts
-  for delete using (public.is_admin());
+  for delete using (auth.uid() is not null);
 
 -- ── Invitations ────────────────────────────────────────────────────────────────
 
