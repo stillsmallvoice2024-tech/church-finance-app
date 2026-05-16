@@ -14,8 +14,11 @@
 | `category_opening_balances` | Multi-portion opening balances; supersedes `categories.starting_balance` |
 | `banks` | Bank accounts; `currency` (default NGN); starting balance cols: `starting_balance`, `starting_balance_category`, `starting_balance_budget_portion`, `starting_balance_alloc_type`, `starting_balance_allocations jsonb` |
 | `currencies` | User-managed currency list; code PK, name, symbol, flag emoji |
-| `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type` |
-| `income_types` | Inflow labels; `color`, `special_config_id` |
+| `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type`; versioning cols: `config_group_id` → `special_config_groups(id)`, `effective_from date`, `effective_to date`, `version_number int` |
+| `income_types` | Inflow labels; `color`, `special_config_id` (legacy), `special_config_group_id` → `special_config_groups(id)` |
+| `special_config_groups` | Groups multiple versions of the same special config; `name`, `created_at`; income types link here via `special_config_group_id` |
+| `transaction_allocation_snapshots` | Per-transaction snapshot of resolved special config at calculation time; `transaction_id` UNIQUE, `config_version_id`, `config_group_id`, `resolved_rows jsonb`, `allocation_type`, `is_recalculated bool`, `recalculated_at` |
+| `recalculation_logs` | Audit trail for bulk recalculation actions; `config_group_id`, `config_version_id`, `performed_by`, `affected_count`, `reason`, `action_summary` |
 | `income_type_rules` | Keyword/stage-code rules per income type |
 | `inflow_transactions` | Money received; `bank_name` text, FX fields, `income_type_id`, `allocation_config_id` |
 | `outflow_transactions` | Money paid out; `bank_name` text, FX fields, `is_pending_deduction` |
@@ -50,6 +53,8 @@
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
 | `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section — also requires `bank_schema_check` view + GRANT (see SQL below) |
 | `recorded_at timestamptz` | `inflow_transactions`, `outflow_transactions` | Financial Report basis selector (Recorded Date mode); "Recorded" column on Inflows/Outflows pages; editable in AddInflowModal/AddOutflowModal; **defaults to current date/time on all creation paths** |
+| `config_group_id uuid`, `effective_from date`, `effective_to date`, `version_number int` | `allocation_configs` | Special config versioning — see Special Config Versioning section |
+| `special_config_group_id uuid` | `income_types` | Links income type to a config group (replaces per-version `special_config_id` link) |
 
 `recorded_at` migration is already in `MIGRATION_SQL` in `Setup.tsx` and backfills from `created_at` for existing rows. If adding manually:
 ```sql
@@ -140,6 +145,27 @@ Every UPDATE in the app must:
 - DELETE policies must use `auth.uid() IS NOT NULL` — see `auth-rules.md` and `miscellaneous.md`
 - `useDeleteTransaction(table)` passes `count: 'exact'` and throws if `count === 0` — catches silent RLS denials
 - `profiles` table: uses three separate non-recursive policies (`profiles_insert`, `profiles_update`, `profiles_delete`) — all `auth.uid() IS NOT NULL`. The old `profiles_admin_all` policy called `is_admin()` which re-queried `profiles`, causing infinite recursion — do not re-introduce helper-function-based policies on `profiles`
+
+---
+
+## Special Config Versioning
+
+`special_config_groups` is the parent record. Each group can have multiple `allocation_configs` rows (versions), identified by `config_group_id`.
+
+**Version resolution** (`getSpecialConfigVersionForDate` in `allocationStore.ts`):
+- Filters by `config_group_id`, `status = 'locked'`, `effective_from <= date`, `effective_to >= date` (or NULL)
+- Returns the version with the latest `effective_from` within range
+
+**Creating a new version** (`createNewVersion` in `useSpecialConfigGroups.ts`):
+1. Finds the version currently covering `effective_from` → sets its `effective_to = effective_from - 1 day`
+2. Finds the next version after `effective_from` → sets new version's `effective_to = next.effective_from - 1 day` (or NULL if latest)
+3. Inserts new version with `version_number = max + 1`
+
+**Income type link** lives at the group level (`income_types.special_config_group_id`), not per-version. `special_config_id` (old per-config link) is preserved for backward compat; `AddInflowModal` checks group link first.
+
+**Backdated recalculation**: after creating a backdated locked version, `getImpactedTransactionCount` finds transactions in the new version's date range → optionally calls `recalculateTransactions` which updates `allocation_config_id` + upserts `transaction_allocation_snapshots` + writes `recalculation_logs`.
+
+**Data migration** (in `MIGRATION_SQL`): each existing `is_special = true` allocation_config gets its own group (version 1); income types' `special_config_group_id` is backfilled from `special_config_id`.
 
 ---
 

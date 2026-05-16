@@ -88,7 +88,7 @@ All nav items visible to all authenticated users.
 - **General** — org name, accounting year
 - **Banks** — list/add/edit/delete banks (multi-row starting balance allocation)
 - **Allocation** — allocation configs (draft/lock workflow)
-- **Special Configs** — special configs with status badges, lock/unlock controls
+- **Special Configs** — group-based UI; each group shows active version (effective dates, type, status) + "Create New Version" button + expandable version history table; "Create New Group" at top; uses `useSpecialConfigGroups()` hook
 - **Income Types** — user-defined inflow labels with keyword/stage-code rules
 - **Currencies** — add/remove currencies (code, name, symbol, flag emoji); shows migration SQL
 - **Database** — migration SQL panel; idempotent `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;` pattern

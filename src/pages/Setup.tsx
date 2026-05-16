@@ -10,6 +10,7 @@ import { useToastStore } from '../store/toastStore'
 import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
 import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
 import { CreateSpecialConfigModal } from '../components/modals/CreateSpecialConfigModal'
+import { useSpecialConfigGroups, type SpecialConfigGroupWithVersions } from '../hooks/useSpecialConfigGroups'
 import { ResetDataModal }           from '../components/modals/ResetDataModal'
 import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeModal'
 import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
@@ -353,143 +354,197 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
 
 // ── Special Configs tab ────────────────────────────────────────────────────────────
 
-function SpecialConfigsTab({ onNew, onEdit, onEditLocked, onLock, onDelete }: {
+function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
   onNew:        () => void
-  onEdit:       (c: AllocationConfig) => void
-  onEditLocked: (c: AllocationConfig) => void
-  onLock:       (c: AllocationConfig) => void
-  onDelete:     (c: AllocationConfig) => void
+  onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  onRefetch:    () => void
 }) {
-  const [configs,  setConfigs]  = useState<AllocationConfig[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [err,      setErr]      = useState<string | null>(null)
+  const { groups, loading, error } = useSpecialConfigGroups()
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
-  const load = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('allocation_configs')
-      .select('*')
-      .eq('is_special', true)
-      .order('created_at', { ascending: false })
-    if (error) setErr(error.message)
-    else setConfigs((data ?? []) as AllocationConfig[])
-    setLoading(false)
+  const toggleExpand = (id: string) =>
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  const handleDeleteGroup = async (g: SpecialConfigGroupWithVersions) => {
+    if (!window.confirm(`Delete group "${g.name}" and all its versions? This cannot be undone.`)) return
+    const { error: err } = await supabase
+      .from('special_config_groups')
+      .delete()
+      .eq('id', g.id)
+    if (err) { window.alert(err.message); return }
+    onRefetch()
   }
 
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const handleDeleteVersion = async (v: AllocationConfig) => {
+    if (!window.confirm(`Delete version #${v.version_number ?? '?'} (effective ${v.effective_from ?? '—'})? This cannot be undone.`)) return
+    const { error: err } = await supabase
+      .from('allocation_configs')
+      .delete()
+      .eq('id', v.id)
+    if (err) { window.alert(err.message); return }
+    onRefetch()
+  }
 
   if (loading) return (
-    <div className="max-w-2xl space-y-2">
+    <div className="max-w-3xl space-y-2">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+        <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
       ))}
     </div>
   )
 
-  if (err) return (
-    <div className="max-w-2xl flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-      <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />{err}
+  if (error) return (
+    <div className="max-w-3xl flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+      <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />{error}
     </div>
   )
 
   return (
-    <div className="max-w-2xl space-y-3">
+    <div className="max-w-3xl space-y-3">
       <div className="flex justify-end">
         <button
           onClick={onNew}
           className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
         >
-          <Plus className="w-4 h-4" /> Create Special Config
+          <Plus className="w-4 h-4" /> Create New Group
         </button>
       </div>
 
-      {configs.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
           <Layers className="w-10 h-10 text-gray-300" />
           <div>
-            <p className="text-sm font-medium text-gray-600">No special configurations yet</p>
-            <p className="text-xs text-gray-400 mt-1">Create a special config to override the regular allocation for specific transactions.</p>
+            <p className="text-sm font-medium text-gray-600">No special config groups yet</p>
+            <p className="text-xs text-gray-400 mt-1">Create a group to manage versioned special allocation configs.</p>
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Rows</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
-                <th className="px-4 py-3 w-24" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {configs.map(c => {
-                const isAmt   = c.allocation_type === 'amount'
-                const isLocked = c.status === 'locked'
-                const total   = c.rows.reduce((s, r) => s + (isAmt ? (r.amount ?? 0) : (r.percentage ?? 0)), 0)
-                return (
-                  <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        isAmt ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-purple-50 text-purple-700 border border-purple-200'
-                      }`}>
-                        {isAmt ? 'Amount ₦' : 'Percentage %'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-gray-700">
-                      {isAmt ? `₦${total.toLocaleString()}` : `${total.toFixed(1)}%`}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-500">{c.rows.length}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                        isLocked
-                          ? 'bg-green-50 text-green-700 border border-green-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        {isLocked ? <Lock className="w-3 h-3" /> : <FileEdit className="w-3 h-3" />}
-                        {isLocked ? 'Locked' : 'Draft'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(c.created_at?.slice(0, 10) ?? '')}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {!isLocked && (
-                          <button
-                            onClick={() => onLock(c)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-                            title="Lock config"
-                          >
-                            <Lock className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => isLocked ? onEditLocked(c) : onEdit(c)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => onDelete(c)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {groups.map(g => {
+            const isExpanded = expandedGroups.has(g.id)
+            const av = g.active_version
+            const isAmt = av?.allocation_type === 'amount'
+            return (
+              <div key={g.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                {/* Group header row */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-gray-900 text-sm">{g.name}</span>
+                      {g.linked_income_type_name && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                          {g.linked_income_type_name}
+                        </span>
+                      )}
+                    </div>
+                    {av ? (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Active: v{av.version_number} &nbsp;&middot;&nbsp;
+                        {av.effective_from ?? '—'}{av.effective_to ? ` → ${av.effective_to}` : ' → open'} &nbsp;&middot;&nbsp;
+                        <span className={isAmt ? 'text-blue-600' : 'text-purple-600'}>
+                          {isAmt ? 'Amount ₦' : 'Percentage %'}
+                        </span>
+                        {' '}&nbsp;&middot;&nbsp;
+                        <span className="text-green-700">Locked</span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-0.5">No active version for today</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => onNewVersion(g, g.active_version)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-blue-50 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> New Version
+                    </button>
+                    <button
+                      onClick={() => toggleExpand(g.id)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-xs"
+                      title={isExpanded ? 'Hide history' : 'View history'}
+                    >
+                      {isExpanded ? 'Hide' : 'History'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteGroup(g)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                      title="Delete group"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Version history */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100">
+                    {g.versions.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-gray-400">No versions yet.</p>
+                    ) : (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-100">
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Ver</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Effective From</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Effective To</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Type</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-2 text-right text-gray-500 font-semibold uppercase tracking-wider">Rows</th>
+                            <th className="px-4 py-2 w-10" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {g.versions.map(v => {
+                            const vAmt = v.allocation_type === 'amount'
+                            const vLocked = v.status === 'locked'
+                            return (
+                              <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
+                                <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
+                                <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
+                                <td className="px-4 py-2">
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    vAmt ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                                  }`}>
+                                    {vAmt ? 'Amount' : 'Pct'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                                  }`}>
+                                    {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                                    {vLocked ? 'Locked' : 'Draft'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2 text-right text-gray-500">{v.rows.length}</td>
+                                <td className="px-4 py-2">
+                                  <button
+                                    onClick={() => handleDeleteVersion(v)}
+                                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                                    title="Delete version"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
-      <p className="text-xs text-gray-400">{configs.length} special config{configs.length !== 1 ? 's' : ''}</p>
+      <p className="text-xs text-gray-400">{groups.length} group{groups.length !== 1 ? 's' : ''}</p>
     </div>
   )
 }
@@ -825,6 +880,90 @@ UPDATE outflow_transactions SET recorded_at = created_at WHERE recorded_at IS NU
 CREATE INDEX IF NOT EXISTS idx_inflow_recorded_at  ON inflow_transactions(recorded_at);
 CREATE INDEX IF NOT EXISTS idx_outflow_recorded_at ON outflow_transactions(recorded_at);
 
+-- Special config versioning
+CREATE TABLE IF NOT EXISTS public.special_config_groups (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.special_config_groups ENABLE ROW LEVEL SECURITY;
+DO $\$ BEGIN
+  CREATE POLICY "scg_read" ON public.special_config_groups FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
+  CREATE POLICY "scg_write" ON public.special_config_groups FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+
+ALTER TABLE public.allocation_configs
+  ADD COLUMN IF NOT EXISTS config_group_id uuid REFERENCES public.special_config_groups(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS effective_from  date,
+  ADD COLUMN IF NOT EXISTS effective_to    date,
+  ADD COLUMN IF NOT EXISTS version_number  integer NOT NULL DEFAULT 1;
+
+ALTER TABLE public.income_types
+  ADD COLUMN IF NOT EXISTS special_config_group_id uuid REFERENCES public.special_config_groups(id) ON DELETE SET NULL;
+
+-- Migrate existing special configs: each becomes a group with version 1
+DO $\$
+DECLARE
+  cfg RECORD;
+  grp_id uuid;
+BEGIN
+  FOR cfg IN SELECT * FROM public.allocation_configs WHERE is_special = true AND config_group_id IS NULL LOOP
+    INSERT INTO public.special_config_groups (name, created_at)
+    VALUES (cfg.name, cfg.created_at)
+    RETURNING id INTO grp_id;
+
+    UPDATE public.allocation_configs
+    SET config_group_id = grp_id,
+        effective_from  = COALESCE(cfg.start_date::date, cfg.created_at::date),
+        version_number  = 1
+    WHERE id = cfg.id;
+
+    UPDATE public.income_types
+    SET special_config_group_id = grp_id
+    WHERE special_config_id = cfg.id AND special_config_group_id IS NULL;
+  END LOOP;
+END $\$;
+
+CREATE TABLE IF NOT EXISTS public.transaction_allocation_snapshots (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_id     uuid NOT NULL REFERENCES public.inflow_transactions(id) ON DELETE CASCADE,
+  config_version_id  uuid REFERENCES public.allocation_configs(id) ON DELETE RESTRICT,
+  config_group_id    uuid REFERENCES public.special_config_groups(id) ON DELETE SET NULL,
+  resolved_rows      jsonb NOT NULL DEFAULT '[]',
+  allocation_type    text,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  is_recalculated    boolean NOT NULL DEFAULT false,
+  recalculated_at    timestamptz,
+  UNIQUE(transaction_id)
+);
+ALTER TABLE public.transaction_allocation_snapshots ENABLE ROW LEVEL SECURITY;
+DO $\$ BEGIN
+  CREATE POLICY "tas_read" ON public.transaction_allocation_snapshots FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
+  CREATE POLICY "tas_write" ON public.transaction_allocation_snapshots FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+
+CREATE TABLE IF NOT EXISTS public.recalculation_logs (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  config_group_id    uuid REFERENCES public.special_config_groups(id) ON DELETE SET NULL,
+  config_version_id  uuid REFERENCES public.allocation_configs(id) ON DELETE SET NULL,
+  performed_by       uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  performed_at       timestamptz NOT NULL DEFAULT now(),
+  affected_count     integer NOT NULL DEFAULT 0,
+  reason             text,
+  action_summary     text NOT NULL
+);
+ALTER TABLE public.recalculation_logs ENABLE ROW LEVEL SECURITY;
+DO $\$ BEGIN
+  CREATE POLICY "rl_read" ON public.recalculation_logs FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
+  CREATE POLICY "rl_write" ON public.recalculation_logs FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+
 -- Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';`
 
@@ -980,10 +1119,9 @@ export default function SetupPage() {
   const [editLockedTarget,  setEditLockedTarget]  = useState<AllocationConfig | null>(null)
   const [deleteAllocTarget, setDeleteAllocTarget] = useState<AllocationConfig | null>(null)
   const [specialModalOpen,      setSpecialModalOpen]      = useState(false)
-  const [editSpecialRecord,     setEditSpecialRecord]     = useState<AllocationConfig | null>(null)
-  const [deleteSpecialTarget,   setDeleteSpecialTarget]   = useState<AllocationConfig | null>(null)
-  const [specialLockTarget,     setSpecialLockTarget]     = useState<AllocationConfig | null>(null)
-  const [specialEditLocked,     setSpecialEditLocked]     = useState<AllocationConfig | null>(null)
+  const [specialModalMode,      setSpecialModalMode]      = useState<'new_group' | 'new_version'>('new_group')
+  const [selectedSpecialGroup,  setSelectedSpecialGroup]  = useState<SpecialConfigGroupWithVersions | null>(null)
+  const [copyFromVersion,       setCopyFromVersion]       = useState<AllocationConfig | null>(null)
   const [specialRefetch,        setSpecialRefetch]        = useState(0)
   const [resetModalOpen,       setResetModalOpen]       = useState(false)
   const [incomeTypeModalOpen,  setIncomeTypeModalOpen]  = useState(false)
@@ -1061,44 +1199,17 @@ export default function SetupPage() {
     setAllocModalOpen(true)
   }
 
-  const confirmSpecialLock = async () => {
-    if (!specialLockTarget) return
-    try {
-      await lockConfig(specialLockTarget.id)
-      toast(`"${specialLockTarget.name}" locked`, 'success')
-      setSpecialLockTarget(null)
-      setSpecialRefetch(n => n + 1)
-    } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Lock failed', 'error')
-    }
+  const handleNewGroup = () => {
+    setSpecialModalMode('new_group')
+    setSelectedSpecialGroup(null)
+    setCopyFromVersion(null)
+    setSpecialModalOpen(true)
   }
 
-  const handleSpecialUnlockAndEdit = async () => {
-    if (!specialEditLocked) return
-    try {
-      await unlockConfig(specialEditLocked.id)
-      toast(`"${specialEditLocked.name}" unlocked`, 'success')
-      const target = specialEditLocked
-      setSpecialEditLocked(null)
-      setEditSpecialRecord(target)
-      setSpecialModalOpen(true)
-      setSpecialRefetch(n => n + 1)
-    } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Unlock failed', 'error')
-    }
-  }
-
-  const handleSpecialCreateCopy = () => {
-    if (!specialEditLocked) return
-    const source = specialEditLocked
-    setSpecialEditLocked(null)
-    setEditSpecialRecord({
-      ...source,
-      id:         '',
-      name:       `${source.name} (copy)`,
-      status:     'draft',
-      created_at: '',
-    })
+  const handleNewVersion = (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => {
+    setSpecialModalMode('new_version')
+    setSelectedSpecialGroup(group)
+    setCopyFromVersion(copyFrom)
     setSpecialModalOpen(true)
   }
 
@@ -1154,11 +1265,9 @@ export default function SetupPage() {
           {activeTab === 'Special Configs' && (
             <SpecialConfigsTab
               key={specialRefetch}
-              onNew={() => { setEditSpecialRecord(null); setSpecialModalOpen(true) }}
-              onEdit={c => { setEditSpecialRecord(c); setSpecialModalOpen(true) }}
-              onEditLocked={c => setSpecialEditLocked(c)}
-              onLock={c => setSpecialLockTarget(c)}
-              onDelete={c => setDeleteSpecialTarget(c)}
+              onNew={handleNewGroup}
+              onNewVersion={handleNewVersion}
+              onRefetch={() => setSpecialRefetch(n => n + 1)}
             />
           )}
           {activeTab === 'Income Types' && (
@@ -1297,99 +1406,12 @@ export default function SetupPage() {
       />
       <CreateSpecialConfigModal
         open={specialModalOpen}
-        onClose={() => { setSpecialModalOpen(false); setEditSpecialRecord(null) }}
-        onSaved={() => { setSpecialModalOpen(false); setEditSpecialRecord(null); setSpecialRefetch(n => n + 1) }}
-        editRecord={editSpecialRecord}
+        onClose={() => { setSpecialModalOpen(false) }}
+        onSaved={() => { setSpecialModalOpen(false); setSpecialRefetch(n => n + 1) }}
+        mode={specialModalMode}
+        group={selectedSpecialGroup}
+        copyFromVersion={copyFromVersion}
       />
-      <DeleteDialog
-        open={!!deleteSpecialTarget}
-        onClose={() => setDeleteSpecialTarget(null)}
-        onConfirm={async () => {
-          if (!deleteSpecialTarget) return
-          await supabase.from('allocation_configs').delete().eq('id', deleteSpecialTarget.id)
-          setDeleteSpecialTarget(null)
-          setSpecialRefetch(n => n + 1)
-        }}
-        loading={false}
-        label={deleteSpecialTarget ? `"${deleteSpecialTarget.name}"` : 'this config'}
-      />
-
-      {/* Special config lock confirmation */}
-      <Modal
-        open={!!specialLockTarget}
-        onClose={() => setSpecialLockTarget(null)}
-        title="Lock Special Config"
-        size="max-w-sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Lock <span className="font-semibold">"{specialLockTarget?.name}"</span>? Locked configs are read-only and will be used when matched by income type rules.
-          </p>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setSpecialLockTarget(null)}
-              disabled={locking}
-              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmSpecialLock}
-              disabled={locking}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60"
-            >
-              {locking && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              Lock Config
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Special config edit-locked choice */}
-      <Modal
-        open={!!specialEditLocked}
-        onClose={() => setSpecialEditLocked(null)}
-        title="Edit Locked Special Config"
-        size="max-w-sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold">"{specialEditLocked?.name}"</span> is locked. How would you like to proceed?
-          </p>
-          <div className="space-y-2">
-            <button
-              onClick={handleSpecialUnlockAndEdit}
-              disabled={unlocking}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-60"
-            >
-              <LockOpen className="w-5 h-5 text-amber-600 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Unlock &amp; Edit</p>
-                <p className="text-xs text-gray-500">Reverts status to draft so you can make changes.</p>
-              </div>
-              {unlocking && <span className="ml-auto w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />}
-            </button>
-            <button
-              onClick={handleSpecialCreateCopy}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <Copy className="w-5 h-5 text-gray-500 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Create a Copy</p>
-                <p className="text-xs text-gray-500">Opens a new draft pre-filled with this config's data.</p>
-              </div>
-            </button>
-          </div>
-          <div className="flex justify-end">
-            <button
-              onClick={() => setSpecialEditLocked(null)}
-              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </Modal>
       <ResetDataModal
         open={resetModalOpen}
         onClose={() => setResetModalOpen(false)}

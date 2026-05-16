@@ -11,14 +11,16 @@ export interface IncomeTypeRule {
 }
 
 export interface IncomeType {
-  id:                  string
-  name:                string
-  description:         string | null
-  color:               string
-  special_config_id:   string | null
-  special_config_name: string | null  // joined from allocation_configs
-  rules:               IncomeTypeRule[]
-  created_at:          string
+  id:                       string
+  name:                     string
+  description:              string | null
+  color:                    string
+  special_config_id:        string | null
+  special_config_name:      string | null  // joined from allocation_configs
+  special_config_group_id:  string | null
+  special_config_group_name: string | null
+  rules:                    IncomeTypeRule[]
+  created_at:               string
 }
 
 // ── useIncomeTypes ─────────────────────────────────────────────────────────────
@@ -33,8 +35,9 @@ export function useIncomeTypes() {
     const { data, error: err } = await supabase
       .from('income_types')
       .select(`
-        id, name, description, color, special_config_id, created_at,
+        id, name, description, color, special_config_id, special_config_group_id, created_at,
         allocation_configs ( name ),
+        special_config_groups ( name ),
         income_type_rules ( id, income_type_id, rule_type, rule_value )
       `)
       .order('name')
@@ -43,15 +46,18 @@ export function useIncomeTypes() {
     } else {
       const mapped = (data ?? []).map((r: Record<string, unknown>) => {
         const cfg = r.allocation_configs as { name: string } | null
+        const grp = r.special_config_groups as { name: string } | null
         return {
-          id:                  r.id,
-          name:                r.name,
-          description:         r.description ?? null,
-          color:               r.color,
-          special_config_id:   r.special_config_id ?? null,
-          special_config_name: cfg?.name ?? null,
-          rules:               (r.income_type_rules as IncomeTypeRule[]) ?? [],
-          created_at:          r.created_at,
+          id:                       r.id,
+          name:                     r.name,
+          description:              r.description ?? null,
+          color:                    r.color,
+          special_config_id:        r.special_config_id ?? null,
+          special_config_name:      cfg?.name ?? null,
+          special_config_group_id:  r.special_config_group_id ?? null,
+          special_config_group_name: grp?.name ?? null,
+          rules:                    (r.income_type_rules as IncomeTypeRule[]) ?? [],
+          created_at:               r.created_at,
         } as IncomeType
       })
       setIncomeTypes(mapped)
@@ -150,14 +156,42 @@ export function useSpecialConfigOptions() {
   return { options, loading, reload }
 }
 
+// ── useSpecialConfigGroupOptions ───────────────────────────────────────────────
+
+export interface SpecialConfigGroupOption {
+  id:   string
+  name: string
+}
+
+export function useSpecialConfigGroupOptions() {
+  const [options,  setOptions]  = useState<SpecialConfigGroupOption[]>([])
+  const [loading,  setLoading]  = useState(true)
+
+  const reload = () => {
+    supabase
+      .from('special_config_groups')
+      .select('id, name')
+      .order('name')
+      .then(({ data }) => {
+        setOptions((data ?? []) as SpecialConfigGroupOption[])
+        setLoading(false)
+      })
+  }
+
+  useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { options, loading, reload }
+}
+
 // ── Mutations ──────────────────────────────────────────────────────────────────
 
 export interface IncomeTypeInput {
-  name:             string
-  description?:     string
-  color:            string
-  special_config_id?: string | null
-  rules:            { rule_type: 'keyword' | 'stage_code'; rule_value: string }[]
+  name:                    string
+  description?:            string
+  color:                   string
+  special_config_id?:      string | null
+  special_config_group_id?: string | null
+  rules:                   { rule_type: 'keyword' | 'stage_code'; rule_value: string }[]
 }
 
 export async function saveIncomeType(input: IncomeTypeInput, existingId?: string): Promise<string> {
@@ -171,6 +205,7 @@ export async function saveIncomeType(input: IncomeTypeInput, existingId?: string
         description:      input.description || null,
         color:            input.color,
         special_config_id: input.special_config_id || null,
+        ...(input.special_config_group_id !== undefined ? { special_config_group_id: input.special_config_group_id || null } : {}),
       })
       .eq('id', existingId)
     if (error) throw new Error(error.message)
@@ -184,6 +219,7 @@ export async function saveIncomeType(input: IncomeTypeInput, existingId?: string
         description:      input.description || null,
         color:            input.color,
         special_config_id: input.special_config_id || null,
+        ...(input.special_config_group_id !== undefined ? { special_config_group_id: input.special_config_group_id || null } : {}),
       })
       .select('id')
       .single()

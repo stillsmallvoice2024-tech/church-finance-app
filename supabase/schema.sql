@@ -642,4 +642,75 @@ create policy "report_templates_select" on public.report_templates
 create policy "report_templates_all" on public.report_templates
   for all using (auth.uid() is not null) with check (auth.uid() is not null);
 
+-- ============================================================
+-- SPECIAL CONFIG GROUPS (versioned special allocation configs)
+-- ============================================================
+create table if not exists public.special_config_groups (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.special_config_groups enable row level security;
+
+create policy "scg_read" on public.special_config_groups
+  for select using (auth.uid() is not null);
+create policy "scg_write" on public.special_config_groups
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
+alter table public.allocation_configs
+  add column if not exists config_group_id uuid references public.special_config_groups(id) on delete cascade,
+  add column if not exists effective_from  date,
+  add column if not exists effective_to    date,
+  add column if not exists version_number  integer not null default 1;
+
+alter table public.income_types
+  add column if not exists special_config_group_id uuid references public.special_config_groups(id) on delete set null;
+
+create index if not exists idx_alloc_config_group on public.allocation_configs(config_group_id);
+
+-- ============================================================
+-- TRANSACTION ALLOCATION SNAPSHOTS
+-- ============================================================
+create table if not exists public.transaction_allocation_snapshots (
+  id                 uuid primary key default gen_random_uuid(),
+  transaction_id     uuid not null references public.inflow_transactions(id) on delete cascade,
+  config_version_id  uuid references public.allocation_configs(id) on delete restrict,
+  config_group_id    uuid references public.special_config_groups(id) on delete set null,
+  resolved_rows      jsonb not null default '[]',
+  allocation_type    text,
+  created_at         timestamptz not null default now(),
+  is_recalculated    boolean not null default false,
+  recalculated_at    timestamptz,
+  unique(transaction_id)
+);
+
+alter table public.transaction_allocation_snapshots enable row level security;
+
+create policy "tas_read" on public.transaction_allocation_snapshots
+  for select using (auth.uid() is not null);
+create policy "tas_write" on public.transaction_allocation_snapshots
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
+-- ============================================================
+-- RECALCULATION LOGS
+-- ============================================================
+create table if not exists public.recalculation_logs (
+  id                 uuid primary key default gen_random_uuid(),
+  config_group_id    uuid references public.special_config_groups(id) on delete set null,
+  config_version_id  uuid references public.allocation_configs(id) on delete set null,
+  performed_by       uuid references public.profiles(id) on delete set null,
+  performed_at       timestamptz not null default now(),
+  affected_count     integer not null default 0,
+  reason             text,
+  action_summary     text not null
+);
+
+alter table public.recalculation_logs enable row level security;
+
+create policy "rl_read" on public.recalculation_logs
+  for select using (auth.uid() is not null);
+create policy "rl_write" on public.recalculation_logs
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
 create index if not exists idx_report_templates_user on public.report_templates(created_by);

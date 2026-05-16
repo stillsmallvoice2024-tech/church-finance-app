@@ -7,7 +7,7 @@ import { Modal } from '../ui/Modal'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
-import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
+import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../../store/allocationStore'
 import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
@@ -123,24 +123,31 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   // Auto-apply special config when income type changes (unless config was manually picked)
   useEffect(() => {
     if (configManuallySet) return
-    if (selectedIncomeType?.special_config_id) {
+    if (selectedIncomeType?.special_config_group_id && watchedDate) {
+      const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
+      setSelectedConfigId(version?.id ?? '')
+    } else if (selectedIncomeType?.special_config_id) {
       setSelectedConfigId(selectedIncomeType.special_config_id)
     } else if (!incomeTypeId) {
-      // income type cleared — fall back to date-based
       if (watchedDate) {
         const cfg = getConfigForDate(lockedConfigs, watchedDate)
         setSelectedConfigId(cfg?.id ?? '')
       }
     }
-  }, [incomeTypeId, selectedIncomeType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [incomeTypeId, selectedIncomeType, watchedDate, allocConfigs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-select allocation config by date (unless manually overridden or income-type config applied)
   useEffect(() => {
     if (configManuallySet || !watchedDate) return
-    if (selectedIncomeType?.special_config_id) return  // income type already set config
+    if (selectedIncomeType?.special_config_group_id) {
+      const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
+      setSelectedConfigId(version?.id ?? '')
+      return
+    }
+    if (selectedIncomeType?.special_config_id) return
     const cfg = getConfigForDate(lockedConfigs, watchedDate)
     setSelectedConfigId(cfg?.id ?? '')
-  }, [watchedDate, lockedConfigs, configManuallySet])
+  }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Populate / clear form when modal opens
   useEffect(() => {
