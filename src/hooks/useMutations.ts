@@ -818,22 +818,27 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
+      const { data: oldData } = await supabase
+        .from('banks').select('*').eq('id', input.id).single()
+
+      const updates = {
+        name:           input.name,
+        account_number: input.account_number ?? null,
+        account_type:   input.account_type   ?? null,
+        currency:       input.currency        ?? 'NGN',
+        starting_balance:                input.starting_balance               ?? null,
+        starting_balance_category:       input.starting_balance_category      ?? null,
+        starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+        starting_balance_alloc_type:     input.starting_balance_alloc_type    ?? null,
+        starting_balance_allocations:    input.starting_balance_allocations   ?? [],
+      }
+
       const { error: err } = await supabase
-        .from('banks')
-        .update({
-          name:           input.name,
-          account_number: input.account_number ?? null,
-          account_type:   input.account_type   ?? null,
-          currency:       input.currency        ?? 'NGN',
-          starting_balance:                input.starting_balance               ?? null,
-          starting_balance_category:       input.starting_balance_category      ?? null,
-          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
-          starting_balance_alloc_type:     input.starting_balance_alloc_type    ?? null,
-          starting_balance_allocations:    input.starting_balance_allocations   ?? [],
-        })
-        .eq('id', input.id)
+        .from('banks').update(updates).eq('id', input.id)
       if (err) throw err
-      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, newData: input as unknown as Record<string, unknown> })
+
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })
+      if (oldData) logFieldChanges(user.id, 'banks', input.id, oldData as Record<string, unknown>, updates as Record<string, unknown>)
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }

@@ -5,12 +5,13 @@ import { z } from 'zod'
 import { AlertTriangle, Terminal, Plus, Trash2, Check, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
-import { useCategories } from '../../hooks/useCategories'
+import { useCategories, upsertCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import type { DbBank, StartingBalanceRow, SchemaStatus } from '../../hooks/useBanks'
 import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { formatCurrency, parseCurrency } from '../../utils/currency'
+import { useToastStore } from '../../store/toastStore'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -57,6 +58,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
   const { categories, refetch: refetchCategories } = useCategories()
   const { currencies } = useCurrencies()
+  const { push: toast } = useToastStore()
 
   const addMutation    = useAddBank()
   const updateMutation = useUpdateBank()
@@ -145,7 +147,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     } else {
       resetForm({ name: '', account_number: '', account_type: '' })
       setAllocType('percentage')
-      setRows([{ category_name: '', budget_portion: '', value: '' }])
+      setRows([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
     }
 
     // Schema check with one retry — handles stale PostgREST cache immediately
@@ -246,6 +248,34 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       } else {
         await add(payload)
       }
+
+      // Propagate apply_to_category rows into category_opening_balances
+      if (hasBalance && allocations.length > 0) {
+        const totalBalance = values.starting_balance ?? 0
+        let propagateFailed = false
+        for (const row of allocations) {
+          if (row.apply_to_category === false) continue
+          const cat = categories.find(c => c.name === row.category_name)
+          if (!cat) continue
+          const amount = allocType === 'percentage'
+            ? Math.round(((row.percentage ?? 0) / 100) * totalBalance * 100) / 100
+            : (row.amount ?? 0)
+          if (amount <= 0) continue
+          try {
+            await upsertCategoryOpeningBalance(cat.id, row.budget_portion as BudgetPortion, amount)
+          } catch {
+            propagateFailed = true
+          }
+        }
+        if (propagateFailed) {
+          toast('Bank saved — category balance update failed. Verify category opening balances manually.', 'error')
+        } else {
+          toast(isEdit ? 'Bank updated' : 'Bank added', 'success')
+        }
+      } else {
+        toast(isEdit ? 'Bank updated' : 'Bank added', 'success')
+      }
+
       onSuccess?.()
       onClose()
     } catch { /* surfaced via hook error */ }
