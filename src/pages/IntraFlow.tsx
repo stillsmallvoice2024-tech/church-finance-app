@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   ArrowLeftRight, Plus, Download, Pencil, Trash2,
-  Search, AlertCircle, RefreshCw, FileSpreadsheet,
+  Search, AlertCircle, RefreshCw,
   LayoutGrid, LayoutList,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddIntraFlowModal }       from '../components/modals/AddIntraFlowModal'
-import { ImportModal }             from '../components/modals/ImportModal'
-import { CanWrite }                from '../components/auth/RoleGates'
 import { useIntraFlows, type IntraFlowRow } from '../hooks/useTransactions'
 import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
@@ -97,7 +95,6 @@ export default function IntraFlow() {
   const [modalOpen,    setModalOpen]    = useState(false)
   const [deleteId,     setDeleteId]     = useState<string | null>(null)
   const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
-  const [importOpen,   setImportOpen]   = useState(false)
   const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
 
   const { push: toast }                             = useToastStore()
@@ -381,19 +378,7 @@ export default function IntraFlow() {
         loading={deleting}
         label="this internal transfer"
       />
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <DescriptionTooltip tooltip={descTooltip} />
-
-      {/* Floating import button */}
-      <CanWrite>
-        <button
-          onClick={() => setImportOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-accent text-white text-sm font-medium rounded-full shadow-lg hover:bg-accent/90 transition-colors"
-          title="Import from Excel"
-        >
-          <FileSpreadsheet className="w-4 h-4" /> Import Excel
-        </button>
-      </CanWrite>
     </>
   )
 }
