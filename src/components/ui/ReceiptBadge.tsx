@@ -107,14 +107,19 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
+    // Snapshot before resetting the input (FileList is live — cleared when input.value = '')
+    const fileArray = Array.from(files)
+    const total = fileArray.length
     setUploading(true)
     let failed = 0
+    let lastError: string | null = null
     try {
-      for (const file of Array.from(files)) {
+      for (const file of fileArray) {
         try {
           await upload(file)
         } catch (e) {
           failed++
+          lastError = e instanceof Error ? e.message : String(e)
           console.error('[ReceiptBadge] upload failed:', file.name, e)
         }
       }
@@ -124,13 +129,13 @@ export function ReceiptBadge({ entityType, entityId }: Props) {
     }
     if (failed > 0) {
       toast(
-        failed === files.length
-          ? 'Upload failed — check storage permissions or bucket setup'
-          : `${failed} of ${files.length} file(s) failed to upload`,
+        failed === total
+          ? `Upload failed: ${lastError ?? 'check storage permissions or bucket setup'}`
+          : `${failed} of ${total} file(s) failed to upload${lastError ? `: ${lastError}` : ''}`,
         'error',
       )
     } else {
-      toast(`${files.length} receipt${files.length > 1 ? 's' : ''} uploaded`, 'success')
+      toast(`${total} receipt${total > 1 ? 's' : ''} uploaded`, 'success')
     }
   }
 
