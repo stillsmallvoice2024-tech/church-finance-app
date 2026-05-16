@@ -155,6 +155,15 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 ---
 
+## Outflows Table — Column Order
+
+Checkbox, Date, Recorded, **Bank**, Txn ID, Description, Disbursed (₦), Refunded (₦), Net (₦), Stage Code 1, Remarks, 📎, Actions (13 total).
+
+- `transfer_charge` is **not shown** as a column but is still deducted in the Net (₦) calculation
+- `bank_name` is displayed as the **Bank** column, positioned after Recorded
+
+---
+
 ## AddOutflowModal — Removed Fields
 
 The **Optional Banking Details** section has been fully removed from `AddOutflowModal.tsx`:
