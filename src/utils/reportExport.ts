@@ -3,6 +3,9 @@ import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import type {
   ReportGroup,
+  ReportItem,
+  ReportGroupChild,
+  ReportSubgroup,
   ReportTable,
   ReportLayout,
   ReportCategoryBalance,
@@ -33,7 +36,7 @@ function getCategoryBalance(
 // ── Balance helpers ───────────────────────────────────────────────────────────
 
 export function getItemBalance(
-  item: ReportGroup['items'][number],
+  item: ReportItem,
   balances: Map<string, ReportCategoryBalance>,
   opBalances: OperationalBalanceMap,
 ): number {
@@ -53,13 +56,14 @@ export function computeGroupTotal(
   opBalances: OperationalBalanceMap = new Map(),
 ): number {
   let total = 0
-  for (const item of group.items) {
-    if (item.visible) total += getItemBalance(item, balances, opBalances)
-  }
-  for (const sg of group.subgroups ?? []) {
-    if (!sg.visible) continue
-    for (const item of sg.items) {
-      if (item.visible) total += getItemBalance(item, balances, opBalances)
+  for (const child of group.children) {
+    if (child.kind === 'item') {
+      if (child.data.visible) total += getItemBalance(child.data, balances, opBalances)
+    } else {
+      if (!child.data.visible) continue
+      for (const item of child.data.items) {
+        if (item.visible) total += getItemBalance(item, balances, opBalances)
+      }
     }
   }
   return total
@@ -87,13 +91,27 @@ export function computeGrandTotal(
     .reduce((sum, t) => sum + computeTableTotal(t, balances, opBalances), 0)
 }
 
+function migrateGroupChildren(g: ReportGroup): ReportGroupChild[] {
+  const raw = g as unknown as { children?: ReportGroupChild[]; items?: ReportItem[]; subgroups?: ReportSubgroup[] }
+  if (raw.children !== undefined) return raw.children
+  return [
+    ...(raw.items ?? []).map(data => ({ kind: 'item' as const, data })),
+    ...(raw.subgroups ?? []).map(data => ({ kind: 'subgroup' as const, data })),
+  ]
+}
+
 /** Coerce old single-table layout to the new multi-table format */
 export function normaliseTables(layout: ReportLayout): ReportTable[] {
-  if (layout.tables && layout.tables.length > 0) return layout.tables
-  if (layout.groups && layout.groups.length > 0) {
-    return [{ id: 'legacy', title: 'Financial Report', visible: true, groups: layout.groups, include_in_combined_total: true }]
-  }
-  return []
+  const rawTables =
+    layout.tables && layout.tables.length > 0
+      ? layout.tables
+      : layout.groups && layout.groups.length > 0
+        ? [{ id: 'legacy', title: 'Financial Report', visible: true, groups: layout.groups, include_in_combined_total: true }]
+        : []
+  return rawTables.map(t => ({
+    ...t,
+    groups: t.groups.map(g => ({ ...g, children: migrateGroupChildren(g) })),
+  }))
 }
 
 // ── PDF Export ────────────────────────────────────────────────────────────────
@@ -148,46 +166,41 @@ export function exportReportPDF(
     for (const group of table.groups) {
       if (!group.visible) continue
 
-      // Group header
       tableBody.push([
         { content: group.label, styles: { fontStyle: 'bold', fillColor: [230, 230, 230] as [number, number, number] } },
         { content: '', styles: { fillColor: [230, 230, 230] as [number, number, number] } },
       ])
 
-      // Direct items in group
-      for (const item of group.items) {
-        if (!item.visible) continue
-        const val = getItemBalance(item, balances, opBalances)
-        tableBody.push([item.displayLabel, `₦${fmt(val)}`])
-      }
-
-      // Subgroups
-      for (const sg of group.subgroups ?? []) {
-        if (!sg.visible) continue
-        tableBody.push([
-          { content: `  ${sg.label}`, styles: { fontStyle: 'italic', fillColor: [245, 245, 245] as [number, number, number] } },
-          { content: '', styles: { fillColor: [245, 245, 245] as [number, number, number] } },
-        ])
-        for (const item of sg.items) {
-          if (!item.visible) continue
-          const val = getItemBalance(item, balances, opBalances)
-          tableBody.push([`    ${item.displayLabel}`, `₦${fmt(val)}`])
+      for (const child of group.children) {
+        if (child.kind === 'item') {
+          if (!child.data.visible) continue
+          const val = getItemBalance(child.data, balances, opBalances)
+          tableBody.push([child.data.displayLabel, `₦${fmt(val)}`])
+        } else {
+          const sg = child.data
+          if (!sg.visible) continue
+          tableBody.push([
+            { content: `  ${sg.label}`, styles: { fontStyle: 'italic', fillColor: [245, 245, 245] as [number, number, number] } },
+            { content: '', styles: { fillColor: [245, 245, 245] as [number, number, number] } },
+          ])
+          for (const item of sg.items) {
+            if (!item.visible) continue
+            const val = getItemBalance(item, balances, opBalances)
+            tableBody.push([`    ${item.displayLabel}`, `₦${fmt(val)}`])
+          }
+          const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
+          tableBody.push([
+            { content: `  ${sg.label} Sub-Total`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
+            { content: `₦${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
+          ])
         }
-        // Subgroup subtotal
-        const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
-        tableBody.push([
-          { content: `  ${sg.label} Sub-Total`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
-          { content: `₦${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
-        ])
       }
 
-      // Group subtotal
       const groupTotal = computeGroupTotal(group, balances, opBalances)
       tableBody.push([
         { content: `${group.label} Sub-Total`, styles: { fontStyle: 'bold' } },
         { content: `₦${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
       ])
-
       tableBody.push([{ content: '', styles: { cellPadding: 1 } }, ''])
     }
 
@@ -273,20 +286,21 @@ export function exportReportExcel(
 
       rows.push([group.label, ''])
 
-      for (const item of group.items) {
-        if (!item.visible) continue
-        rows.push([`  ${item.displayLabel}`, getItemBalance(item, balances, opBalances)])
-      }
-
-      for (const sg of group.subgroups ?? []) {
-        if (!sg.visible) continue
-        rows.push([`  ${sg.label}`, ''])
-        for (const item of sg.items) {
-          if (!item.visible) continue
-          rows.push([`    ${item.displayLabel}`, getItemBalance(item, balances, opBalances)])
+      for (const child of group.children) {
+        if (child.kind === 'item') {
+          if (!child.data.visible) continue
+          rows.push([`  ${child.data.displayLabel}`, getItemBalance(child.data, balances, opBalances)])
+        } else {
+          const sg = child.data
+          if (!sg.visible) continue
+          rows.push([`  ${sg.label}`, ''])
+          for (const item of sg.items) {
+            if (!item.visible) continue
+            rows.push([`    ${item.displayLabel}`, getItemBalance(item, balances, opBalances)])
+          }
+          const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
+          rows.push([`  ${sg.label} Sub-Total`, sgTotal])
         }
-        const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
-        rows.push([`  ${sg.label} Sub-Total`, sgTotal])
       }
 
       rows.push([`${group.label} Sub-Total`, computeGroupTotal(group, balances, opBalances)])

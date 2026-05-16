@@ -53,6 +53,7 @@ import {
 import { useToastStore } from '../store/toastStore'
 import type {
   ReportGroup,
+  ReportGroupChild,
   ReportItem,
   ReportSubgroup,
   ReportTable,
@@ -122,11 +123,14 @@ interface GroupLocation { tableId: string; group: ReportGroup }
 function findItem(tables: ReportTable[], itemId: string): ItemLocation | null {
   for (const t of tables) {
     for (const g of t.groups) {
-      const item = g.items.find(i => i.id === itemId)
-      if (item) return { tableId: t.id, groupId: g.id, item }
-      for (const sg of g.subgroups ?? []) {
-        const sgItem = sg.items.find(i => i.id === itemId)
-        if (sgItem) return { tableId: t.id, groupId: g.id, subgroupId: sg.id, item: sgItem }
+      for (const child of g.children) {
+        if (child.kind === 'item' && child.data.id === itemId) {
+          return { tableId: t.id, groupId: g.id, item: child.data }
+        }
+        if (child.kind === 'subgroup') {
+          const sgItem = child.data.items.find(i => i.id === itemId)
+          if (sgItem) return { tableId: t.id, groupId: g.id, subgroupId: child.data.id, item: sgItem }
+        }
       }
     }
   }
@@ -500,11 +504,6 @@ function SortableGroup({
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const groupTotal = computeGroupTotal(group, balances, opBalances)
 
-  const allItemIds = [
-    ...group.items.map(i => itmId(i.id)),
-    ...(group.subgroups ?? []).map(sg => sgpId(sg.id)),
-  ]
-
   return (
     <div
       ref={setNodeRef}
@@ -584,58 +583,68 @@ function SortableGroup({
         )}
       </div>
 
-      {/* Items + subgroups */}
+      {/* Items + subgroups in unified order */}
       <div className="p-2 space-y-1">
-        <SortableContext items={allItemIds} strategy={verticalListSortingStrategy}>
-          {/* Direct items */}
-          {group.items.map((item, idx) => (
-            <SortableItem
-              key={item.id}
-              item={item}
-              balances={balances}
-              opBalances={opBalances}
-              onToggleVisible={onToggleItem}
-              onRename={onRenameItem}
-              onChangePortion={onChangeItemPortion}
-              onDelete={onDeleteItem}
-              editing={editing}
-              onMoveUp={idx > 0 ? () => onMoveItemUp(item.id) : undefined}
-              onMoveDown={idx < group.items.length - 1 ? () => onMoveItemDown(item.id) : undefined}
-              subgroups={(group.subgroups ?? []).map(sg => ({ id: sg.id, label: sg.label }))}
-              currentSubgroupId={undefined}
-              onAssignSubgroup={(sgId) => { if (sgId) onMoveItemToSubgroup(item.id, sgId) }}
-            />
-          ))}
-
-          {/* Subgroups */}
-          {(group.subgroups ?? []).map((sg, sgIdx) => {
-            const totalSgs = (group.subgroups ?? []).length
-            return (
-              <SortableSubgroup
-                key={sg.id}
-                sg={sg}
-                groupId={group.id}
-                balances={balances}
-                opBalances={opBalances}
-                editing={editing}
-                onRenameSubgroup={(sgId, label) => onRenameSubgroup(group.id, sgId, label)}
-                onToggleSubgroup={(sgId) => onToggleSubgroup(group.id, sgId)}
-                onDeleteSubgroup={(sgId) => onDeleteSubgroup(group.id, sgId)}
-                onToggleItem={onToggleItem}
-                onRenameItem={onRenameItem}
-                onChangeItemPortion={onChangeItemPortion}
-                onDeleteItem={onDeleteItem}
-                allSubgroups={(group.subgroups ?? []).map(s => ({ id: s.id, label: s.label }))}
-                onMoveItemUp={onMoveItemUp}
-                onMoveItemDown={onMoveItemDown}
-                onMoveItemToSubgroup={onMoveItemToSubgroup}
-                onRemoveItemFromSubgroup={onRemoveItemFromSubgroup}
-                onMoveSubgroupUp={sgIdx > 0 ? () => onMoveSubgroupUp(group.id, sg.id) : undefined}
-                onMoveSubgroupDown={sgIdx < totalSgs - 1 ? () => onMoveSubgroupDown(group.id, sg.id) : undefined}
-              />
-            )
-          })}
-        </SortableContext>
+        {(() => {
+          const allSubgroupList = group.children
+            .filter(c => c.kind === 'subgroup')
+            .map(c => ({ id: (c as { kind: 'subgroup'; data: ReportSubgroup }).data.id, label: (c as { kind: 'subgroup'; data: ReportSubgroup }).data.label }))
+          const allItemIdsCtx = group.children.map(c =>
+            c.kind === 'item' ? itmId(c.data.id) : sgpId((c as { kind: 'subgroup'; data: ReportSubgroup }).data.id)
+          )
+          return (
+            <SortableContext items={allItemIdsCtx} strategy={verticalListSortingStrategy}>
+              {group.children.map((child, idx) => {
+                if (child.kind === 'item') {
+                  return (
+                    <SortableItem
+                      key={child.data.id}
+                      item={child.data}
+                      balances={balances}
+                      opBalances={opBalances}
+                      onToggleVisible={onToggleItem}
+                      onRename={onRenameItem}
+                      onChangePortion={onChangeItemPortion}
+                      onDelete={onDeleteItem}
+                      editing={editing}
+                      onMoveUp={idx > 0 ? () => onMoveItemUp(child.data.id) : undefined}
+                      onMoveDown={idx < group.children.length - 1 ? () => onMoveItemDown(child.data.id) : undefined}
+                      subgroups={allSubgroupList}
+                      currentSubgroupId={undefined}
+                      onAssignSubgroup={(sgId) => { if (sgId) onMoveItemToSubgroup(child.data.id, sgId) }}
+                    />
+                  )
+                } else {
+                  const sg = child.data
+                  return (
+                    <SortableSubgroup
+                      key={sg.id}
+                      sg={sg}
+                      groupId={group.id}
+                      balances={balances}
+                      opBalances={opBalances}
+                      editing={editing}
+                      onRenameSubgroup={(sgId, label) => onRenameSubgroup(group.id, sgId, label)}
+                      onToggleSubgroup={(sgId) => onToggleSubgroup(group.id, sgId)}
+                      onDeleteSubgroup={(sgId) => onDeleteSubgroup(group.id, sgId)}
+                      onToggleItem={onToggleItem}
+                      onRenameItem={onRenameItem}
+                      onChangeItemPortion={onChangeItemPortion}
+                      onDeleteItem={onDeleteItem}
+                      allSubgroups={allSubgroupList}
+                      onMoveItemUp={onMoveItemUp}
+                      onMoveItemDown={onMoveItemDown}
+                      onMoveItemToSubgroup={onMoveItemToSubgroup}
+                      onRemoveItemFromSubgroup={onRemoveItemFromSubgroup}
+                      onMoveSubgroupUp={idx > 0 ? () => onMoveSubgroupUp(group.id, sg.id) : undefined}
+                      onMoveSubgroupDown={idx < group.children.length - 1 ? () => onMoveSubgroupDown(group.id, sg.id) : undefined}
+                    />
+                  )
+                }
+              })}
+            </SortableContext>
+          )
+        })()}
       </div>
 
       {/* Group subtotal */}
@@ -876,10 +885,11 @@ function CategoryPicker({
   const allGroups = tables.flatMap(t => t.groups)
 
   const usedKeys = new Set(
-    tables.flatMap(t => t.groups.flatMap(g => [
-      ...g.items.map(itemKey),
-      ...(g.subgroups ?? []).flatMap(sg => sg.items.map(itemKey)),
-    ])),
+    tables.flatMap(t => t.groups.flatMap(g =>
+      g.children.flatMap(c =>
+        c.kind === 'item' ? [itemKey(c.data)] : c.data.items.map(itemKey)
+      )
+    ))
   )
 
   const TXN_TYPES = [
@@ -1114,7 +1124,7 @@ export default function FinancialReport() {
     setTables(prev => prev.map(t =>
       t.id !== tId ? t : {
         ...t,
-        groups: [...t.groups, { id: uid(), label: `Group ${t.groups.length + 1}`, visible: true, items: [], subgroups: [] }],
+        groups: [...t.groups, { id: uid(), label: `Group ${t.groups.length + 1}`, visible: true, children: [] }],
       },
     ))
   }, [])
@@ -1158,48 +1168,56 @@ export default function FinancialReport() {
   const addSubgroup = useCallback((gId: string) => {
     setTables(prev => prev.map(t => ({
       ...t,
-      groups: t.groups.map(g =>
-        g.id !== gId ? g : {
-          ...g,
-          subgroups: [...(g.subgroups ?? []), { id: uid(), label: `Subgroup ${(g.subgroups?.length ?? 0) + 1}`, visible: true, items: [] }],
-        },
-      ),
+      groups: t.groups.map(g => {
+        if (g.id !== gId) return g
+        const sgCount = g.children.filter(c => c.kind === 'subgroup').length
+        const newSg: ReportSubgroup = { id: uid(), label: `Subgroup ${sgCount + 1}`, visible: true, items: [] }
+        return { ...g, children: [...g.children, { kind: 'subgroup' as const, data: newSg }] }
+      }),
     })))
   }, [])
 
   const renameSubgroup = useCallback((gId: string, sgId: string, label: string) => {
     setTables(prev => prev.map(t => ({
       ...t,
-      groups: t.groups.map(g =>
-        g.id !== gId ? g : {
+      groups: t.groups.map(g => {
+        if (g.id !== gId) return g
+        return {
           ...g,
-          subgroups: (g.subgroups ?? []).map(sg => sg.id === sgId ? { ...sg, label } : sg),
-        },
-      ),
+          children: g.children.map(c =>
+            c.kind === 'subgroup' && c.data.id === sgId
+              ? { kind: 'subgroup' as const, data: { ...c.data, label } }
+              : c
+          ),
+        }
+      }),
     })))
   }, [])
 
   const toggleSubgroup = useCallback((gId: string, sgId: string) => {
     setTables(prev => prev.map(t => ({
       ...t,
-      groups: t.groups.map(g =>
-        g.id !== gId ? g : {
+      groups: t.groups.map(g => {
+        if (g.id !== gId) return g
+        return {
           ...g,
-          subgroups: (g.subgroups ?? []).map(sg => sg.id === sgId ? { ...sg, visible: !sg.visible } : sg),
-        },
-      ),
+          children: g.children.map(c =>
+            c.kind === 'subgroup' && c.data.id === sgId
+              ? { kind: 'subgroup' as const, data: { ...c.data, visible: !c.data.visible } }
+              : c
+          ),
+        }
+      }),
     })))
   }, [])
 
   const deleteSubgroup = useCallback((gId: string, sgId: string) => {
     setTables(prev => prev.map(t => ({
       ...t,
-      groups: t.groups.map(g =>
-        g.id !== gId ? g : {
-          ...g,
-          subgroups: (g.subgroups ?? []).filter(sg => sg.id !== sgId),
-        },
-      ),
+      groups: t.groups.map(g => {
+        if (g.id !== gId) return g
+        return { ...g, children: g.children.filter(c => !(c.kind === 'subgroup' && c.data.id === sgId)) }
+      }),
     })))
   }, [])
 
@@ -1208,10 +1226,9 @@ export default function FinancialReport() {
       ...t,
       groups: t.groups.map(g => {
         if (g.id !== gId) return g
-        const sgs = g.subgroups ?? []
-        const idx = sgs.findIndex(sg => sg.id === sgId)
+        const idx = g.children.findIndex(c => c.kind === 'subgroup' && c.data.id === sgId)
         if (idx <= 0) return g
-        return { ...g, subgroups: arrayMove(sgs, idx, idx - 1) }
+        return { ...g, children: arrayMove(g.children, idx, idx - 1) }
       }),
     })))
   }, [])
@@ -1221,10 +1238,9 @@ export default function FinancialReport() {
       ...t,
       groups: t.groups.map(g => {
         if (g.id !== gId) return g
-        const sgs = g.subgroups ?? []
-        const idx = sgs.findIndex(sg => sg.id === sgId)
-        if (idx === -1 || idx >= sgs.length - 1) return g
-        return { ...g, subgroups: arrayMove(sgs, idx, idx + 1) }
+        const idx = g.children.findIndex(c => c.kind === 'subgroup' && c.data.id === sgId)
+        if (idx === -1 || idx >= g.children.length - 1) return g
+        return { ...g, children: arrayMove(g.children, idx, idx + 1) }
       }),
     })))
   }, [])
@@ -1247,13 +1263,13 @@ export default function FinancialReport() {
       displayLabel: label,
       portion,
       visible: true,
-      ...(incomeTypeId      ? { incomeTypeId }      : {}),
+      ...(incomeTypeId       ? { incomeTypeId }       : {}),
       ...(transactionTypeKey ? { transactionTypeKey } : {}),
     }
     setTables(prev => prev.map(t => ({
       ...t,
       groups: t.groups.map(g =>
-        g.id !== targetGroupId ? g : { ...g, items: [...g.items, newItem] },
+        g.id !== targetGroupId ? g : { ...g, children: [...g.children, { kind: 'item' as const, data: newItem }] }
       ),
     })))
   }, [])
@@ -1263,11 +1279,15 @@ export default function FinancialReport() {
       ...t,
       groups: t.groups.map(g => ({
         ...g,
-        items: g.items.map(i => i.id === itemId ? { ...i, visible: !i.visible } : i),
-        subgroups: (g.subgroups ?? []).map(sg => ({
-          ...sg,
-          items: sg.items.map(i => i.id === itemId ? { ...i, visible: !i.visible } : i),
-        })),
+        children: g.children.map(c => {
+          if (c.kind === 'item') {
+            return c.data.id === itemId ? { kind: 'item' as const, data: { ...c.data, visible: !c.data.visible } } : c
+          }
+          return { kind: 'subgroup' as const, data: {
+            ...c.data,
+            items: c.data.items.map(i => i.id === itemId ? { ...i, visible: !i.visible } : i),
+          }}
+        }),
       })),
     })))
   }, [])
@@ -1277,11 +1297,15 @@ export default function FinancialReport() {
       ...t,
       groups: t.groups.map(g => ({
         ...g,
-        items: g.items.map(i => i.id === itemId ? { ...i, displayLabel: label } : i),
-        subgroups: (g.subgroups ?? []).map(sg => ({
-          ...sg,
-          items: sg.items.map(i => i.id === itemId ? { ...i, displayLabel: label } : i),
-        })),
+        children: g.children.map(c => {
+          if (c.kind === 'item') {
+            return c.data.id === itemId ? { kind: 'item' as const, data: { ...c.data, displayLabel: label } } : c
+          }
+          return { kind: 'subgroup' as const, data: {
+            ...c.data,
+            items: c.data.items.map(i => i.id === itemId ? { ...i, displayLabel: label } : i),
+          }}
+        }),
       })),
     })))
   }, [])
@@ -1291,11 +1315,15 @@ export default function FinancialReport() {
       ...t,
       groups: t.groups.map(g => ({
         ...g,
-        items: g.items.map(i => i.id === itemId ? { ...i, portion } : i),
-        subgroups: (g.subgroups ?? []).map(sg => ({
-          ...sg,
-          items: sg.items.map(i => i.id === itemId ? { ...i, portion } : i),
-        })),
+        children: g.children.map(c => {
+          if (c.kind === 'item') {
+            return c.data.id === itemId ? { kind: 'item' as const, data: { ...c.data, portion } } : c
+          }
+          return { kind: 'subgroup' as const, data: {
+            ...c.data,
+            items: c.data.items.map(i => i.id === itemId ? { ...i, portion } : i),
+          }}
+        }),
       })),
     })))
   }, [])
@@ -1305,11 +1333,14 @@ export default function FinancialReport() {
       ...t,
       groups: t.groups.map(g => ({
         ...g,
-        items: g.items.filter(i => i.id !== itemId),
-        subgroups: (g.subgroups ?? []).map(sg => ({
-          ...sg,
-          items: sg.items.filter(i => i.id !== itemId),
-        })),
+        children: g.children.reduce<ReportGroupChild[]>((acc, c) => {
+          if (c.kind === 'item') {
+            return c.data.id === itemId ? acc : [...acc, c]
+          }
+          return [...acc, { kind: 'subgroup' as const, data: {
+            ...c.data, items: c.data.items.filter(i => i.id !== itemId),
+          }}]
+        }, []),
       })),
     })))
   }, [])
@@ -1318,14 +1349,15 @@ export default function FinancialReport() {
     setTables(prev => prev.map(t => ({
       ...t,
       groups: t.groups.map(g => {
-        const idx = g.items.findIndex(i => i.id === itemId)
-        if (idx > 0) return { ...g, items: arrayMove(g.items, idx, idx - 1) }
+        const idx = g.children.findIndex(c => c.kind === 'item' && c.data.id === itemId)
+        if (idx > 0) return { ...g, children: arrayMove(g.children, idx, idx - 1) }
         return {
           ...g,
-          subgroups: (g.subgroups ?? []).map(sg => {
-            const si = sg.items.findIndex(i => i.id === itemId)
-            if (si > 0) return { ...sg, items: arrayMove(sg.items, si, si - 1) }
-            return sg
+          children: g.children.map(c => {
+            if (c.kind !== 'subgroup') return c
+            const si = c.data.items.findIndex(i => i.id === itemId)
+            if (si > 0) return { kind: 'subgroup' as const, data: { ...c.data, items: arrayMove(c.data.items, si, si - 1) } }
+            return c
           }),
         }
       }),
@@ -1336,14 +1368,15 @@ export default function FinancialReport() {
     setTables(prev => prev.map(t => ({
       ...t,
       groups: t.groups.map(g => {
-        const idx = g.items.findIndex(i => i.id === itemId)
-        if (idx !== -1 && idx < g.items.length - 1) return { ...g, items: arrayMove(g.items, idx, idx + 1) }
+        const idx = g.children.findIndex(c => c.kind === 'item' && c.data.id === itemId)
+        if (idx !== -1 && idx < g.children.length - 1) return { ...g, children: arrayMove(g.children, idx, idx + 1) }
         return {
           ...g,
-          subgroups: (g.subgroups ?? []).map(sg => {
-            const si = sg.items.findIndex(i => i.id === itemId)
-            if (si !== -1 && si < sg.items.length - 1) return { ...sg, items: arrayMove(sg.items, si, si + 1) }
-            return sg
+          children: g.children.map(c => {
+            if (c.kind !== 'subgroup') return c
+            const si = c.data.items.findIndex(i => i.id === itemId)
+            if (si !== -1 && si < c.data.items.length - 1) return { kind: 'subgroup' as const, data: { ...c.data, items: arrayMove(c.data.items, si, si + 1) } }
+            return c
           }),
         }
       }),
@@ -1354,31 +1387,29 @@ export default function FinancialReport() {
     setTables(prev => prev.map(t => ({
       ...t,
       groups: t.groups.map(g => {
-        if (!(g.subgroups ?? []).some(sg => sg.id === targetSgId)) return g
+        if (!g.children.some(c => c.kind === 'subgroup' && c.data.id === targetSgId)) return g
         let item: ReportItem | undefined
-        let newItems = g.items
-        let newSubgroups = g.subgroups ?? []
-        const directIdx = g.items.findIndex(i => i.id === itemId)
-        if (directIdx !== -1) {
-          item = g.items[directIdx]
-          newItems = g.items.filter(i => i.id !== itemId)
-        } else {
-          for (const sg of newSubgroups) {
-            const si = sg.items.findIndex(i => i.id === itemId)
-            if (si !== -1) {
-              item = sg.items[si]
-              newSubgroups = newSubgroups.map(s =>
-                s.id === sg.id ? { ...s, items: s.items.filter(i => i.id !== itemId) } : s
-              )
-              break
-            }
+        const withoutItem = g.children.reduce<ReportGroupChild[]>((acc, c) => {
+          if (c.kind === 'item') {
+            if (c.data.id === itemId) { item = c.data; return acc }
+            return [...acc, c]
           }
-        }
+          const si = c.data.items.findIndex(i => i.id === itemId)
+          if (si !== -1) {
+            item = c.data.items[si]
+            return [...acc, { kind: 'subgroup' as const, data: { ...c.data, items: c.data.items.filter(i => i.id !== itemId) } }]
+          }
+          return [...acc, c]
+        }, [])
         if (!item) return g
-        newSubgroups = newSubgroups.map(sg =>
-          sg.id === targetSgId ? { ...sg, items: [...sg.items, item!] } : sg
-        )
-        return { ...g, items: newItems, subgroups: newSubgroups }
+        return {
+          ...g,
+          children: withoutItem.map(c =>
+            c.kind === 'subgroup' && c.data.id === targetSgId
+              ? { kind: 'subgroup' as const, data: { ...c.data, items: [...c.data.items, item!] } }
+              : c
+          ),
+        }
       }),
     })))
   }, [])
@@ -1388,13 +1419,17 @@ export default function FinancialReport() {
       ...t,
       groups: t.groups.map(g => {
         let item: ReportItem | undefined
-        const newSubgroups = (g.subgroups ?? []).map(sg => {
-          const si = sg.items.findIndex(i => i.id === itemId)
-          if (si !== -1) { item = sg.items[si]; return { ...sg, items: sg.items.filter(i => i.id !== itemId) } }
-          return sg
+        const newChildren = g.children.map(c => {
+          if (c.kind !== 'subgroup') return c
+          const si = c.data.items.findIndex(i => i.id === itemId)
+          if (si !== -1) {
+            item = c.data.items[si]
+            return { kind: 'subgroup' as const, data: { ...c.data, items: c.data.items.filter(i => i.id !== itemId) } }
+          }
+          return c
         })
         if (!item) return g
-        return { ...g, items: [...g.items, item], subgroups: newSubgroups }
+        return { ...g, children: [...newChildren, { kind: 'item' as const, data: item }] }
       }),
     })))
   }, [])
@@ -1409,31 +1444,25 @@ export default function FinancialReport() {
     const { active, over } = event
     if (!over || active.id === over.id) return
 
-    const activeStr = String(active.id)
-    const overStr   = String(over.id)
+    const activeStr  = String(active.id)
+    const overStr    = String(over.id)
     const activeType = prefixType(activeStr)
     const overType   = prefixType(overStr)
 
-    // Cross-group item moves
+    // Cross-group item moves (direct group children only — not items inside subgroups)
     if (activeType === 'itm') {
       const itemId = stripPrefix(activeStr)
       const loc    = findItem(tables, itemId)
-      if (!loc) return
+      if (!loc || loc.subgroupId) return
 
-      // Items in a subgroup may not be moved to a different parent group
-      if (loc.subgroupId) return
-
-      // Find destination group
       let destGroupId: string | null = null
       if (overType === 'grp') {
         destGroupId = stripPrefix(overStr)
       } else if (overType === 'itm') {
         const overItemLoc = findItem(tables, stripPrefix(overStr))
-        if (overItemLoc) destGroupId = overItemLoc.groupId
-      } else if (overType === 'sgp') {
-        // dropping onto subgroup header — no cross-subgroup in DragOver
-        return
+        if (overItemLoc && !overItemLoc.subgroupId) destGroupId = overItemLoc.groupId
       }
+      // sgp → ignore (ambiguous cross-group intent)
 
       if (!destGroupId || destGroupId === loc.groupId) return
 
@@ -1444,14 +1473,10 @@ export default function FinancialReport() {
           ...t,
           groups: t.groups.map(g => {
             if (g.id === loc.groupId) {
-              return {
-                ...g,
-                items: g.items.filter(i => i.id !== itemId),
-                subgroups: (g.subgroups ?? []).map(sg => ({ ...sg, items: sg.items.filter(i => i.id !== itemId) })),
-              }
+              return { ...g, children: g.children.filter(c => !(c.kind === 'item' && c.data.id === itemId)) }
             }
             if (g.id === destGroupId) {
-              return { ...g, items: [...g.items, item] }
+              return { ...g, children: [...g.children, { kind: 'item' as const, data: item }] }
             }
             return g
           }),
@@ -1494,7 +1519,6 @@ export default function FinancialReport() {
           return { ...t, groups: arrayMove(t.groups, ai2, oi2) }
         }))
       } else {
-        // Cross-table group move
         setTables(prev => {
           const group = findGroup(prev, activeGId)?.group
           if (!group) return prev
@@ -1513,51 +1537,58 @@ export default function FinancialReport() {
       return
     }
 
-    // Reorder subgroups within the same parent group
-    if (activeType === 'sgp' && overType === 'sgp') {
-      const activeSgId = stripPrefix(activeStr)
-      const overSgId   = stripPrefix(overStr)
+    // Group-level child reorder: items ↔ items, items ↔ subgroups, subgroups ↔ subgroups
+    if (activeType === 'itm' || activeType === 'sgp') {
+      if (overType !== 'itm' && overType !== 'sgp') return
+
+      const activeRawId = stripPrefix(activeStr)
+      const overRawId   = stripPrefix(overStr)
+
+      // Special case: two items inside the same subgroup
+      if (activeType === 'itm' && overType === 'itm') {
+        const activeLoc = findItem(tables, activeRawId)
+        const overLoc   = findItem(tables, overRawId)
+        if (!activeLoc || !overLoc || activeLoc.groupId !== overLoc.groupId) return
+        if (activeLoc.subgroupId && overLoc.subgroupId && activeLoc.subgroupId === overLoc.subgroupId) {
+          setTables(prev => prev.map(t => ({
+            ...t,
+            groups: t.groups.map(g => {
+              if (g.id !== activeLoc.groupId) return g
+              return {
+                ...g,
+                children: g.children.map(c => {
+                  if (c.kind !== 'subgroup' || c.data.id !== activeLoc.subgroupId) return c
+                  const ai2 = c.data.items.findIndex(i => i.id === activeRawId)
+                  const oi2 = c.data.items.findIndex(i => i.id === overRawId)
+                  if (ai2 === -1 || oi2 === -1) return c
+                  return { kind: 'subgroup' as const, data: { ...c.data, items: arrayMove(c.data.items, ai2, oi2) } }
+                }),
+              }
+            }),
+          })))
+          return
+        }
+        // Block cross-subgroup DnD
+        if (activeLoc.subgroupId || overLoc.subgroupId) return
+      }
+
+      // General: reorder direct group children (itm ↔ itm, itm ↔ sgp, sgp ↔ sgp, sgp ↔ itm)
       setTables(prev => prev.map(t => ({
         ...t,
         groups: t.groups.map(g => {
-          const sgs = g.subgroups ?? []
-          const ai2 = sgs.findIndex(sg => sg.id === activeSgId)
-          const oi2 = sgs.findIndex(sg => sg.id === overSgId)
-          if (ai2 !== -1 && oi2 !== -1) return { ...g, subgroups: arrayMove(sgs, ai2, oi2) }
-          return g
-        }),
-      })))
-      return
-    }
-
-    // Reorder items within same group
-    if (activeType === 'itm' && overType === 'itm') {
-      const activeItemId = stripPrefix(activeStr)
-      const overItemId   = stripPrefix(overStr)
-      const activeLoc    = findItem(tables, activeItemId)
-      const overLoc      = findItem(tables, overItemId)
-      if (!activeLoc || !overLoc) return
-      if (activeLoc.groupId !== overLoc.groupId) return // cross handled in dragOver
-
-      setTables(prev => prev.map(t => ({
-        ...t,
-        groups: t.groups.map(g => {
-          if (g.id !== activeLoc.groupId) return g
-          if (activeLoc.subgroupId && overLoc.subgroupId && activeLoc.subgroupId === overLoc.subgroupId) {
-            return {
-              ...g,
-              subgroups: (g.subgroups ?? []).map(sg => {
-                if (sg.id !== activeLoc.subgroupId) return sg
-                const ai2 = sg.items.findIndex(i => i.id === activeItemId)
-                const oi2 = sg.items.findIndex(i => i.id === overItemId)
-                return { ...sg, items: arrayMove(sg.items, ai2, oi2) }
-              }),
-            }
-          }
-          const ai2 = g.items.findIndex(i => i.id === activeItemId)
-          const oi2 = g.items.findIndex(i => i.id === overItemId)
-          if (ai2 !== -1 && oi2 !== -1) return { ...g, items: arrayMove(g.items, ai2, oi2) }
-          return g
+          const ai2 = g.children.findIndex(c =>
+            activeType === 'itm'
+              ? c.kind === 'item' && c.data.id === activeRawId
+              : c.kind === 'subgroup' && c.data.id === activeRawId
+          )
+          if (ai2 === -1) return g
+          const oi2 = g.children.findIndex(c =>
+            overType === 'itm'
+              ? c.kind === 'item' && c.data.id === overRawId
+              : c.kind === 'subgroup' && c.data.id === overRawId
+          )
+          if (oi2 === -1) return g
+          return { ...g, children: arrayMove(g.children, ai2, oi2) }
         }),
       })))
     }
@@ -1624,40 +1655,44 @@ export default function FinancialReport() {
                         </td>
                       </tr>
 
-                      {group.items.filter(i => i.visible).map(item => {
-                        const val = getItemBalance(item, balances, operationalBalances)
-                        return (
-                          <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                            <td className="px-8 py-2 text-gray-700 dark:text-gray-300">{item.displayLabel}</td>
-                            <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">₦{fmt(val)}</td>
-                          </tr>
-                        )
-                      })}
-
-                      {(group.subgroups ?? []).filter(sg => sg.visible).map(sg => {
-                        const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, operationalBalances), 0)
-                        return (
-                          <>
-                            <tr key={`sgh-${sg.id}`} className="bg-gray-50/80 dark:bg-gray-800/40">
-                              <td colSpan={2} className="px-8 py-1.5 text-xs font-semibold italic text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                                {sg.label}
-                              </td>
+                      {group.children.map(child => {
+                        if (child.kind === 'item') {
+                          const item = child.data
+                          if (!item.visible) return null
+                          const val = getItemBalance(item, balances, operationalBalances)
+                          return (
+                            <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                              <td className="px-8 py-2 text-gray-700 dark:text-gray-300">{item.displayLabel}</td>
+                              <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">₦{fmt(val)}</td>
                             </tr>
-                            {sg.items.filter(i => i.visible).map(item => {
-                              const val = getItemBalance(item, balances, operationalBalances)
-                              return (
-                                <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800">
-                                  <td className="px-12 py-2 text-gray-600 dark:text-gray-400">{item.displayLabel}</td>
-                                  <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">₦{fmt(val)}</td>
-                                </tr>
-                              )
-                            })}
-                            <tr key={`sgs-${sg.id}`} className="bg-gray-100/60 dark:bg-gray-800/30">
-                              <td className="px-8 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{sg.label} Sub-Total</td>
-                              <td className="px-6 py-1 text-right font-mono font-bold text-xs">₦{fmt(sgTotal)}</td>
-                            </tr>
-                          </>
-                        )
+                          )
+                        } else {
+                          const sg = child.data
+                          if (!sg.visible) return null
+                          const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, operationalBalances), 0)
+                          return (
+                            <>
+                              <tr key={`sgh-${sg.id}`} className="bg-gray-50/80 dark:bg-gray-800/40">
+                                <td colSpan={2} className="px-8 py-1.5 text-xs font-semibold italic text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                  {sg.label}
+                                </td>
+                              </tr>
+                              {sg.items.filter(i => i.visible).map(item => {
+                                const val = getItemBalance(item, balances, operationalBalances)
+                                return (
+                                  <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800">
+                                    <td className="px-12 py-2 text-gray-600 dark:text-gray-400">{item.displayLabel}</td>
+                                    <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">₦{fmt(val)}</td>
+                                  </tr>
+                                )
+                              })}
+                              <tr key={`sgs-${sg.id}`} className="bg-gray-100/60 dark:bg-gray-800/30">
+                                <td className="px-8 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{sg.label} Sub-Total</td>
+                                <td className="px-6 py-1 text-right font-mono font-bold text-xs">₦{fmt(sgTotal)}</td>
+                              </tr>
+                            </>
+                          )
+                        }
                       })}
 
                       <tr key={`gs-${group.id}`} className="bg-gray-100 dark:bg-gray-800">
@@ -1701,11 +1736,11 @@ export default function FinancialReport() {
   const allSortableIds = [
     ...tables.map(t => tblId(t.id)),
     ...tables.flatMap(t => t.groups.map(g => grpId(g.id))),
-    ...tables.flatMap(t => t.groups.flatMap(g => [
-      ...g.items.map(i => itmId(i.id)),
-      ...(g.subgroups ?? []).map(sg => sgpId(sg.id)),
-      // subgroup items are in their own SortableContext — excluded here to prevent DnD conflicts
-    ])),
+    ...tables.flatMap(t => t.groups.flatMap(g =>
+      g.children.map(c =>
+        c.kind === 'item' ? itmId(c.data.id) : sgpId(c.data.id)
+      )
+    )),
   ]
 
   const renderEditMode = () => (

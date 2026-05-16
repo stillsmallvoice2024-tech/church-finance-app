@@ -103,12 +103,15 @@ export interface ReportSubgroup {
   items: ReportItem[]
 }
 
+export type ReportGroupChild =
+  | { kind: 'item'; data: ReportItem }
+  | { kind: 'subgroup'; data: ReportSubgroup }
+
 export interface ReportGroup {
   id: string
   label: string
   visible: boolean
-  items: ReportItem[]
-  subgroups?: ReportSubgroup[]
+  children: ReportGroupChild[]
 }
 
 export interface ReportTable {
