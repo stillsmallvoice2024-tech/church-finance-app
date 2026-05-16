@@ -378,12 +378,27 @@ Each group header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside gri
 - Threaded: main component → `SortableTableBlock` (curries `group.id`, passes index-aware `undefined` at boundaries) → `SortableGroup`
 - No cross-table group movement via buttons (DnD only)
 
+### Unified Children Ordering Model (Groups)
+
+`ReportGroup.children: ReportGroupChild[]` is a **single ordered list** of all direct children — categories and subgroups interleaved in any order. There are no separate `items` or `subgroups` arrays on `ReportGroup`.
+
+```ts
+type ReportGroupChild =
+  | { kind: 'item';     data: ReportItem }
+  | { kind: 'subgroup'; data: ReportSubgroup }
+```
+
+- All mutations (`addItem`, `moveItemUp`, `deleteItem`, `addSubgroup`, `moveSubgroupUp`, …) operate on `g.children` via the discriminated union
+- `migrateGroupChildren(g)` in `reportExport.ts` converts legacy `{items, subgroups}` shapes to `{children}` for backward compat with stored templates
+- Rendering (view + edit mode, PDF, Excel) iterates `group.children` in order
+- Subtotal computation (`computeGroupTotal`) iterates `group.children` in order
+
 ### Item Reorder Controls (Edit Mode)
 
 Each item row shows ▲/▼ buttons (`ChevronUp`/`ChevronDown`) alongside drag handle:
-- Up/Down swap item with adjacent item **within the same container** (group root or subgroup)
+- Up/Down swap item with adjacent sibling in `g.children` (when in group root) or within `sg.items` (when inside a subgroup)
 - `onMoveUp` is `undefined` (disabled) when item is first; `onMoveDown` is `undefined` when last
-- Callbacks: `moveItemUp(itemId)` / `moveItemDown(itemId)` — locate item in direct items or subgroup items, apply `arrayMove`
+- Callbacks: `moveItemUp(itemId)` / `moveItemDown(itemId)` — locate item in `g.children` or `sg.items`, apply `arrayMove`
 
 ### Subgroup Assignment (Edit Mode)
 
@@ -397,7 +412,7 @@ Each item has a `— Root —` + subgroup `<select>` dropdown (shown only when p
 
 Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside grip + eye + trash):
 - `onMoveSubgroupUp?` / `onMoveSubgroupDown?` are `undefined` (greyed, disabled) at boundaries
-- Callbacks: `moveSubgroupUp(gId, sgId)` / `moveSubgroupDown(gId, sgId)` — `arrayMove` within `g.subgroups`, constrained to same parent group
+- Callbacks: `moveSubgroupUp(gId, sgId)` / `moveSubgroupDown(gId, sgId)` — `arrayMove` within `g.children` (subgroup child swaps with adjacent sibling of any kind), constrained to same parent group
 - Threaded: main component → `SortableTableBlock` → `SortableGroup` (curries `group.id` and passes index-aware `undefined` at boundaries) → `SortableSubgroup`
 - No cross-group subgroup movement (DnD or buttons)
 
@@ -406,4 +421,5 @@ Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside 
 - Items inside a subgroup can be reordered within that subgroup via DnD or ▲/▼ buttons
 - Items in group root can be dragged to another group via group header (DnD over `grp-{id}` triggers `handleDragOver` cross-group move)
 - Direct cross-subgroup DnD blocked — assign via dropdown instead
-- Subgroups reorder within same parent group via `sgp→sgp` branch in `handleDragEnd`, or via ↑/↓ buttons
+- Subgroups and root items reorder within the same parent group via the unified `itm/sgp` branch in `handleDragEnd` (reorders `g.children` directly), or via ↑/↓ buttons
+- Categories and subgroups can be freely interleaved — any child order is valid (e.g. Cat1, SgA, Cat2, SgB, Cat3)
