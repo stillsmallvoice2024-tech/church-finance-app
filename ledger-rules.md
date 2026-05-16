@@ -85,8 +85,10 @@ This ensures special-config inflows (e.g. Easter offering) use the correct perce
   - Amount mode: direct `amount` value
 - For `apply_to_category = false` rows: no write — amount is already captured in existing transactions, no double-count
 - Category is resolved by name: `categories.find(c => c.name === row.category_name)?.id`
-- Propagation runs after successful bank INSERT/UPDATE; partial failure → warning toast (bank save not rolled back)
-- No cleanup of stale `category_opening_balances` rows on edit — if a row switches to `apply_to_category = false`, remove the stale entry via the Categories page
+- Propagation runs after successful bank INSERT/UPDATE; partial failure → warning toast naming each failing category (bank save not rolled back)
+- On edit: stale cleanup — if a row was previously `apply_to_category = true` and is now `false`, the modal deletes the corresponding `category_opening_balances` row via `deleteCategoryOpeningBalance()` before upserting new entries
+- `starting_balance_allocations` is only sent in the save payload when `hasBalance` is true; sending it for plain banks (no opening balance) would force schema migration unnecessarily
+- Schema cache retry (when save fails due to stale PostgREST cache): on re-check returning `'ok'`, modal toasts "Save failed during schema refresh — please try again" so the user knows to resubmit; the save is NOT retried automatically
 
 ---
 
