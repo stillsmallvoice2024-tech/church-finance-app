@@ -20,6 +20,16 @@ export interface AllocationConfig {
   total_amount?:   number
   rows:            AllocationRow[]
   created_at:      string
+  config_group_id?: string | null
+  effective_from?:  string | null
+  effective_to?:    string | null
+  version_number?:  number
+}
+
+export interface SpecialConfigGroup {
+  id:         string
+  name:       string
+  created_at: string
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────────
@@ -39,6 +49,23 @@ export function getConfigForDate(
     .filter(c => c.status === 'locked' && !c.is_special && c.start_date <= date)
     .sort((a, b) => b.start_date.localeCompare(a.start_date))
 
+  return eligible[0] ?? null
+}
+
+export function getSpecialConfigVersionForDate(
+  configs: AllocationConfig[],
+  groupId: string,
+  date: string,
+): AllocationConfig | null {
+  const eligible = configs
+    .filter(c =>
+      c.status === 'locked' &&
+      c.config_group_id === groupId &&
+      c.effective_from != null &&
+      c.effective_from <= date &&
+      (c.effective_to == null || c.effective_to >= date)
+    )
+    .sort((a, b) => b.effective_from!.localeCompare(a.effective_from!))
   return eligible[0] ?? null
 }
 

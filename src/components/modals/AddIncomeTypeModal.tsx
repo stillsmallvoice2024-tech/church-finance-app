@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, AlertTriangle, Terminal } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import {
-  saveIncomeType, useSpecialConfigOptions,
+  saveIncomeType, useSpecialConfigGroupOptions,
   type IncomeType, type IncomeTypeInput,
 } from '../../hooks/useIncomeTypes'
 
@@ -71,12 +71,12 @@ interface Props {
 
 export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props) {
   const isEdit = !!editRecord
-  const { options: configOptions, reload: reloadSpecialConfigs } = useSpecialConfigOptions()
+  const { options: groupOptions, reload: reloadSpecialGroups } = useSpecialConfigGroupOptions()
 
-  const [name,           setName]           = useState('')
-  const [description,    setDescription]    = useState('')
-  const [color,          setColor]          = useState(COLORS[0].value)
-  const [specialConfig,  setSpecialConfig]  = useState('')
+  const [name,                setName]                = useState('')
+  const [description,         setDescription]         = useState('')
+  const [color,               setColor]               = useState(COLORS[0].value)
+  const [specialConfigGroup,  setSpecialConfigGroup]  = useState('')
   const [rules,          setRules]          = useState<RuleDraft[]>([{ rule_type: 'keyword', rule_value: '' }])
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState<string | null>(null)
@@ -86,13 +86,13 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
   // Populate form when editing
   useEffect(() => {
     if (!open) return
-    reloadSpecialConfigs()
+    reloadSpecialGroups()
     setError(null)
     if (editRecord) {
       setName(editRecord.name)
       setDescription(editRecord.description ?? '')
       setColor(editRecord.color)
-      setSpecialConfig(editRecord.special_config_id ?? '')
+      setSpecialConfigGroup(editRecord.special_config_group_id ?? '')
       setRules(
         editRecord.rules.length > 0
           ? editRecord.rules.map(r => ({ rule_type: r.rule_type, rule_value: r.rule_value }))
@@ -100,7 +100,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
       )
     } else {
       setName(''); setDescription(''); setColor(COLORS[0].value)
-      setSpecialConfig('')
+      setSpecialConfigGroup('')
       setRules([{ rule_type: 'keyword', rule_value: '' }])
     }
   }, [open, editRecord])
@@ -118,7 +118,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
         name:             name.trim(),
         description:      description.trim() || undefined,
         color,
-        special_config_id: specialConfig || null,
+        special_config_group_id: specialConfigGroup || null,
         rules:            rules.filter(r => r.rule_value.trim()),
       }
       await saveIncomeType(input, editRecord?.id)
@@ -245,21 +245,21 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
           </p>
         </div>
 
-        {/* Linked special config */}
-        <Field label="Auto-apply Config (optional)">
+        {/* Linked special config group */}
+        <Field label="Auto-apply Config Group (optional)">
           <select
-            value={specialConfig}
-            onChange={e => setSpecialConfig(e.target.value)}
+            value={specialConfigGroup}
+            onChange={e => setSpecialConfigGroup(e.target.value)}
             className={`${iCls(false)} bg-white`}
           >
             <option value="">— None —</option>
-            {configOptions.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            {groupOptions.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
             ))}
           </select>
-          {specialConfig && (
+          {specialConfigGroup && (
             <p className="text-[11px] text-gray-400 mt-1">
-              When this income type is selected on a transaction, this allocation config will be auto-applied.
+              When this income type is selected on a transaction, the active version of this config group will be auto-applied.
             </p>
           )}
         </Field>
