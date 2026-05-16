@@ -98,7 +98,8 @@ All nav items visible to all authenticated users.
 ## ReceiptBadge Upload Behaviour
 
 - `inputRef` resets `input.value = ''` after each upload batch — allows re-selecting the same file
-- Errors surfaced via `useToastStore`: full failure → "Upload failed — check storage permissions or bucket setup"; partial → "N of M file(s) failed to upload"
+- **FileList is live** — snapshot `Array.from(files)` and `files.length` into local vars before the `try/finally` block; resetting `input.value` clears the live FileList, corrupting any count read after the reset
+- Failure toast includes the real backend error message (storage or DB); full failure → `"Upload failed: <error>"`; partial → `"N of M file(s) failed: <error>"`
 - Success toast shown on clean upload
 - Upload errors from `useReceipts.upload()` are caught per-file; count tracked; never silently swallowed
 
@@ -156,12 +157,10 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 ## AddOutflowModal — Removed Fields
 
-The **Optional Banking Details** section has been removed from `AddOutflowModal.tsx`. Fields no longer shown in the UI:
-- Amount Refunded (`amount_refunded`)
-- Transfer Charge (`transfer_charge`)
-- FX Currency (`fx_currency`)
-
-The Zod schema and `onSubmit` handler retain these fields for backward compat with existing records. The **FX Details** collapsible (fx_amount, fx_rate) remains.
+The **Optional Banking Details** section has been fully removed from `AddOutflowModal.tsx`:
+- `amount_refunded` and `transfer_charge` removed from Zod schema, `resetForm` defaults, and both update/add submit payloads — nothing is sent to the backend for these fields
+- `fx_currency` is absent from the UI but kept in `AddOutflowInput` (optional) for backward compat with existing records
+- The **FX Details** collapsible (fx_amount, fx_rate) remains
 
 ---
 
