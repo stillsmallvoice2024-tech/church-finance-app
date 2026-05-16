@@ -140,6 +140,14 @@ Every UPDATE in the app must:
 
 Build the `updates` object as a named const before calling `.update()` so the same object can be passed to both `logAudit` and `logFieldChanges` without re-expressing the payload.
 
+**Row-count check on UPDATE**: always chain `.select('id')` and throw if `!updatedRows?.length` — PostgREST silently returns no error when RLS rejects the row or the record is missing. Example pattern used in `useUpdateBank`:
+```ts
+const { data: updatedRows, error: err } = await supabase
+  .from('banks').update(updates).eq('id', input.id).select('id')
+if (err) throw err
+if (!updatedRows?.length) throw new Error('Record not found or update silently rejected — please refresh and try again.')
+```
+
 Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `useUpdateBank`. Any new UPDATE hook must follow the same pattern.
 
 ---

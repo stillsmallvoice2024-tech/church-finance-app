@@ -833,9 +833,10 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
         starting_balance_allocations:    input.starting_balance_allocations   ?? [],
       }
 
-      const { error: err } = await supabase
-        .from('banks').update(updates).eq('id', input.id)
+      const { data: updatedRows, error: err } = await supabase
+        .from('banks').update(updates).eq('id', input.id).select('id')
       if (err) throw err
+      if (!updatedRows?.length) throw new Error('Bank not found or update was silently rejected — please refresh and try again.')
 
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })
       if (oldData) logFieldChanges(user.id, 'banks', input.id, oldData as Record<string, unknown>, updates as Record<string, unknown>)

@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { AlertTriangle, Terminal, Plus, Trash2, Check, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
-import { useCategories, upsertCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
+import { useCategories, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import type { DbBank, StartingBalanceRow, SchemaStatus } from '../../hooks/useBanks'
 import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
@@ -168,8 +168,10 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     return () => { active = false }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
-  // When a save fails with a schema-cache error: check both information_schema and
-  // PostgREST's direct SELECT to determine whether columns are missing or just cache-stale.
+  // When a save fails with a schema-cache error: re-check state.
+  // If re-check returns 'ok' (columns exist, cache now fine) the save failed during a
+  // transient cache reload window — show a retry toast rather than silently clearing.
+  // If re-check returns non-ok, the migration banner will show.
   // Capped at MAX_CACHE_RETRIES — beyond that, keep the error and show schemaStuck.
   useEffect(() => {
     if (!error || !/schema cache/i.test(error)) return
@@ -180,12 +182,16 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       const status = await checkBankStartingBalanceMigration()
       if (cancelled) return
       setSchemaStatus(status)
-      // Always clear the raw mutation error — banner conveys the status
+      if (status === 'ok') {
+        // Cache refreshed — the save was lost during the reload window, user must retry
+        toast('Save failed during schema refresh — please try again.', 'error')
+      }
+      // Clear raw mutation error — banner (if non-ok) or toast (if ok) conveys status
       resetAdd()
       resetUpdate()
     })()
     return () => { cancelled = true }
-  }, [error])
+  }, [error, toast])
 
   const confirmNewCategory = async (rowIndex: number) => {
     if (!newCatMode) return
@@ -233,6 +239,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         }))
       : []
 
+    // Only send starting_balance_allocations when there is a balance; omitting it for
+    // no-balance banks lets the DB default ('[]') apply and avoids requiring the migration
+    // for basic bank creation.
     const payload: AddBankInput = {
       name:           values.name,
       account_number: values.account_number || undefined,
@@ -240,35 +249,83 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       currency:       values.currency       || 'NGN',
       starting_balance:             values.starting_balance || undefined,
       starting_balance_alloc_type:  hasBalance ? allocType : undefined,
-      starting_balance_allocations: allocations,
+      starting_balance_allocations: hasBalance ? allocations : undefined,
     }
+
+    console.log('[bank-modal] onSubmit', { isEdit, hasBalance, allocType, payload })
+
     try {
       if (isEdit && editRecord) {
+        console.log('[bank-modal] updating bank', editRecord.id)
         await update({ id: editRecord.id, ...payload })
+        console.log('[bank-modal] bank update succeeded')
       } else {
+        console.log('[bank-modal] inserting bank')
         await add(payload)
+        console.log('[bank-modal] bank insert succeeded')
       }
 
-      // Propagate apply_to_category rows into category_opening_balances
+      // ── Propagate opening balances into category_opening_balances ──────────────
       if (hasBalance && allocations.length > 0) {
         const totalBalance = values.starting_balance ?? 0
-        let propagateFailed = false
+        const propagateErrors: string[] = []
+        const skipped: string[] = []
+
+        // On edit: remove stale entries where apply_to_category changed from true → false
+        if (isEdit && editRecord) {
+          const prevAllocs = editRecord.starting_balance_allocations ?? []
+          for (const prev of prevAllocs) {
+            if (prev.apply_to_category === false) continue // was already excluded, no cleanup
+            const curr = allocations.find(
+              a => a.category_name === prev.category_name && a.budget_portion === prev.budget_portion
+            )
+            if (curr && curr.apply_to_category === false) {
+              const cat = categories.find(c => c.name === prev.category_name)
+              if (cat) {
+                console.log('[bank-modal] removing stale category opening balance', prev.category_name, prev.budget_portion)
+                try {
+                  await deleteCategoryOpeningBalance(cat.id, prev.budget_portion as BudgetPortion)
+                } catch (e) {
+                  console.error('[bank-modal] stale cleanup failed', prev.category_name, e)
+                }
+              }
+            }
+          }
+        }
+
+        // Upsert entries for apply_to_category = true rows
         for (const row of allocations) {
           if (row.apply_to_category === false) continue
           const cat = categories.find(c => c.name === row.category_name)
-          if (!cat) continue
+          if (!cat) {
+            console.warn('[bank-modal] category not found for propagation', row.category_name)
+            skipped.push(row.category_name)
+            continue
+          }
           const amount = allocType === 'percentage'
             ? Math.round(((row.percentage ?? 0) / 100) * totalBalance * 100) / 100
             : (row.amount ?? 0)
           if (amount <= 0) continue
+          console.log('[bank-modal] upserting category opening balance', { catId: cat.id, portion: row.budget_portion, amount })
           try {
             await upsertCategoryOpeningBalance(cat.id, row.budget_portion as BudgetPortion, amount)
-          } catch {
-            propagateFailed = true
+          } catch (e: unknown) {
+            const msg = (e as { message?: string })?.message ?? 'Unknown error'
+            console.error('[bank-modal] upsert failed', { category: row.category_name, portion: row.budget_portion, error: msg })
+            propagateErrors.push(`${row.category_name} (${row.budget_portion})`)
           }
         }
-        if (propagateFailed) {
-          toast('Bank saved — category balance update failed. Verify category opening balances manually.', 'error')
+
+        if (propagateErrors.length > 0) {
+          toast(
+            `Bank saved — category balance update failed for: ${propagateErrors.join(', ')}. Check Setup → Database if migration is needed.`,
+            'error'
+          )
+        } else if (skipped.length > 0) {
+          toast(
+            `Bank saved — ${skipped.length} categor${skipped.length === 1 ? 'y was' : 'ies were'} not found and skipped: ${skipped.join(', ')}`,
+            'error'
+          )
         } else {
           toast(isEdit ? 'Bank updated' : 'Bank added', 'success')
         }
@@ -278,7 +335,10 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
       onSuccess?.()
       onClose()
-    } catch { /* surfaced via hook error */ }
+    } catch (e) {
+      console.error('[bank-modal] save threw', e)
+      /* error surfaced via hook error state */
+    }
   }
 
   const schemaStuck         = isSchemaCacheError && cacheRetryCount.current > MAX_CACHE_RETRIES
