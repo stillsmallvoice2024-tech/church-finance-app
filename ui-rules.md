@@ -370,6 +370,14 @@ Each level has its own `SortableContext` to prevent cross-level collision interf
 
 Subgroup items are intentionally excluded from `allSortableIds` and `allItemIds`; they live only in their subgroup-level context. Breaking this isolation causes unreliable same-subgroup reordering.
 
+### Group Reorder Controls (Edit Mode)
+
+Each group header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside grip + add-subgroup + eye + trash):
+- `onMoveGroupUp?` / `onMoveGroupDown?` are `undefined` (greyed `text-gray-300`, disabled) at boundaries
+- Callbacks: `moveGroupUp(gId)` / `moveGroupDown(gId)` — scan all tables, `arrayMove` within the matched table's `groups` array
+- Threaded: main component → `SortableTableBlock` (curries `group.id`, passes index-aware `undefined` at boundaries) → `SortableGroup`
+- No cross-table group movement via buttons (DnD only)
+
 ### Item Reorder Controls (Edit Mode)
 
 Each item row shows ▲/▼ buttons (`ChevronUp`/`ChevronDown`) alongside drag handle:
