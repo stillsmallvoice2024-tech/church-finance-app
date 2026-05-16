@@ -830,7 +830,9 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
         starting_balance_category:       input.starting_balance_category      ?? null,
         starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
         starting_balance_alloc_type:     input.starting_balance_alloc_type    ?? null,
-        starting_balance_allocations:    input.starting_balance_allocations   ?? [],
+        ...(input.starting_balance_allocations !== undefined && {
+          starting_balance_allocations: input.starting_balance_allocations,
+        }),
       }
 
       const { data: updatedRows, error: err } = await supabase

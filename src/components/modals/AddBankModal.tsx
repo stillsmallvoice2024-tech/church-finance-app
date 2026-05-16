@@ -80,6 +80,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [checkingSchema, setCheckingSchema] = useState(false)
   const newCatInputRef   = useRef<HTMLInputElement>(null)
   const cacheRetryCount  = useRef(0)
+  const formRef          = useRef<HTMLFormElement>(null)
 
   const { register, control, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -182,13 +183,13 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       const status = await checkBankStartingBalanceMigration()
       if (cancelled) return
       setSchemaStatus(status)
-      if (status === 'ok') {
-        // Cache refreshed — the save was lost during the reload window, user must retry
-        toast('Save failed during schema refresh — please try again.', 'error')
-      }
-      // Clear raw mutation error — banner (if non-ok) or toast (if ok) conveys status
+      // Clear raw mutation error before retrying or showing banner
       resetAdd()
       resetUpdate()
+      if (status === 'ok') {
+        // Cache is now fresh — auto-retry the save so the user doesn't have to
+        formRef.current?.requestSubmit()
+      }
     })()
     return () => { cancelled = true }
   }, [error, toast])
@@ -346,7 +347,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Bank' : 'Add Bank'}>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
 
         {checkingSchema && (
           <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
