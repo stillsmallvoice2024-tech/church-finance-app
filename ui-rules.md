@@ -155,6 +155,17 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 ---
 
+## Inflows Table — Column Order
+
+Checkbox, Expand-chevron, Date, Recorded, **Bank**, **Txn Ref**, Type, Description, Amount (₦), Actions (10 total).
+
+- `bank_name` → Bank column after Recorded
+- `transaction_ref` → Txn Ref column after Bank
+- Type column shows income type badge + transaction type badge (stacked `flex-col`); fallback `—` when both null
+- Expanded remark row uses `colSpan={10}`
+
+---
+
 ## Outflows Table — Column Order
 
 Checkbox, Date, Recorded, **Bank**, Txn ID, Description, Disbursed (₦), Refunded (₦), Net (₦), Stage Code 1, Remarks, 📎, Actions (13 total).
@@ -187,7 +198,7 @@ The **Optional Banking Details** section has been fully removed from `AddOutflow
   - Outflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `stage_code_1` (category select, from `categories` prop) + `stage_code_2` (select)
   - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID; no way to bulk-clear `transaction_type` (individual edit only)
   - **Strip-and-retry pattern**: `handleApply` uses `let updates` + `MISSING_COL_RE` — on first schema cache error for a column, strips that column from `updates` for the current row AND all subsequent rows (prevents cascade failures). Per-column warning toast emitted once after loop. Toast order: column warnings → success/fail count.
-- colSpan for loading/empty/expanded rows must equal total column count (8 for Inflows, 13 for Outflows)
+- colSpan for loading/empty/expanded rows must equal total column count (10 for Inflows, 13 for Outflows)
 - Multi-select is **table view only** — cards view unchanged
 
 ## Schema Cache Error — Inline Display (Inflows / Outflows modals)
