@@ -125,6 +125,42 @@ Collapsible groups; state persisted in `localStorage` under key `nav-group-<id>`
 
 ---
 
+## Dashboard Layout
+
+Section order (top → bottom):
+1. **Welcome + Quick Actions** — greeting left, `<CanWrite>` action buttons right; always first
+2. **KPI stat cards** — 4-col grid
+3. **Monthly chart** — full-width area chart
+4. **Recent Transactions** — last 10 inflows
+5. **Foreign Currency** — compact single Card with 4-col internal grid (not 4 separate Cards)
+
+Quick action button hierarchy:
+- **Add Inflow** — `bg-success text-white` (primary)
+- **Add Outflow** — `bg-white border border-gray-200 text-gray-700` (secondary)
+- **Import** — `bg-white border border-gray-200 text-gray-500` (utility)
+
+**Do not** place Quick Actions at the bottom of the dashboard. **Do not** use a separate section heading for them.
+
+**FX strip**: single `<Card>` with `grid grid-cols-2 sm:grid-cols-4` inside — not 4 individual Card components. Empty currencies use `opacity-40`.
+
+---
+
+## StatCard (`src/components/ui/StatCard.tsx`)
+
+- Label: `text-xs font-medium text-gray-400 uppercase tracking-wide` — intentionally small/quiet
+- Value: `text-2xl font-bold text-gray-900` — intentionally dominant
+- Trend: `text-xs font-medium` (was `text-sm`) — kept subordinate to value
+- Icon container: `p-2.5 rounded-lg` (was `p-3 rounded-xl`)
+
+---
+
+## Settings Page (`src/pages/Settings.tsx`)
+
+Section order: Profile → Password → **Theme** → App Information  
+(App Information is the least user-relevant section; always last.)
+
+---
+
 ## Setup Page Tabs (`src/pages/Setup.tsx`)
 
 - **General** — org name, accounting year

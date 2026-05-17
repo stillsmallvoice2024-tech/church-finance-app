@@ -14,7 +14,6 @@ import { format } from 'date-fns'
 import { Card }                    from '../components/ui/Card'
 import { CardSkeleton }            from '../components/ui/LoadingSkeleton'
 import { StatCard }                from '../components/ui/StatCard'
-import { Badge }                   from '../components/ui/Badge'
 import { CanWrite }                from '../components/auth/RoleGates'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
@@ -41,7 +40,6 @@ const FX_META = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-/** Ensure all 12 months have an entry (fills gaps with zeros) */
 function fillMonthlyGaps(
   year: number,
   data: { month: string; inflow: number; outflow: number; net: number }[],
@@ -91,7 +89,7 @@ export default function Dashboard() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [stats.refetch])   // stable ref: stats.refetch is a useCallback
+  }, [stats.refetch])
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const chartData = useMemo(
@@ -106,7 +104,6 @@ export default function Dashboard() {
 
   const isLoading = stats.loading || categoriesLoading
 
-  // ── First name ─────────────────────────────────────────────────────────────
   const firstName =
     profile?.full_name?.split(' ')[0] ??
     user?.email?.split('@')[0] ??
@@ -136,8 +133,8 @@ export default function Dashboard() {
     <>
       <div className="space-y-6">
 
-        {/* ── Welcome banner ──────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        {/* ── Welcome + Quick Actions ──────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               {greeting()}, {firstName}
@@ -146,12 +143,31 @@ export default function Dashboard() {
               {format(new Date(), 'EEEE, d MMMM yyyy')} &nbsp;·&nbsp; {year} overview
             </p>
           </div>
-          {profile?.role && (
-            <Badge
-              label={profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
-              variant={profile.role === 'admin' ? 'primary' : profile.role === 'accountant' ? 'success' : 'neutral'}
-            />
-          )}
+          <CanWrite>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <button
+                onClick={() => setShowAddInflow(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Add Inflow
+              </button>
+              <button
+                onClick={() => setShowAddOutflow(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <MinusCircle className="w-4 h-4" />
+                Add Outflow
+              </button>
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Import
+              </button>
+            </div>
+          </CanWrite>
         </div>
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
@@ -193,7 +209,7 @@ export default function Dashboard() {
         {/* ── Monthly area chart ───────────────────────────────────────────── */}
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-gray-800">
+            <h2 className="text-sm font-semibold text-gray-700">
               Monthly Inflows vs Outflows
             </h2>
             <span className="text-xs text-gray-400">{year}</span>
@@ -245,17 +261,17 @@ export default function Dashboard() {
         {/* ── Recent transactions ──────────────────────────────────────────── */}
         <Card padding={false}>
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-800">Recent Transactions</h2>
+            <h2 className="text-sm font-semibold text-gray-700">Recent Transactions</h2>
             <span className="text-xs text-gray-400">Last 10 inflows</span>
           </div>
 
           {isLoading ? (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-100">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4 px-6 py-3 animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-20 shrink-0" />
-                  <div className="h-4 bg-gray-200 rounded flex-1" />
-                  <div className="h-4 bg-gray-200 rounded w-24 shrink-0" />
+                  <div className="h-4 bg-gray-100 rounded w-20 shrink-0" />
+                  <div className="h-4 bg-gray-100 rounded flex-1" />
+                  <div className="h-4 bg-gray-100 rounded w-24 shrink-0" />
                 </div>
               ))}
             </div>
@@ -265,7 +281,7 @@ export default function Dashboard() {
               <p className="text-sm">No recent transactions.</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-100">
               {stats.recentTransactions.map(tx => (
                 <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 transition-colors">
                   <span className="text-xs text-gray-400 whitespace-nowrap w-20 shrink-0">
@@ -274,7 +290,7 @@ export default function Dashboard() {
                   <span className="text-sm text-gray-700 truncate flex-1">
                     {tx.description ?? '—'}
                   </span>
-                  <span className="text-sm font-semibold text-success whitespace-nowrap shrink-0">
+                  <span className="text-sm font-semibold text-success whitespace-nowrap shrink-0 font-mono">
                     +{formatCurrencyCompact(tx.amount)}
                   </span>
                 </div>
@@ -284,8 +300,8 @@ export default function Dashboard() {
         </Card>
 
         {/* ── FX currency strip ────────────────────────────────────────────── */}
-        <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+        <Card>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
             Foreign Currency Holdings
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -293,65 +309,23 @@ export default function Dashboard() {
               const balance  = fxMap.get(fx.code) ?? 0
               const hasValue = balance > 0
               return (
-                <Card
-                  key={fx.code}
-                  className={`transition-opacity ${hasValue ? '' : 'opacity-50'}`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-lg">{fx.flag}</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                      hasValue ? 'bg-primary-100 text-primary' : 'bg-gray-100 text-gray-400'
-                    }`}>
-                      {fx.code}
-                    </span>
+                <div key={fx.code} className={`${!hasValue ? 'opacity-40' : ''}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-sm leading-none">{fx.flag}</span>
+                    <span className="text-xs font-semibold text-gray-400">{fx.code}</span>
                   </div>
                   {isLoading ? (
-                    <div className="h-6 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-5 bg-gray-100 rounded animate-pulse w-3/4" />
                   ) : (
-                    <p className={`text-xl font-bold ${hasValue ? 'text-gray-900' : 'text-gray-400'}`}>
+                    <p className={`text-base font-bold font-mono ${hasValue ? 'text-gray-900' : 'text-gray-400'}`}>
                       {fx.symbol}{balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   )}
-                  <p className="text-xs text-gray-400 mt-1">
-                    {hasValue ? 'Current balance' : 'No holdings'}
-                  </p>
-                </Card>
+                </div>
               )
             })}
           </div>
-        </div>
-
-        {/* ── Quick actions (admin / accountant only) ──────────────────────── */}
-        <CanWrite>
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              Quick Actions
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => setShowAddInflow(true)}
-                className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-success rounded-xl hover:bg-green-700 transition-colors shadow-sm"
-              >
-                <PlusCircle className="w-4 h-4" />
-                Add Inflow
-              </button>
-              <button
-                onClick={() => setShowAddOutflow(true)}
-                className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-danger rounded-xl hover:bg-red-700 transition-colors shadow-sm"
-              >
-                <MinusCircle className="w-4 h-4" />
-                Add Outflow
-              </button>
-              <button
-                onClick={() => setShowImport(true)}
-                className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors shadow-sm"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                Import Excel
-              </button>
-            </div>
-          </div>
-        </CanWrite>
+        </Card>
 
       </div>
 
