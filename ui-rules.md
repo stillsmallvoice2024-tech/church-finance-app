@@ -15,11 +15,13 @@
 
 ## DescriptionCell Pattern
 
-All long-text table columns use `DescriptionCell` + `useDescriptionExpand` hook (`src/components/ui/DescriptionCell.tsx`).
+All long-text table columns **and card view descriptions/remarks** use `DescriptionCell` + `useDescriptionExpand` hook (`src/components/ui/DescriptionCell.tsx`).
 
 - **Hover** → tooltip via `DescriptionTooltip` portal (renders in `document.body`, `z-[9999]`)
-- **Click** → inline expand below row text
+- **Click/tap** → inline expand below row text
 - **Chevron** (`ChevronDown`, `shrink-0`) — always visible; inner `<span>` needs `min-w-0` so flex container truncates instead of hiding the icon
+- **`textCls` prop** (optional, default `text-gray-700`) — override text colour without forking the component (e.g. `textCls="text-red-600"` for old values in ChangeLog)
+- **`<DescriptionTooltip tooltip={descTooltip} />`** must be placed at the end of every page's return that uses `DescriptionCell` — renders the hover tooltip portal
 
 ```tsx
 const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
@@ -36,13 +38,24 @@ const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTool
   />
 </td>
 
+// In card view (wrap in div for colour/style context):
+{row.description && (
+  <div className="text-xs text-gray-500">
+    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
+  </div>
+)}
+
 // At end of return (renders portal):
 <DescriptionTooltip tooltip={descTooltip} />
 ```
 
-Use a prefixed id (e.g. `rem-${row.id}`) for a second `DescriptionCell` in the same row.
+ID prefixing rules:
+- Second field in same row: `rem-${row.id}` (remarks) or any unique prefix
+- Card view: `card-desc-${row.id}`, `card-rem-${row.id}` — prevents collision with table-view IDs
 
-Pages using DescriptionCell: Inflows, Outflows, BankLedger, IntraFlow, BankDeposits, ForeignCurrency, Categories, ReversalTransactions, IntraBankTransfers, RefundTransactions.
+**Never use bare `truncate` on user-visible text fields** — always use `DescriptionCell` so tap/hover expansion works on all devices.
+
+Pages using DescriptionCell: Inflows, Outflows, BankLedger, CategoryLedger, IntraFlow, BankDeposits, ForeignCurrency, Categories, ReversalTransactions, IntraBankTransfers, RefundTransactions, ChangeLog.
 
 ---
 
