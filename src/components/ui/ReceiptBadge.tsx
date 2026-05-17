@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Paperclip, X, Download, Trash2, Loader2, Upload, AlertTriangle, Terminal } from 'lucide-react'
+import { Paperclip, X, Download, Trash2, Loader2, Upload, AlertTriangle } from 'lucide-react'
+import { TechDetails } from './TechDetails'
 import { useReceipts, type ReceiptEntityType, type Receipt } from '../../hooks/useReceipts'
 import { useToastStore } from '../../store/toastStore'
 
@@ -186,26 +187,22 @@ function friendlyUploadError(msg: string | null): string {
             </button>
           </div>
 
-          {/* Migration error */}
+          {/* Error state */}
           {error && (
-            <div className="p-2 space-y-1">
+            <div className="p-2">
               <div className="flex items-start gap-1.5 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
                 <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-                <span>
+                <div className="flex-1 min-w-0">
                   {isMigrationError
-                    ? 'Receipts table not found. Run the SQL below in Supabase SQL Editor.'
+                    ? (
+                      <>
+                        <p>Receipts aren't set up yet. Ask your administrator to enable this feature.</p>
+                        <TechDetails>{MIGRATION_SQL}</TechDetails>
+                      </>
+                    )
                     : error}
-                </span>
-              </div>
-              {isMigrationError && (
-                <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-800 border-b border-gray-700">
-                    <Terminal className="w-3 h-3 text-gray-400" />
-                    <span className="text-[9px] text-gray-400 font-mono">Supabase SQL Editor</span>
-                  </div>
-                  <pre className="px-2 py-2 text-[10px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
