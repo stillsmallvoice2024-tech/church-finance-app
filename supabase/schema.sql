@@ -67,6 +67,7 @@ create table public.banks (
   name                             text not null,
   account_number                   text,
   account_type                     text,
+  currency                         text not null default 'NGN',
   starting_balance                 numeric(15,2),
   starting_balance_category        text,
   starting_balance_budget_portion  text,

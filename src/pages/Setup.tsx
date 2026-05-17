@@ -853,8 +853,9 @@ DO $\$ BEGIN
     FOR DELETE USING (auth.uid() IS NOT NULL);
 EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
 
--- Bank starting balance columns
+-- Bank columns (currency + starting balance)
 ALTER TABLE banks
+  ADD COLUMN IF NOT EXISTS currency                  text NOT NULL DEFAULT 'NGN',
   ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS starting_balance_category text,
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
@@ -866,6 +867,7 @@ CREATE OR REPLACE VIEW public.bank_schema_check AS
   FROM information_schema.columns
   WHERE table_schema = 'public' AND table_name = 'banks';
 GRANT SELECT ON public.bank_schema_check TO anon, authenticated;
+NOTIFY pgrst, 'reload schema';
 
 -- recorded_at: editable business reporting/upload date
 -- Backfilled from created_at for existing rows

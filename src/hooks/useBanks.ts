@@ -32,6 +32,16 @@ export interface BanksResult {
 
 export type SchemaStatus = 'ok' | 'migration_needed' | 'cache_stale'
 
+// All columns that INSERT/UPDATE payloads send to 'banks'
+const REQUIRED_BANK_COLS = [
+  'currency',
+  'starting_balance',
+  'starting_balance_category',
+  'starting_balance_budget_portion',
+  'starting_balance_alloc_type',
+  'starting_balance_allocations',
+] as const
+
 export async function checkBankStartingBalanceMigration(): Promise<SchemaStatus> {
   // Try information_schema via the helper view — unaffected by PostgREST column cache
   const { data, error: viewErr } = await supabase
@@ -39,20 +49,26 @@ export async function checkBankStartingBalanceMigration(): Promise<SchemaStatus>
     .select('column_name')
   if (!viewErr && data) {
     const cols = new Set(data.map((r: { column_name: string }) => r.column_name))
-    if (!cols.has('starting_balance') || !cols.has('starting_balance_allocations')) {
+    const missing = REQUIRED_BANK_COLS.filter(c => !cols.has(c))
+    if (missing.length > 0) {
+      console.warn('[bank-schema] missing columns in DB:', missing)
       return 'migration_needed'
     }
-    // Columns exist in DB — verify PostgREST's table cache also knows about them
+    // All columns exist in DB — verify PostgREST's SELECT cache is also current
     const { error: pgErr } = await supabase
       .from('banks')
-      .select('starting_balance, starting_balance_allocations')
+      .select('currency, starting_balance, starting_balance_category, starting_balance_budget_portion, starting_balance_alloc_type, starting_balance_allocations')
       .limit(0)
-    return pgErr ? 'cache_stale' : 'ok'
+    if (pgErr) {
+      console.warn('[bank-schema] PostgREST SELECT cache stale:', pgErr.message)
+      return 'cache_stale'
+    }
+    return 'ok'
   }
   // View not created yet — fall back to PostgREST-only check
   const { error } = await supabase
     .from('banks')
-    .select('starting_balance, starting_balance_allocations')
+    .select('currency, starting_balance, starting_balance_allocations')
     .limit(0)
   return error ? 'migration_needed' : 'ok'
 }

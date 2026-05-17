@@ -20,6 +20,7 @@ const MAX_CACHE_RETRIES = 3
 
 const MIGRATION_SQL =
 `ALTER TABLE banks
+  ADD COLUMN IF NOT EXISTS currency                  text NOT NULL DEFAULT 'NGN',
   ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS starting_balance_category text,
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
@@ -356,9 +357,21 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
         {showMigrationBanner && (
           schemaStuck ? (
-            <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <span>Schema cache could not refresh — please reload the page and try again.</span>
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-medium">Schema cache error persists — run the full migration SQL below in your Supabase SQL Editor, then reload the page.</p>
+                  {error && <p className="font-mono text-[10px] break-all opacity-80">{error}</p>}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                  <Terminal className="w-3 h-3 text-gray-400" />
+                  <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+                </div>
+                <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+              </div>
             </div>
           ) : schemaStatus === 'cache_stale' ? (
             <div className="space-y-2">
@@ -366,6 +379,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <div className="flex-1 space-y-1">
                   <p>Columns exist but PostgREST cache needs reloading — run the line below in your Supabase SQL Editor, then click Re-check.</p>
+                  {error && <p className="font-mono text-[10px] break-all opacity-70">{error}</p>}
                   <button
                     type="button"
                     onClick={async () => {
