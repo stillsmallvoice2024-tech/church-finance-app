@@ -626,8 +626,6 @@ function ManualEntryForm() {
         bank_name:               selectedBank?.name    || undefined,
         bank_description:        v('bank_description') || undefined,
         transaction_id:          v('transaction_id')   || undefined,
-        amount_refunded:         v('amount_refunded')  ? parseFloat(v('amount_refunded'))  : undefined,
-        transfer_charge:         v('transfer_charge')  ? parseFloat(v('transfer_charge'))  : undefined,
         is_pending_deduction:    isPending,
         stage_code_1:            outflowS1             || undefined,
         stage_code_2:            outflowS2             || undefined,
@@ -999,19 +997,6 @@ function ManualEntryForm() {
             />
             <span className="text-sm font-medium text-gray-700">Mark as Pending Deduction</span>
           </label>
-
-          {/* Optional banking extras */}
-          <div className="border border-gray-100 rounded-lg p-4 space-y-4 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Optional Banking Details</p>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Amount Refunded (₦)">
-                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('amount_refunded')} onChange={e => setCurrency('amount_refunded', e.target.value)} className={iCls} />
-              </Field>
-              <Field label="Transfer Charge (₦)">
-                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('transfer_charge')} onChange={e => setCurrency('transfer_charge', e.target.value)} className={iCls} />
-              </Field>
-            </div>
-          </div>
 
           {/* Remarks */}
           <Field label="Remarks">
