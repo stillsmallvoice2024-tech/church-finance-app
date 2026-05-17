@@ -754,26 +754,58 @@ Dark mode class application (`darkMode: 'class'`) is configured but UI coverage 
 
 ---
 
-## Mobile Card View Pattern (CategoryLedger)
+## Mobile Card View Pattern (App-Wide Standard)
 
-Vertical stacked layout — **not** horizontal flex. All ledger card views must follow this structure:
+All pages with mobile card views use this two-section structure. CategoryLedger is the canonical reference.
 
+### Card wrapper (all pages)
 ```
-┌───────────────────────────────────┐
-│  Date label (text-[11px] gray-400)│
-│  Description (DescriptionCell)    │
-│  ─────────────────────────────────│
-│  bg-gray-50/40 metrics footer:    │
-│  INFLOW/OUTFLOW  │  BALANCE        │
-│  (label above value, 2-col grid)  │
-└───────────────────────────────────┘
+rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200
+```
+- Permanent `shadow-sm` — **not** `hover:shadow-md transition-shadow`
+- No padding on wrapper — sections carry their own padding
+- `border-gray-200` (not `border-gray-100`)
+
+### Section 1 — Header body
+```
+px-4 pt-3.5 pb-3
+```
+- Date: `text-[11px] font-semibold mb-1.5 text-gray-400` using `formatDate()` (single-line)
+- Badges, bank name, flow arrows, description (`DescriptionCell`), remarks — all in header
+- **Never** use `formatCardDate` (split day/year removed from all pages)
+
+### Section 2 — Metrics footer
+```
+grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3
+```
+- Label: `text-[10px] uppercase tracking-wide font-semibold mb-0.5`
+- Value: `text-sm font-mono font-bold tabular-nums`
+- Right column used for action buttons (edit/delete icon buttons, `w-3.5 h-3.5`) when only one financial metric; or for a second metric (balance, net) when both are needed
+- Use `grid-cols-3` when showing two metrics + actions
+- Divider between columns: `border-l border-gray-200/80 pl-4`
+
+### Container
+- `space-y-3` between cards — **not** `grid gap-4`
+- Container sits directly in the page (or inside `<Card padding={false}><div className="p-4 space-y-3">`)
+
+### Loading skeleton
+```tsx
+<div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+  <div className="px-4 pt-3.5 pb-3 space-y-2">
+    <div className="h-3 bg-gray-200 rounded w-1/4" />
+    <div className="h-4 bg-gray-200 rounded w-3/4" />
+  </div>
+  <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 grid grid-cols-2 gap-4">
+    <div className="h-8 bg-gray-200 rounded" /><div className="h-8 bg-gray-200 rounded" />
+  </div>
+</div>
 ```
 
-- **Header**: date at top (`text-[11px] font-semibold text-gray-400`), description below via `DescriptionCell`
-- **Metrics footer**: `grid grid-cols-2 border-t bg-gray-50/40 px-4 py-3` — label (`text-[10px] uppercase tracking-wide font-semibold`) sits above value (`text-sm font-mono font-bold tabular-nums`)
-- **Amount column**: show whichever of inflow/outflow is non-zero; label reads "Inflow" or "Outflow" accordingly — avoids 3-col squeeze on 320px screens
-- **Card surface**: `rounded-xl border shadow-sm overflow-hidden bg-white border-gray-200`
-- **B/F row**: `bg-blue-50/60 border-blue-200`; label shows "Balance B/F"; amount label shows "B/F Amount"; description rendered as plain `<p>` (not DescriptionCell)
-- **Toggle placement**: Table/Cards toggle lives in a toolbar row **directly above** the card/table content, paired with a transaction count (`{n} transaction{s}`). Never in the top page controls row.
-- **`space-y-3`** between cards (not `space-y-2`)
-- All card item IDs prefixed `card-${row.id}` to avoid collision with table-view DescriptionCell IDs
+### Other rules
+- **CategoryLedger B/F row**: `bg-blue-50/60 border-blue-200`; B/F description as plain `<p>`, not DescriptionCell
+- **Toggle placement**: directly above card/table section, paired with result count — never in page header
+- **ID prefixes**: `card-${row.id}`, `card-rem-${row.id}` to avoid collision with table-view IDs
+- **Empty states**: use `<EmptyState compact />` directly in the `space-y-3` container (no `col-span-full`)
+
+### Pages using this standard
+Inflows, Outflows, BankLedger, BankDeposits, IntraBankTransfers, IntraFlow, Categories, RefundTransactions, ReversalTransactions, CategoryLedger
