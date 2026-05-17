@@ -5,6 +5,8 @@ import { Pagination }         from '../components/ui/Pagination'
 import { useFieldChanges }    from '../hooks/useFieldChanges'
 import { usePageTitle }       from '../hooks/usePageTitle'
 import { exportCSV }          from '../utils/csvExport'
+import { filterInputCls }     from '../components/ui/FormField'
+import { EmptyState }         from '../components/ui/EmptyState'
 
 const PAGE_SIZE = 200
 
@@ -91,7 +93,6 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
     )
   }
 
-  const inputCls = 'px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white'
 
   return (
     <div className="space-y-5">
@@ -116,7 +117,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-500">Table</label>
-            <select value={tableFilter} onChange={e => setTableFilter(e.target.value)} className={inputCls}>
+            <select value={tableFilter} onChange={e => setTableFilter(e.target.value)} className={filterInputCls}>
               <option value="">All tables</option>
               {Object.entries(TABLE_LABELS).map(([val, label]) => (
                 <option key={val} value={val}>{label}</option>
@@ -125,11 +126,11 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-500">From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputCls} />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-500">To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
           </div>
           {(tableFilter || dateFrom || dateTo) && (
             <button
@@ -147,7 +148,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="border-b border-gray-100">
+              <tr className="bg-gray-50 border-b border-gray-100">
                 {['Timestamp', 'User', 'Table', 'Record ID', 'Field', 'Old Value', 'New Value'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     {h}
@@ -155,7 +156,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100">
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
@@ -168,11 +169,8 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
                 ))
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-2 text-gray-400">
-                      <ClipboardList className="w-10 h-10 text-gray-200" />
-                      <p className="text-sm">No field changes recorded yet.</p>
-                    </div>
+                  <td colSpan={7}>
+                    <EmptyState icon={ClipboardList} title="No field changes recorded yet." compact />
                   </td>
                 </tr>
               ) : (

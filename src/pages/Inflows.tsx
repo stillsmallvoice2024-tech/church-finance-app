@@ -24,6 +24,7 @@ import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
+import { filterInputCls } from '../components/ui/FormField'
 
 const PAGE_SIZE = 25
 
@@ -208,10 +209,10 @@ export default function Inflows() {
         <Card>
           <div className="flex flex-wrap gap-3 items-end">
             <FilterGroup label="From">
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputCls} />
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="To">
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="Search" className="flex-1 min-w-[180px]">
               <div className="relative">
@@ -219,7 +220,7 @@ export default function Inflows() {
                 <input
                   type="text" placeholder="Search description…" value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
-                  className={`${inputCls} pl-9`}
+                  className={`${filterInputCls} pl-9`}
                 />
               </div>
             </FilterGroup>
@@ -494,7 +495,6 @@ export default function Inflows() {
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
 
 function FilterGroup({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -586,7 +586,7 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Bank Name</label>
-          <select value={bankName} onChange={e => setBankName(e.target.value)} className={inputCls}>
+          <select value={bankName} onChange={e => setBankName(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
           </select>
@@ -594,12 +594,12 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Recorded Date</label>
-          <input type="date" value={recordedAt} onChange={e => setRecordedAt(e.target.value)} className={inputCls} />
+          <input type="date" value={recordedAt} onChange={e => setRecordedAt(e.target.value)} className={filterInputCls} />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Transaction Type</label>
-          <select value={txnType} onChange={e => setTxnType(e.target.value)} className={inputCls}>
+          <select value={txnType} onChange={e => setTxnType(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             <option value="refund">Refund</option>
             <option value="reversal">Reversal</option>
@@ -611,7 +611,7 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
         {incomeTypes.length > 0 && (
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-500">Income Type</label>
-            <select value={incomeTypeId} onChange={e => setIncomeTypeId(e.target.value)} className={inputCls}>
+            <select value={incomeTypeId} onChange={e => setIncomeTypeId(e.target.value)} className={filterInputCls}>
               <option value="">— Keep existing —</option>
               {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
@@ -620,7 +620,7 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
-          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={inputCls}>
+          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
@@ -628,7 +628,7 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Stage Code 2 (Portion Type)</label>
-          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={inputCls}>
+          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             <option value="Percentage Allocation">Percentage Allocation</option>
             <option value="Specific Seed">Specific Seed</option>

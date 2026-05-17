@@ -26,6 +26,7 @@ import { useAuth }                 from '../hooks/useAuth'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
 import { formatCurrencyCompact, formatDate } from '../utils/formatters'
+import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -220,9 +221,8 @@ export default function Dashboard() {
               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : chartData.every(d => d.inflow === 0 && d.outflow === 0) ? (
-            <div className="h-72 flex flex-col items-center justify-center gap-2 text-gray-400">
-              <TrendingUp className="w-8 h-8" />
-              <p className="text-sm">No transactions recorded for {year} yet.</p>
+            <div className="h-72 flex items-center justify-center">
+              <ChartEmpty message={`No transactions recorded for ${year} yet.`} />
             </div>
           ) : (
             <div className="h-72">
@@ -276,10 +276,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : stats.recentTransactions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-12 text-gray-400">
-              <TrendingUp className="w-8 h-8" />
-              <p className="text-sm">No recent transactions.</p>
-            </div>
+            <EmptyState icon={TrendingUp} title="No recent transactions." compact />
           ) : (
             <div className="divide-y divide-gray-100">
               {stats.recentTransactions.map(tx => (

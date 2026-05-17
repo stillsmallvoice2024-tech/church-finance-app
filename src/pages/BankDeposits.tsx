@@ -18,6 +18,7 @@ import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { filterInputCls } from '../components/ui/FormField'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -588,4 +589,3 @@ function inputCls(hasError: boolean) {
   }`
 }
 
-const filterInputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'

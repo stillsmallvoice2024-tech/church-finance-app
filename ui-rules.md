@@ -244,20 +244,27 @@ Section order: Profile → Password → **Theme** → App Information
 
 All form modals must use these shared components — do NOT define local copies.
 
-### `Field` + `inputCls` (`src/components/ui/FormField.tsx`)
+### `Field` + `inputCls` + `filterInputCls` (`src/components/ui/FormField.tsx`)
 
 ```tsx
-import { Field, inputCls } from '../ui/FormField'
+import { Field, inputCls, filterInputCls } from '../ui/FormField'
 
+// Modal form fields with error support:
 <Field label="Date *" error={errors.date?.message}>
   <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
 </Field>
+
+// Filter/search inputs without error states:
+<input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
+<input type="text" placeholder="Search…" className={`${filterInputCls} pl-9`} />
 ```
 
-- `Field` renders label + children + optional error text
+- `Field` renders label (`text-xs font-medium text-gray-600`) + children + optional red error text
 - Automatically injects `id`, `aria-invalid`, `aria-describedby` onto the first child element via `React.cloneElement` + `useId` — no manual aria wiring needed in modals
 - Error message rendered with `role="alert"` so screen readers announce it on appearance
-- `inputCls(hasError)` returns the standard input class string: `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg …`
+- `inputCls(hasError)` — for form modal fields; includes `min-h-[44px]` and error border state
+- `filterInputCls` — plain string constant for filter/search inputs; no error state; same visual appearance
+- **Never define local `inputCls` or `filterInputCls` duplicates in page files** — import from FormField
 - `error` prop is optional — omit when no validation message needed
 
 ### `ButtonSpinner` (`src/components/ui/ButtonSpinner.tsx`)
@@ -289,7 +296,7 @@ import { CollapsibleSection } from '../ui/CollapsibleSection'
 
 ### `ViewToggle` + `useViewToggle` (`src/components/ui/ViewToggle.tsx`)
 
-Infrastructure ready — not yet wired globally. Use when adding table/card toggle to a list page.
+Wired on Inflows (`inflows-view`) and Outflows (`outflows-view`). Use the same pattern for any new list page.
 
 ```tsx
 import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
@@ -299,10 +306,19 @@ const { view, setView } = useViewToggle('my-page-view')
 <ViewToggle storageKey="my-page-view" value={view} onChange={setView} />
 ```
 
-- Renders labeled `[ Table ] [ Cards ]` segmented control (not icon-only)
+- Renders labeled `[ Table ] [ Cards ]` segmented control (not icon-only) — **never use icon-only toggle buttons**
 - Desktop default = `table`, mobile default = `cards` (via `matchMedia('(min-width: 768px)')`)
 - User override persists in `localStorage` under `storageKey`
 - Container has `role="group" aria-label="View mode"`; each button has `aria-pressed`
+- **Do NOT apply to:** financial reports, allocation admin screens, dense config tables
+
+---
+
+## Receipts Folder Navigation (responsive)
+
+- Mobile (`< md`): horizontal scrollable pill tabs — `flex overflow-x-auto gap-2 md:hidden`
+- Desktop (`md+`): `hidden md:block w-52 shrink-0` sidebar — same `folder` state drives both
+- **Never use a fixed-width sidebar without a mobile fallback** — `w-52 shrink-0` alone forces horizontal page scroll on narrow screens
 
 ---
 
@@ -625,3 +641,47 @@ Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside 
 - Direct cross-subgroup DnD blocked — assign via dropdown instead
 - Subgroups and root items reorder within the same parent group via the unified `itm/sgp` branch in `handleDragEnd` (reorders `g.children` directly), or via ↑/↓ buttons
 - Categories and subgroups can be freely interleaved — any child order is valid (e.g. Cat1, SgA, Cat2, SgB, Cat3)
+
+---
+
+## Finalized Design System Standards (Phase 7 Audit)
+
+### Page Container Rhythm
+
+- Top-level page `div`: `space-y-5` (standard) or `space-y-6` for dashboard-style pages
+- Page header layout: `flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`
+- Heading: `text-2xl font-bold text-gray-900`
+- Subheading: `text-sm text-gray-500 mt-0.5`
+
+### Table Standards
+
+- `<thead> <tr>`: always `bg-gray-50 border-b border-gray-100`
+- `<tbody>`: always `divide-y divide-gray-100` (never `divide-gray-50`)
+- Dark variants: `dark:bg-gray-800/50 dark:border-gray-700` on thead, `dark:divide-gray-700/50` on tbody
+
+### Empty States
+
+- Table empty cell: `<td colSpan={n}><EmptyState icon={X} title="…" compact /></td>`
+- Full-page empty: `<EmptyState icon={X} title="…" message="…" />` (non-compact)
+- Chart empty: `<ChartEmpty message="…" />` wrapped in a height-constrained div
+- **Never** use inline `<div className="flex flex-col items-center …">` for empty states
+
+### Summary Strip Grids (responsive)
+
+- 3-item strips: `grid-cols-1 sm:grid-cols-3 gap-3`
+- 4-item strips: `grid-cols-2 sm:grid-cols-4 gap-3`
+- **Never** use bare `grid-cols-3` or `grid-cols-4` without a mobile breakpoint — causes overflow on small screens
+
+### Dark Mode Status
+
+Dark mode class application (`darkMode: 'class'`) is configured but UI coverage is limited to `FinancialReport.tsx` and a few layout components. Pages and shared UI components are light-mode only. Full dark mode is a future project, not incremental page patches.
+
+### Icon Size Conventions
+
+| Context | Size |
+|---|---|
+| Inline text / table cell | `w-4 h-4` |
+| Button / nav item | `w-4 h-4` or `w-5 h-5` |
+| Page heading decoration | `w-6 h-6` |
+| Error / alert state | `w-10 h-10` |
+| Empty state (via EmptyState component) | `w-7 h-7` (managed by component) |

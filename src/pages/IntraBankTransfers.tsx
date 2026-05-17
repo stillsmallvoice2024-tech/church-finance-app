@@ -18,6 +18,7 @@ import { useToastStore } from '../store/toastStore'
 import { useAuthStore }  from '../store/authStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -272,15 +273,15 @@ export default function IntraBankTransfers() {
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">From</label>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputCls(false)} />
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">To</label>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls(false)} />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
             </div>
             <div className="flex flex-col gap-1 min-w-[160px]">
               <label className="text-xs font-medium text-gray-500">Bank</label>
-              <select value={bankFilter} onChange={e => setBankFilter(e.target.value)} className={`${inputCls(false)} bg-white`}>
+              <select value={bankFilter} onChange={e => setBankFilter(e.target.value)} className={filterInputCls}>
                 <option value="">All banks</option>
                 {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
@@ -417,17 +418,3 @@ export default function IntraBankTransfers() {
   )
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-const inputCls = (hasError: boolean) =>
-  `w-full px-3 py-2 text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${hasError ? 'border-red-400 focus:border-red-400' : 'border-gray-300 focus:border-primary'}`
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>
-  )
-}
