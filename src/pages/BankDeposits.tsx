@@ -19,6 +19,7 @@ import { formatDate, formatCurrency } from '../utils/formatters'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls } from '../components/ui/FormField'
+import { EmptyState } from '../components/ui/EmptyState'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -409,49 +410,61 @@ export default function BankDeposits() {
       {/* Table / Cards */}
       <Card padding={false}>
         {displayMode === 'cards' ? (
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="p-4 space-y-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-2/3" /><div className="h-6 bg-gray-200 rounded w-1/2" />
+                <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+                  <div className="px-4 pt-3.5 pb-3 space-y-2">
+                    <div className="h-3 bg-gray-200 rounded w-1/4" />
+                    <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  </div>
+                  <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 grid grid-cols-2 gap-4">
+                    <div className="h-8 bg-gray-200 rounded" /><div className="h-8 bg-gray-200 rounded" />
+                  </div>
                 </div>
               ))
             ) : filtered.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-gray-400">
-                <Landmark className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                <p className="text-sm">No bank deposits found.</p>
-              </div>
+              <EmptyState icon={Landmark} title="No bank deposits found." compact />
             ) : filtered.map(row => (
-              <div key={`${row.source}-${row.id}`} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+              <div key={`${row.source}-${row.id}`} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                {/* Card header */}
+                <div className="px-4 pt-3.5 pb-3">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
                     <SourceBadge source={row.source} />
                   </div>
-                  {admin && row.source === 'bank_deposits' && (
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(row)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => setDeleteTarget(row)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                  {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
+                  {row.description && (
+                    <div className="text-sm mb-1">
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                    </div>
+                  )}
+                  {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono">Ref: {row.transaction_ref}</p>}
+                  {row.remarks && (
+                    <div className="text-xs mt-1.5">
+                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
                     </div>
                   )}
                 </div>
-                <p className="text-base font-bold text-gray-900">{formatCurrency(row.amount)}</p>
-                {row.bank_name       && <p className="text-xs text-gray-500">{row.bank_name}</p>}
-                {row.description     && (
-                  <div className="text-xs text-gray-600">
-                    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                {/* Metrics footer */}
+                <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Amount</p>
+                    <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(row.amount)}</p>
                   </div>
-                )}
-                {row.transaction_ref && <p className="text-xs text-gray-400 font-mono truncate">Ref: {row.transaction_ref}</p>}
-                {row.remarks         && (
-                  <div className="text-xs text-gray-400 italic">
-                    <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                  </div>
-                )}
+                  {admin && row.source === 'bank_deposits' ? (
+                    <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
+                      <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-primary/10 text-gray-400 hover:text-primary transition-colors" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border-l border-gray-200/80 pl-4 min-w-0" />
+                  )}
+                </div>
               </div>
             ))}
           </div>
