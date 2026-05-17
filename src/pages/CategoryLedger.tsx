@@ -434,27 +434,27 @@ export default function CategoryLedger() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-xl bg-primary/5 border border-primary/20 px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1 flex items-center gap-1">
-                  <Percent className="w-3 h-3" /> % Allocated
+              <div className="rounded-xl bg-primary/5 border border-primary/20 px-3 py-3 min-w-0 overflow-hidden">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1.5 flex items-center gap-1">
+                  <Percent className="w-3 h-3 shrink-0" /><span className="truncate">% Allocated</span>
                 </p>
-                <p className="text-base font-mono font-bold text-primary">{formatCurrency(globalTotals.alloc)}</p>
+                <p className="text-sm font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc)}</p>
               </div>
-              <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1 flex items-center gap-1">
-                  <Gift className="w-3 h-3" /> Specific Seeds
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-3 min-w-0 overflow-hidden">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1.5 flex items-center gap-1">
+                  <Gift className="w-3 h-3 shrink-0" /><span className="truncate">Specific Seeds</span>
                 </p>
-                <p className="text-base font-mono font-bold text-amber-700">{formatCurrency(globalTotals.seed)}</p>
+                <p className="text-sm font-mono font-bold text-amber-700 tabular-nums">{formatCurrency(globalTotals.seed)}</p>
               </div>
-              <div className={`rounded-xl border px-4 py-3 ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                <p className={`text-[10px] font-bold uppercase tracking-wide mb-1 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
-                  <Archive className="w-3 h-3" /> Savings Net
+              <div className={`rounded-xl border px-3 py-3 min-w-0 overflow-hidden ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-wide mb-1.5 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
+                  <Archive className="w-3 h-3 shrink-0" /><span className="truncate">Savings Net</span>
                 </p>
-                <p className={`text-base font-mono font-bold ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav)}</p>
+                <p className={`text-sm font-mono font-bold tabular-nums ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav)}</p>
               </div>
-              <div className="rounded-xl bg-gray-800 border border-gray-700 px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300 mb-1">Grand Total</p>
-                <p className="text-base font-mono font-bold text-white">{formatCurrency(globalTotals.alloc + globalTotals.seed + globalTotals.sav)}</p>
+              <div className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3 min-w-0 overflow-hidden">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300 mb-1.5 truncate">Grand Total</p>
+                <p className="text-sm font-mono font-bold text-white tabular-nums">{formatCurrency(globalTotals.alloc + globalTotals.seed + globalTotals.sav)}</p>
               </div>
             </div>
           )}
@@ -656,25 +656,6 @@ export default function CategoryLedger() {
               ))}
             </div>
 
-            {/* Table / Card toggle */}
-            <div className="ml-auto flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-              <button
-                onClick={() => setDisplayMode('table')}
-                className={`px-3 py-2 border-r border-gray-200 transition-colors ${
-                  displayMode === 'table' ? 'bg-gray-800 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Table
-              </button>
-              <button
-                onClick={() => setDisplayMode('cards')}
-                className={`px-3 py-2 transition-colors ${
-                  displayMode === 'cards' ? 'bg-gray-800 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Cards
-              </button>
-            </div>
           </div>
 
           {/* No category selected */}
@@ -707,19 +688,19 @@ export default function CategoryLedger() {
           {/* Ledger content */}
           {activeCategory && !ledgerLoading && !ledgerError && (
             <>
-              {/* Summary strip for selected category + portion */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-xl bg-primary/5 border border-primary/20 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1">{activeCategory}</p>
+              {/* Summary strip — category name spans full width on mobile */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="col-span-2 sm:col-span-1 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 min-w-0 overflow-hidden">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1 truncate">{activeCategory}</p>
                   <p className="text-xs text-gray-500">{ledgerPortion} portion</p>
                 </div>
-                <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3">
+                <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-success mb-1">Total Inflow</p>
-                  <p className="text-sm font-mono font-semibold text-success">{formatCurrency(ledgerTotals.inflow)}</p>
+                  <p className="text-sm font-mono font-semibold text-success tabular-nums">{formatCurrency(ledgerTotals.inflow)}</p>
                 </div>
-                <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+                <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-danger mb-1">Total Outflow</p>
-                  <p className="text-sm font-mono font-semibold text-danger">{formatCurrency(ledgerTotals.outflow)}</p>
+                  <p className="text-sm font-mono font-semibold text-danger tabular-nums">{formatCurrency(ledgerTotals.outflow)}</p>
                 </div>
               </div>
 
@@ -733,86 +714,147 @@ export default function CategoryLedger() {
                 </div>
               )}
 
-              {/* TABLE display */}
-              {ledgerRows.length > 0 && displayMode === 'table' && (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                        <th className="px-4 py-3 text-left font-medium">Date</th>
-                        <th className="px-4 py-3 text-left font-medium">Description</th>
-                        <th className="px-4 py-3 text-right font-medium text-success">Inflow</th>
-                        <th className="px-4 py-3 text-right font-medium text-danger">Outflow</th>
-                        <th className="px-5 py-3 text-right font-medium">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {ledgerRows.map(row => (
-                        <tr key={row.id} className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : 'hover:bg-gray-50'}`}>
-                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
-                          <td className="px-4 py-3 text-gray-700 max-w-xs">
-                            <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-success">
-                            {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-danger">
-                            {row.outflow > 0 ? formatCurrency(row.outflow) : <span className="text-gray-300 text-xs">—</span>}
-                          </td>
-                          <td className={`px-5 py-3 text-right font-mono font-semibold ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                            {formatCurrency(row.balance)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
-                        <td className="px-4 py-3 text-gray-700" colSpan={2}>Totals</td>
-                        <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow)}</td>
-                        <td className={`px-5 py-3 text-right font-mono ${ledgerRows[ledgerRows.length - 1]?.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                          {ledgerRows.length > 0 ? formatCurrency(ledgerRows[ledgerRows.length - 1].balance) : '—'}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-
-              {/* CARDS display */}
-              {ledgerRows.length > 0 && displayMode === 'cards' && (
-                <div className="space-y-2">
-                  {ledgerRows.map(row => (
-                    <div key={row.id} className={`border rounded-xl px-4 py-3 flex items-center gap-4 ${row.id === 'bal-bf' ? 'bg-blue-50/60 border-blue-100 font-medium' : 'bg-white border-gray-200'}`}>
-                      <div className="w-20 shrink-0">
-                        <p className="text-xs text-gray-400">{row.id === 'bal-bf' ? 'Bal. B/F' : formatDate(row.date)}</p>
-                      </div>
-                      <div className="flex-1 min-w-0 text-sm text-gray-700">
-                        <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                      </div>
-                      <div className="flex items-center gap-4 shrink-0 text-right">
-                        {row.inflow > 0 && (
-                          <div>
-                            <p className="text-[10px] text-gray-400 uppercase">Inflow</p>
-                            <p className="text-sm font-mono font-semibold text-success">{formatCurrency(row.inflow)}</p>
-                          </div>
-                        )}
-                        {row.outflow > 0 && (
-                          <div>
-                            <p className="text-[10px] text-gray-400 uppercase">Outflow</p>
-                            <p className="text-sm font-mono font-semibold text-danger">{formatCurrency(row.outflow)}</p>
-                          </div>
-                        )}
-                        <div className="border-l border-gray-200 pl-4">
-                          <p className="text-[10px] text-gray-400 uppercase">Balance</p>
-                          <p className={`text-sm font-mono font-semibold ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                            {formatCurrency(row.balance)}
-                          </p>
-                        </div>
-                      </div>
+              {ledgerRows.length > 0 && (
+                <>
+                  {/* Toggle row — directly above the content it controls */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500">
+                      {ledgerRows.length} transaction{ledgerRows.length !== 1 ? 's' : ''}
+                    </p>
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                      <button
+                        onClick={() => setDisplayMode('table')}
+                        className={`px-3 py-2 border-r border-gray-200 transition-colors ${
+                          displayMode === 'table' ? 'bg-gray-800 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Table
+                      </button>
+                      <button
+                        onClick={() => setDisplayMode('cards')}
+                        className={`px-3 py-2 transition-colors ${
+                          displayMode === 'cards' ? 'bg-gray-800 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Cards
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+
+                  {/* TABLE display */}
+                  {displayMode === 'table' && (
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                            <th className="px-4 py-3 text-left font-medium">Date</th>
+                            <th className="px-4 py-3 text-left font-medium">Description</th>
+                            <th className="px-4 py-3 text-right font-medium text-success">Inflow</th>
+                            <th className="px-4 py-3 text-right font-medium text-danger">Outflow</th>
+                            <th className="px-5 py-3 text-right font-medium">Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {ledgerRows.map(row => (
+                            <tr key={row.id} className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : 'hover:bg-gray-50'}`}>
+                              <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
+                              <td className="px-4 py-3 text-gray-700 max-w-xs">
+                                <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-success">
+                                {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-danger">
+                                {row.outflow > 0 ? formatCurrency(row.outflow) : <span className="text-gray-300 text-xs">—</span>}
+                              </td>
+                              <td className={`px-5 py-3 text-right font-mono font-semibold ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
+                                {formatCurrency(row.balance)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
+                            <td className="px-4 py-3 text-gray-700" colSpan={2}>Totals</td>
+                            <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow)}</td>
+                            <td className={`px-5 py-3 text-right font-mono ${ledgerRows[ledgerRows.length - 1]?.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
+                              {ledgerRows.length > 0 ? formatCurrency(ledgerRows[ledgerRows.length - 1].balance) : '—'}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* CARDS display — vertical stacked layout, mobile-first */}
+                  {displayMode === 'cards' && (
+                    <div className="space-y-3">
+                      {ledgerRows.map(row => (
+                        <div
+                          key={row.id}
+                          className={`rounded-xl border overflow-hidden shadow-sm ${
+                            row.id === 'bal-bf'
+                              ? 'bg-blue-50/60 border-blue-200'
+                              : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          {/* Card header: date + description */}
+                          <div className="px-4 pt-3.5 pb-3">
+                            <p className={`text-[11px] font-semibold mb-1.5 ${
+                              row.id === 'bal-bf'
+                                ? 'text-blue-500 uppercase tracking-wide'
+                                : 'text-gray-400'
+                            }`}>
+                              {row.id === 'bal-bf' ? 'Balance B/F' : formatDate(row.date)}
+                            </p>
+                            {row.id === 'bal-bf' ? (
+                              <p className="text-sm font-semibold text-blue-800">{row.description}</p>
+                            ) : (
+                              <div className="text-sm">
+                                <DescriptionCell
+                                  id={`card-${row.id}`}
+                                  text={row.description}
+                                  tooltip={descTooltip}
+                                  setTooltip={setDescTooltip}
+                                  textCls="text-gray-800"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Financial metrics — 2-col grid, labels above values */}
+                          <div className={`grid grid-cols-2 border-t px-4 py-3 ${
+                            row.id === 'bal-bf'
+                              ? 'border-blue-200/60 bg-blue-50/30'
+                              : 'border-gray-100 bg-gray-50/40'
+                          }`}>
+                            <div className="min-w-0">
+                              <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${
+                                row.inflow > 0 ? 'text-green-600/70' : 'text-red-600/70'
+                              }`}>
+                                {row.id === 'bal-bf' ? 'B/F Amount' : (row.inflow > 0 ? 'Inflow' : 'Outflow')}
+                              </p>
+                              <p className={`text-sm font-mono font-bold tabular-nums ${
+                                row.inflow > 0 ? 'text-success' : 'text-danger'
+                              }`}>
+                                {row.inflow > 0 ? formatCurrency(row.inflow) : formatCurrency(row.outflow)}
+                              </p>
+                            </div>
+                            <div className="border-l border-gray-200/80 pl-4 min-w-0">
+                              <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Balance</p>
+                              <p className={`text-sm font-mono font-bold tabular-nums ${
+                                row.balance >= 0 ? 'text-gray-900' : 'text-danger'
+                              }`}>
+                                {formatCurrency(row.balance)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
