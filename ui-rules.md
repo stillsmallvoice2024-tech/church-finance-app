@@ -289,7 +289,7 @@ import { CollapsibleSection } from '../ui/CollapsibleSection'
 
 ### `ViewToggle` + `useViewToggle` (`src/components/ui/ViewToggle.tsx`)
 
-Infrastructure ready — not yet wired globally. Use when adding table/card toggle to a list page.
+Wired on Inflows (`inflows-view`) and Outflows (`outflows-view`). Use the same pattern for any new list page.
 
 ```tsx
 import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
@@ -299,10 +299,19 @@ const { view, setView } = useViewToggle('my-page-view')
 <ViewToggle storageKey="my-page-view" value={view} onChange={setView} />
 ```
 
-- Renders labeled `[ Table ] [ Cards ]` segmented control (not icon-only)
+- Renders labeled `[ Table ] [ Cards ]` segmented control (not icon-only) — **never use icon-only toggle buttons**
 - Desktop default = `table`, mobile default = `cards` (via `matchMedia('(min-width: 768px)')`)
 - User override persists in `localStorage` under `storageKey`
 - Container has `role="group" aria-label="View mode"`; each button has `aria-pressed`
+- **Do NOT apply to:** financial reports, allocation admin screens, dense config tables
+
+---
+
+## Receipts Folder Navigation (responsive)
+
+- Mobile (`< md`): horizontal scrollable pill tabs — `flex overflow-x-auto gap-2 md:hidden`
+- Desktop (`md+`): `hidden md:block w-52 shrink-0` sidebar — same `folder` state drives both
+- **Never use a fixed-width sidebar without a mobile fallback** — `w-52 shrink-0` alone forces horizontal page scroll on narrow screens
 
 ---
 
