@@ -551,6 +551,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const inflowRows:  Record<string, unknown>[] = []
       const outflowRows: Record<string, unknown>[] = []
       const importTimestamp = new Date().toISOString()
+      // Collision trackers for fallback IDs: hash → count of times seen this batch
+      const inflowIdCounts  = new Map<string, number>()
+      const outflowIdCounts = new Map<string, number>()
 
       // Merge continuation rows (no date, no amounts, but has text) into preceding primary row
       const mergedRows = (sheet.rows as unknown[][]).map(r => [...r])
@@ -608,9 +611,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {
-            row.transaction_ref = await generateFallbackTransactionId(
+            const baseId = await generateFallbackTransactionId(
               String(date), String(credit), desc ?? '', internalBank?.name ?? ''
             )
+            const count = inflowIdCounts.get(baseId) ?? 0
+            inflowIdCounts.set(baseId, count + 1)
+            row.transaction_ref = count === 0 ? baseId : `${baseId}-${count}`
           }
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
@@ -623,9 +629,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (!txnType && cfg) row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_id) {
-            row.transaction_id = await generateFallbackTransactionId(
+            const baseId = await generateFallbackTransactionId(
               String(date), String(debit), desc ?? '', internalBank?.name ?? ''
             )
+            const count = outflowIdCounts.get(baseId) ?? 0
+            outflowIdCounts.set(baseId, count + 1)
+            row.transaction_id = count === 0 ? baseId : `${baseId}-${count}`
           }
           const sc = rowStageCodes[ri]
           if (sc) {
