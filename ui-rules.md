@@ -363,6 +363,7 @@ const { view, setView } = useViewToggle('my-page-view')
 - User override persists in `localStorage` under `storageKey`
 - Container has `role="group" aria-label="View mode"`; each button has `aria-pressed`
 - **Do NOT apply to:** financial reports, allocation admin screens, dense config tables
+- **Placement:** always in a results toolbar row immediately above the cards/table section — NOT in the page header. Pattern: `<div className="flex items-center justify-between">` with result count left and `<ViewToggle>` right. Export/action buttons remain in the page header.
 
 ---
 
@@ -723,6 +724,27 @@ Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside 
 - 3-item strips: `grid-cols-1 sm:grid-cols-3 gap-3`
 - 4-item strips: `grid-cols-2 sm:grid-cols-4 gap-3`
 - **Never** use bare `grid-cols-3` or `grid-cols-4` without a mobile breakpoint — causes overflow on small screens
+- Card divs must have `min-w-0` to allow grid overflow containment
+- Value text: `text-base font-bold tabular-nums` (not `text-lg`) — prevents overflow at narrow widths; `tabular-nums` ensures consistent digit width
+- Label text: `truncate` to prevent overflow on long labels
+
+### StatCard Value Sizing
+
+- Value: `text-xl sm:text-2xl font-bold tabular-nums` — responsive scaling prevents overflow on small screens while preserving hierarchy at wider widths
+
+### Card View Date Metadata
+
+- In card views where date competes horizontally with badges/controls, stack using `formatCardDate` from `src/utils/formatters.ts`:
+  ```tsx
+  const { dayMonth, year } = formatCardDate(row.date)
+  // renders: "17 May," on line 1, "2026" on line 2
+  <div className="flex flex-col leading-none gap-px">
+    <span className="text-xs text-gray-500">{dayMonth}</span>
+    <span className="text-[10px] text-gray-400">{year}</span>
+  </div>
+  ```
+- Apply only in card views where horizontal competition exists (e.g. badges on the right side of the same row)
+- In table rows, continue using `formatDate` (single-line)
 
 ### Dark Mode Status
 
