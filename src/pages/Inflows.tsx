@@ -2,13 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingUp, Download, Pencil, Trash2,
   ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw,
-  LayoutList, LayoutGrid,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Modal }                   from '../components/ui/Modal'
 import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
+import { ViewToggle, useViewToggle } from '../components/ui/ViewToggle'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -104,11 +104,12 @@ export default function Inflows() {
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
 
   // UI state
+  const { view: displayMode, setView: setDisplayMode } = useViewToggle('inflows-view')
+
   const [editRecord,        setEditRecord]        = useState<InflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
   const [deleteId,          setDeleteId]          = useState<string | null>(null)
   const [expandedId,        setExpandedId]        = useState<string | null>(null)
-  const [displayMode,       setDisplayMode]       = useState<'table' | 'cards'>('table')
   const [selectedIds,       setSelectedIds]       = useState<Set<string>>(new Set())
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkDeleting,      setBulkDeleting]      = useState(false)
@@ -193,16 +194,7 @@ export default function Inflows() {
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-              <button onClick={() => setDisplayMode('table')} title="Table view"
-                className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-                <LayoutList className="w-4 h-4" />
-              </button>
-              <button onClick={() => setDisplayMode('cards')} title="Card view"
-                className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-            </div>
+            <ViewToggle storageKey="inflows-view" value={displayMode} onChange={setDisplayMode} />
             <button
               onClick={handleExport} disabled={data.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
@@ -255,17 +247,21 @@ export default function Inflows() {
                 </div>
               ))
             ) : data.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-gray-400">
-                <TrendingUp className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                <p className="text-sm">No inflow transactions match your filters.</p>
+              <div className="col-span-full">
+                <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
               </div>
             ) : data.map(row => {
               const it = incomeTypes.find(t => t.id === row.income_type_id)
               return (
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                    <div className="flex items-center gap-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+                      {row.bank_name && (
+                        <span className="ml-2 text-xs text-gray-400">{row.bank_name}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
                       {it && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
                       )}
