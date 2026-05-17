@@ -153,6 +153,68 @@ All nav items visible to all authenticated users.
 
 ---
 
+## Shared Form Primitives
+
+All form modals must use these shared components — do NOT define local copies.
+
+### `Field` + `inputCls` (`src/components/ui/FormField.tsx`)
+
+```tsx
+import { Field, inputCls } from '../ui/FormField'
+
+<Field label="Date *" error={errors.date?.message}>
+  <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
+</Field>
+```
+
+- `Field` renders label (`text-xs font-medium text-gray-600`) + children + optional red error text
+- `inputCls(hasError)` returns the standard input class string: `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg …`
+- `error` prop is optional — omit when no validation message needed
+
+### `ButtonSpinner` (`src/components/ui/ButtonSpinner.tsx`)
+
+```tsx
+import { ButtonSpinner } from '../ui/ButtonSpinner'
+
+<button disabled={loading} className="… flex items-center gap-2">
+  {loading && <ButtonSpinner />}
+  {loading ? 'Saving…' : 'Save'}
+</button>
+```
+
+### `CollapsibleSection` (`src/components/ui/CollapsibleSection.tsx`)
+
+```tsx
+import { CollapsibleSection } from '../ui/CollapsibleSection'
+
+<CollapsibleSection label="FX Details (amount & rate)">
+  {/* content rendered inside p-4 space-y-4 container */}
+</CollapsibleSection>
+```
+
+- State is internal; resets automatically on modal close (Modal unmounts on `open=false`)
+- `defaultOpen?: boolean` — defaults to `false`
+- Chevron rotates 180° when open (CSS `transition-transform duration-200`)
+- Use for: FX sections, advanced config, optional settings, expandable helper content
+
+### `ViewToggle` + `useViewToggle` (`src/components/ui/ViewToggle.tsx`)
+
+Infrastructure ready — not yet wired globally. Use when adding table/card toggle to a list page.
+
+```tsx
+import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
+
+const { view, setView } = useViewToggle('my-page-view')
+
+<ViewToggle storageKey="my-page-view" value={view} onChange={setView} />
+```
+
+- Renders labeled `[ Table ] [ Cards ]` segmented control (not icon-only)
+- Desktop default = `table`, mobile default = `cards` (via `matchMedia('(min-width: 768px)')`)
+- User override persists in `localStorage` under `storageKey`
+
+---
+
 ## Inline Rename Pattern (Category Groups)
 
 Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName`, `savingGroup`.
