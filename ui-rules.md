@@ -1,5 +1,18 @@
 # UI & Frontend Rules
 
+## Accessibility Foundations
+
+- **Focus ring:** `:focus-visible` shows a 2px primary-blue ring (dark: `#60a5fa`); mouse/touch users see none. Defined globally in `index.css` — do not add custom `outline` overrides in components.
+- **Skip link:** `Layout.tsx` renders a `sr-only focus:not-sr-only` "Skip to main content" link targeting `#main-content` on `<main>`. Always present — do not remove.
+- **`Field` accessibility:** auto-injects `aria-invalid`, `aria-describedby`, and `htmlFor` — no manual wiring needed in form modals.
+- **Modal focus trap:** built into `Modal.tsx` — Tab stays within panel; focus returns to trigger on close.
+- **`CollapsibleSection`:** emits `aria-expanded` + `aria-controls` automatically.
+- **`ViewToggle`:** emits `role="group"` + `aria-pressed` automatically.
+- **Page titles:** `usePageTitle(title)` sets `{title} — Church Finance`. All pages use this hook — keep consistent.
+- **Dark mode muted text:** `text-gray-400` maps to `#9ca3af` in dark (not `#6b7280`) — sufficient contrast on dark card backgrounds. Placeholders follow the same value.
+
+---
+
 ## DescriptionCell Pattern
 
 All long-text table columns use `DescriptionCell` + `useDescriptionExpand` hook (`src/components/ui/DescriptionCell.tsx`).
@@ -77,6 +90,7 @@ Toast container uses `.toast-safe-bottom` (CSS var `--tab-bar-height: 64px`) on 
 - **`isDirty` prop:** when `true`, ESC / backdrop / × show a "Discard changes?" overlay instead of closing immediately. Cancel buttons inside the form bypass this guard (explicit intent).
   - react-hook-form modals: pass `formState.isDirty`
   - Controlled-state modals: snapshot initial values in a `useRef` on open and compare
+- **Focus trap:** Tab/Shift+Tab are trapped within the modal panel while open. Focus moves to the first focusable element on open; returns to the triggering element on close. No manual focus management needed in individual modals.
 
 ---
 
@@ -240,7 +254,9 @@ import { Field, inputCls } from '../ui/FormField'
 </Field>
 ```
 
-- `Field` renders label (`text-xs font-medium text-gray-600`) + children + optional red error text
+- `Field` renders label + children + optional error text
+- Automatically injects `id`, `aria-invalid`, `aria-describedby` onto the first child element via `React.cloneElement` + `useId` — no manual aria wiring needed in modals
+- Error message rendered with `role="alert"` so screen readers announce it on appearance
 - `inputCls(hasError)` returns the standard input class string: `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg …`
 - `error` prop is optional — omit when no validation message needed
 
@@ -268,6 +284,7 @@ import { CollapsibleSection } from '../ui/CollapsibleSection'
 - State is internal; resets automatically on modal close (Modal unmounts on `open=false`)
 - `defaultOpen?: boolean` — defaults to `false`
 - Chevron rotates 180° when open (CSS `transition-transform duration-200`)
+- Renders `aria-expanded` + `aria-controls` on the trigger button automatically
 - Use for: FX sections, advanced config, optional settings, expandable helper content
 
 ### `ViewToggle` + `useViewToggle` (`src/components/ui/ViewToggle.tsx`)
@@ -285,6 +302,7 @@ const { view, setView } = useViewToggle('my-page-view')
 - Renders labeled `[ Table ] [ Cards ]` segmented control (not icon-only)
 - Desktop default = `table`, mobile default = `cards` (via `matchMedia('(min-width: 768px)')`)
 - User override persists in `localStorage` under `storageKey`
+- Container has `role="group" aria-label="View mode"`; each button has `aria-pressed`
 
 ---
 
