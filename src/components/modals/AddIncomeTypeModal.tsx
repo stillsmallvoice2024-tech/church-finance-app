@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
+import { Field, inputCls } from '../ui/FormField'
+import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { TechDetails } from '../ui/TechDetails'
 import {
   saveIncomeType, useSpecialConfigGroupOptions,
@@ -163,7 +165,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
         disabled={saving}
         className="flex items-center gap-2 px-5 min-h-[44px] text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
       >
-        {saving && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+        {saving && <ButtonSpinner />}
         {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Income Type'}
       </button>
     </div>
@@ -202,7 +204,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
           <input
             type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="e.g. Sunday Tithe"
-            className={iCls(!name.trim() && !!error)}
+            className={inputCls(!name.trim() && !!error)}
           />
         </Field>
 
@@ -211,7 +213,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
           <input
             type="text" value={description} onChange={e => setDescription(e.target.value)}
             placeholder="Optional note about this income type"
-            className={iCls(false)}
+            className={inputCls(false)}
           />
         </Field>
 
@@ -284,7 +286,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
           <select
             value={specialConfigGroup}
             onChange={e => setSpecialConfigGroup(e.target.value)}
-            className={`${iCls(false)} bg-white`}
+            className={`${inputCls(false)} bg-white`}
           >
             <option value="">— None —</option>
             {groupOptions.map(g => (
@@ -303,17 +305,3 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
   )
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function iCls(hasError: boolean) {
-  return `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${hasError ? 'border-red-400' : 'border-gray-300 focus:border-primary'}`
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
-      {children}
-    </div>
-  )
-}

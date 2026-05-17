@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
+import { Field, inputCls } from '../ui/FormField'
+import { ButtonSpinner } from '../ui/ButtonSpinner'
+import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -63,7 +65,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { banks }      = useBanks()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
-  const [fxOpen,    setFxOpen]    = useState(false)
 
   const addMutation    = useAddOutflow()
   const updateMutation = useUpdateTransaction('outflow_transactions')
@@ -88,7 +89,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     if (!open) return
     resetAdd()
     resetUpdate()
-    setFxOpen(false)
     if (editRecord) {
       setIsPending(editRecord.is_pending_deduction ?? false)
       resetForm({
@@ -186,7 +186,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         disabled={loading}
         className="px-5 min-h-[44px] text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center gap-2"
       >
-        {loading && <Spinner />}
+        {loading && <ButtonSpinner />}
         {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Save Outflow'}
       </button>
     </div>
@@ -325,32 +325,20 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         </label>
 
         {/* FX Details collapsible */}
-        <div className="border border-gray-100 rounded-lg overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setFxOpen(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 hover:bg-gray-100 transition-colors"
-          >
-            FX Details (amount &amp; rate)
-            {fxOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          {fxOpen && (
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="FX Amount" error={errors.fx_amount?.message}>
-                  <Controller control={control} name="fx_amount" render={({ field }) => (
-                    <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.0000" className={inputCls(!!errors.fx_amount)} />
-                  )} />
-                </Field>
-                <Field label="FX Rate" error={errors.fx_rate?.message}>
-                  <Controller control={control} name="fx_rate" render={({ field }) => (
-                    <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.000000" className={inputCls(!!errors.fx_rate)} />
-                  )} />
-                </Field>
-              </div>
-            </div>
-          )}
-        </div>
+        <CollapsibleSection label="FX Details (amount & rate)">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="FX Amount" error={errors.fx_amount?.message}>
+              <Controller control={control} name="fx_amount" render={({ field }) => (
+                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.0000" className={inputCls(!!errors.fx_amount)} />
+              )} />
+            </Field>
+            <Field label="FX Rate" error={errors.fx_rate?.message}>
+              <Controller control={control} name="fx_rate" render={({ field }) => (
+                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.000000" className={inputCls(!!errors.fx_rate)} />
+              )} />
+            </Field>
+          </div>
+        </CollapsibleSection>
 
         {/* Remarks */}
         <Field label="Remarks" error={errors.remarks?.message}>
@@ -366,24 +354,3 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   )
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────────────────
-
-function inputCls(hasError: boolean) {
-  return `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
-    hasError ? 'border-red-400 focus:border-red-400' : 'border-gray-300 focus:border-primary'
-  }`
-}
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>
-  )
-}
-
-function Spinner() {
-  return <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-}
