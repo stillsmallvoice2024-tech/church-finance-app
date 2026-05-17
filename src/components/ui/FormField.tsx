@@ -6,6 +6,9 @@ export function inputCls(hasError: boolean): string {
   }`
 }
 
+// For filter/search inputs that don't need error-state styling
+export const filterInputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white'
+
 interface FieldProps {
   label: string
   error?: string

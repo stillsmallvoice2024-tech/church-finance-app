@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { BookOpen, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
 import { Card }          from '../components/ui/Card'
+import { filterInputCls } from '../components/ui/FormField'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { useBanks }      from '../hooks/useBanks'
 import { useRole }       from '../hooks/useRole'
@@ -182,7 +183,7 @@ export default function BankLedger() {
 
       {/* Summary bar */}
       {selectedBank && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { label: 'Total Inflows',  value: formatCurrency(totalInflow),  color: 'text-green-700' },
             { label: 'Total Outflows', value: formatCurrency(totalOutflow), color: 'text-red-700'   },
@@ -233,9 +234,8 @@ export default function BankLedger() {
                   </div>
                 ))
               ) : filtered.length === 0 ? (
-                <div className="col-span-full py-16 text-center text-gray-400">
-                  <BookOpen className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm">No transactions for {selectedBankName}.</p>
+                <div className="col-span-full">
+                  <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} />
                 </div>
               ) : filtered.map(row => (
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
@@ -363,4 +363,3 @@ export default function BankLedger() {
   )
 }
 
-const filterInputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'

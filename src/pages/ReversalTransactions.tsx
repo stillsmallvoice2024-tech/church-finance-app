@@ -6,6 +6,7 @@ import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { usePageTitle }    from '../hooks/usePageTitle'
 import { supabase }        from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { filterInputCls } from '../components/ui/FormField'
 
 interface TxnRow {
   id:                      string
@@ -117,11 +118,11 @@ export default function ReversalTransactions() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-500">From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputCls} />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-500">To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo('') }}
@@ -234,4 +235,3 @@ export default function ReversalTransactions() {
   )
 }
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'

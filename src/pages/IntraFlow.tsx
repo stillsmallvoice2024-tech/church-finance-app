@@ -19,6 +19,7 @@ import { useCategories }  from '../hooks/useCategories'
 import { useYearRange }   from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { filterInputCls } from '../components/ui/FormField'
 
 const PAGE_SIZE = 25
 
@@ -194,13 +195,13 @@ export default function IntraFlow() {
         <Card>
           <div className="flex flex-wrap gap-3 items-end">
             <FilterGroup label="From">
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputCls} />
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="To">
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="From Category" className="min-w-[180px]">
-              <select value={accountFrom} onChange={e => setAccountFrom(e.target.value)} className={`${inputCls} bg-white`}>
+              <select value={accountFrom} onChange={e => setAccountFrom(e.target.value)} className={`${filterInputCls} bg-white`}>
                 <option value="">All categories</option>
                 {categories.map(c => (
                   <option key={c.id} value={c.name}>{c.name}</option>
@@ -208,7 +209,7 @@ export default function IntraFlow() {
               </select>
             </FilterGroup>
             <FilterGroup label="To Category" className="min-w-[180px]">
-              <select value={accountTo} onChange={e => setAccountTo(e.target.value)} className={`${inputCls} bg-white`}>
+              <select value={accountTo} onChange={e => setAccountTo(e.target.value)} className={`${filterInputCls} bg-white`}>
                 <option value="">All categories</option>
                 {categories.map(c => (
                   <option key={c.id} value={c.name}>{c.name}</option>
@@ -221,7 +222,7 @@ export default function IntraFlow() {
                 <input
                   type="text" placeholder="Search description…" value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
-                  className={`${inputCls} pl-9`}
+                  className={`${filterInputCls} pl-9`}
                 />
               </div>
             </FilterGroup>
@@ -385,7 +386,6 @@ export default function IntraFlow() {
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
 
 function FilterGroup({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return (

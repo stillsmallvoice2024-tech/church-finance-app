@@ -24,6 +24,7 @@ import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
+import { filterInputCls } from '../components/ui/FormField'
 
 const PAGE_SIZE = 25
 
@@ -209,13 +210,13 @@ export default function Outflows() {
         <Card>
           <div className="flex flex-wrap gap-3 items-end">
             <FilterGroup label="From">
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputCls} />
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="To">
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputCls} />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="Stage Code 1" className="min-w-[180px]">
-              <select value={stageCode} onChange={e => setStageCode(e.target.value)} className={`${inputCls} bg-white`}>
+              <select value={stageCode} onChange={e => setStageCode(e.target.value)} className={`${filterInputCls} bg-white`}>
                 <option value="">All categories</option>
                 {categories.map(c => (
                   <option key={c.id} value={c.name}>{c.name}</option>
@@ -228,7 +229,7 @@ export default function Outflows() {
                 <input
                   type="text" placeholder="Search description…" value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
-                  className={`${inputCls} pl-9`}
+                  className={`${filterInputCls} pl-9`}
                 />
               </div>
             </FilterGroup>
@@ -490,7 +491,6 @@ export default function Outflows() {
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
 
 function FilterGroup({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -578,7 +578,7 @@ function BulkEditOutflowModal({ open, onClose, ids, banks, categories, onSuccess
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Bank Name</label>
-          <select value={bankName} onChange={e => setBankName(e.target.value)} className={inputCls}>
+          <select value={bankName} onChange={e => setBankName(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
           </select>
@@ -586,12 +586,12 @@ function BulkEditOutflowModal({ open, onClose, ids, banks, categories, onSuccess
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Recorded Date</label>
-          <input type="date" value={recordedAt} onChange={e => setRecordedAt(e.target.value)} className={inputCls} />
+          <input type="date" value={recordedAt} onChange={e => setRecordedAt(e.target.value)} className={filterInputCls} />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Transaction Type</label>
-          <select value={txnType} onChange={e => setTxnType(e.target.value)} className={inputCls}>
+          <select value={txnType} onChange={e => setTxnType(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             <option value="refund">Refund</option>
             <option value="reversal">Reversal</option>
@@ -602,7 +602,7 @@ function BulkEditOutflowModal({ open, onClose, ids, banks, categories, onSuccess
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
-          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={inputCls}>
+          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
@@ -610,7 +610,7 @@ function BulkEditOutflowModal({ open, onClose, ids, banks, categories, onSuccess
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Stage Code 2 (Portion Type)</label>
-          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={inputCls}>
+          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
             <option value="Percentage Allocation">Percentage Allocation</option>
             <option value="Specific Seed">Specific Seed</option>
