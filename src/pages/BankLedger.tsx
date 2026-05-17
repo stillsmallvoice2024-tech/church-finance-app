@@ -55,7 +55,7 @@ export default function BankLedger() {
   const [dateTo,       setDateTo]       = useState('')
   const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
   const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   const load = useCallback(async (bankName: string) => {
     if (!bankName) { setLedgerRows([]); return }
@@ -265,7 +265,7 @@ export default function BankLedger() {
                   )}
                   {row.description && (
                     <div className="text-xs text-gray-600">
-                      <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </div>
                   )}
                   <div className="flex items-center justify-between pt-1 border-t border-gray-50">
@@ -315,7 +315,7 @@ export default function BankLedger() {
                               {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                             </span>
                           )}
-                          <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </div>
                       </td>
                       <AmountCell value={row.inflow}   mode="inflow"  />

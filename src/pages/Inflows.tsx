@@ -116,7 +116,7 @@ export default function Inflows() {
   const [bulkDeleting,      setBulkDeleting]      = useState(false)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
 
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
@@ -275,11 +275,11 @@ export default function Inflows() {
                   </div>
                   <p className="text-lg font-bold text-success">{formatCurrency(Number(row.amount))}</p>
                   <div className="text-sm text-gray-700">
-                    <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                   </div>
                   {row.remark && (
                     <div className="text-xs text-gray-400 italic">
-                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remark} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
                     </div>
                   )}
                   <div className="flex gap-1 pt-1 border-t border-gray-50">
@@ -426,7 +426,7 @@ export default function Inflows() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]" onClick={e => e.stopPropagation()}>
-                          <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
                         <AmountCell value={Number(row.amount)} mode="inflow" />
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>

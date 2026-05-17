@@ -178,7 +178,7 @@ export default function IntraBankTransfers() {
   const { banks } = useBanks()
   const { canWrite, canDelete } = useRole()
   const { push: toast } = useToastStore()
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   const [rows,        setRows]        = useState<TransferRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -338,7 +338,7 @@ export default function IntraBankTransfers() {
                   </div>
                   {row.description && (
                     <div className="text-xs text-gray-500">
-                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
                     </div>
                   )}
                   {row.transaction_ref && <p className="text-xs text-gray-400 font-mono">{row.transaction_ref}</p>}
@@ -382,11 +382,11 @@ export default function IntraBankTransfers() {
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.to_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(row.amount)}</td>
                       <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
-                        <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
                       <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px]">
-                        <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">

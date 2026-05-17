@@ -28,7 +28,7 @@ export default function ForeignCurrency() {
   const [addOpen, setAddOpen]           = useState(false)
   const [editRecord, setEditRecord]     = useState<FXTransaction | null>(null)
   const [filterCcy, setFilterCcy]       = useState<FXCurrency | ''>('')
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [rates, setRates]               = useState<Record<FXCurrency, number>>({
     USD: 0, GBP: 0, EUR: 0, CNY: 0,
   })
@@ -278,7 +278,7 @@ export default function ForeignCurrency() {
                         {meta.symbol}{fmtFX(t.running_balance)}
                       </td>
                       <td className="px-4 py-3 text-gray-600 max-w-[200px]">
-                        <DescriptionCell id={t.id} text={t.narration} expanded={descExpanded.has(t.id)} onToggle={() => toggleDesc(t.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={t.id} text={t.narration} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
                       <td className="px-4 py-3 text-gray-400 font-mono text-xs">
                         {t.transaction_ref ?? '—'}

@@ -29,7 +29,7 @@ export default function RefundTransactions() {
   usePageTitle('Refunds')
 
   const { canWrite } = useRole()
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -199,7 +199,7 @@ export default function RefundTransactions() {
                 <p className="text-base font-bold text-gray-900">{formatCurrency(row.amount)}</p>
                 {row.description && (
                   <div className="text-xs text-gray-600">
-                    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
+                    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
                   </div>
                 )}
                 {row.bank_name   && <p className="text-xs text-gray-400">{row.bank_name}</p>}
@@ -208,7 +208,7 @@ export default function RefundTransactions() {
                 )}
                 {row.remarks && (
                   <div className="text-xs text-gray-400 italic">
-                    <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                    <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
                   </div>
                 )}
               </div>
@@ -249,12 +249,12 @@ export default function RefundTransactions() {
                     </td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
                     <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]">
-                      <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
-                      <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </td>
                     {canWrite() && (
                       <td className="px-2 py-3">

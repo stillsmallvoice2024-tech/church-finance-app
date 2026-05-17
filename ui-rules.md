@@ -17,41 +17,55 @@
 
 All long-text table columns **and card view descriptions/remarks** use `DescriptionCell` + `useDescriptionExpand` hook (`src/components/ui/DescriptionCell.tsx`).
 
-- **Hover** → tooltip via `DescriptionTooltip` portal (renders in `document.body`, `z-[9999]`)
-- **Click/tap** → inline expand below row text
-- **Chevron** (`ChevronDown`, `shrink-0`) — always visible; inner `<span>` needs `min-w-0` so flex container truncates instead of hiding the icon
-- **`textCls` prop** (optional, default `text-gray-700`) — override text colour without forking the component (e.g. `textCls="text-red-600"` for old values in ChangeLog)
-- **`<DescriptionTooltip tooltip={descTooltip} />`** must be placed at the end of every page's return that uses `DescriptionCell` — renders the hover tooltip portal
+**Interaction model (unified — no inline accordion expansion):**
+- **Mouse hover** → popover tooltip via `DescriptionTooltip` portal (`document.body`, `z-[9999]`); dismisses on pointer leave
+- **Tap / click** → same popover; dismisses on outside tap, ESC key, or tab-away
+- **Keyboard focus** → popover shows on focus, hides on blur; Enter/Space re-show
+- **One popover at a time** — clicking another truncated cell switches the active popover cleanly
+- **Never inline-expand** (no accordion, no layout shift, rows stay compact)
 
+**`DescriptionCell` props:**
 ```tsx
-const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+interface DescriptionCellProps {
+  id: string
+  text: string | null
+  tooltip: TooltipState | null
+  setTooltip: (t: TooltipState | null) => void
+  textCls?: string   // default 'text-gray-700'; override for semantic colours
+}
+```
 
+`expanded` and `onToggle` props **do not exist** — the component is self-contained.
+
+**`useDescriptionExpand` hook** (simplified — no `expandedIds` or `toggle`):
+```tsx
+const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
+// hook also wires outside-click + ESC dismissal automatically
+```
+
+**Usage:**
+```tsx
 // In table cell:
 <td className="px-4 py-3 text-sm max-w-[200px]">
-  <DescriptionCell
-    id={row.id}
-    text={row.description}
-    expanded={descExpanded.has(row.id)}
-    onToggle={() => toggleDesc(row.id)}
-    tooltip={descTooltip}
-    setTooltip={setDescTooltip}
-  />
+  <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
 </td>
 
-// In card view (wrap in div for colour/style context):
+// In card view (wrap in div for colour context):
 {row.description && (
   <div className="text-xs text-gray-500">
-    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
+    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
   </div>
 )}
 
-// At end of return (renders portal):
+// At end of return (renders hover tooltip portal):
 <DescriptionTooltip tooltip={descTooltip} />
 ```
 
 ID prefixing rules:
 - Second field in same row: `rem-${row.id}` (remarks) or any unique prefix
 - Card view: `card-desc-${row.id}`, `card-rem-${row.id}` — prevents collision with table-view IDs
+
+**`textCls` prop** — override text colour without forking the component (e.g. `textCls="text-red-600"` for old values in ChangeLog). Null text renders a non-interactive `—` in the given colour.
 
 **Never use bare `truncate` on user-visible text fields** — always use `DescriptionCell` so tap/hover expansion works on all devices.
 

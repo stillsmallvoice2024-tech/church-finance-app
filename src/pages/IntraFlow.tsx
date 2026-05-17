@@ -95,7 +95,7 @@ export default function IntraFlow() {
   const [editRecord,   setEditRecord]   = useState<IntraFlowRow | null>(null)
   const [modalOpen,    setModalOpen]    = useState(false)
   const [deleteId,     setDeleteId]     = useState<string | null>(null)
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
 
   const { push: toast }                             = useToastStore()
@@ -271,12 +271,12 @@ export default function IntraFlow() {
                     </div>
                     {row.description && (
                       <div className="text-xs text-gray-500">
-                        <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </div>
                     )}
                     {row.remark     && (
                       <div className="text-xs text-gray-400 italic">
-                        <DescriptionCell id={`card-rem-${row.id}`} text={row.remark} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={`card-rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </div>
                     )}
                     {(canWrite() || canDelete()) && (
@@ -339,7 +339,7 @@ export default function IntraFlow() {
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
-                          <DescriptionCell id={`rem-${row.id}`} text={row.remark} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          <DescriptionCell id={`rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">

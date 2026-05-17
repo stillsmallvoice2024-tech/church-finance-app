@@ -116,7 +116,7 @@ export default function Outflows() {
   const [bulkDeleting,      setBulkDeleting]      = useState(false)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
 
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
@@ -284,12 +284,12 @@ export default function Outflows() {
                   </div>
                   <p className="text-lg font-bold text-danger">{formatCurrency(Number(row.amount_disbursed))}</p>
                   <div className="text-sm text-gray-700">
-                    <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                    <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                   </div>
                   {row.stage_code_1 && <p className="text-xs text-gray-400">{row.stage_code_1}</p>}
                   {row.remarks && (
                     <div className="text-xs text-gray-400 italic">
-                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
                     </div>
                   )}
                   {net !== Number(row.amount_disbursed) && (
@@ -422,7 +422,7 @@ export default function Outflows() {
                                 {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                               </span>
                             )}
-                            <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                            <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </div>
                         </td>
                         <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
@@ -430,7 +430,7 @@ export default function Outflows() {
                         <AmountCell value={net} mode="neutral" />
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
-                          <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
                         <td className="px-2 py-3">
                           <ReceiptBadge entityType="outflow" entityId={row.id} />

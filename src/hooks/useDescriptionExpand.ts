@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export interface TooltipState {
   id: string
@@ -8,15 +8,19 @@ export interface TooltipState {
 }
 
 export function useDescriptionExpand() {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
-  const toggle = (id: string) =>
-    setExpandedIds(prev => {
-      const s = new Set(prev)
-      s.has(id) ? s.delete(id) : s.add(id)
-      return s
-    })
+  useEffect(() => {
+    if (!tooltip) return
+    const dismiss = () => setTooltip(null)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') dismiss() }
+    document.addEventListener('click', dismiss)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('click', dismiss)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [tooltip])
 
-  return { expandedIds, tooltip, setTooltip, toggle }
+  return { tooltip, setTooltip }
 }

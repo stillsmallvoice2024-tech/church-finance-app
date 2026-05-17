@@ -48,7 +48,7 @@ export default function ChangeLog() {
     pageSize:  PAGE_SIZE,
   })
 
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -194,13 +194,13 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
                     <td className="px-4 py-3 text-sm max-w-[160px]">
                       {e.old_value == null
                         ? <span className="text-gray-300">—</span>
-                        : <DescriptionCell id={`old-${e.id}`} text={e.old_value} expanded={descExpanded.has(`old-${e.id}`)} onToggle={() => toggleDesc(`old-${e.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-red-600" />
+                        : <DescriptionCell id={`old-${e.id}`} text={e.old_value} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-red-600" />
                       }
                     </td>
                     <td className="px-4 py-3 text-sm max-w-[160px]">
                       {e.new_value == null
                         ? <span className="text-gray-300">—</span>
-                        : <DescriptionCell id={`new-${e.id}`} text={e.new_value} expanded={descExpanded.has(`new-${e.id}`)} onToggle={() => toggleDesc(`new-${e.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-green-700" />
+                        : <DescriptionCell id={`new-${e.id}`} text={e.new_value} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-green-700" />
                       }
                     </td>
                   </tr>

@@ -706,7 +706,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
   onToggleHide:    (c: Category, hide: boolean) => void
   checking:        boolean
 }) {
-  const { expandedIds, tooltip, setTooltip, toggle } = useDescriptionExpand()
+  const { tooltip, setTooltip } = useDescriptionExpand()
 
   const catBalances = openingBalances.filter(b => b.category_id === cat.id)
   const displayBalances: { budget_portion: string; amount: number }[] = catBalances.length > 0
@@ -722,7 +722,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
       </td>
       <td className="px-5 py-3 text-gray-500 hidden sm:table-cell max-w-[200px]">
-        <DescriptionCell id={cat.id} text={cat.description} expanded={expandedIds.has(cat.id)} onToggle={() => toggle(cat.id)} tooltip={tooltip} setTooltip={setTooltip} />
+        <DescriptionCell id={cat.id} text={cat.description} tooltip={tooltip} setTooltip={setTooltip} />
         <DescriptionTooltip tooltip={tooltip} />
       </td>
       <td className="px-5 py-3 hidden md:table-cell">

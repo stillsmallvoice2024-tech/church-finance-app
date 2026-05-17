@@ -46,7 +46,7 @@ export default function CategoryLedger() {
   const { groups }                               = useCategoryGroups()
   const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
   const outflowVersion                           = useTransactionSyncStore(s => s.outflowVersion)
-  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
+  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   // Summary state
   const [rows,    setRows]    = useState<CategoryRow[]>([])
@@ -751,7 +751,7 @@ export default function CategoryLedger() {
                         <tr key={row.id} className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : 'hover:bg-gray-50'}`}>
                           <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
                           <td className="px-4 py-3 text-gray-700 max-w-xs">
-                            <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                            <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </td>
                           <td className="px-4 py-3 text-right font-mono text-success">
                             {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
@@ -788,7 +788,7 @@ export default function CategoryLedger() {
                         <p className="text-xs text-gray-400">{row.id === 'bal-bf' ? 'Bal. B/F' : formatDate(row.date)}</p>
                       </div>
                       <div className="flex-1 min-w-0 text-sm text-gray-700">
-                        <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </div>
                       <div className="flex items-center gap-4 shrink-0 text-right">
                         {row.inflow > 0 && (
