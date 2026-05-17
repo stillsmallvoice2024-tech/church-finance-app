@@ -189,11 +189,11 @@ export default function BankLedger() {
             { label: 'Total Outflows', value: formatCurrency(totalOutflow), color: 'text-red-700'   },
             { label: 'Net Balance',    value: formatCurrency(netBalance),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700' },
           ].map(({ label, value, color }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-              <p className="text-xs text-gray-500 mb-1">{label}</p>
+            <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
+              <p className="text-xs text-gray-500 mb-1 truncate">{label}</p>
               {loading
                 ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
-                : <p className={`text-lg font-bold ${color}`}>{value}</p>}
+                : <p className={`text-base font-bold tabular-nums ${color}`}>{value}</p>}
             </div>
           ))}
         </div>

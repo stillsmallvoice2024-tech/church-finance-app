@@ -37,11 +37,11 @@ function SummaryStrip({ total, count, largest, average, loading }: {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {items.map(({ label, value }) => (
-        <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-          <p className="text-xs text-gray-500 mb-1">{label}</p>
+        <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
+          <p className="text-xs text-gray-500 mb-1 truncate">{label}</p>
           {loading
             ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
-            : <p className="text-lg font-bold text-gray-900">{value}</p>}
+            : <p className="text-base font-bold text-gray-900 tabular-nums">{value}</p>}
         </div>
       ))}
     </div>
