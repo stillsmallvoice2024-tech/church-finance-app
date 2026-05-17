@@ -64,11 +64,39 @@ const { push } = useToastStore()
 push('Saved successfully', 'success')  // types: success | error | info
 ```
 
+Toast container uses `.toast-safe-bottom` (CSS var `--tab-bar-height: 64px`) on mobile so it never overlaps the bottom tab bar. On `md:` and above it reverts to `bottom-5`.
+
 ---
 
-## Modal Sizing
+## Modal Sizing & Behaviour
 
 `Modal.tsx` accepts a `size` prop: `max-w-sm | max-w-md | max-w-lg | max-w-xl | max-w-2xl`
+
+- **Mobile full-screen:** below `sm` the panel fills the viewport (`h-full`, no border-radius). Centred card layout at `sm`+.
+- **`footer` prop:** pass action buttons here — rendered in a sticky strip below the scrollable body, always visible regardless of form length. Give the `<form>` an `id` and use `form={id}` on the submit button.
+- **`isDirty` prop:** when `true`, ESC / backdrop / × show a "Discard changes?" overlay instead of closing immediately. Cancel buttons inside the form bypass this guard (explicit intent).
+  - react-hook-form modals: pass `formState.isDirty`
+  - Controlled-state modals: snapshot initial values in a `useRef` on open and compare
+
+---
+
+## Infrastructure / Schema Error Display
+
+Never show raw SQL, migration instructions, or PostgREST/Supabase terminology in the normal workflow UI.
+
+- Wrap technical details in `<TechDetails>` (`src/components/ui/TechDetails.tsx`) — collapsed by default
+- User-facing copy pattern: *"We couldn't complete this action right now. Please try again."*
+- Admin setup required: *"This feature requires a one-time setup. Ask your administrator to enable it."*
+- Keep all existing retry logic, schema checks, and Re-check buttons intact — only the display changes
+
+`TechDetails` usage:
+```tsx
+import { TechDetails } from '../ui/TechDetails'
+
+<TechDetails>{MIGRATION_SQL}</TechDetails>
+// or
+<TechDetails>{`NOTIFY pgrst, 'reload schema';`}</TechDetails>
+```
 
 ---
 

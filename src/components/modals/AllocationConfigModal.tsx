@@ -4,6 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, Trash2 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
+import { Field, inputCls } from '../ui/FormField'
+import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { InlineCategorySelect } from '../ui/InlineCategorySelect'
 import {
   useAddAllocationConfig,
@@ -169,14 +171,14 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
               type="text"
               placeholder="e.g. 2025 Allocation"
               {...register('name')}
-              className={iCls(!!errors.name)}
+              className={inputCls(!!errors.name)}
             />
           </Field>
           <Field label="Effective From *" error={errors.start_date?.message}>
             <input
               type="date"
               {...register('start_date')}
-              className={iCls(!!errors.start_date)}
+              className={inputCls(!!errors.start_date)}
             />
           </Field>
         </div>
@@ -209,7 +211,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                       onChange={field.onChange}
                       categories={categories}
                       onRefresh={refetchCategories}
-                      selectCls={iCls(!!errors.rows?.[idx]?.category_name)}
+                      selectCls={inputCls(!!errors.rows?.[idx]?.category_name)}
                     />
                   )}
                 />
@@ -222,7 +224,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
               <div>
                 <select
                   {...register(`rows.${idx}.budget_portion`)}
-                  className={iCls(!!errors.rows?.[idx]?.budget_portion)}
+                  className={inputCls(!!errors.rows?.[idx]?.budget_portion)}
                 >
                   <option value="">— Portion —</option>
                   {BUDGET_PORTIONS.map(p => (
@@ -244,7 +246,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                     max="100"
                     placeholder="0"
                     {...register(`rows.${idx}.percentage`)}
-                    className={`${iCls(!!errors.rows?.[idx]?.percentage)} pr-7 text-right`}
+                    className={`${inputCls(!!errors.rows?.[idx]?.percentage)} pr-7 text-right`}
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
                 </div>
@@ -294,7 +296,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
             disabled={loading}
             className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
           >
-            {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {loading && <ButtonSpinner />}
             {loading ? 'Saving…' : 'Save as Draft'}
           </button>
         </div>
@@ -303,16 +305,3 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
   )
 }
 
-function iCls(e: boolean) {
-  return `w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${e ? 'border-red-400' : 'border-gray-300 focus:border-primary'}`
-}
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>
-  )
-}

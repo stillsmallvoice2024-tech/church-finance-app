@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { AlertTriangle, Plus, Trash2, Check, X } from 'lucide-react'
 import { TechDetails } from '../ui/TechDetails'
 import { Modal } from '../ui/Modal'
+import { Field, inputCls } from '../ui/FormField'
+import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
@@ -361,7 +363,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         disabled={loading || checkingSchema || schemaStatus !== 'ok' || schemaStuck || (hasBalance && !balanced)}
         className="px-5 min-h-[44px] text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
       >
-        {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+        {loading && <ButtonSpinner />}
         {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Bank'}
       </button>
     </div>
@@ -442,7 +444,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             type="text"
             placeholder="e.g. First Bank of Nigeria"
             {...register('name')}
-            className={iCls(!!errors.name)}
+            className={inputCls(!!errors.name)}
           />
         </Field>
 
@@ -451,12 +453,12 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             type="text"
             placeholder="e.g. 0123456789"
             {...register('account_number')}
-            className={iCls(!!errors.account_number)}
+            className={inputCls(!!errors.account_number)}
           />
         </Field>
 
         <Field label="Account Type" error={errors.account_type?.message}>
-          <select {...register('account_type')} className={`${iCls(!!errors.account_type)} bg-white`}>
+          <select {...register('account_type')} className={`${inputCls(!!errors.account_type)} bg-white`}>
             <option value="">— Select type —</option>
             {ACCOUNT_TYPES.map(t => (
               <option key={t} value={t}>{t}</option>
@@ -465,7 +467,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         </Field>
 
         <Field label="Account Currency">
-          <select {...register('currency')} className={`${iCls(false)} bg-white`}>
+          <select {...register('currency')} className={`${inputCls(false)} bg-white`}>
             {currencies.map(c => (
               <option key={c.code} value={c.code}>
                 {c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}
@@ -483,7 +485,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
           <Field label="Starting Balance (₦)" error={errors.starting_balance?.message}>
             <Controller control={control} name="starting_balance" render={({ field }) => (
-              <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={iCls(!!errors.starting_balance)} />
+              <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.starting_balance)} />
             )} />
           </Field>
 
@@ -678,16 +680,3 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   )
 }
 
-function iCls(e: boolean) {
-  return `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${e ? 'border-red-400' : 'border-gray-300 focus:border-primary'}`
-}
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>
-  )
-}
