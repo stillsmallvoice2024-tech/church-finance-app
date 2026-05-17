@@ -190,7 +190,25 @@ Section order: Profile → Password → **Theme** → App Information
 - **Special Configs** — group-based UI; each group shows active version (effective dates, type, status) + "Create New Version" button + expandable version history table; "Create New Group" at top; uses `useSpecialConfigGroups()` hook
 - **Income Types** — user-defined inflow labels with keyword/stage-code rules
 - **Currencies** — add/remove currencies (code, name, symbol, flag emoji); shows migration SQL
-- **Database** — migration SQL panel; idempotent `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;` pattern
+
+**Database tab removed from primary nav.** Migration SQL is now inside the **Developer Tools** collapsible section below the tab content (collapsed by default). `devToolsOpen` state controls visibility. Do not re-add Database as a primary tab — it is infrastructure tooling, not operational config.
+
+## Developer Tools Pattern (Setup page)
+
+Low-emphasis collapsible section below the main tab content, above Danger Zone. Pattern:
+```tsx
+<div className="border border-gray-200 rounded-xl overflow-hidden">
+  <button onClick={() => setDevToolsOpen(o => !o)} className="w-full flex items-center justify-between px-5 py-4 ...">
+    <Terminal w-4 h-4 text-gray-400 /> + title "Developer Tools" (text-gray-500) + subtitle (text-gray-400)
+    <ChevronDown rotates 180° when open />
+  </button>
+  {devToolsOpen && <div className="border-t border-gray-100 p-5"><DatabaseTab /></div>}
+</div>
+```
+- `DatabaseTab` component is preserved intact; only its entry point changed
+- idempotent migration SQL: `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
+- Copy button wired to `navigator.clipboard.writeText(MIGRATION_SQL)`
+- Use this pattern for any future infrastructure/admin-only tools that should not dominate the primary UI
 
 ---
 

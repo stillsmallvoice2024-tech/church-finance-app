@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
@@ -24,7 +24,7 @@ import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Currencies', 'Database'] as const
+const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 // ── General tab ──────────────────────────────────────────────────────────────────
@@ -1130,6 +1130,7 @@ export default function SetupPage() {
   const [editIncomeType,       setEditIncomeType]       = useState<IncomeType | null>(null)
   const [deleteIncomeTypeTarget, setDeleteIncomeTypeTarget] = useState<IncomeType | null>(null)
   const [incomeTypeRefetch,    setIncomeTypeRefetch]    = useState(0)
+  const [devToolsOpen,         setDevToolsOpen]         = useState(false)
   const { configs, reload: reloadAllocs } = useAllocationStore()
 
   const { push: toast } = useToastStore()
@@ -1281,7 +1282,28 @@ export default function SetupPage() {
             />
           )}
           {activeTab === 'Currencies'     && <CurrenciesTab />}
-          {activeTab === 'Database'       && <DatabaseTab />}
+        </div>
+
+        {/* Developer Tools */}
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setDevToolsOpen(o => !o)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-2.5">
+              <Terminal className="w-4 h-4 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-500">Developer Tools</p>
+                <p className="text-xs text-gray-400">Advanced setup and troubleshooting utilities</p>
+              </div>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${devToolsOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {devToolsOpen && (
+            <div className="border-t border-gray-100 p-5">
+              <DatabaseTab />
+            </div>
+          )}
         </div>
 
         {/* Danger Zone */}
