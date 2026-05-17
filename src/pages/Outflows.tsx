@@ -16,7 +16,7 @@ import { useBanks }                from '../hooks/useBanks'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
-import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
+import { formatDate, formatCurrency, formatCurrencyCompact, formatCardDate } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
@@ -49,11 +49,11 @@ function SummaryStrip({ total, count, largest, average, loading }: {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {items.map(({ label, value }) => (
-        <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-          <p className="text-xs text-gray-500 mb-1">{label}</p>
+        <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
+          <p className="text-xs text-gray-500 mb-1 truncate">{label}</p>
           {loading
             ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
-            : <p className="text-lg font-bold text-gray-900">{value}</p>}
+            : <p className="text-base font-bold text-gray-900 tabular-nums">{value}</p>}
         </div>
       ))}
     </div>
@@ -196,7 +196,6 @@ export default function Outflows() {
             <p className="text-sm text-gray-500 mt-0.5">All disbursements and payments</p>
           </div>
           <div className="flex items-center gap-2">
-            <ViewToggle storageKey="outflows-view" value={displayMode} onChange={setDisplayMode} />
             <button
               onClick={handleExport} disabled={data.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
@@ -247,6 +246,14 @@ export default function Outflows() {
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
+        {/* Results toolbar */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            {loading ? ' ' : `${count.toLocaleString()} result${count !== 1 ? 's' : ''}`}
+          </p>
+          <ViewToggle storageKey="outflows-view" value={displayMode} onChange={setDisplayMode} />
+        </div>
+
         {/* Cards / Table */}
         {displayMode === 'cards' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -262,13 +269,17 @@ export default function Outflows() {
               </div>
             ) : data.map(row => {
               const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
+              const { dayMonth: dateDM, year: dateYr } = formatCardDate(row.date)
               return (
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+                      <div className="flex flex-col leading-none gap-px">
+                        <span className="text-xs text-gray-500">{dateDM}</span>
+                        <span className="text-[10px] text-gray-400">{dateYr}</span>
+                      </div>
                       {row.bank_name && (
-                        <span className="ml-2 text-xs text-gray-400">{row.bank_name}</span>
+                        <span className="text-xs text-gray-400 mt-0.5 block">{row.bank_name}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -410,7 +421,7 @@ export default function Outflows() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.transaction_id ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
+                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[220px]">
                           <div className="flex items-start gap-1.5 min-w-0">
                             {row.is_pending_deduction && (
                               <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">

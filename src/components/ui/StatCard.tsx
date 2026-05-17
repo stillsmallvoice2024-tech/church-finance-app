@@ -24,7 +24,7 @@ export function StatCard({
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide truncate">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1.5">{value}</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1.5 tabular-nums">{value}</p>
           {trend && (
             <div
               className={`flex items-center gap-1 mt-2 text-xs font-medium ${
