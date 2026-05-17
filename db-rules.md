@@ -107,8 +107,10 @@ NOTIFY pgrst, 'reload schema';
 
 Check flow:
 1. Query `bank_schema_check` view → reflects live `information_schema` (unaffected by PostgREST table cache)
-2. If columns confirmed in DB, do a zero-row SELECT via PostgREST to verify its INSERT cache
+2. If columns confirmed in DB, do a zero-row SELECT via PostgREST to verify its **SELECT** plan cache
 3. PostgREST SELECT error → `cache_stale`; success → `ok`; view query error or missing columns → `migration_needed`
+
+> **Important limitation**: the SELECT plan cache and the INSERT/UPDATE plan cache are separate in PostgREST. The check returning `'ok'` guarantees the SELECT cache is fresh but does **not** guarantee the INSERT/UPDATE cache is. If a save fails with a schema cache error after the check returns `'ok'`, the modal treats this as `'cache_stale'` (shows the NOTIFY banner) rather than retrying — retrying would loop until `schemaStuck` because the INSERT cache is still stale.
 
 This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no DDL), while `migration_needed` requires a full `ALTER TABLE`. Showing the wrong SQL wastes a DDL operation on an already-migrated DB.
 
@@ -141,6 +143,13 @@ Every UPDATE in the app must:
 Build the `updates` object as a named const before calling `.update()` so the same object can be passed to both `logAudit` and `logFieldChanges` without re-expressing the payload.
 
 **Row-count check on UPDATE**: always chain `.select('id')` and throw if `!updatedRows?.length` — PostgREST silently returns no error when RLS rejects the row or the record is missing. Example pattern used in `useUpdateBank`:
+
+**Conditional optional columns in UPDATE**: never fall back nullable migration columns to `[]` or `{}` — use a conditional spread so those fields are omitted entirely when not provided. Sending `starting_balance_allocations: []` on every bank UPDATE would trigger a PostgREST schema cache miss for users who haven't run the migration. Pattern used in `useUpdateBank`:
+```ts
+...(input.starting_balance_allocations !== undefined && {
+  starting_balance_allocations: input.starting_balance_allocations,
+})
+```
 ```ts
 const { data: updatedRows, error: err } = await supabase
   .from('banks').update(updates).eq('id', input.id).select('id')
