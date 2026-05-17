@@ -173,12 +173,20 @@ export default function ReversalTransactions() {
                   </span>
                 </div>
                 <p className="text-base font-bold text-gray-900">{formatCurrency(row.amount)}</p>
-                {row.description && <p className="text-xs text-gray-600 truncate">{row.description}</p>}
+                {row.description && (
+                  <div className="text-xs text-gray-600">
+                    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
+                  </div>
+                )}
                 {row.bank_name   && <p className="text-xs text-gray-400">{row.bank_name}</p>}
                 {row.original_transaction_id && (
                   <p className="text-xs text-gray-500">Orig ID: <span className="font-mono">{row.original_transaction_id}</span></p>
                 )}
-                {row.remarks && <p className="text-xs text-gray-400 italic truncate">{row.remarks}</p>}
+                {row.remarks && (
+                  <div className="text-xs text-gray-400 italic">
+                    <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                  </div>
+                )}
               </div>
             ))}
           </div>
