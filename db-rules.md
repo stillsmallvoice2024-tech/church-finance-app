@@ -53,7 +53,7 @@
 |---|---|---|
 | `transaction_type text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds, BankDeposits pages |
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
-| `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section — also requires `bank_schema_check` view + GRANT (see SQL below) |
+| `currency text NOT NULL DEFAULT 'NGN'`, `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section — also requires `bank_schema_check` view + GRANT (see SQL below) |
 | `recorded_at timestamptz` | `inflow_transactions`, `outflow_transactions` | Financial Report basis selector (Recorded Date mode); "Recorded" column on Inflows/Outflows pages; editable in AddInflowModal/AddOutflowModal; **defaults to current date/time on all creation paths** |
 | `config_group_id uuid`, `effective_from date`, `effective_to date`, `version_number int` | `allocation_configs` | Special config versioning — see Special Config Versioning section |
 | `special_config_group_id uuid` | `income_types` | Links income type to a config group (replaces per-version `special_config_id` link) |
@@ -79,14 +79,15 @@ CREATE INDEX IF NOT EXISTS idx_inflow_txn_type  ON inflow_transactions(transacti
 CREATE INDEX IF NOT EXISTS idx_outflow_txn_type ON outflow_transactions(transaction_type);
 ```
 
-The `banks` starting balance migration must also include the helper view so `checkBankStartingBalanceMigration()` can query live schema state:
+The `banks` migration must include `currency` and all starting balance columns plus the helper view:
 ```sql
 ALTER TABLE banks
-  ADD COLUMN IF NOT EXISTS starting_balance               numeric(15,2) DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS starting_balance_category      text,
+  ADD COLUMN IF NOT EXISTS currency                  text NOT NULL DEFAULT 'NGN',
+  ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS starting_balance_category text,
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
-  ADD COLUMN IF NOT EXISTS starting_balance_alloc_type    text,
-  ADD COLUMN IF NOT EXISTS starting_balance_allocations   jsonb NOT NULL DEFAULT '[]';
+  ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
+  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';
 CREATE OR REPLACE VIEW public.bank_schema_check AS
   SELECT column_name::text
   FROM information_schema.columns
@@ -101,16 +102,20 @@ NOTIFY pgrst, 'reload schema';
 
 | Status | Meaning | Required action |
 |---|---|---|
-| `ok` | Columns exist in DB and PostgREST cache knows them | None — save proceeds |
-| `migration_needed` | Columns absent from DB | Run full `ALTER TABLE` + view SQL |
-| `cache_stale` | Columns exist in DB but PostgREST INSERT cache is stale | Run `NOTIFY pgrst, 'reload schema';` only |
+| `ok` | All 6 columns exist in DB and PostgREST SELECT cache knows them | None — save proceeds |
+| `migration_needed` | One or more columns absent from DB (logs which ones) | Run full `ALTER TABLE` + view SQL |
+| `cache_stale` | Columns exist in DB but PostgREST SELECT cache is stale | Run `NOTIFY pgrst, 'reload schema';` only |
+
+Checked columns (all 6 must exist): `currency`, `starting_balance`, `starting_balance_category`, `starting_balance_budget_portion`, `starting_balance_alloc_type`, `starting_balance_allocations`
 
 Check flow:
 1. Query `bank_schema_check` view → reflects live `information_schema` (unaffected by PostgREST table cache)
-2. If columns confirmed in DB, do a zero-row SELECT via PostgREST to verify its **SELECT** plan cache
+2. If all columns confirmed in DB, do a zero-row SELECT via PostgREST to verify its **SELECT** plan cache
 3. PostgREST SELECT error → `cache_stale`; success → `ok`; view query error or missing columns → `migration_needed`
 
 > **Important limitation**: the SELECT plan cache and the INSERT/UPDATE plan cache are separate in PostgREST. The check returning `'ok'` guarantees the SELECT cache is fresh but does **not** guarantee the INSERT/UPDATE cache is. If a save fails with a schema cache error after the check returns `'ok'`, the modal treats this as `'cache_stale'` (shows the NOTIFY banner) rather than retrying — retrying would loop until `schemaStuck` because the INSERT cache is still stale.
+
+> **`schemaStuck` banner**: when the retry limit is exceeded, the modal now shows the actual raw DB error string + full migration SQL so the user has actionable information. The `cache_stale` banner also shows the raw error for diagnosis.
 
 This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no DDL), while `migration_needed` requires a full `ALTER TABLE`. Showing the wrong SQL wastes a DDL operation on an already-migrated DB.
 
