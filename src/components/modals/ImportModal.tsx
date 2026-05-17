@@ -14,6 +14,7 @@ import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
+import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
 // ── Target table definitions ───────────────────────────────────────────────────
@@ -564,8 +565,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         while (prevRi >= 0 && parseDate(mergedRows[prevRi][dateIdx], dateFormat) === null) prevRi--
         if (prevRi < 0) continue
         const prev = mergedRows[prevRi]
-        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).trim()
-        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).trim()
+        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).replace(/\s+/g, ' ').trim()
+        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).replace(/\s+/g, ' ').trim()
       }
 
       for (let ri = 0; ri < mergedRows.length; ri++) {
@@ -606,6 +607,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             }
           }
           if (internalBank) row.bank_name = internalBank.name
+          if (!row.transaction_ref) {
+            row.transaction_ref = await generateFallbackTransactionId(
+              String(date), String(credit), desc ?? '', internalBank?.name ?? ''
+            )
+          }
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           row.recorded_at = importTimestamp
@@ -616,6 +622,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (userId) row.created_by = userId
           if (!txnType && cfg) row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
+          if (!row.transaction_id) {
+            row.transaction_id = await generateFallbackTransactionId(
+              String(date), String(debit), desc ?? '', internalBank?.name ?? ''
+            )
+          }
           const sc = rowStageCodes[ri]
           if (sc) {
             if (sc.s1) row.stage_code_1 = sc.s1
