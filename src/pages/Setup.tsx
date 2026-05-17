@@ -158,7 +158,7 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
           <Plus className="w-4 h-4" /> Add Bank
         </button>
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
@@ -275,7 +275,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
       )}
 
       {!loading && !error && configs.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -429,7 +429,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
             const av = g.active_version
             const isAmt = av?.allocation_type === 'amount'
             return (
-              <div key={g.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div key={g.id} className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                 {/* Group header row */}
                 <div className="flex items-center gap-3 px-4 py-3">
                   <div className="flex-1 min-w-0">
@@ -690,7 +690,7 @@ function CurrenciesTab() {
           {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-gray-200 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
@@ -1241,7 +1241,7 @@ export default function SetupPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="border-b border-gray-200">
+        <div className="border-b border-gray-200 overflow-x-auto">
           <nav className="-mb-px flex gap-6">
             {TABS.map(tab => (
               <button

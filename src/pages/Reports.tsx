@@ -663,7 +663,7 @@ export default function Reports() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit print:hidden overflow-x-auto">
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit max-w-full print:hidden overflow-x-auto">
         {visibleTabs.map(t => (
           <button
             key={t.id}
