@@ -12,6 +12,8 @@ import { AddOutflowModal } from '../components/modals/AddOutflowModal'
 import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { EmptyState } from '../components/ui/EmptyState'
+import { AmountCell } from '../components/ui/AmountCell'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -282,14 +284,17 @@ export default function BankLedger() {
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    {['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)', '📎'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    {([
+                      ['Date', false], ['Description', false],
+                      ['Inflow (₦)', true], ['Outflow (₦)', true], ['Balance (₦)', true], ['📎', false],
+                    ] as [string, boolean][]).map(([h, right]) => (
+                      <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>{h}</th>
                     ))}
                     {canWrite() && <th className="px-4 py-3 w-10" />}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-100">
                   {loading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>{Array.from({ length: 5 }).map((_, j) => (
@@ -297,11 +302,8 @@ export default function BankLedger() {
                       ))}</tr>
                     ))
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={6} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2 text-gray-400">
-                        <BookOpen className="w-10 h-10 text-gray-200" />
-                        <p className="text-sm">No transactions for {selectedBankName}.</p>
-                      </div>
+                    <tr><td colSpan={6}>
+                      <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
                     </td></tr>
                   ) : filtered.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
@@ -316,15 +318,9 @@ export default function BankLedger() {
                           <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium text-green-700 whitespace-nowrap">
-                        {row.inflow > 0 ? formatCurrency(row.inflow) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-red-700 whitespace-nowrap">
-                        {row.outflow > 0 ? formatCurrency(row.outflow) : '—'}
-                      </td>
-                      <td className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${row.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                        {formatCurrency(row.balance)}
-                      </td>
+                      <AmountCell value={row.inflow}   mode="inflow"  />
+                      <AmountCell value={row.outflow}  mode="outflow" />
+                      <AmountCell value={row.balance}  mode="balance" showZero />
                       <td className="px-2 py-3">
                         <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
                       </td>
