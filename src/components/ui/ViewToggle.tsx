@@ -10,11 +10,16 @@ interface ViewToggleProps {
 
 export function ViewToggle({ storageKey, value, onChange }: ViewToggleProps) {
   return (
-    <div className="inline-flex items-center rounded-lg border border-gray-200 overflow-hidden text-sm font-medium">
+    <div
+      role="group"
+      aria-label="View mode"
+      className="inline-flex items-center rounded-lg border border-gray-200 overflow-hidden text-sm font-medium"
+    >
       {(['table', 'cards'] as ViewMode[]).map(mode => (
         <button
           key={mode}
           type="button"
+          aria-pressed={value === mode}
           onClick={() => {
             onChange(mode)
             try { localStorage.setItem(storageKey, mode) } catch { /* ignore */ }
