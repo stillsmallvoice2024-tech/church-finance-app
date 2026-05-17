@@ -1,4 +1,5 @@
 import { Menu, LogOut, Sun, Moon } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useRole } from '../../hooks/useRole'
 import { useThemeStore } from '../../store/themeStore'
@@ -31,16 +32,19 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <h1 className="hidden text-base font-semibold text-gray-800 sm:block">
+        <NavLink
+          to="/"
+          className="hidden text-base font-semibold text-gray-800 hover:text-primary transition-colors sm:block dark:text-gray-100 dark:hover:text-accent"
+        >
           Church Finance
-        </h1>
+        </NavLink>
       </div>
 
       {/* Right: role badge + user avatar + sign out */}
       <div className="flex items-center gap-3">
         {roleLabel && (
           <span
-            className={`hidden items-center rounded-full px-2.5 py-0.5 text-xs font-semibold sm:inline-flex ${roleBadgeClass}`}
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeClass}`}
           >
             {roleLabel}
           </span>
