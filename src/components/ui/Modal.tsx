@@ -1,6 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+
+function getFocusable(el: HTMLElement | null): HTMLElement[] {
+  if (!el) return []
+  return Array.from(
+    el.querySelectorAll<HTMLElement>(
+      'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+    )
+  )
+}
 
 interface ModalProps {
   open: boolean
@@ -34,6 +43,8 @@ export function Modal({
   isDirty,
 }: ModalProps) {
   const [confirmingClose, setConfirmingClose] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
 
   const requestClose = () => {
     if (isDirty) {
@@ -42,6 +53,40 @@ export function Modal({
       onClose()
     }
   }
+
+  // Save trigger element on open; return focus to it on close
+  useEffect(() => {
+    if (open) {
+      returnFocusRef.current = document.activeElement as HTMLElement
+      const raf = requestAnimationFrame(() => {
+        const focusable = getFocusable(panelRef.current)
+        focusable[0]?.focus()
+      })
+      return () => cancelAnimationFrame(raf)
+    } else {
+      returnFocusRef.current?.focus()
+      returnFocusRef.current = null
+    }
+  }, [open])
+
+  // Tab trap — keep focus within modal
+  useEffect(() => {
+    if (!open) return
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const focusable = getFocusable(panelRef.current)
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus() }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', trap)
+    return () => document.removeEventListener('keydown', trap)
+  }, [open])
 
   // ESC — with dirty guard
   useEffect(() => {
@@ -91,6 +136,7 @@ export function Modal({
 
       {/* Panel — full-screen on mobile, centered card on sm+ */}
       <div
+        ref={panelRef}
         className={`relative w-full bg-white flex flex-col h-full sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh]`}
       >
         {/* Header */}
