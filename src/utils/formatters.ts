@@ -41,11 +41,6 @@ export function formatDate(date: string | Date): string {
   return format(new Date(date), 'dd MMM yyyy')
 }
 
-export function formatCardDate(date: string | Date): { dayMonth: string; year: string } {
-  const d = new Date(date)
-  return { dayMonth: format(d, 'dd MMM,'), year: format(d, 'yyyy') }
-}
-
 export function formatDateTime(date: string | Date): string {
   return format(new Date(date), 'dd MMM yyyy, HH:mm')
 }

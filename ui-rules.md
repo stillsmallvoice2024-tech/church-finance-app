@@ -734,17 +734,8 @@ Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside 
 
 ### Card View Date Metadata
 
-- In card views where date competes horizontally with badges/controls, stack using `formatCardDate` from `src/utils/formatters.ts`:
-  ```tsx
-  const { dayMonth, year } = formatCardDate(row.date)
-  // renders: "17 May," on line 1, "2026" on line 2
-  <div className="flex flex-col leading-none gap-px">
-    <span className="text-xs text-gray-500">{dayMonth}</span>
-    <span className="text-[10px] text-gray-400">{year}</span>
-  </div>
-  ```
-- Apply only in card views where horizontal competition exists (e.g. badges on the right side of the same row)
-- In table rows, continue using `formatDate` (single-line)
+- Always use `formatDate(row.date)` for dates in card views — single-line format (`"17 May 2026"`) consistent across all pages (Inflows, Outflows, BankLedger, CategoryLedger, etc.)
+- Do NOT stack date across two lines — creates visual inconsistency with pages that use `formatDate`
 
 ### Dark Mode Status
 

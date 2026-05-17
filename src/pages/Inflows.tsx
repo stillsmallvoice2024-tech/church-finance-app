@@ -15,7 +15,7 @@ import { useBanks }                from '../hooks/useBanks'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
-import { formatDate, formatCurrency, formatCurrencyCompact, formatCardDate } from '../utils/formatters'
+import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useIncomeTypes }          from '../hooks/useIncomeTypes'
@@ -260,17 +260,13 @@ export default function Inflows() {
               </div>
             ) : data.map(row => {
               const it = incomeTypes.find(t => t.id === row.income_type_id)
-              const { dayMonth: dateDM, year: dateYr } = formatCardDate(row.date)
               return (
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="flex flex-col leading-none gap-px">
-                        <span className="text-xs text-gray-500">{dateDM}</span>
-                        <span className="text-[10px] text-gray-400">{dateYr}</span>
-                      </div>
+                      <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
                       {row.bank_name && (
-                        <span className="text-xs text-gray-400 mt-0.5 block">{row.bank_name}</span>
+                        <span className="ml-2 text-xs text-gray-400">{row.bank_name}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
