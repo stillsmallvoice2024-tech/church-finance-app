@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { ClipboardList, Download, AlertCircle, RefreshCw } from 'lucide-react'
 import { Card }               from '../components/ui/Card'
 import { Pagination }         from '../components/ui/Pagination'
+import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { useFieldChanges }    from '../hooks/useFieldChanges'
 import { usePageTitle }       from '../hooks/usePageTitle'
 import { exportCSV }          from '../utils/csvExport'
@@ -45,6 +47,8 @@ export default function ChangeLog() {
     page,
     pageSize:  PAGE_SIZE,
   })
+
+  const { expandedIds: descExpanded, tooltip: descTooltip, setTooltip: setDescTooltip, toggle: toggleDesc } = useDescriptionExpand()
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -187,11 +191,17 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
                       {e.record_id.slice(0, 8)}…
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-800">{e.field_name}</td>
-                    <td className="px-4 py-3 text-sm text-red-600 max-w-[160px] truncate" title={e.old_value ?? ''}>
-                      {e.old_value ?? <span className="text-gray-300">—</span>}
+                    <td className="px-4 py-3 text-sm max-w-[160px]">
+                      {e.old_value == null
+                        ? <span className="text-gray-300">—</span>
+                        : <DescriptionCell id={`old-${e.id}`} text={e.old_value} expanded={descExpanded.has(`old-${e.id}`)} onToggle={() => toggleDesc(`old-${e.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-red-600" />
+                      }
                     </td>
-                    <td className="px-4 py-3 text-sm text-green-700 max-w-[160px] truncate" title={e.new_value ?? ''}>
-                      {e.new_value ?? <span className="text-gray-300">—</span>}
+                    <td className="px-4 py-3 text-sm max-w-[160px]">
+                      {e.new_value == null
+                        ? <span className="text-gray-300">—</span>
+                        : <DescriptionCell id={`new-${e.id}`} text={e.new_value} expanded={descExpanded.has(`new-${e.id}`)} onToggle={() => toggleDesc(`new-${e.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-green-700" />
+                      }
                     </td>
                   </tr>
                 ))
@@ -201,6 +211,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
         </div>
         <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
       </Card>
+      <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
 }

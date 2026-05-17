@@ -336,7 +336,11 @@ export default function IntraBankTransfers() {
                     <ArrowRightLeft className="w-3 h-3 text-gray-400 shrink-0" />
                     <span className="truncate max-w-[100px]">{row.to_bank_name ?? '—'}</span>
                   </div>
-                  {row.description && <p className="text-xs text-gray-500 truncate">{row.description}</p>}
+                  {row.description && (
+                    <div className="text-xs text-gray-500">
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} expanded={descExpanded.has(`card-desc-${row.id}`)} onToggle={() => toggleDesc(`card-desc-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
+                    </div>
+                  )}
                   {row.transaction_ref && <p className="text-xs text-gray-400 font-mono">{row.transaction_ref}</p>}
                   {(canWrite() || canDelete()) && (
                     <div className="flex gap-1 pt-1 border-t border-gray-50">

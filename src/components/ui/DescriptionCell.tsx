@@ -9,6 +9,7 @@ interface DescriptionCellProps {
   onToggle: () => void
   tooltip: TooltipState | null
   setTooltip: (t: TooltipState | null) => void
+  textCls?: string
 }
 
 export function DescriptionCell({
@@ -18,11 +19,12 @@ export function DescriptionCell({
   onToggle,
   tooltip,
   setTooltip,
+  textCls = 'text-gray-700',
 }: DescriptionCellProps) {
   return (
     <div className="min-w-0">
       <div
-        className="text-gray-700 truncate cursor-pointer select-none flex items-center gap-1 group"
+        className={`${textCls} truncate cursor-pointer select-none flex items-center gap-1 group`}
         onClick={onToggle}
         onMouseEnter={e => {
           if (!text) return
