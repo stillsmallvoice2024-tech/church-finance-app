@@ -6,6 +6,7 @@ export interface Column<T> {
   header: string
   render?: (row: T) => ReactNode
   className?: string
+  rightAlign?: boolean
 }
 
 interface DataTableProps<T> {
@@ -29,18 +30,18 @@ export function DataTable<T>({
     <div className="overflow-x-auto">
       <table className="min-w-full">
         <thead>
-          <tr className="border-b border-gray-100">
+          <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${col.className ?? ''}`}
+                className={`px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ${col.rightAlign ? 'text-right' : 'text-left'} ${col.className ?? ''}`}
               >
                 {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50">
+        <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
           {isLoading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <TableRowSkeleton key={i} cols={columns.length} />

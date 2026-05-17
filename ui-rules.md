@@ -102,12 +102,26 @@ import { TechDetails } from '../ui/TechDetails'
 
 ## Sidebar Navigation
 
-All nav items visible to all authenticated users.
+Collapsible groups; state persisted in `localStorage` under key `nav-group-<id>`.
 
-- **Main:** Dashboard, Inflows, Outflows, Categories, Foreign Currency, Intra-Account Flows, Import, Pending Deductions, Setup, Reports, **Financial Report**, Settings
-- **Banking:** Bank Ledger, Bank Deposits, Intrabank Transfers, Refunds, Reversals, Receipts
-- **Allocations:** Category Ledger, Percentage Allocations, Specific Givings, Savings Portions
-- **Admin:** User Management, Change Log
+| Group (`id`) | Default | Items |
+|---|---|---|
+| Daily Finance (`daily`) | open | Dashboard, Inflows, Outflows, Import, Receipts |
+| Banking (`banking`) | open | Bank Ledger, Bank Deposits, Intrabank Transfers, Intra-Account Flows, Foreign Currency |
+| Review & Processing (`review`) | open | Pending Deductions, Refunds, Reversals |
+| Budget & Allocation (`budget`) | open | Categories, Category Ledger, Percentage Allocations, Specific Givings, Savings Portions |
+| Reports (`reports`) | **closed** | Reports, Financial Report |
+| Administration (`admin`) | **closed** | Setup, Settings, User Management†, Change Log† |
+
+† `adminOnly: true` — filtered out for non-admin users. All other items visible to all authenticated users.
+
+**Active-state layout shift fix:** All nav items carry `border-l-2 pl-[10px] pr-3` at all times. Active → `border-accent bg-white/15 text-white`; inactive → `border-transparent text-white/70`. Padding never changes, eliminating layout shift.
+
+**Icon assignments (semantic):** `PiggyBank` → Savings Portions, `Hourglass` → Pending Deductions, `HandCoins` → Specific Givings, `Repeat2` → Intra-Account Flows, `ArrowRightLeft` → Intrabank Transfers, `FileUp` → Import, `Receipt` → Receipts.
+
+**Mobile bottom bar (BottomTabBar):** Primary tabs — Home, Inflows, Outflows, Import, More. More drawer shows all remaining items grouped by the same sections (2-col grid per section, section headers, `border-l-2` active indicator, `min-h-[48px]` tap targets, `aria-expanded` on More button). Drawer is scrollable with `max-h-[75vh]`.
+
+**TopBar:** App title (`"Church Finance"`) is a `NavLink` to `/`. Role badge is always visible (not hidden on mobile).
 
 ---
 
@@ -150,6 +164,29 @@ All nav items visible to all authenticated users.
 | Card wrapper (`padding` prop) | `src/components/ui/Card.tsx` |
 | Receipt attachment (smart above/below) | `src/components/ui/ReceiptBadge.tsx` |
 | All add/edit form modals | `src/components/modals/` |
+| Right-aligned monetary `<td>` | `src/components/ui/AmountCell.tsx` |
+
+---
+
+## Table Standards
+
+**Header row:** always `bg-gray-50 border-b border-gray-100` on `<thead> <tr>`. Dark variant: `dark:bg-gray-800/50 dark:border-gray-700`.
+
+**Body dividers:** `divide-y divide-gray-100` (not `divide-gray-50`). Dark: `dark:divide-gray-700/50`.
+
+**Numeric column headers:** use `text-right` for all financial amount columns. Text/label columns use `text-left`.
+
+**Amount cells:** use `<AmountCell>` (`src/components/ui/AmountCell.tsx`) — a drop-in `<td>` with `text-right font-mono font-semibold whitespace-nowrap` defaults.
+- `mode="inflow"` → `text-success` (green)
+- `mode="outflow"` → `text-danger` (red)
+- `mode="balance"` → `text-gray-900` positive / `text-danger` negative; use `showZero` for running totals
+- `mode="neutral"` (default) → `text-danger` for negative, `text-gray-800` for positive
+- Zero value shows `—` unless `showZero={true}`
+- `amountColorCls(value, mode)` exported for use outside a `<td>`
+
+**Empty states in tables:** use `<EmptyState compact>` inside `<td colSpan={n}>` — do NOT write inline `<div className="flex flex-col items-center ...">` inside table cells.
+
+**DataTable component (`src/components/ui/DataTable.tsx`):** generic table with these standards built in. `Column.rightAlign?: boolean` controls header alignment.
 
 ---
 

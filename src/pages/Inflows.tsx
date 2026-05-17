@@ -22,6 +22,8 @@ import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 import { useCategories }           from '../hooks/useCategories'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { EmptyState } from '../components/ui/EmptyState'
+import { AmountCell } from '../components/ui/AmountCell'
 
 const PAGE_SIZE = 25
 
@@ -330,7 +332,7 @@ export default function Inflows() {
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="w-10 pl-4 pr-2 py-3">
                     <input
                       type="checkbox"
@@ -340,14 +342,17 @@ export default function Inflows() {
                     />
                   </th>
                   <th className="w-8" />
-                  {['Date', 'Recorded', 'Bank', 'Txn Ref', 'Type', 'Description', 'Amount (₦)', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  {([
+                    ['Date', false], ['Recorded', false], ['Bank', false], ['Txn Ref', false],
+                    ['Type', false], ['Description', false], ['Amount (₦)', true], ['Actions', false],
+                  ] as [string, boolean][]).map(([h, right]) => (
+                    <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
@@ -360,11 +365,8 @@ export default function Inflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2 text-gray-400">
-                        <TrendingUp className="w-10 h-10 text-gray-200" />
-                        <p className="text-sm">No inflow transactions match your filters.</p>
-                      </div>
+                    <td colSpan={10}>
+                      <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
                     </td>
                   </tr>
                 ) : (
@@ -425,7 +427,7 @@ export default function Inflows() {
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]" onClick={e => e.stopPropagation()}>
                           <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-success whitespace-nowrap">{formatCurrency(Number(row.amount))}</td>
+                        <AmountCell value={Number(row.amount)} mode="inflow" />
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             {canWrite() && (

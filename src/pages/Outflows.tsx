@@ -21,6 +21,8 @@ import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { EmptyState } from '../components/ui/EmptyState'
+import { AmountCell } from '../components/ui/AmountCell'
 
 const PAGE_SIZE = 25
 
@@ -342,7 +344,7 @@ export default function Outflows() {
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="w-10 pl-4 pr-2 py-3">
                     <input
                       type="checkbox"
@@ -351,14 +353,18 @@ export default function Outflows() {
                       onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())}
                     />
                   </th>
-                  {['Date', 'Recorded', 'Bank', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Net (₦)', 'Stage Code 1', 'Remarks', '📎', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  {([
+                    ['Date', false], ['Recorded', false], ['Bank', false], ['Txn ID', false],
+                    ['Description', false], ['Disbursed (₦)', true], ['Refunded (₦)', true],
+                    ['Net (₦)', true], ['Stage Code 1', false], ['Remarks', false], ['📎', false], ['Actions', false],
+                  ] as [string, boolean][]).map(([h, right]) => (
+                    <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i}>
@@ -371,11 +377,8 @@ export default function Outflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2 text-gray-400">
-                        <TrendingDown className="w-10 h-10 text-gray-200" />
-                        <p className="text-sm">No outflow transactions match your filters.</p>
-                      </div>
+                    <td colSpan={13}>
+                      <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
                     </td>
                   </tr>
                 ) : (
@@ -420,11 +423,9 @@ export default function Outflows() {
                             <DescriptionCell id={row.id} text={row.description} expanded={descExpanded.has(row.id)} onToggle={() => toggleDesc(row.id)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                          {Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded)) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
+                        <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
+                        <AmountCell value={Number(row.amount_refunded)} mode="neutral" bold={false} />
+                        <AmountCell value={net} mode="neutral" />
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
                           <DescriptionCell id={`rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`rem-${row.id}`)} onToggle={() => toggleDesc(`rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
