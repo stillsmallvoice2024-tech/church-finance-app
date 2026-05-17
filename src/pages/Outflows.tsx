@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingDown, Download, Pencil, Trash2,
-  Search, AlertCircle, RefreshCw, LayoutList, LayoutGrid,
+  Search, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Modal }                   from '../components/ui/Modal'
@@ -9,6 +9,7 @@ import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
 import { ReceiptBadge }            from '../components/ui/ReceiptBadge'
+import { ViewToggle, useViewToggle } from '../components/ui/ViewToggle'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -103,11 +104,12 @@ export default function Outflows() {
   const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount_disbursed))) : 0, [data])
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
 
+  const { view: displayMode, setView: setDisplayMode } = useViewToggle('outflows-view')
+
   // UI state
   const [editRecord,        setEditRecord]        = useState<OutflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
   const [deleteId,          setDeleteId]          = useState<string | null>(null)
-  const [displayMode,       setDisplayMode]       = useState<'table' | 'cards'>('table')
   const [selectedIds,       setSelectedIds]       = useState<Set<string>>(new Set())
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkDeleting,      setBulkDeleting]      = useState(false)
@@ -193,16 +195,7 @@ export default function Outflows() {
             <p className="text-sm text-gray-500 mt-0.5">All disbursements and payments</p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-              <button onClick={() => setDisplayMode('table')} title="Table view"
-                className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-                <LayoutList className="w-4 h-4" />
-              </button>
-              <button onClick={() => setDisplayMode('cards')} title="Card view"
-                className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-            </div>
+            <ViewToggle storageKey="outflows-view" value={displayMode} onChange={setDisplayMode} />
             <button
               onClick={handleExport} disabled={data.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
@@ -263,17 +256,21 @@ export default function Outflows() {
                 </div>
               ))
             ) : data.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-gray-400">
-                <TrendingDown className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                <p className="text-sm">No outflow transactions match your filters.</p>
+              <div className="col-span-full">
+                <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
               </div>
             ) : data.map(row => {
               const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
               return (
                 <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                    <div className="flex items-center gap-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
+                      {row.bank_name && (
+                        <span className="ml-2 text-xs text-gray-400">{row.bank_name}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
                       {row.is_pending_deduction && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
                       )}

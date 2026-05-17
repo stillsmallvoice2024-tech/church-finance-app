@@ -129,9 +129,32 @@ export default function Receipts() {
         </div>
       )}
 
+      {/* Mobile folder tabs */}
+      <div className="flex overflow-x-auto gap-2 md:hidden pb-1 -mx-1 px-1">
+        {FOLDERS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setFolder(key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors shrink-0 ${
+              folder === key
+                ? 'bg-primary text-white font-medium'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            <span>{label}</span>
+            <span className={`text-xs rounded-full px-1.5 py-0.5 ${
+              folder === key ? 'bg-white/20 text-white' : 'bg-white text-gray-500'
+            }`}>
+              {loading ? '…' : countFor(key)}
+            </span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex gap-5">
-        {/* Folder panel */}
-        <div className="w-52 shrink-0 space-y-1">
+        {/* Folder sidebar — desktop only */}
+        <div className="hidden md:block w-52 shrink-0 space-y-1">
           {FOLDERS.map(({ key, label }) => (
             <button
               key={key}
