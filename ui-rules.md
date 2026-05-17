@@ -724,9 +724,10 @@ Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside 
 - 3-item strips: `grid-cols-1 sm:grid-cols-3 gap-3`
 - 4-item strips: `grid-cols-2 sm:grid-cols-4 gap-3`
 - **Never** use bare `grid-cols-3` or `grid-cols-4` without a mobile breakpoint — causes overflow on small screens
-- Card divs must have `min-w-0` to allow grid overflow containment
-- Value text: `text-base font-bold tabular-nums` (not `text-lg`) — prevents overflow at narrow widths; `tabular-nums` ensures consistent digit width
+- Card divs must have `min-w-0 overflow-hidden` to allow grid overflow containment
+- Value text: `text-sm font-bold tabular-nums` — prevents overflow at narrow widths; `tabular-nums` ensures consistent digit width
 - Label text: `truncate` to prevent overflow on long labels
+- **Mixed-span pattern** (when one card is conceptually wider): `grid-cols-2 sm:grid-cols-3` with primary card as `col-span-2 sm:col-span-1` — full-width on mobile, equal column on sm+. Used in CategoryLedger ledger summary strip.
 
 ### StatCard Value Sizing
 
@@ -750,3 +751,29 @@ Dark mode class application (`darkMode: 'class'`) is configured but UI coverage 
 | Page heading decoration | `w-6 h-6` |
 | Error / alert state | `w-10 h-10` |
 | Empty state (via EmptyState component) | `w-7 h-7` (managed by component) |
+
+---
+
+## Mobile Card View Pattern (CategoryLedger)
+
+Vertical stacked layout — **not** horizontal flex. All ledger card views must follow this structure:
+
+```
+┌───────────────────────────────────┐
+│  Date label (text-[11px] gray-400)│
+│  Description (DescriptionCell)    │
+│  ─────────────────────────────────│
+│  bg-gray-50/40 metrics footer:    │
+│  INFLOW/OUTFLOW  │  BALANCE        │
+│  (label above value, 2-col grid)  │
+└───────────────────────────────────┘
+```
+
+- **Header**: date at top (`text-[11px] font-semibold text-gray-400`), description below via `DescriptionCell`
+- **Metrics footer**: `grid grid-cols-2 border-t bg-gray-50/40 px-4 py-3` — label (`text-[10px] uppercase tracking-wide font-semibold`) sits above value (`text-sm font-mono font-bold tabular-nums`)
+- **Amount column**: show whichever of inflow/outflow is non-zero; label reads "Inflow" or "Outflow" accordingly — avoids 3-col squeeze on 320px screens
+- **Card surface**: `rounded-xl border shadow-sm overflow-hidden bg-white border-gray-200`
+- **B/F row**: `bg-blue-50/60 border-blue-200`; label shows "Balance B/F"; amount label shows "B/F Amount"; description rendered as plain `<p>` (not DescriptionCell)
+- **Toggle placement**: Table/Cards toggle lives in a toolbar row **directly above** the card/table content, paired with a transaction count (`{n} transaction{s}`). Never in the top page controls row.
+- **`space-y-3`** between cards (not `space-y-2`)
+- All card item IDs prefixed `card-${row.id}` to avoid collision with table-view DescriptionCell IDs
