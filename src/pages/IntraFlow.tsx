@@ -243,56 +243,65 @@ export default function IntraFlow() {
         {/* Table / Card view */}
         <Card padding={false}>
           {displayMode === 'cards' ? (
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="p-4 space-y-3">
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-2/3" />
-                    <div className="h-6 bg-gray-200 rounded w-1/2" />
-                    <div className="h-4 bg-gray-200 rounded" />
+                  <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+                    <div className="px-4 pt-3.5 pb-3 space-y-2">
+                      <div className="h-3 bg-gray-200 rounded w-1/4" />
+                      <div className="h-4 bg-gray-200 rounded w-3/4" />
+                    </div>
+                    <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 grid grid-cols-2 gap-4">
+                      <div className="h-8 bg-gray-200 rounded" /><div className="h-8 bg-gray-200 rounded" />
+                    </div>
                   </div>
                 ))
               ) : data.length === 0 ? (
-                <div className="col-span-full py-16 text-center text-gray-400">
+                <div className="py-12 text-center text-gray-400">
                   <ArrowLeftRight className="w-10 h-10 text-gray-200 mx-auto mb-2" />
                   <p className="text-sm">No internal transfers match your filters.</p>
                 </div>
               ) : (
                 data.map(row => (
-                  <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-3 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                      <span className="text-base font-bold text-primary">{formatCurrency(Number(row.total_amount))}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-700">
-                      <span className="font-medium truncate max-w-[100px]">{row.account_from ?? '—'}</span>
-                      <ArrowLeftRight className="w-3 h-3 text-gray-400 shrink-0" />
-                      <span className="font-medium truncate max-w-[100px]">{row.account_to ?? '—'}</span>
-                    </div>
-                    {row.description && (
-                      <div className="text-xs text-gray-500">
-                        <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                    {/* Card header */}
+                    <div className="px-4 pt-3.5 pb-3">
+                      <p className="text-[11px] font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
+                      <div className="flex items-center gap-2 text-sm text-gray-700 mb-1">
+                        <span className="font-medium truncate">{row.account_from ?? '—'}</span>
+                        <ArrowLeftRight className="w-3 h-3 text-gray-400 shrink-0" />
+                        <span className="font-medium truncate">{row.account_to ?? '—'}</span>
                       </div>
-                    )}
-                    {row.remark     && (
-                      <div className="text-xs text-gray-400 italic">
-                        <DescriptionCell id={`card-rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      {row.description && (
+                        <div className="text-sm mt-1.5">
+                          <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
+                        </div>
+                      )}
+                      {row.remark && (
+                        <div className="text-xs mt-1.5">
+                          <DescriptionCell id={`card-rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    {/* Metrics footer */}
+                    <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
+                        <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(Number(row.total_amount))}</p>
                       </div>
-                    )}
-                    {(canWrite() || canDelete()) && (
-                      <div className="flex gap-1 pt-1 border-t border-gray-50">
+                      <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                         {canWrite() && (
-                          <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
-                            <Pencil className="w-4 h-4" />
+                          <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                            <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
                         {canDelete() && (
-                          <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
-                            <Trash2 className="w-4 h-4" />
+                          <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 ))
               )}

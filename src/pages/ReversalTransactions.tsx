@@ -152,41 +152,58 @@ export default function ReversalTransactions() {
       {/* Table / Cards */}
       <Card padding={false}>
         {displayMode === 'cards' ? (
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="p-4 space-y-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-2/3" /><div className="h-6 bg-gray-200 rounded w-1/2" />
+                <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+                  <div className="px-4 pt-3.5 pb-3 space-y-2">
+                    <div className="h-3 bg-gray-200 rounded w-1/4" />
+                    <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  </div>
+                  <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3">
+                    <div className="h-8 bg-gray-200 rounded w-1/2" />
+                  </div>
                 </div>
               ))
             ) : filtered.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-gray-400">
+              <div className="py-12 text-center text-gray-400">
                 <Undo2 className="w-10 h-10 text-gray-200 mx-auto mb-2" />
                 <p className="text-sm">No reversal transactions found.</p>
               </div>
             ) : filtered.map(row => (
-              <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {row.direction === 'in' ? 'Inflow' : 'Outflow'}
-                  </span>
+              <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                {/* Card header */}
+                <div className="px-4 pt-3.5 pb-3">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {row.direction === 'in' ? 'Inflow' : 'Outflow'}
+                    </span>
+                  </div>
+                  {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
+                  {row.description && (
+                    <div className="text-sm mb-1">
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                    </div>
+                  )}
+                  {row.original_transaction_id && (
+                    <p className="text-[11px] text-gray-400 font-mono">Orig: {row.original_transaction_id}</p>
+                  )}
+                  {row.remarks && (
+                    <div className="text-xs mt-1.5">
+                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                    </div>
+                  )}
                 </div>
-                <p className="text-base font-bold text-gray-900">{formatCurrency(row.amount)}</p>
-                {row.description && (
-                  <div className="text-xs text-gray-600">
-                    <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
-                  </div>
-                )}
-                {row.bank_name   && <p className="text-xs text-gray-400">{row.bank_name}</p>}
-                {row.original_transaction_id && (
-                  <p className="text-xs text-gray-500">Orig ID: <span className="font-mono">{row.original_transaction_id}</span></p>
-                )}
-                {row.remarks && (
-                  <div className="text-xs text-gray-400 italic">
-                    <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
-                  </div>
-                )}
+                {/* Metrics footer */}
+                <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3">
+                  <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-green-600/70' : 'text-red-600/70'}`}>
+                    Reversal
+                  </p>
+                  <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
+                    {formatCurrency(row.amount)}
+                  </p>
+                </div>
               </div>
             ))}
           </div>

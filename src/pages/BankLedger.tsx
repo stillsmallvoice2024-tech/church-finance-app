@@ -226,56 +226,71 @@ export default function BankLedger() {
       {selectedBank && !error && (
         <Card padding={false}>
           {displayMode === 'cards' ? (
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="p-4 space-y-3">
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-2/3" /><div className="h-6 bg-gray-200 rounded w-1/2" />
+                  <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+                    <div className="px-4 pt-3.5 pb-3 space-y-2">
+                      <div className="h-3 bg-gray-200 rounded w-1/4" />
+                      <div className="h-4 bg-gray-200 rounded w-3/4" />
+                    </div>
+                    <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 grid grid-cols-2 gap-4">
+                      <div className="h-8 bg-gray-200 rounded" /><div className="h-8 bg-gray-200 rounded" />
+                    </div>
                   </div>
                 ))
               ) : filtered.length === 0 ? (
-                <div className="col-span-full">
-                  <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} />
-                </div>
+                <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
               ) : filtered.map(row => (
-                <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">{formatDate(row.date)}</span>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold ${row.inflow > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {row.inflow > 0 ? `+${formatCurrency(row.inflow)}` : `-${formatCurrency(row.outflow)}`}
-                      </span>
-                      {canWrite() && (
-                        <button
-                          onClick={() => row.entity_type === 'inflow' && row.inflowData
-                            ? setEditInflow(row.inflowData)
-                            : row.outflowData && setEditOutflow(row.outflowData)}
-                          className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                          title="Edit source record"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                  {/* Card header */}
+                  <div className="px-4 pt-3.5 pb-3">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      <div className="flex items-center gap-1.5">
+                        {row.transaction_type && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                            {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                          </span>
+                        )}
+                        {canWrite() && (
+                          <button
+                            onClick={() => row.entity_type === 'inflow' && row.inflowData
+                              ? setEditInflow(row.inflowData)
+                              : row.outflowData && setEditOutflow(row.outflowData)}
+                            className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                            title="Edit source record"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    {row.description && (
+                      <div className="text-sm">
+                        <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      </div>
+                    )}
                   </div>
-                  {row.transaction_type && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
-                      {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
-                    </span>
-                  )}
-                  {row.description && (
-                    <div className="text-xs text-gray-600">
-                      <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                  {/* Metrics footer */}
+                  <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.inflow > 0 ? 'text-green-600/70' : 'text-red-600/70'}`}>
+                        {row.inflow > 0 ? 'Inflow' : 'Outflow'}
+                      </p>
+                      <p className={`text-sm font-mono font-bold tabular-nums ${row.inflow > 0 ? 'text-success' : 'text-danger'}`}>
+                        {row.inflow > 0 ? formatCurrency(row.inflow) : formatCurrency(row.outflow)}
+                      </p>
                     </div>
-                  )}
-                  <div className="flex items-center justify-between pt-1 border-t border-gray-50">
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-gray-400">Balance</span>
-                      <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
+                    <div className="border-l border-gray-200/80 pl-4 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400">Balance</p>
+                        <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
+                      </div>
+                      <p className={`text-sm font-mono font-bold tabular-nums ${row.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
+                        {formatCurrency(row.balance)}
+                      </p>
                     </div>
-                    <span className={`text-sm font-bold ${row.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                      {formatCurrency(row.balance)}
-                    </span>
                   </div>
                 </div>
               ))}

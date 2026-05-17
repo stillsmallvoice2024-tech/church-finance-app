@@ -16,7 +16,7 @@ import { useBanks }                from '../hooks/useBanks'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
-import { formatDate, formatCurrency, formatCurrencyCompact, formatCardDate } from '../utils/formatters'
+import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
@@ -256,67 +256,76 @@ export default function Outflows() {
 
         {/* Cards / Table */}
         {displayMode === 'cards' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3 animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-2/3" /><div className="h-6 bg-gray-200 rounded w-1/2" />
+                <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+                  <div className="px-4 pt-3.5 pb-3 space-y-2">
+                    <div className="h-3 bg-gray-200 rounded w-1/4" />
+                    <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  </div>
+                  <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 grid grid-cols-2 gap-4">
+                    <div className="h-8 bg-gray-200 rounded" /><div className="h-8 bg-gray-200 rounded" />
+                  </div>
                 </div>
               ))
             ) : data.length === 0 ? (
-              <div className="col-span-full">
-                <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
-              </div>
+              <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
             ) : data.map(row => {
               const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
-              const { dayMonth: dateDM, year: dateYr } = formatCardDate(row.date)
+              const netDiffers = net !== Number(row.amount_disbursed)
               return (
-                <div key={row.id} className="rounded-xl border border-gray-100 bg-white p-4 space-y-2 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-col leading-none gap-px">
-                        <span className="text-xs text-gray-500">{dateDM}</span>
-                        <span className="text-[10px] text-gray-400">{dateYr}</span>
+                <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                  {/* Card header */}
+                  <div className="px-4 pt-3.5 pb-3">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                        {row.is_pending_deduction && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
+                        )}
+                        {row.transaction_type && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                            {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                          </span>
+                        )}
                       </div>
-                      {row.bank_name && (
-                        <span className="text-xs text-gray-400 mt-0.5 block">{row.bank_name}</span>
-                      )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {row.is_pending_deduction && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
-                      )}
-                      {row.transaction_type && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
-                          {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
-                        </span>
-                      )}
+                    {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
+                    <div className="text-sm">
+                      <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
-                  </div>
-                  <p className="text-lg font-bold text-danger">{formatCurrency(Number(row.amount_disbursed))}</p>
-                  <div className="text-sm text-gray-700">
-                    <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                  </div>
-                  {row.stage_code_1 && <p className="text-xs text-gray-400">{row.stage_code_1}</p>}
-                  {row.remarks && (
-                    <div className="text-xs text-gray-400 italic">
-                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
-                    </div>
-                  )}
-                  {net !== Number(row.amount_disbursed) && (
-                    <p className="text-xs text-gray-500">Net: {formatCurrency(net)}</p>
-                  )}
-                  <div className="flex gap-1 pt-1 border-t border-gray-50">
-                    {canWrite() && (
-                      <button onClick={() => openEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                    {row.stage_code_1 && <p className="text-[11px] text-gray-400 mt-1">{row.stage_code_1}</p>}
+                    {row.remarks && (
+                      <div className="text-xs mt-1.5">
+                        <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                      </div>
                     )}
-                    {canDelete() && (
-                      <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                  </div>
+                  {/* Metrics footer */}
+                  <div className={`border-t border-gray-100 bg-gray-50/40 px-4 py-3 ${netDiffers ? 'grid grid-cols-3' : 'grid grid-cols-2'}`}>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-red-600/70">Disbursed</p>
+                      <p className="text-sm font-mono font-bold tabular-nums text-danger">{formatCurrency(Number(row.amount_disbursed))}</p>
+                    </div>
+                    {netDiffers && (
+                      <div className="border-l border-gray-200/80 pl-4 min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Net</p>
+                        <p className="text-sm font-mono font-bold tabular-nums text-gray-700">{formatCurrency(net)}</p>
+                      </div>
                     )}
+                    <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
+                      {canWrite() && (
+                        <button onClick={() => openEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canDelete() && (
+                        <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )

@@ -523,7 +523,7 @@ export default function Categories() {
 
       {/* Category cards */}
       {!loading && visible.length > 0 && displayMode === 'cards' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="space-y-3">
           {visible.map(cat => {
             const group = groups.find(g => g.id === cat.group_id)
             const catBalances = allOpeningBalances.filter(b => b.category_id === cat.id)
@@ -533,42 +533,52 @@ export default function Categories() {
                   ? [{ budget_portion: cat.starting_balance_budget_portion, amount: cat.starting_balance }]
                   : [])
             return (
-              <div key={cat.id} className={`rounded-xl border border-gray-200 bg-white p-4 space-y-2 hover:shadow-md transition-shadow ${cat.is_hidden ? 'opacity-50' : ''}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-gray-800">{cat.name}
+              <div key={cat.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200 ${cat.is_hidden ? 'opacity-50' : ''}`}>
+                {/* Card header */}
+                <div className="px-4 pt-3.5 pb-3">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="text-sm font-semibold text-gray-800 leading-snug">
+                      {cat.name}
                       {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
                     </p>
-                    {group && <p className="text-xs text-gray-400">{group.name}</p>}
+                    {displayBalances.length > 0 && (
+                      <div className="flex flex-col items-end gap-0.5 shrink-0">
+                        {displayBalances.map(b => (
+                          <span key={b.budget_portion} className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{b.budget_portion}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {displayBalances.length > 0 && (
-                    <div className="flex flex-col items-end gap-0.5 shrink-0">
-                      {displayBalances.map(b => (
-                        <span key={b.budget_portion} className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{b.budget_portion}</span>
-                      ))}
-                    </div>
-                  )}
+                  {group && <p className="text-[11px] font-semibold text-gray-400">{group.name}</p>}
+                  {cat.description && <p className="text-xs text-gray-500 mt-1.5 break-words">{cat.description}</p>}
                 </div>
-                {cat.description && <p className="text-xs text-gray-500 break-words">{cat.description}</p>}
-                {displayBalances.length > 0 && (
-                  <div className="space-y-0.5">
-                    {displayBalances.map(b => (
-                      <p key={b.budget_portion} className="text-xs text-gray-600 font-mono">
-                        Bal. B/F: ₦{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                      </p>
-                    ))}
+                {/* Footer: opening balances + actions */}
+                <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
+                  <div className="min-w-0">
+                    {displayBalances.length > 0 ? (
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Bal. B/F</p>
+                        {displayBalances.map(b => (
+                          <p key={b.budget_portion} className="text-sm font-mono font-bold tabular-nums text-gray-700">
+                            ₦{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-300">No balance</p>
+                    )}
                   </div>
-                )}
-                <div className="flex gap-1 pt-1 border-t border-gray-50">
-                  <button onClick={() => openEdit(cat)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => handleDeleteClick(cat)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => handleToggleHide(cat, !cat.is_hidden)} className="p-1.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title={cat.is_hidden ? 'Show' : 'Hide'}>
-                    {cat.is_hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  </button>
+                  <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
+                    <button onClick={() => openEdit(cat)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleDeleteClick(cat)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleToggleHide(cat, !cat.is_hidden)} className="p-1.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title={cat.is_hidden ? 'Show' : 'Hide'}>
+                      {cat.is_hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             )
