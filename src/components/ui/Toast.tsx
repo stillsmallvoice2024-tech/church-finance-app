@@ -68,7 +68,7 @@ export function ToastContainer() {
 
   return createPortal(
     <div
-      className="fixed bottom-20 right-4 md:bottom-5 md:right-5 z-[200] flex flex-col gap-2 pointer-events-none"
+      className="toast-safe-bottom fixed right-4 md:bottom-5 md:right-5 z-[200] flex flex-col gap-2 pointer-events-none"
       aria-label="Notifications"
     >
       {toasts.map((t) => (

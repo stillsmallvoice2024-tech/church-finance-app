@@ -4,6 +4,7 @@ import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
+import { TechDetails } from '../ui/TechDetails'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -76,7 +77,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
     reset: resetForm,
     control,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
@@ -169,23 +170,44 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     }
   }
 
+  const footerEl = (
+    <div className="flex justify-end gap-3">
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={loading}
+        className="px-4 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        form="add-outflow-form"
+        disabled={loading}
+        className="px-5 min-h-[44px] text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center gap-2"
+      >
+        {loading && <Spinner />}
+        {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Save Outflow'}
+      </button>
+    </div>
+  )
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Outflow Transaction' : 'Add Outflow Transaction'}
+      isDirty={isDirty}
+      footer={footerEl}
     >
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form id="add-outflow-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
 
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
             {/schema cache/i.test(error) ? (
-              <div className="space-y-2">
-                <p className="font-semibold">Schema cache out of sync — run this in Supabase SQL editor, then retry:</p>
-                <code className="block font-mono text-xs bg-white border border-red-200 rounded p-2 whitespace-pre-wrap break-all select-all">
-                  {`NOTIFY pgrst, 'reload schema';`}
-                </code>
-                <p className="text-xs">If the column is also missing, run the full migration in <strong>Setup → Database tab</strong>.</p>
+              <div className="space-y-1">
+                <p>We couldn't save this right now. Please try again in a moment.</p>
+                <TechDetails>{`NOTIFY pgrst, 'reload schema';\n-- If the column is missing, run the full migration in Setup → Database tab.`}</TechDetails>
               </div>
             ) : error}
           </div>
@@ -339,22 +361,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           />
         </Field>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button" onClick={onClose} disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit" disabled={loading}
-            className="px-5 py-2 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center gap-2"
-          >
-            {loading && <Spinner />}
-            {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Save Outflow'}
-          </button>
-        </div>
       </form>
     </Modal>
   )
@@ -363,7 +369,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 // ── Helpers ──────────────────────────────────────────────────────────────────────────────
 
 function inputCls(hasError: boolean) {
-  return `w-full px-3 py-2 text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
+  return `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
     hasError ? 'border-red-400 focus:border-red-400' : 'border-gray-300 focus:border-primary'
   }`
 }

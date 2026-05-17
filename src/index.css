@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Global layout tokens ─────────────────────────────────────────────────── */
+:root {
+  /* Height of the mobile bottom tab bar — keep in sync with h-16 in BottomTabBar.tsx */
+  --tab-bar-height: 64px;
+}
+
+/* Toast container sits above the mobile tab bar */
+@media (max-width: 767px) {
+  .toast-safe-bottom {
+    bottom: calc(var(--tab-bar-height) + 1rem);
+  }
+}
+
 /* ── Dark mode overrides ──────────────────────────────────────────────────── */
 html.dark {
   color-scheme: dark;
