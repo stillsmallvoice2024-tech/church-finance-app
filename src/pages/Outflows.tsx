@@ -287,7 +287,11 @@ export default function Outflows() {
                     <DescriptionCell id={`card-${row.id}`} text={row.description} expanded={descExpanded.has(`card-${row.id}`)} onToggle={() => toggleDesc(`card-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} />
                   </div>
                   {row.stage_code_1 && <p className="text-xs text-gray-400">{row.stage_code_1}</p>}
-                  {row.remarks && <p className="text-xs text-gray-400 italic truncate">{row.remarks}</p>}
+                  {row.remarks && (
+                    <div className="text-xs text-gray-400 italic">
+                      <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} expanded={descExpanded.has(`card-rem-${row.id}`)} onToggle={() => toggleDesc(`card-rem-${row.id}`)} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                    </div>
+                  )}
                   {net !== Number(row.amount_disbursed) && (
                     <p className="text-xs text-gray-500">Net: {formatCurrency(net)}</p>
                   )}
