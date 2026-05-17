@@ -338,12 +338,14 @@ Checkbox, Date, Recorded, **Bank**, Txn ID, Description, Disbursed (₦), Refund
 
 ---
 
-## AddOutflowModal — Removed Fields
+## Outflow — Removed Fields (all entry points)
 
-The **Optional Banking Details** section has been fully removed from `AddOutflowModal.tsx`:
-- `amount_refunded` and `transfer_charge` removed from Zod schema, `resetForm` defaults, and both update/add submit payloads — nothing is sent to the backend for these fields
+The **Optional Banking Details** section (`amount_refunded`, `transfer_charge`) has been fully removed from all outflow entry points:
+- `AddOutflowModal.tsx` — removed from Zod schema, `resetForm` defaults, and both update/add submit payloads
+- `Import.tsx` manual outflow entry — removed from UI block and submit payload
+- Nothing is sent to the backend for these fields from any entry point
 - `fx_currency` is absent from the UI but kept in `AddOutflowInput` (optional) for backward compat with existing records
-- The **FX Details** collapsible (fx_amount, fx_rate) remains
+- The **FX Details** collapsible (fx_amount, fx_rate) remains in both entry points
 
 ---
 
