@@ -1,30 +1,13 @@
+import { useState, useCallback } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  TrendingUp,
-  TrendingDown,
-  Layers,
-  Globe,
-  ArrowLeftRight,
-  ArrowRightLeft,
-  BarChart3,
-  Settings,
-  Users,
-  X,
-  Upload,
-  Clock,
-  SlidersHorizontal,
-  Percent,
-  Gift,
-  Archive,
-  LayoutList,
-  BookOpen,
-  Landmark,
-  RotateCcw,
-  Undo2,
-  Paperclip,
-  ClipboardList,
-  FileText,
+  LayoutDashboard, TrendingUp, TrendingDown, FileUp, Receipt,
+  BookOpen, Landmark, ArrowRightLeft, Repeat2, Globe,
+  Hourglass, RotateCcw, Undo2,
+  Layers, LayoutList, Percent, HandCoins, PiggyBank,
+  BarChart3, FileText,
+  SlidersHorizontal, Settings, Users, ClipboardList,
+  ChevronDown, X,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -33,45 +16,106 @@ interface NavItem {
   label: string
   path: string
   icon: React.ElementType
+  adminOnly?: boolean
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',             path: '/',                      icon: LayoutDashboard  },
-  { label: 'Inflows',               path: '/inflows',               icon: TrendingUp       },
-  { label: 'Outflows',              path: '/outflows',              icon: TrendingDown     },
-  { label: 'Categories',            path: '/categories',            icon: Layers           },
-  { label: 'Foreign Currency',      path: '/foreign-currency',      icon: Globe            },
-  { label: 'Intra-Account Flows',   path: '/intra-flow',            icon: ArrowLeftRight   },
-  { label: 'Import',                path: '/import',                icon: Upload           },
-  { label: 'Pending Deductions',    path: '/pending-deductions',    icon: Clock            },
-  { label: 'Setup',                 path: '/setup',                 icon: SlidersHorizontal},
-  { label: 'Reports',               path: '/reports',               icon: BarChart3        },
-  { label: 'Financial Report',      path: '/financial-report',      icon: FileText         },
-  { label: 'Settings',              path: '/settings',              icon: Settings         },
+interface NavGroupDef {
+  id: string
+  label: string
+  items: NavItem[]
+  defaultOpen: boolean
+}
+
+const NAV_GROUPS: NavGroupDef[] = [
+  {
+    id: 'daily',
+    label: 'Daily Finance',
+    defaultOpen: true,
+    items: [
+      { label: 'Dashboard', path: '/',        icon: LayoutDashboard },
+      { label: 'Inflows',   path: '/inflows',  icon: TrendingUp      },
+      { label: 'Outflows',  path: '/outflows', icon: TrendingDown    },
+      { label: 'Import',    path: '/import',   icon: FileUp          },
+      { label: 'Receipts',  path: '/receipts', icon: Receipt         },
+    ],
+  },
+  {
+    id: 'banking',
+    label: 'Banking',
+    defaultOpen: true,
+    items: [
+      { label: 'Bank Ledger',         path: '/bank-ledger',         icon: BookOpen       },
+      { label: 'Bank Deposits',       path: '/bank-deposits',       icon: Landmark       },
+      { label: 'Intrabank Transfers', path: '/intrabank-transfers', icon: ArrowRightLeft },
+      { label: 'Intra-Account Flows', path: '/intra-flow',          icon: Repeat2        },
+      { label: 'Foreign Currency',    path: '/foreign-currency',    icon: Globe          },
+    ],
+  },
+  {
+    id: 'review',
+    label: 'Review & Processing',
+    defaultOpen: true,
+    items: [
+      { label: 'Pending Deductions', path: '/pending-deductions', icon: Hourglass },
+      { label: 'Refunds',            path: '/refunds',            icon: RotateCcw },
+      { label: 'Reversals',          path: '/reversals',          icon: Undo2     },
+    ],
+  },
+  {
+    id: 'budget',
+    label: 'Budget & Allocation',
+    defaultOpen: true,
+    items: [
+      { label: 'Categories',             path: '/categories',             icon: Layers     },
+      { label: 'Category Ledger',        path: '/category-ledger',        icon: LayoutList },
+      { label: 'Percentage Allocations', path: '/percentage-allocations', icon: Percent    },
+      { label: 'Specific Givings',       path: '/specific-givings',       icon: HandCoins  },
+      { label: 'Savings Portions',       path: '/savings-portions',       icon: PiggyBank  },
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    defaultOpen: false,
+    items: [
+      { label: 'Reports',          path: '/reports',          icon: BarChart3 },
+      { label: 'Financial Report', path: '/financial-report', icon: FileText  },
+    ],
+  },
+  {
+    id: 'admin',
+    label: 'Administration',
+    defaultOpen: false,
+    items: [
+      { label: 'Setup',           path: '/setup',       icon: SlidersHorizontal },
+      { label: 'Settings',        path: '/settings',    icon: Settings          },
+      { label: 'User Management', path: '/users',       icon: Users,         adminOnly: true },
+      { label: 'Change Log',      path: '/change-log',  icon: ClipboardList, adminOnly: true },
+    ],
+  },
 ]
 
-const FINANCE_NAV_ITEMS: NavItem[] = [
-  { label: 'Bank Ledger',         path: '/bank-ledger',          icon: BookOpen       },
-  { label: 'Bank Deposits',       path: '/bank-deposits',        icon: Landmark       },
-  { label: 'Intrabank Transfers', path: '/intrabank-transfers',  icon: ArrowRightLeft },
-  { label: 'Refunds',             path: '/refunds',              icon: RotateCcw      },
-  { label: 'Reversals',           path: '/reversals',            icon: Undo2          },
-  { label: 'Receipts',            path: '/receipts',             icon: Paperclip      },
-]
+function useGroupOpenState() {
+  const [state, setState] = useState<Record<string, boolean>>(() => {
+    const result: Record<string, boolean> = {}
+    NAV_GROUPS.forEach(g => {
+      const stored = localStorage.getItem(`nav-group-${g.id}`)
+      result[g.id] = stored !== null ? stored === 'true' : g.defaultOpen
+    })
+    return result
+  })
 
-const BUDGET_NAV_ITEMS: NavItem[] = [
-  { label: 'Category Ledger',        path: '/category-ledger',        icon: LayoutList },
-  { label: 'Percentage Allocations', path: '/percentage-allocations', icon: Percent    },
-  { label: 'Specific Givings',       path: '/specific-givings',       icon: Gift       },
-  { label: 'Savings Portions',       path: '/savings-portions',       icon: Archive    },
-]
+  const toggle = useCallback((id: string) => {
+    setState(prev => {
+      const next = { ...prev, [id]: !prev[id] }
+      localStorage.setItem(`nav-group-${id}`, String(next[id]))
+      return next
+    })
+  }, [])
 
-const ADMIN_NAV_ITEMS: NavItem[] = [
-  { label: 'User Management', path: '/users',      icon: Users         },
-  { label: 'Change Log',      path: '/change-log', icon: ClipboardList },
-]
+  return { openState: state, toggle }
+}
 
-// Church cross SVG
 function ChurchCross() {
   return (
     <svg viewBox="0 0 32 32" className="w-7 h-7" fill="currentColor" aria-hidden="true">
@@ -90,6 +134,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const { isAdmin } = useRole()
   const showAdmin = isAdmin()
   const activeYear = useAccountingYearStore(s => s.year)
+  const { openState, toggle } = useGroupOpenState()
 
   return (
     <>
@@ -112,7 +157,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           lg:translate-x-0
         `}
       >
-        {/* Logo / church header */}
+        {/* Logo */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0">
@@ -127,7 +172,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               </p>
             </div>
           </div>
-          {/* Mobile close button */}
           <button
             onClick={onClose}
             className="lg:hidden p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
@@ -138,103 +182,58 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
-          <p className="px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-            Main Menu
-          </p>
-          {NAV_ITEMS.map(({ label, path, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === '/'}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-white/15 text-white border-l-2 border-accent pl-[10px]'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }`
-              }
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="truncate">{label}</span>
-            </NavLink>
-          ))}
+        <nav className="flex-1 overflow-y-auto py-3 px-3" aria-label="Main navigation">
+          {NAV_GROUPS.map(group => {
+            const visibleItems = showAdmin
+              ? group.items
+              : group.items.filter(item => !item.adminOnly)
 
-          {/* Finance section */}
-          <div className="pt-4 pb-1">
-            <p className="px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-              Finance
-            </p>
-          </div>
-          {FINANCE_NAV_ITEMS.map(({ label, path, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-white/15 text-white border-l-2 border-accent pl-[10px]'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }`
-              }
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="truncate">{label}</span>
-            </NavLink>
-          ))}
+            if (visibleItems.length === 0) return null
 
-          {/* Budget section */}
-          <div className="pt-4 pb-1">
-            <p className="px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-              Budget Portions
-            </p>
-          </div>
-          {BUDGET_NAV_ITEMS.map(({ label, path, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-white/15 text-white border-l-2 border-accent pl-[10px]'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }`
-              }
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="truncate">{label}</span>
-            </NavLink>
-          ))}
+            const isOpen = openState[group.id] ?? group.defaultOpen
 
-          {showAdmin && (
-            <>
-              <div className="pt-4 pb-1">
-                <p className="px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                  Administration
-                </p>
-              </div>
-              {ADMIN_NAV_ITEMS.map(({ label, path, icon: Icon }) => (
-                <NavLink
-                  key={path}
-                  to={path}
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-white/15 text-white border-l-2 border-accent pl-[10px]'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
-                    }`
-                  }
+            return (
+              <div key={group.id} className="mb-1">
+                <button
+                  onClick={() => toggle(group.id)}
+                  aria-expanded={isOpen}
+                  className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white/60 transition-colors rounded-lg group"
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{label}</span>
-                </NavLink>
-              ))}
-            </>
-          )}
+                  <span>{group.label}</span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                <div
+                  className={`overflow-hidden transition-all duration-200 ease-in-out ${
+                    isOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+                  }`}
+                >
+                  <div className="space-y-0.5 pb-1">
+                    {visibleItems.map(({ label, path, icon: Icon }) => (
+                      <NavLink
+                        key={path}
+                        to={path}
+                        end={path === '/'}
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 pl-[10px] pr-3 py-2.5 rounded-lg text-sm font-medium transition-colors border-l-2 ${
+                            isActive
+                              ? 'bg-white/15 text-white border-accent'
+                              : 'text-white/70 hover:bg-white/10 hover:text-white border-transparent'
+                          }`
+                        }
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </nav>
 
         {/* Footer */}
