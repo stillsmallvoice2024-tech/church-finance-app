@@ -51,9 +51,16 @@ Pages using DescriptionCell: Inflows, Outflows, BankLedger, IntraFlow, BankDepos
 Tables must be inside an `overflow-x-auto` container. Two patterns:
 
 1. **Standard** (most pages): `<div className="overflow-x-auto"><table ...>`
-2. **Rounded-card** (CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions): `<div className="... rounded-xl overflow-x-auto">`
+2. **Rounded-card** (CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions, Setup tabs): `<div className="... rounded-xl overflow-x-auto">`
 
 **Never use `overflow-hidden` alone** on a table container — clips without allowing scroll, breaking mobile.
+
+## Horizontal Overflow Containment
+
+- **`<main>` in `Layout.tsx`** carries `overflow-x-hidden` — systemic backstop that prevents any child overflow from causing page-level horizontal scroll. Do not remove it.
+- **Tab nav bars** (e.g. Setup): the border-b wrapper must include `overflow-x-auto` when tabs are `whitespace-nowrap` and may exceed viewport on mobile. Pattern: `<div className="border-b border-gray-200 overflow-x-auto"><nav className="-mb-px flex gap-x">`.
+- **Segmented controls / pill tab bars** using `w-fit overflow-x-auto`: always pair with `max-w-full` so the viewport constraint is respected and scroll can engage. Pattern: `className="flex ... w-fit max-w-full overflow-x-auto"`.
+- **`-mx-N px-N` negative-margin tab rows**: safe only when `<main>`'s `overflow-x-hidden` backstop is in place — do not pair with a parent that has `overflow: visible`.
 
 ---
 
