@@ -272,6 +272,35 @@ export default function Settings() {
         </div>
       </Section>
 
+      {/* ── Theme ───────────────────────────────────────────────────────── */}
+      <Section icon={Palette} title="Theme">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">Choose your preferred colour scheme. Your preference is saved automatically.</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setTheme('light')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border-2 transition-colors ${
+                theme === 'light'
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Sun className="w-4 h-4" /> Light
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border-2 transition-colors ${
+                theme === 'dark'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Moon className="w-4 h-4" /> Dark
+            </button>
+          </div>
+        </div>
+      </Section>
+
       {/* ── App Info ────────────────────────────────────────────────────── */}
       <Section icon={Info} title="App Information">
         <div className="space-y-3 text-sm">
@@ -305,35 +334,6 @@ export default function Settings() {
             </div>
           </div>
           <InfoRow label="Environment" value={import.meta.env.MODE === 'production' ? 'Production' : 'Development'} />
-        </div>
-      </Section>
-
-      {/* ── Theme ───────────────────────────────────────────────────────── */}
-      <Section icon={Palette} title="Theme">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500">Choose your preferred colour scheme. Your preference is saved automatically.</p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setTheme('light')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border-2 transition-colors ${
-                theme === 'light'
-                  ? 'border-primary bg-primary/5 text-primary'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <Sun className="w-4 h-4" /> Light
-            </button>
-            <button
-              onClick={() => setTheme('dark')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border-2 transition-colors ${
-                theme === 'dark'
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <Moon className="w-4 h-4" /> Dark
-            </button>
-          </div>
         </div>
       </Section>
     </div>
