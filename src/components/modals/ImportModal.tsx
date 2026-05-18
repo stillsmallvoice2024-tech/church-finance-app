@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
-  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2, Sparkles, ChevronDown,
+  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2, Sparkles,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
@@ -311,15 +311,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // Per-row income type overrides (rowIndex → incomeTypeId)
   const [rowIncomeTypes, setRowIncomeTypes] = useState<Record<number, string>>({})
-  const [expandedRows,   setExpandedRows]   = useState<Set<number>>(new Set())
   const [tooltipState,   setTooltipState]   = useState<{ text: string; x: number; y: number } | null>(null)
 
   // Row selection (by sheet row index) — stable across filter/sort changes
   const [selectedInflowRis,  setSelectedInflowRis]  = useState<Set<number>>(new Set())
   const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
-
-  const toggleExpand = (ri: number) =>
-    setExpandedRows(prev => { const s = new Set(prev); s.has(ri) ? s.delete(ri) : s.add(ri); return s })
 
   // In-wizard dup check
   const [wizardDupLoading, setWizardDupLoading] = useState(false)
@@ -1393,8 +1389,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <span className="text-gray-400 font-mono">{ri + 1}</span>
                                     <div className="min-w-0">
                                       <div
-                                        className="flex items-center gap-1 cursor-pointer select-none group"
-                                        onClick={() => toggleExpand(ri)}
+                                        className="flex items-center"
                                         onMouseEnter={e => {
                                           if (!desc) return
                                           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -1404,13 +1399,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         onMouseLeave={() => setTooltipState(null)}
                                       >
                                         <span className="text-gray-700 truncate">{desc || '—'}</span>
-                                        {desc && <ChevronDown className={`w-3 h-3 shrink-0 text-gray-300 group-hover:text-gray-500 transition-transform duration-150 ${expandedRows.has(ri) ? 'rotate-180' : ''}`} />}
                                       </div>
-                                      {expandedRows.has(ri) && (
-                                        <div className="mt-1 text-gray-600 break-words leading-snug bg-gray-50 rounded px-2 py-1 border border-gray-100 text-[11px]">
-                                          {desc}
-                                        </div>
-                                      )}
                                       <div className="text-gray-400">{date}</div>
                                     </div>
                                     <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
