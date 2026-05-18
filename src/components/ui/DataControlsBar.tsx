@@ -31,16 +31,25 @@ export function DataControlsBar({
         setSortOpen(false)
       }
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSortOpen(false)
+    }
     document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onOutside)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [sortOpen])
 
   const activeField = sortFields.find(f => f.key === sortKey)
 
   return (
-    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-      {/* Search */}
-      <div className="relative flex-1 min-w-0 w-full sm:w-auto">
+    // flex-col on mobile (search top, controls bottom-right), flex-row on desktop
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+
+      {/* Search — full width on mobile, stretches on desktop */}
+      <div className="relative flex-1 min-w-0">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
         <input
           type="text"
@@ -61,16 +70,18 @@ export function DataControlsBar({
         )}
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Controls cluster — right-aligned when stacked on mobile */}
+      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+
         {/* Sort dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setSortOpen(o => !o)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
               sortOpen
                 ? 'border-primary/40 bg-primary/5 text-primary'
-                : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300 hover:bg-gray-50'
+                : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
             <ArrowUpDown className="w-3.5 h-3.5 shrink-0" />
@@ -81,8 +92,10 @@ export function DataControlsBar({
           </button>
 
           {sortOpen && (
-            <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
-              <div className="px-3 pt-3 pb-1">
+            <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+
+              {/* Field selection */}
+              <div className="px-3 pt-2.5 pb-1">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Sort By</p>
               </div>
               <div className="pb-1">
@@ -92,10 +105,8 @@ export function DataControlsBar({
                     <button
                       key={f.key}
                       type="button"
-                      onClick={() => {
-                        if (!isSelected) onSort(f.key, defaultDirForType(f.type))
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
+                      onClick={() => { if (!isSelected) onSort(f.key, defaultDirForType(f.type)) }}
+                      className={`w-full flex items-center justify-between px-3 py-1.5 text-sm transition-colors ${
                         isSelected
                           ? 'bg-primary/5 text-primary font-medium cursor-default'
                           : 'text-gray-700 hover:bg-gray-50'
@@ -103,28 +114,32 @@ export function DataControlsBar({
                     >
                       <span>{f.label}</span>
                       {isSelected && (
-                        <span className="text-xs text-primary/60">{directionLabel(f.type, sortDir)}</span>
+                        <span className="text-xs text-primary/60 ml-3 shrink-0">{directionLabel(f.type, sortDir)}</span>
                       )}
                     </button>
                   )
                 })}
               </div>
 
+              {/* Direction — vertical radio rows, no overflow risk */}
               {activeField && (
-                <div className="border-t border-gray-100 px-3 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Direction</p>
-                  <div className="flex gap-1.5">
+                <div className="border-t border-gray-100 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Direction</p>
+                  <div className="flex flex-col gap-0.5">
                     {(['desc', 'asc'] as SortDirection[]).map(d => (
                       <button
                         key={d}
                         type="button"
                         onClick={() => { onSort(sortKey, d); setSortOpen(false) }}
-                        className={`flex-1 text-xs py-1.5 px-2 rounded-lg border transition-colors ${
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left ${
                           sortDir === d
-                            ? 'bg-primary text-white border-primary font-medium'
-                            : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                            ? 'bg-primary/5 text-primary font-medium'
+                            : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                          sortDir === d ? 'bg-primary' : 'bg-gray-300'
+                        }`} />
                         {directionLabel(activeField.type, d)}
                       </button>
                     ))}
@@ -135,12 +150,17 @@ export function DataControlsBar({
           )}
         </div>
 
+        {/* Subtle divider between sort and view toggle */}
+        {view !== undefined && onViewChange && (
+          <div className="h-4 w-px bg-gray-200 mx-0.5" aria-hidden="true" />
+        )}
+
         {/* View toggle */}
         {view !== undefined && onViewChange && (
           <div
             role="group"
             aria-label="View mode"
-            className="inline-flex items-center rounded-lg border border-gray-200 overflow-hidden text-sm font-medium"
+            className="inline-flex items-center rounded-lg border border-gray-200 overflow-hidden"
           >
             {(['table', 'cards'] as DataViewMode[]).map(mode => (
               <button
@@ -148,10 +168,10 @@ export function DataControlsBar({
                 type="button"
                 aria-pressed={view === mode}
                 onClick={() => onViewChange(mode)}
-                className={`px-3 py-1.5 text-sm transition-colors ${
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   view === mode
                     ? 'bg-primary text-white'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                    : 'bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                 }`}
               >
                 {mode === 'table' ? 'Table' : 'Cards'}

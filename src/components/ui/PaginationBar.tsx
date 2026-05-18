@@ -17,10 +17,30 @@ export function PaginationBar({
 }: PaginationBarProps) {
   const totalPages = Math.ceil(total / pageSize)
 
-  // Compact variant: hide entirely when there's nothing to page through
-  // Full variant: always render when a page-size selector is provided so the
-  // user can switch back after selecting a size that fits all rows on one page
-  if (totalPages <= 1 && (variant === 'compact' || !onPageSizeChange)) return null
+  // Compact: hide entirely when nothing to page through
+  if (variant === 'compact' && totalPages <= 1) return null
+
+  // Full + single page: show only the per-page selector so the user can always
+  // switch to a smaller size after choosing one large enough to fit all rows
+  if (variant === 'full' && totalPages <= 1) {
+    if (!onPageSizeChange) return null
+    return (
+      <div className="flex items-center justify-end py-2 px-1">
+        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <span>Per page:</span>
+          <select
+            value={pageSize}
+            onChange={e => onPageSizeChange(parseInt(e.target.value, 10))}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            {pageSizeOptions.map(o => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+    )
+  }
 
   const from = total === 0 ? 0 : page * pageSize + 1
   const to = Math.min((page + 1) * pageSize, total)
@@ -55,7 +75,7 @@ export function PaginationBar({
     )
   }
 
-  // Full variant — page numbers + optional page-size selector
+  // Full variant — page numbers + per-page selector
   const pages: (number | '…')[] = []
   for (let i = 0; i < totalPages; i++) {
     if (i === 0 || i === totalPages - 1 || Math.abs(i - page) <= 1) {
