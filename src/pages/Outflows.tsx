@@ -429,7 +429,9 @@ export default function Outflows() {
                           {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.transaction_id ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[180px]">
+                          <DescriptionCell id={`ref-${row.id}`} text={row.transaction_id ?? null} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[220px]">
                           <div className="flex items-start gap-1.5 min-w-0">
                             {row.is_pending_deduction && (
