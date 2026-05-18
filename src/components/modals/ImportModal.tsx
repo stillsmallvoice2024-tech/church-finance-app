@@ -210,9 +210,11 @@ interface Props {
 }
 
 interface ImportResult {
-  imported: number
-  skipped:  number
-  errors:   string[]
+  imported:        number
+  skipped:         number
+  errors:          string[]
+  fallbackIdCount: number
+  collisions:      string[]
 }
 
 export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: Props) {
@@ -538,6 +540,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       ? new Set(wizardDupsFound.filter(d => !d.id.startsWith('__schema_error')).map(d => d.id))
       : new Set<string>()
     const allSkipIds = new Set([...(skipTxnIds ?? []), ...wizardSkipIds])
+    let fallbackIdCount = 0
+    const collisions: string[] = []
 
     // ── Bank statement split mode ─────────────────────────────────────────────
     if (targetTable === 'bank_statement') {
@@ -620,6 +624,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             const count = inflowIdCounts.get(baseId) ?? 0
             inflowIdCounts.set(baseId, count + 1)
             row.transaction_ref = count === 0 ? baseId : `${baseId}-${count}`
+            fallbackIdCount++
+            if (count > 0) collisions.push(
+              `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
+            )
           }
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
@@ -638,6 +646,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             const count = outflowIdCounts.get(baseId) ?? 0
             outflowIdCounts.set(baseId, count + 1)
             row.transaction_id = count === 0 ? baseId : `${baseId}-${count}`
+            fallbackIdCount++
+            if (count > 0) collisions.push(
+              `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_id as string).slice(-10)}`
+            )
           }
           const sc = rowStageCodes[ri]
           if (sc) {
@@ -750,7 +762,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         useTransactionSyncStore.getState().bumpOutflow()
       }
 
-      setResult({ imported, skipped, errors })
+      setResult({ imported, skipped, errors, fallbackIdCount, collisions })
       setImporting(false)
     }
 
@@ -801,7 +813,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         setProgress(Math.round(((i + batch.length) / fxRows.length) * 100))
       }
 
-      setResult({ imported, skipped, errors })
+      setResult({ imported, skipped, errors, fallbackIdCount, collisions })
       setImporting(false)
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
@@ -1779,10 +1791,23 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <div className="text-sm space-y-1">
                   <div className="text-success">✓ {result.imported.toLocaleString()} rows imported</div>
                   {result.skipped > 0 && <div className="text-amber-600">⚠ {result.skipped} rows skipped</div>}
+                  {result.fallbackIdCount > 0 && (
+                    <div className="text-blue-600 dark:text-blue-400">ℹ {result.fallbackIdCount} fallback ID(s) auto-generated</div>
+                  )}
                 </div>
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
                     {result.errors.map((e, i) => <div key={i} className="whitespace-pre-wrap">{e}</div>)}
+                  </div>
+                )}
+                {result.collisions.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">
+                      ⚠ {result.collisions.length} collision-flagged — manual review needed:
+                    </div>
+                    <div className="max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 dark:bg-amber-900/30 rounded-lg p-3 space-y-0.5 font-mono">
+                      {result.collisions.map((c, i) => <div key={i}>{c}</div>)}
+                    </div>
                   </div>
                 )}
               </div>
