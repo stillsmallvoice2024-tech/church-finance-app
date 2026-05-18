@@ -88,6 +88,18 @@ function parseNumber(raw: unknown): number {
   return isNaN(n) ? 0 : n
 }
 
+// Debit-specific parser: always returns unsigned magnitude.
+// Handles banks that store debits as negative numbers (-1000) or accounting
+// notation (1,000.00) — both of which would silently fail a plain `> 0` check.
+function parseDebitAmount(raw: unknown): number {
+  if (raw == null || raw === '') return 0
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : Math.abs(raw)
+  let s = String(raw).replace(/,/g, '').replace(/\s/g, '').trim()
+  if (s.startsWith('(') && s.endsWith(')')) s = s.slice(1, -1)   // (1000.00) → 1000.00
+  const n = parseFloat(s)
+  return isNaN(n) ? 0 : Math.abs(n)
+}
+
 // ── Auto-mapping ───────────────────────────────────────────────────────────────
 
 const ALIAS_MAP: Record<string, string[]> = {
@@ -446,7 +458,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     const initial: Record<number, { s1: string; s2: string }> = {}
     for (let ri = 0; ri < sheet.rows.length; ri++) {
       const raw   = sheet.rows[ri] as unknown[]
-      const debit = debitIdx >= 0 ? parseNumber(raw[debitIdx]) : 0
+      const debit = debitIdx >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
       if (debit <= 0) continue
       const s1 = s1ColIdx >= 0 && raw[s1ColIdx] != null && raw[s1ColIdx] !== ''
         ? String(raw[s1ColIdx]).trim() : ''
@@ -563,7 +575,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       for (let ri = 1; ri < mergedRows.length; ri++) {
         const row = mergedRows[ri]
         if (parseDate(row[dateIdx], dateFormat) !== null) continue
-        if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseNumber(row[debitIdx]) > 0)) continue
+        if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseDebitAmount(row[debitIdx]) > 0)) continue
         const hasDesc = descIdx >= 0 && row[descIdx] != null && String(row[descIdx]).trim() !== ''
         const hasRef  = refIdx  >= 0 && row[refIdx]  != null && String(row[refIdx]).trim()  !== ''
         if (!hasDesc && !hasRef) continue
@@ -580,8 +592,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const date = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
         if (!date) { skipped++; continue }
 
-        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
-        const debit  = debitIdx  >= 0 ? parseNumber(raw[debitIdx])  : 0
+        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx])      : 0
+        const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
         const desc   = descIdx >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
                          ? String(raw[descIdx]).trim() : null
         const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
@@ -1188,8 +1200,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 return {
                   ri,
                   raw: r,
-                  credit: creditIdx >= 0 ? parseNumber(r[creditIdx]) : 0,
-                  debit:  debitIdx  >= 0 ? parseNumber(r[debitIdx])  : 0,
+                  credit: creditIdx >= 0 ? parseNumber(r[creditIdx])      : 0,
+                  debit:  debitIdx  >= 0 ? parseDebitAmount(r[debitIdx]) : 0,
                 }
               })
               const creditRows = allRows.filter(r => r.credit > 0)
