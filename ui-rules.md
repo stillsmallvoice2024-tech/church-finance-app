@@ -267,6 +267,11 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 | Receipt attachment (smart above/below) | `src/components/ui/ReceiptBadge.tsx` |
 | All add/edit form modals | `src/components/modals/` |
 | Right-aligned monetary `<td>` | `src/components/ui/AmountCell.tsx` |
+| Search + sort + view toggle toolbar | `src/components/ui/DataControlsBar.tsx` |
+| Sortable table column header | `src/components/ui/SortableHeader.tsx` |
+| Paginator (compact + full variants) | `src/components/ui/PaginationBar.tsx` |
+| Unified data view state hook | `src/hooks/useDataViewState.ts` |
+| Generic sort utility | `src/utils/sortUtils.ts` |
 
 ---
 
@@ -348,22 +353,99 @@ import { CollapsibleSection } from '../ui/CollapsibleSection'
 
 ### `ViewToggle` + `useViewToggle` (`src/components/ui/ViewToggle.tsx`)
 
-Wired on Inflows (`inflows-view`) and Outflows (`outflows-view`). Use the same pattern for any new list page.
-
-```tsx
-import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
-
-const { view, setView } = useViewToggle('my-page-view')
-
-<ViewToggle storageKey="my-page-view" value={view} onChange={setView} />
-```
+**Deprecated as standalone usage.** All pages now wire view toggle through `DataControlsBar` + `useDataViewState` (see Data Controls System section below). `ViewToggle.tsx` still exists but should not be used for new pages.
 
 - Renders labeled `[ Table ] [ Cards ]` segmented control (not icon-only) — **never use icon-only toggle buttons**
 - Desktop default = `table`, mobile default = `cards` (via `matchMedia('(min-width: 768px)')`)
-- User override persists in `localStorage` under `storageKey`
-- Container has `role="group" aria-label="View mode"`; each button has `aria-pressed`
 - **Do NOT apply to:** financial reports, allocation admin screens, dense config tables
-- **Placement:** always in a results toolbar row immediately above the cards/table section — NOT in the page header. Pattern: `<div className="flex items-center justify-between">` with result count left and `<ViewToggle>` right. Export/action buttons remain in the page header.
+- **Placement:** always in a results toolbar row immediately above the cards/table section — NOT in the page header
+
+---
+
+## Data Controls System
+
+All list pages use a unified data controls stack. CategoryLedger is the canonical pilot reference.
+
+### Components
+
+| Component | Path | Purpose |
+|---|---|---|
+| `DataControlsBar` | `src/components/ui/DataControlsBar.tsx` | Search input + sort dropdown + optional view toggle — single toolbar row |
+| `SortableHeader` | `src/components/ui/SortableHeader.tsx` | Clickable `<th>` with sort indicator; `inactiveCls` for semantic colour on inactive state |
+| `PaginationBar` | `src/components/ui/PaginationBar.tsx` | `variant="compact"` (top, no per-page selector) and `variant="full"` (bottom, with per-page selector) |
+| `useDataViewState` | `src/hooks/useDataViewState.ts` | Unified sort/view/search/page/pageSize state; all setters reset `page` to 0; persists to localStorage |
+| `sortRows<T>` | `src/utils/sortUtils.ts` | Generic client-side sort; signature: `sortRows(data, getValue, sortKey, sortDir, fields)` |
+
+### `useDataViewState` API
+
+```ts
+const state = useDataViewState({ storageKey: 'xx', defaultSortKey: 'date', defaultSortDir: 'desc' })
+// Returns: { view, setView, sortKey, sortDir, setSort, page, setPage, pageSize, setPageSize, search, setSearch }
+```
+
+localStorage keys: `${storageKey}:view`, `:sk`, `:sd`, `:ps`
+
+### Storage Key Registry (one key per page — do not reuse)
+
+| Page | Key |
+|---|---|
+| CategoryLedger | `cl` |
+| BankLedger | `bl` |
+| BankDeposits | `bd` |
+| ForeignCurrency | `fx` |
+| Receipts | `rcp` |
+| Categories | `cat` |
+| Inflows | `inf` |
+| Outflows | `out` |
+| SavingsPortions | `svp` |
+| PercentageAllocations | `pca` |
+| SpecificGivings | `sg` |
+
+### `SortField` constants
+
+Each page defines a top-level `PAGE_SORT_FIELDS: SortField[]` constant. Type mapping rules:
+- Date columns → `type: 'date'` — sorts as string (ISO `YYYY-MM-DD`); default dir `desc`
+- Monetary/numeric columns → `type: 'numeric'` — sorts as `Number`; default dir `desc`
+- Name/label columns → `type: 'text'` — `localeCompare`; default dir `asc`
+
+### `SortableHeader` — `inactiveCls` prop
+
+Use `inactiveCls` to apply semantic colour to the sort button when the column is not active. Do NOT put semantic colours on the `className` prop (they apply to `<th>`, not the button inside):
+
+```tsx
+// Correct — colour applies to button element:
+<SortableHeader field={...} activeSortKey={state.sortKey} activeSortDir={state.sortDir} onSort={state.setSort}
+  className="px-4 py-3" inactiveCls="text-success/80 hover:text-success" />
+
+// Wrong — colour is on <th>, overridden by button's own styles:
+<SortableHeader ... className="px-4 py-3 text-success" />
+```
+
+### Placement & layout rules
+
+- `DataControlsBar` always sits **inside** the data card/section, visually attached to the dataset — NOT in the page header
+- Wrap in `<div className="px-4 py-2 border-b border-gray-100">` (or `px-5 py-3`) to attach it to the table header area
+- Compact `PaginationBar` goes between `DataControlsBar` and the table/card list
+- Full `PaginationBar` goes after the table/card list, inside the same card wrapper
+- No view toggle on: Receipts (grid only), ForeignCurrency (table only), SpecificGivings (summary cards only), SavingsPortions (per-category table only), PercentageAllocations (allocation table only)
+
+### Server-side pagination (Inflows / Outflows)
+
+These pages keep their existing debounced server-side pagination for search + `count`. Only sort state comes from `useDataViewState`; page/pageSize/search fields from the hook are unused. Client-side `sortRows` runs on the current page slice only:
+
+```ts
+const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc' })
+// search → debounced → API; page/count → existing server state
+// sort → infState.sortKey/sortDir → sortRows(data, getValue, ...) on current page
+```
+
+### Data pipeline pattern (client-side paginated pages)
+
+```
+rawData → dateFiltered → searchFiltered → sortedRows → pagedRows
+```
+- Summary strip totals: computed from `dateFiltered` (not `pagedRows`) — preserves semantics of "totals for date range"
+- Page resets: `useEffect` resets `state.setPage(0)` when dateFrom/dateTo/bankFilter/entityFilter changes
 
 ---
 
