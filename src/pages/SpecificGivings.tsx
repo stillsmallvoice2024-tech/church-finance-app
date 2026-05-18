@@ -1,10 +1,13 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Gift, AlertCircle, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useCategories } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 
 interface SpecificRow {
   id:                       string
@@ -20,6 +23,11 @@ interface GroupedCategory {
   targets:     { target: string; total: number; count: number; latest: string }[]
   total:       number
 }
+
+const SG_SORT_FIELDS: SortField[] = [
+  { key: 'category', label: 'Category', type: 'text' },
+  { key: 'total', label: 'Total', type: 'numeric' },
+]
 
 function groupRows(rows: SpecificRow[]): GroupedCategory[] {
   const byCategory = new Map<string, Map<string, { total: number; count: number; latest: string }>>()
@@ -57,6 +65,8 @@ export default function SpecificGivings() {
   const [rows,    setRows]    = useState<SpecificRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
+
+  const sgState = useDataViewState({ storageKey: 'sg', defaultSortKey: 'total', defaultSortDir: 'desc' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -128,7 +138,22 @@ export default function SpecificGivings() {
 
   useEffect(() => { load() }, [load])
 
-  const grouped    = groupRows(rows)
+  const allGrouped = useMemo(() => groupRows(rows), [rows])
+
+  const filteredGrouped = useMemo(() => {
+    const q = sgState.search.trim().toLowerCase()
+    return q ? allGrouped.filter(g => g.category.toLowerCase().includes(q)) : allGrouped
+  }, [allGrouped, sgState.search])
+
+  const grouped = useMemo(() =>
+    sortRows(filteredGrouped, (g, k) => {
+      if (k === 'category') return g.category
+      if (k === 'total')    return g.total
+      return g.total
+    }, sgState.sortKey, sgState.sortDir, SG_SORT_FIELDS),
+    [filteredGrouped, sgState.sortKey, sgState.sortDir],
+  )
+
   const grandTotal = rows.reduce((s, r) => s + Number(r.amount), 0)
 
   return (
@@ -179,7 +204,17 @@ export default function SpecificGivings() {
       )}
 
       {!loading && grouped.length > 0 && (
-        <>
+        <div className="space-y-1.5">
+          <DataControlsBar
+            sortFields={SG_SORT_FIELDS}
+            sortKey={sgState.sortKey}
+            sortDir={sgState.sortDir}
+            onSort={sgState.setSort}
+            search={sgState.search}
+            onSearchChange={sgState.setSearch}
+            searchPlaceholder="Search categories…"
+          />
+
           {/* Grand total strip */}
           <div className="bg-primary/5 border border-primary/20 rounded-xl px-5 py-3 flex items-center justify-between">
             <span className="text-sm font-semibold text-primary">Total Specific Givings ({year})</span>
@@ -224,7 +259,7 @@ export default function SpecificGivings() {
               </table>
             </div>
           ))}
-        </>
+        </div>
       )}
     </div>
   )

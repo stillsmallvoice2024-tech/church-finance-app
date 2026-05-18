@@ -1,9 +1,13 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency } from '../utils/formatters'
 import { useCategories } from '../hooks/useCategories'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 
 interface SavingsRow {
   category:     string
@@ -11,6 +15,12 @@ interface SavingsRow {
   withdrawn:    number
   balance:      number
 }
+
+const SVP_SORT_FIELDS: SortField[] = [
+  { key: 'category', label: 'Category', type: 'text' },
+  { key: 'deposited', label: 'Total Saved', type: 'numeric' },
+  { key: 'balance', label: 'Net Balance', type: 'numeric' },
+]
 
 export default function SavingsPortions() {
   usePageTitle('Savings Portions')
@@ -20,6 +30,8 @@ export default function SavingsPortions() {
   const [rows,    setRows]    = useState<SavingsRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
+
+  const svpState = useDataViewState({ storageKey: 'svp', defaultSortKey: 'balance', defaultSortDir: 'desc' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -93,9 +105,27 @@ export default function SavingsPortions() {
 
   useEffect(() => { load() }, [load])
 
-  const totalDeposited  = rows.reduce((s, r) => s + r.deposited,  0)
-  const totalWithdrawn  = rows.reduce((s, r) => s + r.withdrawn,  0)
-  const totalBalance    = rows.reduce((s, r) => s + r.balance,    0)
+  // Filter by search
+  const visibleRows = useMemo(() => {
+    const q = svpState.search.trim().toLowerCase()
+    return q ? rows.filter(r => r.category.toLowerCase().includes(q)) : rows
+  }, [rows, svpState.search])
+
+  // Sort
+  const sortedRows = useMemo(() =>
+    sortRows(visibleRows, (r, k) => {
+      if (k === 'category') return r.category
+      if (k === 'deposited') return r.deposited
+      if (k === 'balance')   return r.balance
+      return r.balance
+    }, svpState.sortKey, svpState.sortDir, SVP_SORT_FIELDS),
+    [visibleRows, svpState.sortKey, svpState.sortDir],
+  )
+
+  // Totals reflect visible (filtered) data
+  const totalDeposited = visibleRows.reduce((s, r) => s + r.deposited, 0)
+  const totalWithdrawn = visibleRows.reduce((s, r) => s + r.withdrawn, 0)
+  const totalBalance   = visibleRows.reduce((s, r) => s + r.balance, 0)
 
   return (
     <div className="space-y-5">
@@ -174,18 +204,28 @@ export default function SavingsPortions() {
           </div>
 
           {/* Per-category table */}
-          <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+          <div className="space-y-1.5">
+            <DataControlsBar
+              sortFields={SVP_SORT_FIELDS}
+              sortKey={svpState.sortKey}
+              sortDir={svpState.sortDir}
+              onSort={svpState.setSort}
+              search={svpState.search}
+              onSearchChange={svpState.setSearch}
+              searchPlaceholder="Search categories…"
+            />
+            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                  <th className="px-5 py-3 text-left font-medium">Category</th>
-                  <th className="px-5 py-3 text-right font-medium">Total Saved</th>
+                  <SortableHeader field={SVP_SORT_FIELDS[0]} activeSortKey={svpState.sortKey} activeSortDir={svpState.sortDir} onSort={svpState.setSort} className="px-5 py-3" />
+                  <SortableHeader field={SVP_SORT_FIELDS[1]} activeSortKey={svpState.sortKey} activeSortDir={svpState.sortDir} onSort={svpState.setSort} rightAlign className="px-5 py-3" inactiveCls="text-success/80 hover:text-success" />
                   <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Withdrawn</th>
-                  <th className="px-5 py-3 text-right font-medium">Net Balance</th>
+                  <SortableHeader field={SVP_SORT_FIELDS[2]} activeSortKey={svpState.sortKey} activeSortDir={svpState.sortDir} onSort={svpState.setSort} rightAlign className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {rows.map(row => (
+                {sortedRows.map(row => (
                   <tr key={row.category} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
                     <td className="px-5 py-3 text-right text-success font-mono">
@@ -213,6 +253,7 @@ export default function SavingsPortions() {
                 </tr>
               </tfoot>
             </table>
+          </div>
           </div>
         </>
       )}

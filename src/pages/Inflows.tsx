@@ -1,14 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingUp, Download, Pencil, Trash2,
-  ChevronDown, ChevronRight, Search, AlertCircle, RefreshCw,
+  ChevronDown, ChevronRight, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Modal }                   from '../components/ui/Modal'
-import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
-import { ViewToggle, useViewToggle } from '../components/ui/ViewToggle'
+import { DataControlsBar }         from '../components/ui/DataControlsBar'
+import { SortableHeader }          from '../components/ui/SortableHeader'
+import { PaginationBar }           from '../components/ui/PaginationBar'
+import { useDataViewState }        from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -34,6 +37,11 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   bank_deposit:        'Bank Deposit',
   intrabank_transfer:  'Intrabank Transfer',
 }
+
+const INF_SORT_FIELDS: SortField[] = [
+  { key: 'date',   label: 'Date',   type: 'date'    },
+  { key: 'amount', label: 'Amount', type: 'numeric' },
+]
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -104,8 +112,17 @@ export default function Inflows() {
   const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount))) : 0, [data])
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
 
-  // UI state
-  const { view: displayMode, setView: setDisplayMode } = useViewToggle('inflows-view')
+  // Data controls state
+  const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc' })
+
+  // Client-side sort of current page
+  const sorted = useMemo(() =>
+    sortRows(data, (r, k) => {
+      if (k === 'amount') return Number(r.amount)
+      return r.date
+    }, infState.sortKey, infState.sortDir, INF_SORT_FIELDS),
+    [data, infState.sortKey, infState.sortDir],
+  )
 
   const [editRecord,        setEditRecord]        = useState<InflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
@@ -213,17 +230,7 @@ export default function Inflows() {
             <FilterGroup label="To">
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
             </FilterGroup>
-            <FilterGroup label="Search" className="flex-1 min-w-[180px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input
-                  type="text" placeholder="Search description…" value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  className={`${filterInputCls} pl-9`}
-                />
-              </div>
-            </FilterGroup>
-            {(dateFrom || dateTo || searchInput) && (
+            {(dateFrom || dateTo) && (
               <button
                 onClick={() => { setDateFrom(''); setDateTo(''); setSearchInput('') }}
                 className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -237,16 +244,30 @@ export default function Inflows() {
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
-        {/* Results toolbar */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            {loading ? ' ' : `${count.toLocaleString()} result${count !== 1 ? 's' : ''}`}
-          </p>
-          <ViewToggle storageKey="inflows-view" value={displayMode} onChange={setDisplayMode} />
-        </div>
+        {/* Data controls bar */}
+        <DataControlsBar
+          sortFields={INF_SORT_FIELDS}
+          sortKey={infState.sortKey}
+          sortDir={infState.sortDir}
+          onSort={infState.setSort}
+          view={infState.view}
+          onViewChange={infState.setView}
+          search={searchInput}
+          onSearchChange={v => { setSearchInput(v) }}
+          searchPlaceholder="Search descriptions…"
+        />
+
+        {/* Compact pagination above content */}
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={count}
+          onPageChange={setPage}
+          variant="compact"
+        />
 
         {/* Cards / Table */}
-        {displayMode === 'cards' ? (
+        {infState.view === 'cards' ? (
           <div className="space-y-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
@@ -262,7 +283,7 @@ export default function Inflows() {
               ))
             ) : data.length === 0 ? (
               <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
-            ) : data.map(row => {
+            ) : sorted.map(row => {
               const it = incomeTypes.find(t => t.id === row.income_type_id)
               return (
                 <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
@@ -315,9 +336,17 @@ export default function Inflows() {
             })}
           </div>
         ) : null}
-        {displayMode === 'cards' && <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />}
+        {infState.view === 'cards' && (
+          <PaginationBar
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={count}
+            onPageChange={setPage}
+            variant="full"
+          />
+        )}
 
-        {displayMode === 'table' && <Card padding={false}>
+        {infState.view === 'table' && <Card padding={false}>
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/10 bg-primary/5">
               <span className="text-sm font-medium text-primary">{selectedIds.size} selected</span>
@@ -351,22 +380,19 @@ export default function Inflows() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="w-10 pl-4 pr-2 py-3">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded border-gray-300"
+                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300"
                       checked={allOnPageSelected}
-                      onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())}
-                    />
+                      onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())} />
                   </th>
                   <th className="w-8" />
-                  {([
-                    ['Date', false], ['Recorded', false], ['Bank', false], ['Txn Ref', false],
-                    ['Type', false], ['Description', false], ['Amount (₦)', true], ['Actions', false],
-                  ] as [string, boolean][]).map(([h, right]) => (
-                    <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>
-                      {h}
-                    </th>
-                  ))}
+                  <SortableHeader field={INF_SORT_FIELDS[0]} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Recorded</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Bank</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Txn Ref</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Type</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
+                  <SortableHeader field={INF_SORT_FIELDS[1]} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -387,7 +413,7 @@ export default function Inflows() {
                     </td>
                   </tr>
                 ) : (
-                  data.flatMap(row => {
+                  sorted.flatMap(row => {
                     const expanded = expandedId === row.id
                     const rows = [
                       <tr
@@ -479,7 +505,13 @@ export default function Inflows() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
+          <PaginationBar
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={count}
+            onPageChange={setPage}
+            variant="full"
+          />
         </Card>}
       </div>
 
