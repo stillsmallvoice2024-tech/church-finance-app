@@ -62,7 +62,7 @@ const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpan
 ```
 
 ID prefixing rules:
-- Second field in same row: `rem-${row.id}` (remarks) or any unique prefix
+- Second field in same row: `rem-${row.id}` (remarks), `ref-${row.id}` (transaction_ref / transaction_id), or any unique prefix
 - Card view: `card-desc-${row.id}`, `card-rem-${row.id}` — prevents collision with table-view IDs
 
 **`textCls` prop** — override text colour without forking the component (e.g. `textCls="text-red-600"` for old values in ChangeLog). Null text renders a non-interactive `—` in the given colour.
@@ -409,8 +409,8 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 Checkbox, Expand-chevron, Date, Recorded, **Bank**, **Txn Ref**, Type, Description, Amount (₦), Actions (10 total).
 
-- `bank_name` → Bank column after Recorded
-- `transaction_ref` → Txn Ref column after Bank
+- `bank_name` → Bank column after Recorded; plain `whitespace-nowrap` text
+- `transaction_ref` → Txn Ref column; `max-w-[180px]` `<td>` with `DescriptionCell id={`ref-${row.id}`}` + `onClick={e => e.stopPropagation()}` (prevents triggering row expand)
 - Type column shows income type badge + transaction type badge (stacked `flex-col`); fallback `—` when both null
 - Expanded remark row uses `colSpan={10}`
 
@@ -421,7 +421,8 @@ Checkbox, Expand-chevron, Date, Recorded, **Bank**, **Txn Ref**, Type, Descripti
 Checkbox, Date, Recorded, **Bank**, Txn ID, Description, Disbursed (₦), Refunded (₦), Net (₦), Stage Code 1, Remarks, 📎, Actions (13 total).
 
 - `transfer_charge` is **not shown** as a column but is still deducted in the Net (₦) calculation
-- `bank_name` is displayed as the **Bank** column, positioned after Recorded
+- `bank_name` is displayed as the **Bank** column, positioned after Recorded; plain `whitespace-nowrap` text
+- `transaction_id` → Txn ID column; `max-w-[180px]` `<td>` with `DescriptionCell id={`ref-${row.id}`}` (no stopPropagation needed — outflow `<tr>` has no onClick)
 
 ---
 
