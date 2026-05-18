@@ -414,27 +414,36 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 ## Modal Scroll Preservation Pattern
 
-When a modal can be opened from a scrolled position, preserve and restore scroll to prevent the focus-return and `body.overflow` unlock from resetting the page position.
+When a modal saves and triggers `refetch()`, `loading` becomes `true` and the page replaces its table with a skeleton. The skeleton is shorter than the table — the browser clamps `window.scrollY` to 0. A `requestAnimationFrame` fires during this collapsed state and the `scrollTo` is a no-op. **Must defer restoration until `loading=false`** (table is back in the DOM).
 
 ```tsx
-const scrollYRef = useRef(0)
+const scrollYRef     = useRef(0)
+const pendingScrollRef = useRef<number | null>(null)
+
+// Fires when modal is closed AND loading is done — both required.
+// Handles cancel (loading never changes) and save (wait for table to re-appear).
+useEffect(() => {
+  if (modalOpen || loading || pendingScrollRef.current === null) return
+  const y = pendingScrollRef.current
+  pendingScrollRef.current = null
+  requestAnimationFrame(() => window.scrollTo(0, y))
+}, [modalOpen, loading])
 
 const handleModalClose = () => {
+  pendingScrollRef.current = scrollYRef.current
   setModalOpen(false)
-  const y = scrollYRef.current
-  requestAnimationFrame(() => window.scrollTo(0, y))
 }
 
 const openEdit = (row: Row) => {
-  scrollYRef.current = window.scrollY
+  scrollYRef.current = window.scrollY   // capture before body overflow locks
   setEditRecord(row)
   setModalOpen(true)
 }
 ```
 
-- `requestAnimationFrame` fires after the modal unmounts (focus returns, overflow restores) — no flicker
-- Apply to both add and edit openers for consistency
-- Pass `onClose={handleModalClose}` to the modal; `onSuccess` calls close implicitly via the modal's submit handler
+- `[modalOpen, loading]` dependency covers both cancel (loading stays false, effect fires on modalOpen change) and save (loading goes true then false, effect fires on loading change)
+- `requestAnimationFrame` prevents flicker by deferring until after the final paint
+- Apply to both add and edit openers; pass `onClose={handleModalClose}` to the modal
 
 ---
 
