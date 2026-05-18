@@ -1,15 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Percent, AlertCircle, ExternalLink } from 'lucide-react'
 import { useAllocationStore } from '../store/allocationStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate } from '../utils/formatters'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
+
+const PCA_SORT_FIELDS: SortField[] = [
+  { key: 'category_name', label: 'Category', type: 'text' },
+  { key: 'percentage', label: 'Percentage', type: 'numeric' },
+]
 
 export default function PercentageAllocations() {
   usePageTitle('Percentage Allocations')
 
   const { configs, loading, error, fetch } = useAllocationStore()
   const [selectedId, setSelectedId] = useState<string>('')
+  const pcaState = useDataViewState({ storageKey: 'pca', defaultSortKey: 'category_name', defaultSortDir: 'asc' })
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -22,6 +32,21 @@ export default function PercentageAllocations() {
 
   const total   = config?.rows.reduce((s, r) => s + Number(r.percentage), 0) ?? 0
   const balanced = Math.abs(100 - total) < 0.01
+
+  const filteredRows = useMemo(() => {
+    const q = pcaState.search.trim().toLowerCase()
+    const base = config?.rows ?? []
+    return q ? base.filter(r => r.category_name.toLowerCase().includes(q)) : base
+  }, [config?.rows, pcaState.search])
+
+  const sortedConfigRows = useMemo(() =>
+    sortRows(filteredRows, (r, k) => {
+      if (k === 'category_name') return r.category_name
+      if (k === 'percentage')    return Number(r.percentage)
+      return r.category_name
+    }, pcaState.sortKey, pcaState.sortDir, PCA_SORT_FIELDS),
+    [filteredRows, pcaState.sortKey, pcaState.sortDir],
+  )
 
   return (
     <div className="space-y-5">
@@ -112,7 +137,17 @@ export default function PercentageAllocations() {
           )}
 
           {config && config.rows.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+            <div className="space-y-1.5">
+              <DataControlsBar
+                sortFields={PCA_SORT_FIELDS}
+                sortKey={pcaState.sortKey}
+                sortDir={pcaState.sortDir}
+                onSort={pcaState.setSort}
+                search={pcaState.search}
+                onSearchChange={pcaState.setSearch}
+                searchPlaceholder="Search categories…"
+              />
+              <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-500 flex items-center justify-between">
                 <span className="font-semibold uppercase tracking-wider">
                   {config.name}
@@ -123,15 +158,13 @@ export default function PercentageAllocations() {
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                     <th className="px-5 py-3 text-left font-medium">#</th>
-                    <th className="px-5 py-3 text-left font-medium">Category</th>
-                    <th className="px-5 py-3 text-right font-medium">Percentage</th>
-                    <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">
-                      Per ₦100 received
-                    </th>
+                    <SortableHeader field={PCA_SORT_FIELDS[0]} activeSortKey={pcaState.sortKey} activeSortDir={pcaState.sortDir} onSort={pcaState.setSort} className="px-5 py-3" />
+                    <SortableHeader field={PCA_SORT_FIELDS[1]} activeSortKey={pcaState.sortKey} activeSortDir={pcaState.sortDir} onSort={pcaState.setSort} rightAlign className="px-5 py-3" />
+                    <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Per ₦100 received</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {config.rows.map((row, i) => (
+                  {sortedConfigRows.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3 text-gray-400 text-xs">{i + 1}</td>
                       <td className="px-5 py-3 font-medium text-gray-800">{row.category_name}</td>
@@ -160,6 +193,7 @@ export default function PercentageAllocations() {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           )}
         </>
