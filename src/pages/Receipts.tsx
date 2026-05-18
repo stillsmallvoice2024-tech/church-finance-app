@@ -1,9 +1,17 @@
-import { useState } from 'react'
-import { Paperclip, Download, Trash2, Loader2, Search, FolderOpen, FileText, Image, AlertTriangle, Terminal } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Paperclip, Download, Trash2, Loader2, FolderOpen, FileText, Image, AlertTriangle, Terminal } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAllReceipts, type ReceiptEntityType, type Receipt } from '../hooks/useReceipts'
 import { formatDate } from '../utils/formatters'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
+
+const RCP_SORT_FIELDS: SortField[] = [
+  { key: 'created_at', label: 'Upload Date', type: 'date' },
+  { key: 'file_name',  label: 'File Name',  type: 'text' },
+]
 
 const MIGRATION_SQL =
 `-- Receipts table
@@ -77,15 +85,24 @@ export default function Receipts() {
   usePageTitle('Receipts')
 
   const [folder,  setFolder]  = useState<Folder>('all')
-  const [search,  setSearch]  = useState('')
+  const rcpState = useDataViewState({ storageKey: 'rcp', defaultSortKey: 'created_at', defaultSortDir: 'desc' })
 
   const entityType = folder === 'all' ? undefined : folder
   const { receipts, loading, error, remove, getDownloadUrl } = useAllReceipts(entityType)
 
   const isMigrationError = !!error && /relation.*does not exist|receipts|Could not find/i.test(error)
 
-  const filtered = receipts.filter(r =>
-    !search || r.file_name.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(() => {
+    const q = rcpState.search.trim().toLowerCase()
+    return q ? receipts.filter(r => r.file_name.toLowerCase().includes(q)) : receipts
+  }, [receipts, rcpState.search])
+
+  const sortedReceipts = useMemo(() =>
+    sortRows(filtered, (r, k) => {
+      if (k === 'file_name') return r.file_name
+      return r.created_at
+    }, rcpState.sortKey, rcpState.sortDir, RCP_SORT_FIELDS),
+    [filtered, rcpState.sortKey, rcpState.sortDir],
   )
 
   const countFor = (key: Folder) =>
@@ -180,15 +197,15 @@ export default function Receipts() {
 
         {/* Main panel */}
         <div className="flex-1 min-w-0 space-y-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              type="text" placeholder="Search file name…" value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-            />
-          </div>
+            <DataControlsBar
+            sortFields={RCP_SORT_FIELDS}
+            sortKey={rcpState.sortKey}
+            sortDir={rcpState.sortDir}
+            onSort={rcpState.setSort}
+            search={rcpState.search}
+            onSearchChange={rcpState.setSearch}
+            searchPlaceholder="Search file name…"
+          />
 
           {loading ? (
             <Card>
@@ -196,16 +213,16 @@ export default function Receipts() {
                 <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
               </div>
             </Card>
-          ) : filtered.length === 0 && !error ? (
+          ) : sortedReceipts.length === 0 && !error ? (
             <Card>
               <div className="py-16 flex flex-col items-center gap-3 text-gray-400">
                 <Paperclip className="w-12 h-12 text-gray-200" />
-                <p className="text-sm">{search ? 'No files match your search.' : 'No receipts in this folder yet.'}</p>
+                <p className="text-sm">{rcpState.search ? 'No files match your search.' : 'No receipts in this folder yet.'}</p>
               </div>
             </Card>
           ) : !error && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filtered.map(r => (
+              {sortedReceipts.map(r => (
                 <div
                   key={r.id}
                   className="bg-white border border-gray-100 rounded-xl p-3 space-y-2 hover:shadow-md transition-shadow group"

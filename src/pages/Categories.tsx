@@ -1,5 +1,8 @@
-import { useState, useEffect, Fragment } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, LayoutList, LayoutGrid, Search, Check } from 'lucide-react'
+import { useState, useEffect, Fragment, useMemo } from 'react'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check } from 'lucide-react'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 import {
   useCategories, useCategoryGroups, useCategoryOpeningBalances,
   fetchCategoryOpeningBalances, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance,
@@ -44,6 +47,10 @@ ALTER TABLE public.categories
   ADD COLUMN IF NOT EXISTS group_id uuid REFERENCES public.category_groups(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
   ADD COLUMN IF NOT EXISTS is_hidden boolean NOT NULL DEFAULT false;`
+
+const CAT_SORT_FIELDS: SortField[] = [
+  { key: 'name', label: 'Name', type: 'text' },
+]
 
 // ── Deletion check ─────────────────────────────────────────────────────────────
 
@@ -342,8 +349,7 @@ export default function Categories() {
   const [hideTarget,   setHideTarget]   = useState<Category | null>(null)
   const [showHidden,   setShowHidden]   = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(false)
-  const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
-  const [search,       setSearch]       = useState('')
+  const catState = useDataViewState({ storageKey: 'cat', defaultSortKey: 'name', defaultSortDir: 'asc' })
 
   // Group inline editing
   const [editGroupId,   setEditGroupId]   = useState<string | null>(null)
@@ -416,7 +422,7 @@ export default function Categories() {
     }
   }
 
-  const q = search.trim().toLowerCase()
+  const q = catState.search.trim().toLowerCase()
   const visible  = categories.filter(c => {
     if (!showHidden && c.is_hidden) return false
     if (!q) return true
@@ -426,9 +432,17 @@ export default function Categories() {
   })
   const hiddenCt = categories.filter(c => c.is_hidden).length
 
+  const visibleSorted = useMemo(() =>
+    sortRows(visible, (c, k) => {
+      if (k === 'name') return c.name
+      return c.name
+    }, catState.sortKey, catState.sortDir, CAT_SORT_FIELDS),
+    [visible, catState.sortKey, catState.sortDir],
+  )
+
   // Bucket categories by group
   const groupMap = new Map<string | null, Category[]>()
-  for (const cat of visible) {
+  for (const cat of visibleSorted) {
     const key = cat.group_id ?? null
     if (!groupMap.has(key)) groupMap.set(key, [])
     groupMap.get(key)!.push(cat)
@@ -447,16 +461,6 @@ export default function Categories() {
           <p className="text-sm text-gray-500 mt-0.5">Manage income and allocation categories</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-            <button onClick={() => setDisplayMode('table')} title="Table view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-              <LayoutList className="w-4 h-4" />
-            </button>
-            <button onClick={() => setDisplayMode('cards')} title="Card view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-          </div>
           {hiddenCt > 0 && (
             <button onClick={() => setShowHidden(v => !v)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
@@ -472,22 +476,17 @@ export default function Categories() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Search by category or group name…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+      <DataControlsBar
+        sortFields={CAT_SORT_FIELDS}
+        sortKey={catState.sortKey}
+        sortDir={catState.sortDir}
+        onSort={catState.setSort}
+        view={catState.view}
+        onViewChange={catState.setView}
+        search={catState.search}
+        onSearchChange={catState.setSearch}
+        searchPlaceholder="Search by category or group name…"
+      />
 
       {(error || groupsError) && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
@@ -522,9 +521,9 @@ export default function Categories() {
       )}
 
       {/* Category cards */}
-      {!loading && visible.length > 0 && displayMode === 'cards' && (
+      {!loading && visible.length > 0 && catState.view === 'cards' && (
         <div className="space-y-3">
-          {visible.map(cat => {
+          {visibleSorted.map(cat => {
             const group = groups.find(g => g.id === cat.group_id)
             const catBalances = allOpeningBalances.filter(b => b.category_id === cat.id)
             const displayBalances: { budget_portion: string; amount: number }[] = catBalances.length > 0
@@ -587,7 +586,7 @@ export default function Categories() {
       )}
 
       {/* Category table — grouped */}
-      {!loading && visible.length > 0 && displayMode === 'table' && (
+      {!loading && visible.length > 0 && catState.view === 'table' && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>

@@ -7,8 +7,17 @@ import { AddFXModal } from '../components/modals/AddFXModal'
 import { exportCSV } from '../utils/csvExport'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
+
+const FX_SORT_FIELDS: SortField[] = [
+  { key: 'date',   label: 'Date',   type: 'date'    },
+  { key: 'amount', label: 'Amount', type: 'numeric' },
+]
 
 const FX_META: { code: FXCurrency; symbol: string; flag: string; name: string }[] = [
   { code: 'USD', symbol: '$', flag: '🇺🇸', name: 'US Dollar'      },
@@ -28,6 +37,7 @@ export default function ForeignCurrency() {
   const [addOpen, setAddOpen]           = useState(false)
   const [editRecord, setEditRecord]     = useState<FXTransaction | null>(null)
   const [filterCcy, setFilterCcy]       = useState<FXCurrency | ''>('')
+  const fxState = useDataViewState({ storageKey: 'fx', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [rates, setRates]               = useState<Record<FXCurrency, number>>({
     USD: 0, GBP: 0, EUR: 0, CNY: 0,
@@ -49,6 +59,24 @@ export default function ForeignCurrency() {
   const currentBalances = useMemo(
     () => new Map(summaries.map(s => [s.currency, s.currentBalance])),
     [summaries],
+  )
+
+  const fxSearchFiltered = useMemo(() => {
+    const q = fxState.search.trim().toLowerCase()
+    return q
+      ? transactions.filter(t =>
+          t.narration?.toLowerCase().includes(q) ||
+          t.transaction_ref?.toLowerCase().includes(q)
+        )
+      : transactions
+  }, [transactions, fxState.search])
+
+  const fxSorted = useMemo(() =>
+    sortRows(fxSearchFiltered, (t, k) => {
+      if (k === 'amount') return t.deposit > 0 ? t.deposit : t.withdrawal
+      return t.date
+    }, fxState.sortKey, fxState.sortDir, FX_SORT_FIELDS),
+    [fxSearchFiltered, fxState.sortKey, fxState.sortDir],
   )
 
   const handleExport = () => {
@@ -216,13 +244,25 @@ export default function ForeignCurrency() {
           </div>
         </div>
 
+        <div className="px-4 py-2 border-b border-gray-100">
+          <DataControlsBar
+            sortFields={FX_SORT_FIELDS}
+            sortKey={fxState.sortKey}
+            sortDir={fxState.sortDir}
+            onSort={fxState.setSort}
+            search={fxState.search}
+            onSearchChange={fxState.setSearch}
+            searchPlaceholder="Search narration or ref…"
+          />
+        </div>
+
         {loading ? (
           <div className="space-y-2 p-5">
             {[1, 2, 3, 4, 5].map(i => (
               <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />
             ))}
           </div>
-        ) : transactions.length === 0 ? (
+        ) : fxSorted.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-400">
             No transactions found.
           </div>
@@ -231,10 +271,10 @@ export default function ForeignCurrency() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                  <th className="px-4 py-3 text-left font-medium">Date</th>
+                  <SortableHeader field={FX_SORT_FIELDS[0]} activeSortKey={fxState.sortKey} activeSortDir={fxState.sortDir} onSort={fxState.setSort} className="px-4 py-3" />
                   <th className="px-4 py-3 text-left font-medium">Currency</th>
                   <th className="px-4 py-3 text-left font-medium">Type</th>
-                  <th className="px-4 py-3 text-right font-medium">Amount</th>
+                  <SortableHeader field={FX_SORT_FIELDS[1]} activeSortKey={fxState.sortKey} activeSortDir={fxState.sortDir} onSort={fxState.setSort} rightAlign className="px-4 py-3" />
                   <th className="px-4 py-3 text-right font-medium">Running Balance</th>
                   <th className="px-4 py-3 text-left font-medium">Narration</th>
                   <th className="px-4 py-3 text-left font-medium">Ref</th>
@@ -242,7 +282,7 @@ export default function ForeignCurrency() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {transactions.map(t => {
+                {fxSorted.map(t => {
                   const isDeposit = t.deposit > 0
                   const meta      = FX_META.find(m => m.code === t.currency)!
                   return (
