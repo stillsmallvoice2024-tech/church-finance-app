@@ -16,7 +16,11 @@ export function PaginationBar({
   variant,
 }: PaginationBarProps) {
   const totalPages = Math.ceil(total / pageSize)
-  if (totalPages <= 1) return null
+
+  // Compact variant: hide entirely when there's nothing to page through
+  // Full variant: always render when a page-size selector is provided so the
+  // user can switch back after selecting a size that fits all rows on one page
+  if (totalPages <= 1 && (variant === 'compact' || !onPageSizeChange)) return null
 
   const from = total === 0 ? 0 : page * pageSize + 1
   const to = Math.min((page + 1) * pageSize, total)
