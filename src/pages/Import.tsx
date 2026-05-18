@@ -17,6 +17,7 @@ import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { formatDate } from '../utils/formatters'
 import { formatCurrency, parseCurrency } from '../utils/currency'
+import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 // inflowTypes import removed — income type classification replaces hardcoded types
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
@@ -574,7 +575,7 @@ function ManualEntryForm() {
         description:                v('description')               || undefined,
         allocation_config_id:       effectiveConfigId,
         bank_name:                  selectedBank?.name             || undefined,
-        transaction_ref:            v('transaction_ref')           || undefined,
+        transaction_ref:            v('transaction_ref') || await generateFallbackTransactionId(v('date'), v('amount'), v('description') ?? '', selectedBank?.name ?? ''),
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
         income_type_id:             incomeTypeId                   || undefined,
@@ -625,7 +626,7 @@ function ManualEntryForm() {
         allocation_config_id:    txnType ? undefined : getConfigForDate(configs, v('date'))?.id,
         bank_name:               selectedBank?.name    || undefined,
         bank_description:        v('bank_description') || undefined,
-        transaction_id:          v('transaction_id')   || undefined,
+        transaction_id:          v('transaction_id') || await generateFallbackTransactionId(v('date'), v('amount_disbursed'), v('description') ?? v('bank_description') ?? '', selectedBank?.name ?? ''),
         is_pending_deduction:    isPending,
         stage_code_1:            outflowS1             || undefined,
         stage_code_2:            outflowS2             || undefined,

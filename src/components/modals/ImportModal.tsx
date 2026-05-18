@@ -14,6 +14,7 @@ import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
+import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
 // ── Target table definitions ───────────────────────────────────────────────────
@@ -553,6 +554,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const inflowRows:  Record<string, unknown>[] = []
       const outflowRows: Record<string, unknown>[] = []
       const importTimestamp = new Date().toISOString()
+      // Collision trackers for fallback IDs: hash → count of times seen this batch
+      const inflowIdCounts  = new Map<string, number>()
+      const outflowIdCounts = new Map<string, number>()
 
       // Merge continuation rows (no date, no amounts, but has text) into preceding primary row
       const mergedRows = (sheet.rows as unknown[][]).map(r => [...r])
@@ -567,8 +571,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         while (prevRi >= 0 && parseDate(mergedRows[prevRi][dateIdx], dateFormat) === null) prevRi--
         if (prevRi < 0) continue
         const prev = mergedRows[prevRi]
-        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).trim()
-        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).trim()
+        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).replace(/\s+/g, ' ').trim()
+        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).replace(/\s+/g, ' ').trim()
       }
 
       for (let ri = 0; ri < mergedRows.length; ri++) {
@@ -609,6 +613,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             }
           }
           if (internalBank) row.bank_name = internalBank.name
+          if (!row.transaction_ref) {
+            const baseId = await generateFallbackTransactionId(
+              String(date), String(credit), desc ?? '', internalBank?.name ?? ''
+            )
+            const count = inflowIdCounts.get(baseId) ?? 0
+            inflowIdCounts.set(baseId, count + 1)
+            row.transaction_ref = count === 0 ? baseId : `${baseId}-${count}`
+          }
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           row.recorded_at = importTimestamp
@@ -619,6 +631,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (userId) row.created_by = userId
           if (!txnType && cfg) row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
+          if (!row.transaction_id) {
+            const baseId = await generateFallbackTransactionId(
+              String(date), String(debit), desc ?? '', internalBank?.name ?? ''
+            )
+            const count = outflowIdCounts.get(baseId) ?? 0
+            outflowIdCounts.set(baseId, count + 1)
+            row.transaction_id = count === 0 ? baseId : `${baseId}-${count}`
+          }
           const sc = rowStageCodes[ri]
           if (sc) {
             if (sc.s1) row.stage_code_1 = sc.s1
@@ -631,6 +651,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           outflowRows.push(row)
         }
         if (credit === 0 && debit === 0) skipped++
+      }
+
+      // Cross-batch dup check: query DB for any IDs (bank-provided or fallback) already present
+      const pendingInflowIds  = inflowRows.map(r  => r.transaction_ref as string).filter(Boolean)
+      const pendingOutflowIds = outflowRows.map(r => r.transaction_id  as string).filter(Boolean)
+      if (pendingInflowIds.length > 0) {
+        const { data } = await supabase
+          .from('inflow_transactions')
+          .select('transaction_ref')
+          .in('transaction_ref', pendingInflowIds)
+        for (const r of data ?? []) if (r.transaction_ref) allSkipIds.add(r.transaction_ref)
+      }
+      if (pendingOutflowIds.length > 0) {
+        const { data } = await supabase
+          .from('outflow_transactions')
+          .select('transaction_id')
+          .in('transaction_id', pendingOutflowIds)
+        for (const r of data ?? []) if (r.transaction_id) allSkipIds.add(r.transaction_id)
       }
 
       // Apply dup skip filter
