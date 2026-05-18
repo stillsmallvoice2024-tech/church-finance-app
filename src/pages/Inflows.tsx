@@ -598,26 +598,30 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
   const handleApply = async () => {
     if (!hasChanges) return
     setSaving(true)
-    let updates: Record<string, unknown> = {}
-    if (bankName)     updates.bank_name       = bankName
-    if (recordedAt)   updates.recorded_at     = `${recordedAt}T00:00:00.000Z`
-    if (txnType)      updates.transaction_type = txnType
-    if (incomeTypeId) updates.income_type_id   = incomeTypeId
-    if (stageCode1)   updates.stage_code_1    = stageCode1
-    if (stageCode2)   updates.stage_code_2    = stageCode2
+    const baseUpdates: Record<string, unknown> = {}
+    if (bankName)     baseUpdates.bank_name        = bankName
+    if (recordedAt)   baseUpdates.recorded_at      = `${recordedAt}T00:00:00.000Z`
+    if (txnType)      baseUpdates.transaction_type = txnType
+    if (incomeTypeId) baseUpdates.income_type_id   = incomeTypeId
+    if (stageCode1)   baseUpdates.stage_code_1     = stageCode1
+    if (stageCode2)   baseUpdates.stage_code_2     = stageCode2
     let failed = 0
     const strippedCols: string[] = []
     for (const id of ids) {
+      // Build per-row updates from the immutable base, minus any schema-confirmed-missing columns
+      const rowUpdates = Object.fromEntries(
+        Object.entries(baseUpdates).filter(([k]) => !strippedCols.includes(k))
+      )
       try {
-        await update({ id, updates })
+        await update({ id, updates: rowUpdates })
       } catch (err: unknown) {
         const col = (err instanceof Error ? err.message : '').match(MISSING_COL_RE)?.[1]
-        if (col && col in updates) {
-          const stripped = { ...updates }
-          delete stripped[col]
-          updates = stripped
+        if (col && col in rowUpdates) {
           if (!strippedCols.includes(col)) strippedCols.push(col)
-          try { await update({ id, updates }) } catch { failed++ }
+          const retryUpdates = Object.fromEntries(
+            Object.entries(rowUpdates).filter(([k]) => k !== col)
+          )
+          try { await update({ id, updates: retryUpdates }) } catch { failed++ }
         } else {
           failed++
         }
