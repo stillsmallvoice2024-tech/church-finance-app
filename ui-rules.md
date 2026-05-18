@@ -453,6 +453,22 @@ The **Optional Banking Details** section (`amount_refunded`, `transfer_charge`) 
 - colSpan for loading/empty/expanded rows must equal total column count (10 for Inflows, 13 for Outflows)
 - Multi-select is **table view only** — cards view unchanged
 
+---
+
+## Import Modal — Step 4 Row Selection (Credit & Debit tabs)
+
+Row-level checkboxes in the Configure Rows step of `ImportModal.tsx`:
+
+- **State:** `selectedInflowRis: Set<number>` and `selectedOutflowRis: Set<number>` — keyed by sheet row index (`ri`), stable across filter/sort changes and tab switches; both reset in `reset()`
+- **Header checkbox:** Select All for currently filtered rows; supports indeterminate state via `ref={el => { if (el) el.indeterminate = some && !all }}`
+- **Row checkbox:** individual toggle; selected rows get `bg-primary/5` tint
+- **Apply logic:** when `selectedRis.size > 0` → apply to selected set; otherwise fall back to all filtered rows (so "apply to all" still works via Select All → Apply)
+- **Apply button disabled** when both no selection and no field values are chosen
+- **Row count display:** `{filtered.length} / {total} rows · X selected` (selected count only shown when > 0)
+- **Description cell — Debit tab:** hover tooltip only (no click-expand, no ChevronDown); `onMouseEnter`/`onMouseLeave` on a plain `div` — no `onClick`, no `cursor-pointer`, no `expandedRows` reference
+- **Description cell — Credit tab:** retains click-to-expand with ChevronDown + `expandedRows` state + hover tooltip (both behaviours)
+- Grid templates include a leading `24px` checkbox column: Credit `[24px_32px_1fr_72px_120px_120px_96px]`, Debit `[24px_36px_1fr_80px_110px_110px_90px]`
+
 ## Schema Cache Error — Inline Display (Inflows / Outflows modals)
 
 Lighter alternative to full Migration-Gated Modal when a column is optional and the save is not gated:
