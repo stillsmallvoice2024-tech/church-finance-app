@@ -130,6 +130,35 @@ Both import paths use a **strip-and-retry** pattern when PostgREST rejects an IN
 
 ---
 
+## Transaction ID Normalization (`normalizeId`, `ImportModal.tsx`)
+
+All transaction IDs extracted from files and returned from the DB must pass through `normalizeId()` before being stored, added to skip sets, or compared. Plain `.trim()` is insufficient.
+
+```ts
+// Strips soft-hyphen (U+00AD), NBSP (U+00A0), zero-width chars (U+200B–U+200D),
+// line/para separators (U+2028–U+2029), BOM (U+FEFF); applies NFC; collapses whitespace.
+function normalizeId(raw: string): string {
+  return raw
+    .normalize('NFC')
+    .replace(/­| |​|‌|‍| | |﻿/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+```
+
+**Apply at every ID touch-point in `ImportModal.tsx`:**
+- File row extraction: `normalizeId(String(raw[refIdx])) || null`
+- `wizardSkipIds` construction: `.map(d => normalizeId(d.id))`
+- `skipTxnIds` entries: `(skipTxnIds ?? []).map(normalizeId)`
+- DB cross-batch query results: `normalizeId(r.transaction_ref)` before `allSkipIds.add(...)`
+- Pre-import check DB results: normalize before pushing to `results[]`
+
+**Why:** Excel cells can embed invisible Unicode (zero-width spaces, soft hyphen, NBSP, BOM) that survive `.trim()`. `Set.has()` is an exact-byte match, so a visually-identical ID with a hidden character fails dedup silently.
+
+**Dev diagnostics:** `import.meta.env.DEV` console logs (`[dup-check]`) print each ID's raw/normalized form and skip decision at the cross-batch filter step.
+
+---
+
 ## Fallback Transaction ID Generation
 
 When a row has no bank-provided reference, a deterministic SHA-256 ID is generated as a fallback — never overwriting an existing value.
