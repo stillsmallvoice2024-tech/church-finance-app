@@ -465,8 +465,7 @@ Row-level checkboxes in the Configure Rows step of `ImportModal.tsx`:
 - **Apply logic:** when `selectedRis.size > 0` → apply to selected set; otherwise fall back to all filtered rows (so "apply to all" still works via Select All → Apply)
 - **Apply button disabled** when both no selection and no field values are chosen
 - **Row count display:** `{filtered.length} / {total} rows · X selected` (selected count only shown when > 0)
-- **Description cell — Debit tab:** hover tooltip only (no click-expand, no ChevronDown); `onMouseEnter`/`onMouseLeave` on a plain `div` — no `onClick`, no `cursor-pointer`, no `expandedRows` reference
-- **Description cell — Credit tab:** retains click-to-expand with ChevronDown + `expandedRows` state + hover tooltip (both behaviours)
+- **Description cell — both tabs:** hover tooltip only (no click-expand, no ChevronDown); `onMouseEnter`/`onMouseLeave` on a plain `div` with `className="flex items-center"` — no `onClick`, no `cursor-pointer`, no `expandedRows`
 - Grid templates include a leading `24px` checkbox column: Credit `[24px_32px_1fr_72px_120px_120px_96px]`, Debit `[24px_36px_1fr_80px_110px_110px_90px]`
 
 ## Schema Cache Error — Inline Display (Inflows / Outflows modals)
