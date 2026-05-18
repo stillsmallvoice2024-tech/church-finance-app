@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff } from 'lucide-react'
+import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff, Database, Download, UploadCloud, FileDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
@@ -7,6 +7,9 @@ import { useToastStore } from '../store/toastStore'
 import { useThemeStore } from '../store/themeStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { ROLE_LABELS } from '../utils/constants'
+import { BackupModal }     from '../components/modals/BackupModal'
+import { RestoreModal }    from '../components/modals/RestoreModal'
+import { ExportCSVsModal } from '../components/modals/ExportCSVsModal'
 
 const APP_VERSION = '1.0.0'
 
@@ -68,6 +71,11 @@ export default function Settings() {
   const [fullName,      setFullName]      = useState(profile?.full_name ?? '')
   const [username,      setUsername]      = useState((profile as { username?: string | null } | null)?.username ?? '')
   const [savingName,    setSavingName]    = useState(false)
+
+  // Data management modals
+  const [backupOpen,    setBackupOpen]    = useState(false)
+  const [restoreOpen,   setRestoreOpen]   = useState(false)
+  const [exportOpen,    setExportOpen]    = useState(false)
 
   // In-app password change
   const [newPassword,   setNewPassword]   = useState('')
@@ -301,6 +309,55 @@ export default function Settings() {
         </div>
       </Section>
 
+      {/* ── Data Management ─────────────────────────────────────────────── */}
+      <Section icon={Database} title="Data Management">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Back up your entire account, restore from a previous backup, or download your data as CSV spreadsheets.
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={() => setBackupOpen(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Download className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Backup Account</p>
+                <p className="text-xs text-gray-500 mt-0.5">Download or share a complete backup of all your data.</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setRestoreOpen(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <UploadCloud className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Restore Backup</p>
+                <p className="text-xs text-gray-500 mt-0.5">Upload a backup file to restore your account to a previous state.</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setExportOpen(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                <FileDown className="w-4 h-4 text-gray-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Export CSVs</p>
+                <p className="text-xs text-gray-500 mt-0.5">Download all tables as individual CSV spreadsheets.</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </Section>
+
       {/* ── App Info ────────────────────────────────────────────────────── */}
       <Section icon={Info} title="App Information">
         <div className="space-y-3 text-sm">
@@ -336,6 +393,19 @@ export default function Settings() {
           <InfoRow label="Environment" value={import.meta.env.MODE === 'production' ? 'Production' : 'Development'} />
         </div>
       </Section>
+      <BackupModal
+        open={backupOpen}
+        onClose={() => setBackupOpen(false)}
+      />
+      <RestoreModal
+        open={restoreOpen}
+        onClose={() => setRestoreOpen(false)}
+        onDone={() => toast('Restore complete — reload to see changes', 'success')}
+      />
+      <ExportCSVsModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   )
 }
