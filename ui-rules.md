@@ -414,19 +414,26 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 ## Modal Scroll Preservation Pattern
 
-When a modal saves and triggers `refetch()`, `loading` becomes `true` and the page replaces its table with a skeleton. The skeleton is shorter than the table — the browser clamps `window.scrollY` to 0. A `requestAnimationFrame` fires during this collapsed state and the `scrollTo` is a no-op. **Must defer restoration until `loading=false`** (table is back in the DOM).
+**Critical:** `Layout.tsx` wraps all page content in `<main id="main-content" className="... overflow-y-auto">`. The `window` never scrolls — `window.scrollY` is always 0. **Always read/write `main.scrollTop`, not `window.scrollY`/`window.scrollTo`.**
+
+Two compounding problems to solve:
+1. Wrong scroll target (`window` vs `<main>`)
+2. `refetch()` → `loading=true` → skeleton replaces table → page shrinks → browser clamps `main.scrollTop` to 0 → any restore during this phase is a no-op; must defer until `loading=false`
 
 ```tsx
-const scrollYRef     = useRef(0)
+const scrollYRef       = useRef(0)
 const pendingScrollRef = useRef<number | null>(null)
 
-// Fires when modal is closed AND loading is done — both required.
-// Handles cancel (loading never changes) and save (wait for table to re-appear).
+const getScroller = () => document.getElementById('main-content')
+
+// Deferred restore: fires when modal is closed AND loading is done.
+// Handles cancel (loading unchanged, fires on modalOpen change) and
+// save (loading goes true→false, fires on loading change).
 useEffect(() => {
   if (modalOpen || loading || pendingScrollRef.current === null) return
   const y = pendingScrollRef.current
   pendingScrollRef.current = null
-  requestAnimationFrame(() => window.scrollTo(0, y))
+  requestAnimationFrame(() => { getScroller()?.scrollTo(0, y) })
 }, [modalOpen, loading])
 
 const handleModalClose = () => {
@@ -435,14 +442,13 @@ const handleModalClose = () => {
 }
 
 const openEdit = (row: Row) => {
-  scrollYRef.current = window.scrollY   // capture before body overflow locks
+  scrollYRef.current = getScroller()?.scrollTop ?? 0
   setEditRecord(row)
   setModalOpen(true)
 }
 ```
 
-- `[modalOpen, loading]` dependency covers both cancel (loading stays false, effect fires on modalOpen change) and save (loading goes true then false, effect fires on loading change)
-- `requestAnimationFrame` prevents flicker by deferring until after the final paint
+- Use `getElementById('main-content')` — matches `id` on `<main>` in `Layout.tsx`
 - Apply to both add and edit openers; pass `onClose={handleModalClose}` to the modal
 
 ---
