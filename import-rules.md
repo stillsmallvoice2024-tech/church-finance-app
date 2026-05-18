@@ -36,6 +36,22 @@ Also contains `ManualEntryForm` for single-transaction entry.
 
 ---
 
+## Column Auto-Mapping (`autoMapColumn`, `ImportModal.tsx`)
+
+- Called in `proceedToMapping` for every spreadsheet header; returns field key or `SKIP`
+- Step 1: exact field key match (`f.key.replace(/_/g,'') === h`)
+- Step 2: alias lookup via `ALIAS_MAP[f.key]`
+  - Aliases **≤ 2 chars** (`'in'`, `'cr'`, `'dr'`): `startsWith` / `endsWith` only — **not** mid-word substring. Prevents short aliases stealing unrelated headers (e.g. `'in'` must not match `'maindr'` mid-word).
+  - Aliases **> 2 chars**: exact OR `h.includes(alias)`
+
+**`ALIAS_MAP` — bank_statement virtual fields:**
+- `credit`: `credit`, `cr`, `deposit`, `deposits`, `inflow`, `in`, `income`, `incoming`, `inward`, `creditamt`
+- `debit`: `debit`, `dr`, `withdrawal`, `withdrawals`, `outflow`, `out`, `payment`, `payments`, `charge`, `charges`, `debitamt`
+
+**Do not add 2-char aliases to `credit` or `debit` without verifying they cannot appear as mid-word substrings in the other field's common headers.**
+
+---
+
 ## Header Detection (`detectHeaderRow`)
 
 Exported from `ImportModal.tsx`; used by both the modal and `Import.tsx`'s pre-modal duplicate check.
