@@ -50,6 +50,24 @@ Also contains `ManualEntryForm` for single-transaction entry.
 
 **Do not add 2-char aliases to `credit` or `debit` without verifying they cannot appear as mid-word substrings in the other field's common headers.**
 
+## Debit Amount Parsing (`parseDebitAmount`, `ImportModal.tsx`)
+
+Banks store debit amounts in multiple sign conventions. `parseNumber` returns raw signed values and does not handle accounting notation, so **never use `parseNumber` on raw debit column cells** — use `parseDebitAmount` instead.
+
+- Always returns unsigned magnitude (`Math.abs`)
+- Handles accounting notation: `(1,000.00)` → `1000`
+- Handles negative strings: `"-1,000.00"` → `1000`
+- Handles positive strings: `"1,000.00"` → `1000` (no change)
+- Returns `0` for null / empty / NaN
+
+**Applied at all four debit read-sites:**
+1. `proceedToRowConfig` — pre-scan debit rows for stage-code pre-population
+2. Continuation-row merge guard — prevent debit rows being mislabelled
+3. `runImport` main loop — `amount_disbursed` value + `debit > 0` gate
+4. Step 4 IIFE `allRows` map — feeds the Debit (Outflows) tab list
+
+Credit uses `parseNumber` (unchanged) — credits are always stored as positive.
+
 ---
 
 ## Header Detection (`detectHeaderRow`)
