@@ -124,6 +124,7 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 - Applied inside the row-building loop via `if (!row.transaction_ref)` / `if (!row.transaction_id)`
 - **Within-batch collision suffix:** if two rows in the same batch hash identically, the second gets `hash-1`, third `hash-2`, etc. (tracked by `inflowIdCounts`/`outflowIdCounts` Maps). Suffixed IDs flag potential duplicates for manual review.
 - **Cross-batch duplicate detection:** after all rows are built, `runImport` queries the DB for all pending `transaction_ref`/`transaction_id` values (bank-provided + fallback) and adds matches to `allSkipIds` before the filter step. Re-importing identical data is fully skipped.
+- **Result panel visibility:** `ImportResult` carries `fallbackIdCount: number` and `collisions: string[]`. After import: blue line shows fallback count; amber section lists each collision-suffixed row (`type | date | amount | description | …last-10-chars-of-id`). Both hidden when zero.
 
 **Manual entry (`Import.tsx`):** `doSaveInflow` and `doSaveOutflow` generate a fallback when the user leaves Transaction Ref/ID blank.
 
