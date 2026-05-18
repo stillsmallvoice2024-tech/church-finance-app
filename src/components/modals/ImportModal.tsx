@@ -650,6 +650,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit === 0 && debit === 0) skipped++
       }
 
+      // Cross-batch dup check: query DB for any IDs (bank-provided or fallback) already present
+      const pendingInflowIds  = inflowRows.map(r  => r.transaction_ref as string).filter(Boolean)
+      const pendingOutflowIds = outflowRows.map(r => r.transaction_id  as string).filter(Boolean)
+      if (pendingInflowIds.length > 0) {
+        const { data } = await supabase
+          .from('inflow_transactions')
+          .select('transaction_ref')
+          .in('transaction_ref', pendingInflowIds)
+        for (const r of data ?? []) if (r.transaction_ref) allSkipIds.add(r.transaction_ref)
+      }
+      if (pendingOutflowIds.length > 0) {
+        const { data } = await supabase
+          .from('outflow_transactions')
+          .select('transaction_id')
+          .in('transaction_id', pendingOutflowIds)
+        for (const r of data ?? []) if (r.transaction_id) allSkipIds.add(r.transaction_id)
+      }
+
       // Apply dup skip filter
       const inflowToInsert  = allSkipIds.size > 0
         ? inflowRows.filter(r => { const id = r.transaction_ref as string | undefined; return !id || !allSkipIds.has(id) })
