@@ -310,12 +310,14 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         ? { ...updates, updated_at: new Date().toISOString() }
         : updates
 
-      const { error: err } = await supabase
+      const { error: err, count } = await supabase
         .from(table)
         .update(withTimestamp)
         .eq('id', id)
+        .select('id', { count: 'exact', head: true })
 
       if (err) throw err
+      if (count === 0) throw new Error('Record not found or update blocked by permissions.')
 
       logAudit({
         userId:    user.id,

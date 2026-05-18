@@ -582,13 +582,14 @@ function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
   const [saving,       setSaving]       = useState(false)
 
   useEffect(() => {
-    if (!open) return
+    if (open) return
     setBankName('')
     setRecordedAt('')
     setTxnType('')
     setIncomeTypeId('')
     setStageCode1('')
     setStageCode2('')
+    setSaving(false)
   }, [open])
 
   const hasChanges = !!bankName || !!recordedAt || !!txnType || !!incomeTypeId || !!stageCode1 || !!stageCode2

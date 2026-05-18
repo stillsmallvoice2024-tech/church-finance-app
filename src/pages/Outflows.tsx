@@ -587,12 +587,13 @@ function BulkEditOutflowModal({ open, onClose, ids, banks, categories, onSuccess
   const [saving,     setSaving]     = useState(false)
 
   useEffect(() => {
-    if (!open) return
+    if (open) return
     setBankName('')
     setRecordedAt('')
     setTxnType('')
     setStageCode1('')
     setStageCode2('')
+    setSaving(false)
   }, [open])
 
   const hasChanges = !!bankName || !!recordedAt || !!txnType || !!stageCode1 || !!stageCode2

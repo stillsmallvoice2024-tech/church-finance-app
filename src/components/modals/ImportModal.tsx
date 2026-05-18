@@ -16,20 +16,8 @@ import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
+import { normalizeId } from '../../utils/normalizeId'
 
-// ── ID normalization ──────────────────────────────────────────────────────────
-// Strips invisible characters (zero-width spaces, soft hyphen, BOM, NBSP, etc.),
-// applies Unicode NFC, collapses whitespace, and trims.
-// Case is preserved — bank-provided IDs are case-sensitive.
-function normalizeId(raw: string): string {
-  // U+00AD soft-hyphen, U+00A0 NBSP, U+200B–U+200D zero-width chars,
-  // U+2028–U+2029 line/para separators, U+FEFF BOM
-  return raw
-    .normalize('NFC')
-    .replace(/\u00ad|\u00a0|\u200b|\u200c|\u200d|\u2028|\u2029|\ufeff/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 // ── Target table definitions ───────────────────────────────────────────────────
 

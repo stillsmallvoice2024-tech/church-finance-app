@@ -21,6 +21,7 @@ import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 // inflowTypes import removed — income type classification replaces hardcoded types
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
+import { normalizeId } from '../utils/normalizeId'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ export default function Import() {
       if (col) {
         txnIdCol = col.header
         ids = dataRows
-          .map(r => String((r as unknown[])[col.index] ?? '').trim())
+          .map(r => normalizeId(String((r as unknown[])[col.index] ?? '')))
           .filter(id => id.length > 0)
       }
 
@@ -171,12 +172,12 @@ export default function Import() {
     const found: DupRecord[] = []
     if (!inflowRes.error && inflowRes.data) {
       for (const r of inflowRes.data) {
-        if (r.transaction_ref) found.push({ id: r.transaction_ref, table: 'inflow_transactions' })
+        if (r.transaction_ref) found.push({ id: normalizeId(r.transaction_ref), table: 'inflow_transactions' })
       }
     }
     if (!outflowRes.error && outflowRes.data) {
       for (const r of outflowRes.data) {
-        if (r.transaction_id) found.push({ id: r.transaction_id, table: 'outflow_transactions' })
+        if (r.transaction_id) found.push({ id: normalizeId(r.transaction_id), table: 'outflow_transactions' })
       }
     }
 
