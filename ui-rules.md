@@ -403,6 +403,34 @@ Used in `Categories.tsx` group header rows. State: `editGroupId`, `editGroupName
 
 **Rendering:** Multiple portions stack vertically — `flex-col gap-0.5` for both the Portion pill column and the Bal. B/F amount column.
 
+**On save (`onSuccess`):** call both `refetch()` (categories hook) AND `refetchBalances()` (opening balances hook). The two hooks have independent state; calling only one leaves the table stale.
+
+---
+
+## Modal Scroll Preservation Pattern
+
+When a modal can be opened from a scrolled position, preserve and restore scroll to prevent the focus-return and `body.overflow` unlock from resetting the page position.
+
+```tsx
+const scrollYRef = useRef(0)
+
+const handleModalClose = () => {
+  setModalOpen(false)
+  const y = scrollYRef.current
+  requestAnimationFrame(() => window.scrollTo(0, y))
+}
+
+const openEdit = (row: Row) => {
+  scrollYRef.current = window.scrollY
+  setEditRecord(row)
+  setModalOpen(true)
+}
+```
+
+- `requestAnimationFrame` fires after the modal unmounts (focus returns, overflow restores) — no flicker
+- Apply to both add and edit openers for consistency
+- Pass `onClose={handleModalClose}` to the modal; `onSuccess` calls close implicitly via the modal's submit handler
+
 ---
 
 ## Inflows Table — Column Order
