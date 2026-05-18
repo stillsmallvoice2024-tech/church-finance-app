@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Landmark, Plus, Pencil, Trash2, ChevronDown, ChevronUp,
-  LayoutGrid, LayoutList, AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw,
 } from 'lucide-react'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { PaginationBar } from '../components/ui/PaginationBar'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -46,6 +51,14 @@ const schema = z.object({
   remarks:         z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
+
+// ── Sort fields ────────────────────────────────────────────────────────────────
+
+const BD_SORT_FIELDS: SortField[] = [
+  { key: 'date',      label: 'Date',   type: 'date'    },
+  { key: 'amount',    label: 'Amount', type: 'numeric' },
+  { key: 'bank_name', label: 'Bank',   type: 'text'    },
+]
 
 // ── Add/Edit modal ─────────────────────────────────────────────────────────────
 
@@ -174,7 +187,7 @@ export default function BankDeposits() {
   const [rows,         setRows]         = useState<DepositRow[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
-  const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
+  const bdState = useDataViewState({ storageKey: 'bd', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const [dateFrom,     setDateFrom]     = useState('')
   const [dateTo,       setDateTo]       = useState('')
   const [bankFilter,   setBankFilter]   = useState('')
@@ -273,7 +286,11 @@ export default function BankDeposits() {
 
   const selectedBankName = bankFilter ? (banks.find(b => b.id === bankFilter)?.name ?? null) : null
 
-  const filtered = rows.filter(r => {
+  // Reset page when filters change
+  useEffect(() => { bdState.setPage(0) }, [dateFrom, dateTo, bankFilter, bdState.setPage])
+
+  // Date + bank filter (existing logic unchanged)
+  const dateFiltered = useMemo(() => rows.filter(r => {
     if (dateFrom && r.date < dateFrom) return false
     if (dateTo   && r.date > dateTo)   return false
     if (bankFilter) {
@@ -284,9 +301,37 @@ export default function BankDeposits() {
       }
     }
     return true
-  })
+  }), [rows, dateFrom, dateTo, bankFilter, selectedBankName])
 
-  const totalAmount = filtered.reduce((s, r) => s + r.amount, 0)
+  // Search filter
+  const searchFiltered = useMemo(() => {
+    const q = bdState.search.trim().toLowerCase()
+    return q
+      ? dateFiltered.filter(r =>
+          r.description?.toLowerCase().includes(q) ||
+          r.transaction_ref?.toLowerCase().includes(q)
+        )
+      : dateFiltered
+  }, [dateFiltered, bdState.search])
+
+  // Sort
+  const sortedRows = useMemo(() =>
+    sortRows(searchFiltered, (r, k) => {
+      if (k === 'amount')    return r.amount
+      if (k === 'bank_name') return r.bank_name ?? ''
+      return r.date
+    }, bdState.sortKey, bdState.sortDir, BD_SORT_FIELDS),
+    [searchFiltered, bdState.sortKey, bdState.sortDir],
+  )
+
+  // Pagination
+  const pagedRows = useMemo(() => {
+    const start = bdState.page * bdState.pageSize
+    return sortedRows.slice(start, start + bdState.pageSize)
+  }, [sortedRows, bdState.page, bdState.pageSize])
+
+  // Total based on date+bank filtered (not search-filtered)
+  const totalAmount = dateFiltered.reduce((s, r) => s + r.amount, 0)
 
   const openAdd  = () => { setEditRecord(null); setShowModal(true) }
   const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
@@ -313,16 +358,6 @@ export default function BankDeposits() {
           <p className="text-sm text-gray-500 mt-0.5">Physical cash deposited into bank accounts</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-            <button onClick={() => setDisplayMode('table')} title="Table view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-              <LayoutList className="w-4 h-4" />
-            </button>
-            <button onClick={() => setDisplayMode('cards')} title="Card view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-          </div>
           {admin && (
             <button onClick={openAdd}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
@@ -362,9 +397,9 @@ export default function BankDeposits() {
       {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
-          { label: 'Total deposits', value: filtered.length.toLocaleString() },
+          { label: 'Total deposits', value: dateFiltered.length.toLocaleString() },
           { label: 'Total amount',   value: formatCurrency(totalAmount) },
-          { label: 'Avg deposit',    value: filtered.length ? formatCurrency(totalAmount / filtered.length) : '—' },
+          { label: 'Avg deposit',    value: dateFiltered.length ? formatCurrency(totalAmount / dateFiltered.length) : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
             <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -409,7 +444,27 @@ export default function BankDeposits() {
 
       {/* Table / Cards */}
       <Card padding={false}>
-        {displayMode === 'cards' ? (
+        <div className="p-3 border-b border-gray-100">
+          <DataControlsBar
+            sortFields={BD_SORT_FIELDS}
+            sortKey={bdState.sortKey}
+            sortDir={bdState.sortDir}
+            onSort={bdState.setSort}
+            view={bdState.view}
+            onViewChange={bdState.setView}
+            search={bdState.search}
+            onSearchChange={bdState.setSearch}
+            searchPlaceholder="Search deposits…"
+          />
+        </div>
+        <PaginationBar
+          page={bdState.page}
+          pageSize={bdState.pageSize}
+          total={sortedRows.length}
+          onPageChange={bdState.setPage}
+          variant="compact"
+        />
+        {bdState.view === 'cards' ? (
           <div className="p-4 space-y-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
@@ -423,9 +478,9 @@ export default function BankDeposits() {
                   </div>
                 </div>
               ))
-            ) : filtered.length === 0 ? (
+            ) : sortedRows.length === 0 ? (
               <EmptyState icon={Landmark} title="No bank deposits found." compact />
-            ) : filtered.map(row => (
+            ) : pagedRows.map(row => (
               <div key={`${row.source}-${row.id}`} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                 {/* Card header */}
                 <div className="px-4 pt-3.5 pb-3">
@@ -473,9 +528,14 @@ export default function BankDeposits() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'Bank', 'Amount (₦)', 'Description', 'Transaction Ref', 'Remarks', 'Source', ...(admin ? ['Actions'] : [])].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
+                  <SortableHeader field={BD_SORT_FIELDS[0]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={BD_SORT_FIELDS[2]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={BD_SORT_FIELDS[1]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Transaction Ref</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Remarks</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Source</th>
+                  {admin && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -485,14 +545,14 @@ export default function BankDeposits() {
                       <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>
                     ))}</tr>
                   ))
-                ) : filtered.length === 0 ? (
+                ) : sortedRows.length === 0 ? (
                   <tr><td colSpan={colCount} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-400">
                       <Landmark className="w-10 h-10 text-gray-200" />
                       <p className="text-sm">No bank deposits found.</p>
                     </div>
                   </td></tr>
-                ) : filtered.map(row => (
+                ) : pagedRows.map(row => (
                   <tr key={`${row.source}-${row.id}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
@@ -527,6 +587,14 @@ export default function BankDeposits() {
             </table>
           </div>
         )}
+        <PaginationBar
+          page={bdState.page}
+          pageSize={bdState.pageSize}
+          total={sortedRows.length}
+          onPageChange={bdState.setPage}
+          onPageSizeChange={bdState.setPageSize}
+          variant="full"
+        />
       </Card>
 
       <DepositModal

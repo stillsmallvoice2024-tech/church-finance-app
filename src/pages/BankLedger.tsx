@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { BookOpen, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { BookOpen, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
 import { usePageTitle }  from '../hooks/usePageTitle'
@@ -15,6 +15,11 @@ import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { PaginationBar } from '../components/ui/PaginationBar'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -38,6 +43,15 @@ interface LedgerRow {
   outflowData?:     OutflowTransaction
 }
 
+// ── Sort fields ────────────────────────────────────────────────────────────────
+
+const BL_SORT_FIELDS: SortField[] = [
+  { key: 'date',    label: 'Date',    type: 'date'    },
+  { key: 'inflow',  label: 'Inflow',  type: 'numeric' },
+  { key: 'outflow', label: 'Outflow', type: 'numeric' },
+  { key: 'balance', label: 'Balance', type: 'numeric' },
+]
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function BankLedger() {
@@ -47,7 +61,7 @@ export default function BankLedger() {
   const { canWrite } = useRole()
 
   const [selectedBank, setSelectedBank] = useState('')
-  const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
+  const blState = useDataViewState({ storageKey: 'bl', defaultSortKey: 'date', defaultSortDir: 'asc' })
   const [ledgerRows,   setLedgerRows]   = useState<LedgerRow[]>([])
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState<string | null>(null)
@@ -118,14 +132,44 @@ export default function BankLedger() {
     load(bankName)
   }, [selectedBank, banks, load])
 
-  const filtered = ledgerRows.filter(r => {
+  // Reset page when bank or date changes
+  useEffect(() => { blState.setPage(0) }, [selectedBank, dateFrom, dateTo, blState.setPage])
+
+  // Date-range filter (unchanged logic)
+  const dateFiltered = useMemo(() => ledgerRows.filter(r => {
     if (dateFrom && r.date < dateFrom) return false
     if (dateTo   && r.date > dateTo)   return false
     return true
-  })
+  }), [ledgerRows, dateFrom, dateTo])
 
-  const totalInflow  = filtered.reduce((s, r) => s + r.inflow,  0)
-  const totalOutflow = filtered.reduce((s, r) => s + r.outflow, 0)
+  // Search filter
+  const searchFiltered = useMemo(() => {
+    const q = blState.search.trim().toLowerCase()
+    return q
+      ? dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
+      : dateFiltered
+  }, [dateFiltered, blState.search])
+
+  // Sort
+  const sortedRows = useMemo(() =>
+    sortRows(searchFiltered, (r, k) => {
+      if (k === 'inflow')  return r.inflow
+      if (k === 'outflow') return r.outflow
+      if (k === 'balance') return r.balance
+      return r.date
+    }, blState.sortKey, blState.sortDir, BL_SORT_FIELDS),
+    [searchFiltered, blState.sortKey, blState.sortDir],
+  )
+
+  // Pagination
+  const pagedRows = useMemo(() => {
+    const start = blState.page * blState.pageSize
+    return sortedRows.slice(start, start + blState.pageSize)
+  }, [sortedRows, blState.page, blState.pageSize])
+
+  // Totals based on date-filtered (not search-filtered or paged) — summary strip unchanged
+  const totalInflow  = dateFiltered.reduce((s, r) => s + r.inflow,  0)
+  const totalOutflow = dateFiltered.reduce((s, r) => s + r.outflow, 0)
   const netBalance   = totalInflow - totalOutflow
 
   const selectedBankName = banks.find(b => b.id === selectedBank)?.name ?? ''
@@ -137,16 +181,6 @@ export default function BankLedger() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Bank Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">Per-bank transaction history with running balance</p>
-        </div>
-        <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-          <button onClick={() => setDisplayMode('table')} title="Table view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-            <LayoutList className="w-4 h-4" />
-          </button>
-          <button onClick={() => setDisplayMode('cards')} title="Card view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-            <LayoutGrid className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
@@ -222,10 +256,36 @@ export default function BankLedger() {
         </Card>
       )}
 
+      {/* DataControlsBar */}
+      {selectedBank && !error && (
+        <DataControlsBar
+          sortFields={BL_SORT_FIELDS}
+          sortKey={blState.sortKey}
+          sortDir={blState.sortDir}
+          onSort={blState.setSort}
+          view={blState.view}
+          onViewChange={blState.setView}
+          search={blState.search}
+          onSearchChange={blState.setSearch}
+          searchPlaceholder="Search descriptions…"
+        />
+      )}
+
+      {/* Compact pagination — above card */}
+      {selectedBank && !error && (
+        <PaginationBar
+          page={blState.page}
+          pageSize={blState.pageSize}
+          total={sortedRows.length}
+          onPageChange={blState.setPage}
+          variant="compact"
+        />
+      )}
+
       {/* Ledger table / cards */}
       {selectedBank && !error && (
         <Card padding={false}>
-          {displayMode === 'cards' ? (
+          {blState.view === 'cards' ? (
             <div className="p-4 space-y-3">
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
@@ -239,9 +299,9 @@ export default function BankLedger() {
                     </div>
                   </div>
                 ))
-              ) : filtered.length === 0 ? (
+              ) : sortedRows.length === 0 ? (
                 <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
-              ) : filtered.map(row => (
+              ) : pagedRows.map(row => (
                 <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                   {/* Card header */}
                   <div className="px-4 pt-3.5 pb-3">
@@ -300,12 +360,12 @@ export default function BankLedger() {
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    {([
-                      ['Date', false], ['Description', false],
-                      ['Inflow (₦)', true], ['Outflow (₦)', true], ['Balance (₦)', true], ['📎', false],
-                    ] as [string, boolean][]).map(([h, right]) => (
-                      <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>{h}</th>
-                    ))}
+                    <SortableHeader field={BL_SORT_FIELDS[0]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">Description</th>
+                    <SortableHeader field={BL_SORT_FIELDS[1]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
+                    <SortableHeader field={BL_SORT_FIELDS[2]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
+                    <SortableHeader field={BL_SORT_FIELDS[3]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">📎</th>
                     {canWrite() && <th className="px-4 py-3 w-10" />}
                   </tr>
                 </thead>
@@ -316,11 +376,11 @@ export default function BankLedger() {
                         <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>
                       ))}</tr>
                     ))
-                  ) : filtered.length === 0 ? (
+                  ) : sortedRows.length === 0 ? (
                     <tr><td colSpan={6}>
                       <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
                     </td></tr>
-                  ) : filtered.map(row => (
+                  ) : pagedRows.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 max-w-[280px]">
@@ -358,6 +418,14 @@ export default function BankLedger() {
               </table>
             </div>
           )}
+          <PaginationBar
+            page={blState.page}
+            pageSize={blState.pageSize}
+            total={sortedRows.length}
+            onPageChange={blState.setPage}
+            onPageSizeChange={blState.setPageSize}
+            variant="full"
+          />
         </Card>
       )}
 
@@ -377,4 +445,3 @@ export default function BankLedger() {
     </div>
   )
 }
-
