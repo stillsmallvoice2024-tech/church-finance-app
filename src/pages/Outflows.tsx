@@ -1,15 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingDown, Download, Pencil, Trash2,
-  Search, AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Modal }                   from '../components/ui/Modal'
-import { Pagination }              from '../components/ui/Pagination'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
 import { ReceiptBadge }            from '../components/ui/ReceiptBadge'
-import { ViewToggle, useViewToggle } from '../components/ui/ViewToggle'
+import { DataControlsBar }         from '../components/ui/DataControlsBar'
+import { SortableHeader }          from '../components/ui/SortableHeader'
+import { PaginationBar }           from '../components/ui/PaginationBar'
+import { useDataViewState }        from '../hooks/useDataViewState'
+import { sortRows, type SortField } from '../utils/sortUtils'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -34,6 +37,11 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   bank_deposit:        'Bank Deposit',
   intrabank_transfer:  'Intrabank Transfer',
 }
+
+const OUT_SORT_FIELDS: SortField[] = [
+  { key: 'date',             label: 'Date',      type: 'date'    },
+  { key: 'amount_disbursed', label: 'Disbursed', type: 'numeric' },
+]
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -105,7 +113,17 @@ export default function Outflows() {
   const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount_disbursed))) : 0, [data])
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
 
-  const { view: displayMode, setView: setDisplayMode } = useViewToggle('outflows-view')
+  // Data controls state
+  const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'date', defaultSortDir: 'desc' })
+
+  // Client-side sort of current page
+  const sorted = useMemo(() =>
+    sortRows(data, (r, k) => {
+      if (k === 'amount_disbursed') return Number(r.amount_disbursed)
+      return r.date
+    }, outState.sortKey, outState.sortDir, OUT_SORT_FIELDS),
+    [data, outState.sortKey, outState.sortDir],
+  )
 
   // UI state
   const [editRecord,        setEditRecord]        = useState<OutflowTransaction | null>(null)
@@ -222,17 +240,7 @@ export default function Outflows() {
                 ))}
               </select>
             </FilterGroup>
-            <FilterGroup label="Search" className="flex-1 min-w-[180px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input
-                  type="text" placeholder="Search description…" value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  className={`${filterInputCls} pl-9`}
-                />
-              </div>
-            </FilterGroup>
-            {(dateFrom || dateTo || stageCode || searchInput) && (
+            {(dateFrom || dateTo || stageCode) && (
               <button
                 onClick={() => { setDateFrom(''); setDateTo(''); setStageCode(''); setSearchInput('') }}
                 className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -246,16 +254,30 @@ export default function Outflows() {
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
-        {/* Results toolbar */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            {loading ? ' ' : `${count.toLocaleString()} result${count !== 1 ? 's' : ''}`}
-          </p>
-          <ViewToggle storageKey="outflows-view" value={displayMode} onChange={setDisplayMode} />
-        </div>
+        {/* Data controls bar */}
+        <DataControlsBar
+          sortFields={OUT_SORT_FIELDS}
+          sortKey={outState.sortKey}
+          sortDir={outState.sortDir}
+          onSort={outState.setSort}
+          view={outState.view}
+          onViewChange={outState.setView}
+          search={searchInput}
+          onSearchChange={v => { setSearchInput(v) }}
+          searchPlaceholder="Search descriptions…"
+        />
+
+        {/* Compact pagination above content */}
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={count}
+          onPageChange={setPage}
+          variant="compact"
+        />
 
         {/* Cards / Table */}
-        {displayMode === 'cards' ? (
+        {outState.view === 'cards' ? (
           <div className="space-y-3">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
@@ -271,7 +293,7 @@ export default function Outflows() {
               ))
             ) : data.length === 0 ? (
               <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
-            ) : data.map(row => {
+            ) : sorted.map(row => {
               const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
               const netDiffers = net !== Number(row.amount_disbursed)
               return (
@@ -332,9 +354,17 @@ export default function Outflows() {
             })}
           </div>
         ) : null}
-        {displayMode === 'cards' && <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />}
+        {outState.view === 'cards' && (
+          <PaginationBar
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={count}
+            onPageChange={setPage}
+            variant="full"
+          />
+        )}
 
-        {displayMode === 'table' && <Card padding={false}>
+        {outState.view === 'table' && <Card padding={false}>
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/10 bg-primary/5">
               <span className="text-sm font-medium text-primary">{selectedIds.size} selected</span>
@@ -375,15 +405,18 @@ export default function Outflows() {
                       onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())}
                     />
                   </th>
-                  {([
-                    ['Date', false], ['Recorded', false], ['Bank', false], ['Txn ID', false],
-                    ['Description', false], ['Disbursed (₦)', true], ['Refunded (₦)', true],
-                    ['Net (₦)', true], ['Stage Code 1', false], ['Remarks', false], ['📎', false], ['Actions', false],
-                  ] as [string, boolean][]).map(([h, right]) => (
-                    <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>
-                      {h}
-                    </th>
-                  ))}
+                  <SortableHeader field={OUT_SORT_FIELDS[0]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Recorded</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Bank</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Txn ID</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
+                  <SortableHeader field={OUT_SORT_FIELDS[1]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right whitespace-nowrap">Refunded (₦)</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right whitespace-nowrap">Net (₦)</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Stage Code 1</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Remarks</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">📎</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -404,7 +437,7 @@ export default function Outflows() {
                     </td>
                   </tr>
                 ) : (
-                  data.map(row => {
+                  sorted.map(row => {
                     const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
                     return (
                       <tr
@@ -478,7 +511,13 @@ export default function Outflows() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
+          <PaginationBar
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={count}
+            onPageChange={setPage}
+            variant="full"
+          />
         </Card>}
       </div>
 
