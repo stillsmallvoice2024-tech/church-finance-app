@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment, useMemo } from 'react'
+import { useState, useEffect, Fragment, useMemo, useRef } from 'react'
 import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { useDataViewState } from '../hooks/useDataViewState'
@@ -336,12 +336,14 @@ export default function Categories() {
 
   const { categories, loading, error, refetch }    = useCategories()
   const { groups, error: groupsError, refetch: refetchGroups } = useCategoryGroups()
-  const { balances: allOpeningBalances } = useCategoryOpeningBalances()
+  const { balances: allOpeningBalances, refetch: refetchBalances } = useCategoryOpeningBalances()
   const { mutate: deleteCategory }                  = useDeleteCategory()
   const { mutate: updateCategory }                  = useUpdateCategory()
   const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
   const { mutate: updateGroup }                     = useUpdateCategoryGroup()
   const toast = useToast()
+
+  const scrollYRef = useRef(0)
 
   const [modalOpen,    setModalOpen]    = useState(false)
   const [editRecord,   setEditRecord]   = useState<Category | null>(null)
@@ -356,8 +358,14 @@ export default function Categories() {
   const [editGroupName, setEditGroupName] = useState('')
   const [savingGroup,   setSavingGroup]   = useState(false)
 
-  const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
-  const openEdit = (c: Category) => { setEditRecord(c); setModalOpen(true) }
+  const handleModalClose = () => {
+    setModalOpen(false)
+    const y = scrollYRef.current
+    requestAnimationFrame(() => window.scrollTo(0, y))
+  }
+
+  const openAdd  = () => { scrollYRef.current = window.scrollY; setEditRecord(null); setModalOpen(true) }
+  const openEdit = (c: Category) => { scrollYRef.current = window.scrollY; setEditRecord(c); setModalOpen(true) }
 
   const handleDeleteClick = async (cat: Category) => {
     setCheckingDeps(true)
@@ -665,8 +673,8 @@ export default function Categories() {
       {/* Modals */}
       <CategoryModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSuccess={refetch}
+        onClose={handleModalClose}
+        onSuccess={() => { refetch(); refetchBalances() }}
         editRecord={editRecord}
         groups={groups}
         onGroupCreated={refetchGroups}
