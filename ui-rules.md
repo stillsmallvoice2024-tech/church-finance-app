@@ -499,6 +499,7 @@ The **Optional Banking Details** section (`amount_refunded`, `transfer_charge`) 
   - Outflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `stage_code_1` (category select, from `categories` prop) + `stage_code_2` (select)
   - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID; no way to bulk-clear `transaction_type` (individual edit only)
   - **Strip-and-retry pattern**: `handleApply` builds a `const baseUpdates` snapshot before the loop. Each iteration derives `rowUpdates` by filtering out columns already in `strippedCols`. On schema error for a column: add to `strippedCols`, retry the current row with `retryUpdates` (base minus that column). **Never mutate `baseUpdates` or reassign an `updates` variable inside the loop** — doing so causes all subsequent rows to silently lose the stripped column. Per-column warning toast emitted once after loop. Toast order: column warnings → success/fail count.
+  - **Form reset on close (not on open)**: the reset `useEffect` uses `if (open) return` so it fires when the modal closes. State is clean before the next open — avoids previous-session values flashing on the first render of a new session. Also resets `saving` to `false` to prevent a stuck spinner if the modal is closed abnormally.
 - colSpan for loading/empty/expanded rows must equal total column count (10 for Inflows, 13 for Outflows)
 - Multi-select is **table view only** — cards view unchanged
 
