@@ -204,8 +204,13 @@ Quick action button hierarchy:
 
 ## Settings Page (`src/pages/Settings.tsx`)
 
-Section order: Profile → Password → **Theme** → App Information  
+Section order: Profile → Password → **Theme** → **Data Management** → App Information  
 (App Information is the least user-relevant section; always last.)
+
+**Data Management** section contains three action cards:
+- **Download Backup** → opens `BackupModal` (`src/components/modals/BackupModal.tsx`) — creates a full JSON backup with progress; offers download or shareable cloud link (7-day signed URL via Supabase Storage `backups/` bucket)
+- **Restore Backup** → opens `RestoreModal` (`src/components/modals/RestoreModal.tsx`) — file picker → preview summary → confirm → restore with managed/unmanaged sections; supports `replace` and `merge` modes
+- **Export CSVs** → opens `ExportCSVsModal` (`src/components/modals/ExportCSVsModal.tsx`) — same 12 CSV exports as `ResetDataModal` without the delete step
 
 ---
 
