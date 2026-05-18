@@ -360,15 +360,18 @@ export default function Categories() {
 
   const pendingScrollRef = useRef<number | null>(null)
 
-  // Restore scroll only after loading=false. When refetch fires, loading=true collapses
-  // the table to skeleton loaders — page height shrinks and browser clamps window.scrollY
-  // to 0. A scrollTo while the skeleton is visible is a no-op. Waiting for the full
-  // table to re-render before restoring ensures the page is tall enough.
+  // The scrollable container is <main id="main-content"> (overflow-y-auto in Layout.tsx),
+  // not window. Capture/restore scrollTop on that element, not window.scrollY.
+  // Restoration is deferred until loading=false: when refetch fires, loading=true replaces
+  // the table with a skeleton (shorter content), the browser clamps main.scrollTop to 0,
+  // and any restore attempt while the skeleton is visible is a no-op.
+  const getScroller = () => document.getElementById('main-content')
+
   useEffect(() => {
     if (modalOpen || loading || pendingScrollRef.current === null) return
     const y = pendingScrollRef.current
     pendingScrollRef.current = null
-    requestAnimationFrame(() => window.scrollTo(0, y))
+    requestAnimationFrame(() => { getScroller()?.scrollTo(0, y) })
   }, [modalOpen, loading])
 
   const handleModalClose = () => {
@@ -376,8 +379,8 @@ export default function Categories() {
     setModalOpen(false)
   }
 
-  const openAdd  = () => { scrollYRef.current = window.scrollY; setEditRecord(null); setModalOpen(true) }
-  const openEdit = (c: Category) => { scrollYRef.current = window.scrollY; setEditRecord(c); setModalOpen(true) }
+  const openAdd  = () => { scrollYRef.current = getScroller()?.scrollTop ?? 0; setEditRecord(null); setModalOpen(true) }
+  const openEdit = (c: Category) => { scrollYRef.current = getScroller()?.scrollTop ?? 0; setEditRecord(c); setModalOpen(true) }
 
   const handleDeleteClick = async (cat: Category) => {
     setCheckingDeps(true)
