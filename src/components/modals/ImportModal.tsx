@@ -314,6 +314,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [expandedRows,   setExpandedRows]   = useState<Set<number>>(new Set())
   const [tooltipState,   setTooltipState]   = useState<{ text: string; x: number; y: number } | null>(null)
 
+  // Row selection (by sheet row index) — stable across filter/sort changes
+  const [selectedInflowRis,  setSelectedInflowRis]  = useState<Set<number>>(new Set())
+  const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
+
   const toggleExpand = (ri: number) =>
     setExpandedRows(prev => { const s = new Set(prev); s.has(ri) ? s.delete(ri) : s.add(ri); return s })
 
@@ -367,6 +371,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setApplyS2('')
     setApplyIncomeType('')
     setRowIncomeTypes({})
+    setSelectedInflowRis(new Set())
+    setSelectedOutflowRis(new Set())
     setWizardDupLoading(false)
     setWizardDupsFound([])
     setSkipWizardDups(false)
@@ -1257,13 +1263,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       </button>
                       <span className="text-xs text-gray-400 ml-auto">
                         {filtered.length} / {creditRows.length} rows
+                        {selectedInflowRis.size > 0 && (
+                          <> · <span className="text-primary font-medium">{selectedInflowRis.size} selected</span></>
+                        )}
                       </span>
                     </div>
 
                     {/* Apply bar */}
+                    {(() => {
+                      const inflowTargetRis = selectedInflowRis.size > 0
+                        ? [...selectedInflowRis]
+                        : filtered.map(r => r.ri)
+                      const inflowTargetLabel = selectedInflowRis.size > 0
+                        ? `${selectedInflowRis.size} selected`
+                        : isFiltered ? `${filtered.length} filtered` : 'all'
+                      return (
                     <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                       <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                        Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
+                        Apply to {inflowTargetLabel} rows:
                       </span>
                       <select value={applyInflowConfig} onChange={e => {
                           if (e.target.value === '__create__') { setCreateConfigPendingRow('apply'); setApplyInflowConfig('') }
@@ -1289,12 +1306,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       </select>
                       <button
                         type="button"
-                        disabled={!applyInflowConfig && !applyIncomeType && !batchTxnType}
+                        disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType) || inflowTargetRis.length === 0}
                         onClick={() => {
                           setRowConfigs(prev => {
                             const next = { ...prev }
                             if (applyInflowConfig) {
-                              for (const { ri } of filtered)
+                              for (const ri of inflowTargetRis)
                                 next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
                             }
                             return next
@@ -1302,14 +1319,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           if (applyIncomeType) {
                             setRowIncomeTypes(prev => {
                               const next = { ...prev }
-                              for (const { ri } of filtered) next[ri] = applyIncomeType
+                              for (const ri of inflowTargetRis) next[ri] = applyIncomeType
                               return next
                             })
                           }
                           if (batchTxnType !== '') {
                             setRowTxnTypes(prev => {
                               const next = { ...prev }
-                              for (const { ri } of filtered) next[ri] = batchTxnType
+                              for (const ri of inflowTargetRis) next[ri] = batchTxnType
                               return next
                             })
                           }
@@ -1319,10 +1336,30 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         Apply
                       </button>
                     </div>
+                      )
+                    })()}
 
                     {/* Row table */}
+                    {(() => {
+                      const allInflowFilteredSelected = filtered.length > 0 && filtered.every(({ ri }) => selectedInflowRis.has(ri))
+                      const someInflowFilteredSelected = filtered.some(({ ri }) => selectedInflowRis.has(ri))
+                      return (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="grid grid-cols-[36px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                      <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={allInflowFilteredSelected}
+                          ref={el => { if (el) el.indeterminate = someInflowFilteredSelected && !allInflowFilteredSelected }}
+                          onChange={e => {
+                            setSelectedInflowRis(prev => {
+                              const next = new Set(prev)
+                              if (e.target.checked) filtered.forEach(({ ri }) => next.add(ri))
+                              else filtered.forEach(({ ri }) => next.delete(ri))
+                              return next
+                            })
+                          }}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                        />
                         <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Income Type</span><span>Type</span>
                       </div>
                       <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
@@ -1337,9 +1374,22 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               const autoType = desc ? classifyIncomeType(desc, '', incomeTypes) : null
                               const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
                               const effIncomeType = incomeTypes.find(t => t.id === effIncomeTypeId)
+                              const isInflowSelected = selectedInflowRis.has(ri)
                               return (
-                                <div key={ri}>
-                                  <div className="grid grid-cols-[36px_1fr_72px_120px_120px_96px] items-center px-3 py-2 gap-2 text-xs">
+                                <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
+                                  <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] items-center px-3 py-2 gap-2 text-xs">
+                                    <input
+                                      type="checkbox"
+                                      checked={isInflowSelected}
+                                      onChange={e => {
+                                        setSelectedInflowRis(prev => {
+                                          const next = new Set(prev)
+                                          e.target.checked ? next.add(ri) : next.delete(ri)
+                                          return next
+                                        })
+                                      }}
+                                      className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                                    />
                                     <span className="text-gray-400 font-mono">{ri + 1}</span>
                                     <div className="min-w-0">
                                       <div
@@ -1415,6 +1465,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         }
                       </div>
                     </div>
+                      )
+                    })()}
                   </div>
                 )
               }
@@ -1456,13 +1508,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     </button>
                     <span className="text-xs text-gray-400 ml-auto">
                       {filtered.length} / {debitRows.length} rows
+                      {selectedOutflowRis.size > 0 && (
+                        <> · <span className="text-primary font-medium">{selectedOutflowRis.size} selected</span></>
+                      )}
                     </span>
                   </div>
 
                   {/* Apply bar */}
+                  {(() => {
+                    const outflowTargetRis = selectedOutflowRis.size > 0
+                      ? [...selectedOutflowRis]
+                      : filtered.map(r => r.ri)
+                    const outflowTargetLabel = selectedOutflowRis.size > 0
+                      ? `${selectedOutflowRis.size} selected`
+                      : isFiltered ? `${filtered.length} filtered` : 'all'
+                    return (
                   <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                     <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                      Apply to {isFiltered ? `${filtered.length} filtered` : 'all'} rows:
+                      Apply to {outflowTargetLabel} rows:
                     </span>
                     <select value={applyS1} onChange={e => setApplyS1(e.target.value)}
                       className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
@@ -1483,12 +1546,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     </select>
                     <button
                       type="button"
-                      disabled={!applyS1 && !applyS2 && !batchTxnType}
+                      disabled={(!applyS1 && !applyS2 && !batchTxnType) || outflowTargetRis.length === 0}
                       onClick={() => {
                         if (applyS1 || applyS2) {
                           setRowStageCodes(prev => {
                             const next = { ...prev }
-                            for (const { ri } of filtered)
+                            for (const ri of outflowTargetRis)
                               next[ri] = {
                                 s1: applyS1 || (prev[ri]?.s1 ?? ''),
                                 s2: applyS2 || (prev[ri]?.s2 ?? ''),
@@ -1499,7 +1562,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         if (batchTxnType !== '') {
                           setRowTxnTypes(prev => {
                             const next = { ...prev }
-                            for (const { ri } of filtered) next[ri] = batchTxnType
+                            for (const ri of outflowTargetRis) next[ri] = batchTxnType
                             return next
                           })
                         }
@@ -1509,10 +1572,30 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       Apply
                     </button>
                   </div>
+                    )
+                  })()}
 
                   {/* Row table */}
+                  {(() => {
+                    const allOutflowFilteredSelected = filtered.length > 0 && filtered.every(({ ri }) => selectedOutflowRis.has(ri))
+                    const someOutflowFilteredSelected = filtered.some(({ ri }) => selectedOutflowRis.has(ri))
+                    return (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-[40px_1fr_80px_110px_110px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={allOutflowFilteredSelected}
+                        ref={el => { if (el) el.indeterminate = someOutflowFilteredSelected && !allOutflowFilteredSelected }}
+                        onChange={e => {
+                          setSelectedOutflowRis(prev => {
+                            const next = new Set(prev)
+                            if (e.target.checked) filtered.forEach(({ ri }) => next.add(ri))
+                            else filtered.forEach(({ ri }) => next.delete(ri))
+                            return next
+                          })
+                        }}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                      />
                       <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span><span>Type</span>
                     </div>
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
@@ -1524,14 +1607,26 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             const sc      = rowStageCodes[ri] ?? { s1: '', s2: '' }
                             const txnType = rowTxnTypes[ri] ?? ''
                             const origId  = rowOrigTxnIds[ri] ?? ''
+                            const isOutflowSelected = selectedOutflowRis.has(ri)
                             return (
-                              <div key={ri}>
-                                <div className="grid grid-cols-[40px_1fr_80px_110px_110px_90px] items-center px-3 py-2 gap-2 text-xs">
+                              <div key={ri} className={isOutflowSelected ? 'bg-primary/5' : undefined}>
+                                <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_90px] items-center px-3 py-2 gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={isOutflowSelected}
+                                    onChange={e => {
+                                      setSelectedOutflowRis(prev => {
+                                        const next = new Set(prev)
+                                        e.target.checked ? next.add(ri) : next.delete(ri)
+                                        return next
+                                      })
+                                    }}
+                                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                                  />
                                   <span className="text-gray-400 font-mono">{ri + 1}</span>
                                   <div className="min-w-0">
                                     <div
-                                      className="flex items-center gap-1 cursor-pointer select-none group"
-                                      onClick={() => toggleExpand(ri)}
+                                      className="flex items-center"
                                       onMouseEnter={e => {
                                         if (!desc) return
                                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -1541,13 +1636,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       onMouseLeave={() => setTooltipState(null)}
                                     >
                                       <span className="text-gray-700 truncate">{desc || '—'}</span>
-                                      {desc && <ChevronDown className={`w-3 h-3 shrink-0 text-gray-300 group-hover:text-gray-500 transition-transform duration-150 ${expandedRows.has(ri) ? 'rotate-180' : ''}`} />}
                                     </div>
-                                    {expandedRows.has(ri) && (
-                                      <div className="mt-1 text-gray-600 break-words leading-snug bg-gray-50 rounded px-2 py-1 border border-gray-100 text-[11px]">
-                                        {desc}
-                                      </div>
-                                    )}
                                     <div className="text-gray-400">{date}</div>
                                   </div>
                                   <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
@@ -1587,6 +1676,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       }
                     </div>
                   </div>
+                    )
+                  })()}
                 </div>
               )
             })()}
