@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
 import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
@@ -8,8 +8,31 @@ import { formatCurrency, formatDate } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
+import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { SortableHeader } from '../components/ui/SortableHeader'
+import { PaginationBar } from '../components/ui/PaginationBar'
+import { useDataViewState } from '../hooks/useDataViewState'
+import { sortRows, directionLabel } from '../utils/sortUtils'
+import type { SortField } from '../utils/sortUtils'
 
-// ── Types ────────────────────────────────────────────────────────────────────────
+// ── Sort field definitions ────────────────────────────────────────────────────
+
+const SUMMARY_SORT_FIELDS: SortField[] = [
+  { key: 'name',                label: 'Category',      type: 'text' },
+  { key: 'percentage',          label: '% Alloc',       type: 'numeric' },
+  { key: 'percentageAllocated', label: '₦ Allocated',   type: 'numeric' },
+  { key: 'specificSeed',        label: 'Specific Seed', type: 'numeric' },
+  { key: 'savingsNet',          label: 'Savings Net',   type: 'numeric' },
+]
+
+const LEDGER_SORT_FIELDS: SortField[] = [
+  { key: 'date',    label: 'Date',    type: 'date' },
+  { key: 'inflow',  label: 'Inflow',  type: 'numeric' },
+  { key: 'outflow', label: 'Outflow', type: 'numeric' },
+  { key: 'balance', label: 'Balance', type: 'numeric' },
+]
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface CategoryRow {
   name:                string
@@ -29,15 +52,14 @@ interface LedgerRow {
   balance:     number
 }
 
-type ViewMode    = 'summary' | 'ledger'
-type DisplayMode = 'table' | 'cards'
-type Portion     = 'All' | 'Percentage' | 'Specific Seed' | 'Savings'
+type ViewMode      = 'summary' | 'ledger'
+type Portion       = 'All' | 'Percentage' | 'Specific Seed' | 'Savings'
 type LedgerPortion = 'Percentage' | 'Specific Seed' | 'Savings'
 
-const PORTIONS: Portion[]       = ['All', 'Percentage', 'Specific Seed', 'Savings']
+const PORTIONS: Portion[]             = ['All', 'Percentage', 'Specific Seed', 'Savings']
 const LEDGER_PORTIONS: LedgerPortion[] = ['Percentage', 'Specific Seed', 'Savings']
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CategoryLedger() {
   usePageTitle('Category Ledger')
@@ -60,14 +82,26 @@ export default function CategoryLedger() {
 
   // UI state
   const [viewMode,       setViewMode]       = useState<ViewMode>('summary')
-  const [displayMode,    setDisplayMode]    = useState<DisplayMode>('table')
   const [activePortion,  setActivePortion]  = useState<Portion>('All')
   const [activeCategory, setActiveCategory] = useState('')
   const [ledgerPortion,  setLedgerPortion]  = useState<LedgerPortion>('Percentage')
 
+  // Data controls state — persisted per view
+  const summaryViewState = useDataViewState({
+    storageKey:     'cl-summary',
+    defaultSortKey: 'name',
+    defaultSortDir: 'asc',
+  })
+  const ledgerViewState = useDataViewState({
+    storageKey:      'cl-ledger',
+    defaultSortKey:  'date',
+    defaultSortDir:  'asc',
+    defaultPageSize: 25,
+  })
+
   useEffect(() => { if (!loaded) fetchConfigs() }, [loaded, fetchConfigs])
 
-  // ── Summary load ─────────────────────────────────────────────────────────────────
+  // ── Summary load ─────────────────────────────────────────────────────────────
 
   const loadSummary = useCallback(async () => {
     setLoading(true)
@@ -90,11 +124,9 @@ export default function CategoryLedger() {
       return
     }
 
-    // category_opening_balances (new table; falls back to categories.starting_balance if table absent)
     const cobRows = cobRes.error ? [] : (cobRes.data ?? [])
     const cobCatNames = new Set(cobRows.map(r => (r.categories as { name: string } | null)?.name ?? ''))
 
-    // Active allocation config (most recent locked, on or before today)
     const today  = new Date().toISOString().slice(0, 10)
     const active = configs
       .filter(c => c.start_date <= today && c.status === 'locked')
@@ -105,7 +137,6 @@ export default function CategoryLedger() {
       for (const r of active.rows) pctMap.set(r.category_name, Number(r.percentage ?? 0))
     }
 
-    // Accumulate specific seed and savings
     const map = new Map<string, Omit<CategoryRow, 'name' | 'percentage' | 'percentageAllocated'>>()
     const ensure = (cat: string) => {
       if (!map.has(cat)) map.set(cat, { specificSeed: 0, savingsIn: 0, savingsOut: 0 })
@@ -122,7 +153,6 @@ export default function CategoryLedger() {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.actual_amount || r.amount_disbursed || 0)
     }
 
-    // Add opening balances from new table (category_opening_balances)
     for (const ob of cobRows) {
       const catName = (ob.categories as { name: string } | null)?.name ?? ''
       if (!catName) continue
@@ -131,7 +161,6 @@ export default function CategoryLedger() {
       else if (ob.budget_portion === 'Savings') row.savingsIn += Number(ob.amount)
     }
 
-    // Fallback: categories not yet in new table use old starting_balance field
     for (const cat of categories) {
       if (cobCatNames.has(cat.name)) continue
       if (!cat.starting_balance || cat.starting_balance === 0) continue
@@ -141,7 +170,6 @@ export default function CategoryLedger() {
       else if (portion === 'Savings') row.savingsIn += cat.starting_balance
     }
 
-    // Compute percentage-allocated amounts across all time
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
@@ -158,14 +186,12 @@ export default function CategoryLedger() {
       }
     }
 
-    // Add Percentage Allocation opening balances (new table)
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
       const catName = (ob.categories as { name: string } | null)?.name ?? ''
       if (!catName) continue
       allocMap.set(catName, (allocMap.get(catName) ?? 0) + Number(ob.amount))
     }
-    // Fallback Percentage Allocation
     for (const cat of categories) {
       if (cobCatNames.has(cat.name)) continue
       if (!cat.starting_balance || cat.starting_balance === 0) continue
@@ -174,7 +200,6 @@ export default function CategoryLedger() {
       }
     }
 
-    // Merge all name sources
     const allNames = new Set<string>([
       ...categories.map(c => c.name),
       ...pctMap.keys(),
@@ -198,7 +223,7 @@ export default function CategoryLedger() {
 
   useEffect(() => { loadSummary() }, [loadSummary, outflowVersion])
 
-  // ── Ledger load ──────────────────────────────────────────────────────────────────
+  // ── Ledger load ───────────────────────────────────────────────────────────────
 
   const loadLedger = useCallback(async () => {
     if (!activeCategory) return
@@ -296,7 +321,6 @@ export default function CategoryLedger() {
         }
       }
 
-      // Prepend opening balance (Balance Brought Forward) if it matches the active portion
       const catRecord = categories.find(c => c.name === activeCategory)
       const portionMap: Record<LedgerPortion, string> = {
         'Percentage':    'Percentage Allocation',
@@ -305,7 +329,6 @@ export default function CategoryLedger() {
       }
       const bfRow: LedgerRow[] = []
       if (catRecord) {
-        // Try new table first
         const { data: cobLedger } = await supabase
           .from('category_opening_balances')
           .select('amount')
@@ -327,7 +350,6 @@ export default function CategoryLedger() {
         }
       }
 
-      // Merge, sort by date, compute running balance
       const combined = [...bfRow, ...inRows, ...outRows].sort((a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1))
       let balance = 0
       for (const row of combined) {
@@ -346,43 +368,128 @@ export default function CategoryLedger() {
     if (viewMode === 'ledger' && activeCategory) loadLedger()
   }, [viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion])
 
-  // ── Derived ────────────────────────────────────────────────────────────────────
+  // Reset ledger page when category or portion changes
+  const { setPage: setLedgerPage } = ledgerViewState
+  useEffect(() => {
+    setLedgerPage(0)
+  }, [activeCategory, ledgerPortion, setLedgerPage])
 
-  const filteredRows = rows.filter(r => {
-    const catOk = !activeCategory || r.name === activeCategory
-    const portOk =
-      activePortion === 'All'           ? true :
-      activePortion === 'Percentage'    ? r.percentage !== null :
-      activePortion === 'Specific Seed' ? r.specificSeed > 0 :
-      /* Savings */                       r.savingsIn > 0 || r.savingsOut > 0
-    return catOk && portOk
-  })
+  // ── Derived — Summary ─────────────────────────────────────────────────────────
 
-  const totals = filteredRows.reduce(
-    (acc, r) => ({
-      pct:   acc.pct   + (r.percentage ?? 0),
-      alloc: acc.alloc + r.percentageAllocated,
-      seed:  acc.seed  + r.specificSeed,
-      sav:   acc.sav   + (r.savingsIn - r.savingsOut),
+  const filteredRows = useMemo(
+    () => rows.filter(r => {
+      const catOk = !activeCategory || r.name === activeCategory
+      const portOk =
+        activePortion === 'All'           ? true :
+        activePortion === 'Percentage'    ? r.percentage !== null :
+        activePortion === 'Specific Seed' ? r.specificSeed > 0 :
+        /* Savings */                       r.savingsIn > 0 || r.savingsOut > 0
+      return catOk && portOk
     }),
-    { pct: 0, alloc: 0, seed: 0, sav: 0 },
+    [rows, activeCategory, activePortion],
   )
 
-  const ledgerTotals = ledgerRows.reduce(
-    (acc, r) => ({ inflow: acc.inflow + r.inflow, outflow: acc.outflow + r.outflow }),
-    { inflow: 0, outflow: 0 },
+  const summarySearchFiltered = useMemo(
+    () => {
+      const lower = summaryViewState.search.toLowerCase().trim()
+      if (!lower) return filteredRows
+      return filteredRows.filter(r => r.name.toLowerCase().includes(lower))
+    },
+    [filteredRows, summaryViewState.search],
   )
 
-  const globalTotals = rows.reduce(
-    (acc, r) => ({
-      alloc: acc.alloc + r.percentageAllocated,
-      seed:  acc.seed  + r.specificSeed,
-      sav:   acc.sav   + (r.savingsIn - r.savingsOut),
-    }),
-    { alloc: 0, seed: 0, sav: 0 },
+  const summarySorted = useMemo(
+    () => sortRows(
+      summarySearchFiltered,
+      (row, key) => {
+        if (key === 'name') return row.name
+        if (key === 'percentage') return row.percentage ?? -Infinity
+        if (key === 'percentageAllocated') return row.percentageAllocated
+        if (key === 'specificSeed') return row.specificSeed
+        if (key === 'savingsNet') return row.savingsIn - row.savingsOut
+        return null
+      },
+      summaryViewState.sortKey,
+      summaryViewState.sortDir,
+      SUMMARY_SORT_FIELDS,
+    ),
+    [summarySearchFiltered, summaryViewState.sortKey, summaryViewState.sortDir],
   )
 
-  // ── Render ─────────────────────────────────────────────────────────────────────
+  const totals = useMemo(
+    () => summarySorted.reduce(
+      (acc, r) => ({
+        pct:   acc.pct   + (r.percentage ?? 0),
+        alloc: acc.alloc + r.percentageAllocated,
+        seed:  acc.seed  + r.specificSeed,
+        sav:   acc.sav   + (r.savingsIn - r.savingsOut),
+      }),
+      { pct: 0, alloc: 0, seed: 0, sav: 0 },
+    ),
+    [summarySorted],
+  )
+
+  const globalTotals = useMemo(
+    () => rows.reduce(
+      (acc, r) => ({
+        alloc: acc.alloc + r.percentageAllocated,
+        seed:  acc.seed  + r.specificSeed,
+        sav:   acc.sav   + (r.savingsIn - r.savingsOut),
+      }),
+      { alloc: 0, seed: 0, sav: 0 },
+    ),
+    [rows],
+  )
+
+  // ── Derived — Ledger ──────────────────────────────────────────────────────────
+
+  const ledgerFiltered = useMemo(
+    () => {
+      const lower = ledgerViewState.search.toLowerCase().trim()
+      if (!lower) return ledgerRows
+      return ledgerRows.filter(r =>
+        r.id === 'bal-bf' || r.description.toLowerCase().includes(lower)
+      )
+    },
+    [ledgerRows, ledgerViewState.search],
+  )
+
+  const ledgerSorted = useMemo(
+    () => sortRows(
+      ledgerFiltered,
+      (row, key) => {
+        if (key === 'date') return row.date
+        if (key === 'inflow') return row.inflow
+        if (key === 'outflow') return row.outflow
+        if (key === 'balance') return row.balance
+        return null
+      },
+      ledgerViewState.sortKey,
+      ledgerViewState.sortDir,
+      LEDGER_SORT_FIELDS,
+    ),
+    [ledgerFiltered, ledgerViewState.sortKey, ledgerViewState.sortDir],
+  )
+
+  const ledgerPagedRows = useMemo(
+    () => ledgerSorted.slice(
+      ledgerViewState.page * ledgerViewState.pageSize,
+      (ledgerViewState.page + 1) * ledgerViewState.pageSize,
+    ),
+    [ledgerSorted, ledgerViewState.page, ledgerViewState.pageSize],
+  )
+
+  const ledgerTotals = useMemo(
+    () => ledgerRows.reduce(
+      (acc, r) => ({ inflow: acc.inflow + r.inflow, outflow: acc.outflow + r.outflow }),
+      { inflow: 0, outflow: 0 },
+    ),
+    [ledgerRows],
+  )
+
+  const activeLedgerField = LEDGER_SORT_FIELDS.find(f => f.key === ledgerViewState.sortKey)
+
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-5">
@@ -396,7 +503,6 @@ export default function CategoryLedger() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* View toggle */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
             <button
               onClick={() => setViewMode('summary')}
@@ -424,7 +530,7 @@ export default function CategoryLedger() {
         </div>
       </div>
 
-      {/* ── SUMMARY VIEW ──────────────────────────────────────────────────────────────── */}
+      {/* ── SUMMARY VIEW ──────────────────────────────────────────────────────────── */}
       {viewMode === 'summary' && (
         <>
           {/* Aggregate summary cards */}
@@ -508,130 +614,194 @@ export default function CategoryLedger() {
             </div>
           )}
 
-          {!loading && filteredRows.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                    <th className="px-5 py-3 text-left font-medium">Category</th>
-                    <th className="px-4 py-3 text-right font-medium">
-                      <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> % Alloc</span>
-                    </th>
-                    <th className="px-4 py-3 text-right font-medium hidden md:table-cell">
-                      <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocated</span>
-                    </th>
-                    <th className="px-4 py-3 text-right font-medium hidden md:table-cell">
-                      <span className="flex items-center justify-end gap-1"><Gift className="w-3 h-3" /> Specific Seed</span>
-                    </th>
-                    <th className="px-5 py-3 text-right font-medium">
-                      <span className="flex items-center justify-end gap-1"><Archive className="w-3 h-3" /> Savings Net</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {(() => {
-                    const nameToGroupId = new Map(categories.map(c => [c.name, c.group_id]))
-                    const groupedSections = groups
-                      .map(g => ({ group: g, rows: filteredRows.filter(r => nameToGroupId.get(r.name) === g.id) }))
-                      .filter(s => s.rows.length > 0)
-                    const ungroupedRows = filteredRows.filter(r => !nameToGroupId.get(r.name))
+          {!loading && !error && filteredRows.length > 0 && (
+            <div className="space-y-2">
+              {/* Data Controls — immediately above table */}
+              <DataControlsBar
+                sortFields={SUMMARY_SORT_FIELDS}
+                sortKey={summaryViewState.sortKey}
+                sortDir={summaryViewState.sortDir}
+                onSort={summaryViewState.setSort}
+                search={summaryViewState.search}
+                onSearchChange={summaryViewState.setSearch}
+                searchPlaceholder="Search categories…"
+              />
 
-                    const CategoryDataRow = ({ row }: { row: CategoryRow }) => (
-                      <tr className="hover:bg-gray-50 transition-colors">
-                        <td className="px-5 py-3 font-medium text-gray-800">{row.name}</td>
-                        <td className="px-4 py-3 text-right">
-                          {row.percentage !== null
-                            ? <span className="font-mono font-semibold text-primary">{Number(row.percentage).toFixed(1)}%</span>
-                            : <span className="text-gray-300 text-xs">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          {row.percentageAllocated > 0
-                            ? <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated)}</span>
-                            : <span className="text-gray-300 text-xs">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          {row.specificSeed > 0
-                            ? <span className="font-mono text-amber-700">{formatCurrency(row.specificSeed)}</span>
-                            : <span className="text-gray-300 text-xs">—</span>}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          {row.savingsIn > 0 || row.savingsOut > 0
-                            ? <span className={`font-mono font-semibold ${row.savingsIn - row.savingsOut >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(row.savingsIn - row.savingsOut)}</span>
-                            : <span className="text-gray-300 text-xs">—</span>}
-                        </td>
+              {summarySorted.length === 0 ? (
+                <div className="py-10 text-center border border-dashed border-gray-200 rounded-xl bg-gray-50">
+                  <p className="text-sm text-gray-500">No categories match <span className="font-medium">"{summaryViewState.search}"</span></p>
+                  <button
+                    type="button"
+                    onClick={() => summaryViewState.setSearch('')}
+                    className="mt-2 text-xs text-primary hover:underline"
+                  >
+                    Clear search
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                        <SortableHeader
+                          field={SUMMARY_SORT_FIELDS[0]}
+                          activeSortKey={summaryViewState.sortKey}
+                          activeSortDir={summaryViewState.sortDir}
+                          onSort={summaryViewState.setSort}
+                          className="px-5 py-3"
+                        />
+                        <SortableHeader
+                          field={SUMMARY_SORT_FIELDS[1]}
+                          activeSortKey={summaryViewState.sortKey}
+                          activeSortDir={summaryViewState.sortDir}
+                          onSort={summaryViewState.setSort}
+                          rightAlign
+                          className="px-4 py-3"
+                        >
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> % Alloc</span>
+                        </SortableHeader>
+                        <SortableHeader
+                          field={SUMMARY_SORT_FIELDS[2]}
+                          activeSortKey={summaryViewState.sortKey}
+                          activeSortDir={summaryViewState.sortDir}
+                          onSort={summaryViewState.setSort}
+                          rightAlign
+                          className="px-4 py-3 hidden md:table-cell"
+                        >
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocated</span>
+                        </SortableHeader>
+                        <SortableHeader
+                          field={SUMMARY_SORT_FIELDS[3]}
+                          activeSortKey={summaryViewState.sortKey}
+                          activeSortDir={summaryViewState.sortDir}
+                          onSort={summaryViewState.setSort}
+                          rightAlign
+                          className="px-4 py-3 hidden md:table-cell"
+                        >
+                          <span className="flex items-center justify-end gap-1"><Gift className="w-3 h-3" /> Specific Seed</span>
+                        </SortableHeader>
+                        <SortableHeader
+                          field={SUMMARY_SORT_FIELDS[4]}
+                          activeSortKey={summaryViewState.sortKey}
+                          activeSortDir={summaryViewState.sortDir}
+                          onSort={summaryViewState.setSort}
+                          rightAlign
+                          className="px-5 py-3"
+                        >
+                          <span className="flex items-center justify-end gap-1"><Archive className="w-3 h-3" /> Savings Net</span>
+                        </SortableHeader>
                       </tr>
-                    )
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {(() => {
+                        const nameToGroupId = new Map(categories.map(c => [c.name, c.group_id]))
+                        const groupedSections = groups
+                          .map(g => ({ group: g, rows: summarySorted.filter(r => nameToGroupId.get(r.name) === g.id) }))
+                          .filter(s => s.rows.length > 0)
+                        const ungroupedRows = summarySorted.filter(r => !nameToGroupId.get(r.name))
 
-                    const GroupSubtotalRow = ({ sectionRows, label }: { sectionRows: CategoryRow[]; label: string }) => {
-                      const sPct   = sectionRows.reduce((s, r) => s + (r.percentage ?? 0), 0)
-                      const sAlloc = sectionRows.reduce((s, r) => s + r.percentageAllocated, 0)
-                      const sSeed  = sectionRows.reduce((s, r) => s + r.specificSeed, 0)
-                      const sSav   = sectionRows.reduce((s, r) => s + (r.savingsIn - r.savingsOut), 0)
-                      return (
-                        <tr className="bg-gray-50 border-t border-gray-100 text-xs font-semibold text-gray-600">
-                          <td className="px-5 py-2 pl-8">↳ {label} subtotal</td>
-                          <td className="px-4 py-2 text-right font-mono text-primary">{sPct > 0 ? `${sPct.toFixed(1)}%` : '—'}</td>
-                          <td className="px-4 py-2 text-right font-mono text-primary hidden md:table-cell">{sAlloc > 0 ? formatCurrency(sAlloc) : '—'}</td>
-                          <td className="px-4 py-2 text-right font-mono text-amber-700 hidden md:table-cell">{sSeed > 0 ? formatCurrency(sSeed) : '—'}</td>
-                          <td className={`px-5 py-2 text-right font-mono ${sSav >= 0 ? 'text-success' : 'text-danger'}`}>{sSav !== 0 ? formatCurrency(sSav) : '—'}</td>
-                        </tr>
-                      )
-                    }
-
-                    return (
-                      <>
-                        {groupedSections.map(({ group, rows: gRows }) => (
-                          <Fragment key={group.id}>
-                            <tr className="bg-gray-100 border-y border-gray-200">
-                              <td colSpan={5} className="px-5 py-2">
-                                <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{group.name}</span>
-                              </td>
-                            </tr>
-                            {gRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
-                            <GroupSubtotalRow sectionRows={gRows} label={group.name} />
-                          </Fragment>
-                        ))}
-                        {ungroupedRows.length > 0 && groupedSections.length > 0 && (
-                          <tr className="bg-gray-100 border-y border-gray-200">
-                            <td colSpan={5} className="px-5 py-2">
-                              <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Other</span>
+                        const CategoryDataRow = ({ row }: { row: CategoryRow }) => (
+                          <tr className="hover:bg-gray-50 transition-colors">
+                            <td className="px-5 py-3 font-medium text-gray-800">{row.name}</td>
+                            <td className="px-4 py-3 text-right">
+                              {row.percentage !== null
+                                ? <span className="font-mono font-semibold text-primary">{Number(row.percentage).toFixed(1)}%</span>
+                                : <span className="text-gray-300 text-xs">—</span>}
+                            </td>
+                            <td className="px-4 py-3 text-right hidden md:table-cell">
+                              {row.percentageAllocated > 0
+                                ? <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated)}</span>
+                                : <span className="text-gray-300 text-xs">—</span>}
+                            </td>
+                            <td className="px-4 py-3 text-right hidden md:table-cell">
+                              {row.specificSeed > 0
+                                ? <span className="font-mono text-amber-700">{formatCurrency(row.specificSeed)}</span>
+                                : <span className="text-gray-300 text-xs">—</span>}
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              {row.savingsIn > 0 || row.savingsOut > 0
+                                ? <span className={`font-mono font-semibold ${row.savingsIn - row.savingsOut >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(row.savingsIn - row.savingsOut)}</span>
+                                : <span className="text-gray-300 text-xs">—</span>}
                             </td>
                           </tr>
-                        )}
-                        {ungroupedRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
-                      </>
-                    )
-                  })()}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
-                    <td className="px-5 py-3 text-gray-700">Totals</td>
-                    <td className="px-4 py-3 text-right font-mono text-primary">
-                      {totals.pct > 0 ? `${totals.pct.toFixed(1)}%` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-primary hidden md:table-cell">
-                      {totals.alloc > 0 ? formatCurrency(totals.alloc) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-amber-700 hidden md:table-cell">
-                      {totals.seed > 0 ? formatCurrency(totals.seed) : '—'}
-                    </td>
-                    <td className={`px-5 py-3 text-right font-mono ${totals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {formatCurrency(totals.sav)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                        )
+
+                        const GroupSubtotalRow = ({ sectionRows, label }: { sectionRows: CategoryRow[]; label: string }) => {
+                          const sPct   = sectionRows.reduce((s, r) => s + (r.percentage ?? 0), 0)
+                          const sAlloc = sectionRows.reduce((s, r) => s + r.percentageAllocated, 0)
+                          const sSeed  = sectionRows.reduce((s, r) => s + r.specificSeed, 0)
+                          const sSav   = sectionRows.reduce((s, r) => s + (r.savingsIn - r.savingsOut), 0)
+                          return (
+                            <tr className="bg-gray-50 border-t border-gray-100 text-xs font-semibold text-gray-600">
+                              <td className="px-5 py-2 pl-8">↳ {label} subtotal</td>
+                              <td className="px-4 py-2 text-right font-mono text-primary">{sPct > 0 ? `${sPct.toFixed(1)}%` : '—'}</td>
+                              <td className="px-4 py-2 text-right font-mono text-primary hidden md:table-cell">{sAlloc > 0 ? formatCurrency(sAlloc) : '—'}</td>
+                              <td className="px-4 py-2 text-right font-mono text-amber-700 hidden md:table-cell">{sSeed > 0 ? formatCurrency(sSeed) : '—'}</td>
+                              <td className={`px-5 py-2 text-right font-mono ${sSav >= 0 ? 'text-success' : 'text-danger'}`}>{sSav !== 0 ? formatCurrency(sSav) : '—'}</td>
+                            </tr>
+                          )
+                        }
+
+                        return (
+                          <>
+                            {groupedSections.map(({ group, rows: gRows }) => (
+                              <Fragment key={group.id}>
+                                <tr className="bg-gray-100 border-y border-gray-200">
+                                  <td colSpan={5} className="px-5 py-2">
+                                    <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{group.name}</span>
+                                  </td>
+                                </tr>
+                                {gRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
+                                <GroupSubtotalRow sectionRows={gRows} label={group.name} />
+                              </Fragment>
+                            ))}
+                            {ungroupedRows.length > 0 && groupedSections.length > 0 && (
+                              <tr className="bg-gray-100 border-y border-gray-200">
+                                <td colSpan={5} className="px-5 py-2">
+                                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Other</span>
+                                </td>
+                              </tr>
+                            )}
+                            {ungroupedRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
+                          </>
+                        )
+                      })()}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
+                        <td className="px-5 py-3 text-gray-700">
+                          Totals
+                          {summaryViewState.search && (
+                            <span className="ml-1.5 font-normal text-gray-400">({summarySorted.length} shown)</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-primary">
+                          {totals.pct > 0 ? `${totals.pct.toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-primary hidden md:table-cell">
+                          {totals.alloc > 0 ? formatCurrency(totals.alloc) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-amber-700 hidden md:table-cell">
+                          {totals.seed > 0 ? formatCurrency(totals.seed) : '—'}
+                        </td>
+                        <td className={`px-5 py-3 text-right font-mono ${totals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
+                          {formatCurrency(totals.sav)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </>
       )}
 
-      {/* ── LEDGER VIEW ────────────────────────────────────────────────────────────────── */}
+      {/* ── LEDGER VIEW ───────────────────────────────────────────────────────────── */}
       {viewMode === 'ledger' && (
         <>
           {/* Controls row */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Category selector */}
             <select
               value={activeCategory}
               onChange={e => setActiveCategory(e.target.value)}
@@ -641,7 +811,6 @@ export default function CategoryLedger() {
               {rows.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
             </select>
 
-            {/* Portion tabs */}
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
               {LEDGER_PORTIONS.map(p => (
                 <button
@@ -655,7 +824,6 @@ export default function CategoryLedger() {
                 </button>
               ))}
             </div>
-
           </div>
 
           {/* No category selected */}
@@ -688,7 +856,7 @@ export default function CategoryLedger() {
           {/* Ledger content */}
           {activeCategory && !ledgerLoading && !ledgerError && (
             <>
-              {/* Summary strip — category name spans full width on mobile */}
+              {/* Summary strip */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="col-span-2 sm:col-span-1 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1 truncate">{activeCategory}</p>
@@ -715,47 +883,85 @@ export default function CategoryLedger() {
               )}
 
               {ledgerRows.length > 0 && (
-                <>
-                  {/* Toggle row — directly above the content it controls */}
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
-                      {ledgerRows.length} transaction{ledgerRows.length !== 1 ? 's' : ''}
-                    </p>
-                    <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                <div className="space-y-2">
+                  {/* Data Controls — immediately above data */}
+                  <DataControlsBar
+                    sortFields={LEDGER_SORT_FIELDS}
+                    sortKey={ledgerViewState.sortKey}
+                    sortDir={ledgerViewState.sortDir}
+                    onSort={ledgerViewState.setSort}
+                    view={ledgerViewState.view}
+                    onViewChange={ledgerViewState.setView}
+                    search={ledgerViewState.search}
+                    onSearchChange={ledgerViewState.setSearch}
+                    searchPlaceholder="Search descriptions…"
+                  />
+
+                  {/* Top pagination — compact */}
+                  <PaginationBar
+                    page={ledgerViewState.page}
+                    pageSize={ledgerViewState.pageSize}
+                    total={ledgerSorted.length}
+                    onPageChange={ledgerViewState.setPage}
+                    variant="compact"
+                  />
+
+                  {/* No search results */}
+                  {ledgerSorted.length === 0 && (
+                    <div className="py-10 text-center border border-dashed border-gray-200 rounded-xl bg-gray-50">
+                      <p className="text-sm text-gray-500">No transactions match <span className="font-medium">"{ledgerViewState.search}"</span></p>
                       <button
-                        onClick={() => setDisplayMode('table')}
-                        className={`px-3 py-2 border-r border-gray-200 transition-colors ${
-                          displayMode === 'table' ? 'bg-gray-800 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
-                        }`}
+                        type="button"
+                        onClick={() => ledgerViewState.setSearch('')}
+                        className="mt-2 text-xs text-primary hover:underline"
                       >
-                        Table
-                      </button>
-                      <button
-                        onClick={() => setDisplayMode('cards')}
-                        className={`px-3 py-2 transition-colors ${
-                          displayMode === 'cards' ? 'bg-gray-800 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        Cards
+                        Clear search
                       </button>
                     </div>
-                  </div>
+                  )}
 
                   {/* TABLE display */}
-                  {displayMode === 'table' && (
+                  {ledgerSorted.length > 0 && ledgerViewState.view === 'table' && (
                     <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                            <th className="px-4 py-3 text-left font-medium">Date</th>
+                          <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                            <SortableHeader
+                              field={LEDGER_SORT_FIELDS[0]}
+                              activeSortKey={ledgerViewState.sortKey}
+                              activeSortDir={ledgerViewState.sortDir}
+                              onSort={ledgerViewState.setSort}
+                              className="px-4 py-3"
+                            />
                             <th className="px-4 py-3 text-left font-medium">Description</th>
-                            <th className="px-4 py-3 text-right font-medium text-success">Inflow</th>
-                            <th className="px-4 py-3 text-right font-medium text-danger">Outflow</th>
-                            <th className="px-5 py-3 text-right font-medium">Balance</th>
+                            <SortableHeader
+                              field={LEDGER_SORT_FIELDS[1]}
+                              activeSortKey={ledgerViewState.sortKey}
+                              activeSortDir={ledgerViewState.sortDir}
+                              onSort={ledgerViewState.setSort}
+                              rightAlign
+                              className="px-4 py-3 text-success"
+                            />
+                            <SortableHeader
+                              field={LEDGER_SORT_FIELDS[2]}
+                              activeSortKey={ledgerViewState.sortKey}
+                              activeSortDir={ledgerViewState.sortDir}
+                              onSort={ledgerViewState.setSort}
+                              rightAlign
+                              className="px-4 py-3 text-danger"
+                            />
+                            <SortableHeader
+                              field={LEDGER_SORT_FIELDS[3]}
+                              activeSortKey={ledgerViewState.sortKey}
+                              activeSortDir={ledgerViewState.sortDir}
+                              onSort={ledgerViewState.setSort}
+                              rightAlign
+                              className="px-5 py-3"
+                            />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                          {ledgerRows.map(row => (
+                          {ledgerPagedRows.map(row => (
                             <tr key={row.id} className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : 'hover:bg-gray-50'}`}>
                               <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
                               <td className="px-4 py-3 text-gray-700 max-w-xs">
@@ -787,10 +993,18 @@ export default function CategoryLedger() {
                     </div>
                   )}
 
-                  {/* CARDS display — vertical stacked layout, mobile-first */}
-                  {displayMode === 'cards' && (
+                  {/* CARDS display */}
+                  {ledgerSorted.length > 0 && ledgerViewState.view === 'cards' && (
                     <div className="space-y-3">
-                      {ledgerRows.map(row => (
+                      {activeLedgerField && (ledgerViewState.sortKey !== 'date' || ledgerViewState.sortDir !== 'asc' || ledgerViewState.search) && (
+                        <p className="text-xs text-gray-400 px-0.5">
+                          {ledgerViewState.search
+                            ? `${ledgerSorted.length} result${ledgerSorted.length !== 1 ? 's' : ''} · `
+                            : ''}
+                          Sorted by {activeLedgerField.label} · {directionLabel(activeLedgerField.type, ledgerViewState.sortDir)}
+                        </p>
+                      )}
+                      {ledgerPagedRows.map(row => (
                         <div
                           key={row.id}
                           className={`rounded-xl border overflow-hidden shadow-sm ${
@@ -799,7 +1013,6 @@ export default function CategoryLedger() {
                               : 'bg-white border-gray-200'
                           }`}
                         >
-                          {/* Card header: date + description */}
                           <div className="px-4 pt-3.5 pb-3">
                             <p className={`text-[11px] font-semibold mb-1.5 ${
                               row.id === 'bal-bf'
@@ -823,7 +1036,6 @@ export default function CategoryLedger() {
                             )}
                           </div>
 
-                          {/* Financial metrics — 2-col grid, labels above values */}
                           <div className={`grid grid-cols-2 border-t px-4 py-3 ${
                             row.id === 'bal-bf'
                               ? 'border-blue-200/60 bg-blue-50/30'
@@ -854,12 +1066,23 @@ export default function CategoryLedger() {
                       ))}
                     </div>
                   )}
-                </>
+
+                  {/* Bottom pagination — full */}
+                  <PaginationBar
+                    page={ledgerViewState.page}
+                    pageSize={ledgerViewState.pageSize}
+                    total={ledgerSorted.length}
+                    onPageChange={ledgerViewState.setPage}
+                    onPageSizeChange={ledgerViewState.setPageSize}
+                    variant="full"
+                  />
+                </div>
               )}
             </>
           )}
         </>
       )}
+
       <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
