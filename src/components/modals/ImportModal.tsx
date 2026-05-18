@@ -17,6 +17,20 @@ import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
+// ── ID normalization ──────────────────────────────────────────────────────────
+// Strips invisible characters (zero-width spaces, soft hyphen, BOM, NBSP, etc.),
+// applies Unicode NFC, collapses whitespace, and trims.
+// Case is preserved — bank-provided IDs are case-sensitive.
+function normalizeId(raw: string): string {
+  // U+00AD soft-hyphen, U+00A0 NBSP, U+200B–U+200D zero-width chars,
+  // U+2028–U+2029 line/para separators, U+FEFF BOM
+  return raw
+    .normalize('NFC')
+    .replace(/\u00ad|\u00a0|\u200b|\u200c|\u200d|\u2028|\u2029|\ufeff/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 // ── Target table definitions ───────────────────────────────────────────────────
 
 type TargetTable = 'bank_statement' | 'fx_transactions'
@@ -489,7 +503,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     if (refColIdx < 0) return
 
     const ids = sheet.rows
-      .map(r => String((r as unknown[])[refColIdx] ?? '').trim())
+      .map(r => normalizeId(String((r as unknown[])[refColIdx] ?? '')))
       .filter(id => id.length > 0)
     if (ids.length === 0) return
 
@@ -510,7 +524,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         }
       } else {
         for (const r of inflowData ?? []) {
-          if (r.transaction_ref) results.push({ id: r.transaction_ref, table: 'inflow_transactions' })
+          if (r.transaction_ref) results.push({ id: normalizeId(r.transaction_ref), table: 'inflow_transactions' })
         }
       }
 
@@ -524,7 +538,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         }
       } else {
         for (const r of outflowData ?? []) {
-          if (r.transaction_id) results.push({ id: r.transaction_id, table: 'outflow_transactions' })
+          if (r.transaction_id) results.push({ id: normalizeId(r.transaction_id), table: 'outflow_transactions' })
         }
       }
 
@@ -551,9 +565,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
     // Combined dup skip set (pre-import Excel dups + in-wizard dups)
     const wizardSkipIds = skipWizardDups
-      ? new Set(wizardDupsFound.filter(d => !d.id.startsWith('__schema_error')).map(d => d.id))
+      ? new Set(wizardDupsFound.filter(d => !d.id.startsWith('__schema_error')).map(d => normalizeId(d.id)))
       : new Set<string>()
-    const allSkipIds = new Set([...(skipTxnIds ?? []), ...wizardSkipIds])
+    const allSkipIds = new Set([...(skipTxnIds ?? []).map(normalizeId), ...wizardSkipIds])
     let fallbackIdCount = 0
     const collisions: string[] = []
 
@@ -603,7 +617,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const desc   = descIdx >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
                          ? String(raw[descIdx]).trim() : null
         const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
-                         ? String(raw[refIdx]).trim() : null
+                         ? normalizeId(String(raw[refIdx])) || null : null
 
         const cfg = getConfigForDate(latestConfigs, date)
         const txnType = rowTxnTypes[ri] ?? ''
@@ -687,14 +701,38 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           .from('inflow_transactions')
           .select('transaction_ref')
           .in('transaction_ref', pendingInflowIds)
-        for (const r of data ?? []) if (r.transaction_ref) allSkipIds.add(r.transaction_ref)
+        for (const r of data ?? []) {
+          if (r.transaction_ref) {
+            const nid = normalizeId(r.transaction_ref)
+            if (import.meta.env.DEV) console.debug('[dup-check] inflow DB hit:', JSON.stringify(r.transaction_ref), '→ normalized:', JSON.stringify(nid))
+            allSkipIds.add(nid)
+          }
+        }
       }
       if (pendingOutflowIds.length > 0) {
         const { data } = await supabase
           .from('outflow_transactions')
           .select('transaction_id')
           .in('transaction_id', pendingOutflowIds)
-        for (const r of data ?? []) if (r.transaction_id) allSkipIds.add(r.transaction_id)
+        for (const r of data ?? []) {
+          if (r.transaction_id) {
+            const nid = normalizeId(r.transaction_id)
+            if (import.meta.env.DEV) console.debug('[dup-check] outflow DB hit:', JSON.stringify(r.transaction_id), '→ normalized:', JSON.stringify(nid))
+            allSkipIds.add(nid)
+          }
+        }
+      }
+
+      if (import.meta.env.DEV) {
+        console.debug('[dup-check] allSkipIds size:', allSkipIds.size, [...allSkipIds].slice(0, 10))
+        for (const r of inflowRows) {
+          const id = r.transaction_ref as string | undefined
+          if (id) console.debug('[dup-check] inflow row id:', JSON.stringify(id), 'skip?', allSkipIds.has(id))
+        }
+        for (const r of outflowRows) {
+          const id = r.transaction_id as string | undefined
+          if (id) console.debug('[dup-check] outflow row id:', JSON.stringify(id), 'skip?', allSkipIds.has(id))
+        }
       }
 
       // Apply dup skip filter
