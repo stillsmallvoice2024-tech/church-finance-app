@@ -130,14 +130,13 @@ Both import paths use a **strip-and-retry** pattern when PostgREST rejects an IN
 
 ---
 
-## Transaction ID Normalization (`normalizeId`, `ImportModal.tsx`)
+## Transaction ID Normalization (`normalizeId`)
 
-All transaction IDs extracted from files and returned from the DB must pass through `normalizeId()` before being stored, added to skip sets, or compared. Plain `.trim()` is insufficient.
+**Utility:** `src/utils/normalizeId.ts` — shared between `Import.tsx` and `ImportModal.tsx`.
 
 ```ts
-// Strips soft-hyphen (U+00AD), NBSP (U+00A0), zero-width chars (U+200B–U+200D),
-// line/para separators (U+2028–U+2029), BOM (U+FEFF); applies NFC; collapses whitespace.
-function normalizeId(raw: string): string {
+// Strips U+00AD, U+00A0, U+200B–U+200D, U+2028–U+2029, U+FEFF; NFC; collapse whitespace; trim.
+export function normalizeId(raw: string): string {
   return raw
     .normalize('NFC')
     .replace(/­| |​|‌|‍| | |﻿/g, '')
@@ -146,16 +145,22 @@ function normalizeId(raw: string): string {
 }
 ```
 
-**Apply at every ID touch-point in `ImportModal.tsx`:**
-- File row extraction: `normalizeId(String(raw[refIdx])) || null`
-- `wizardSkipIds` construction: `.map(d => normalizeId(d.id))`
-- `skipTxnIds` entries: `(skipTxnIds ?? []).map(normalizeId)`
-- DB cross-batch query results: `normalizeId(r.transaction_ref)` before `allSkipIds.add(...)`
-- Pre-import check DB results: normalize before pushing to `results[]`
+**Apply at every ID touch-point:**
 
-**Why:** Excel cells can embed invisible Unicode (zero-width spaces, soft hyphen, NBSP, BOM) that survive `.trim()`. `Set.has()` is an exact-byte match, so a visually-identical ID with a hidden character fails dedup silently.
+| Location | Where |
+|---|---|
+| `Import.tsx` pre-modal check | File row extraction → `normalizeId(String(raw))` |
+| `Import.tsx` pre-modal check | DB results → `normalizeId(r.transaction_ref/id)` before push to `found[]` |
+| `ImportModal.tsx` wizard dup check | File row extraction → `normalizeId(String(raw[refColIdx]))` |
+| `ImportModal.tsx` wizard dup check | DB results → `normalizeId(r.transaction_ref/id)` before push to `results[]` |
+| `ImportModal.tsx` `runImport` | File ref extraction → `normalizeId(String(raw[refIdx])) \|\| null` |
+| `ImportModal.tsx` `runImport` | `skipTxnIds` → `(skipTxnIds ?? []).map(normalizeId)` |
+| `ImportModal.tsx` `runImport` | `wizardDupsFound` → `.map(d => normalizeId(d.id))` |
+| `ImportModal.tsx` `runImport` cross-batch | DB results → `normalizeId(r.transaction_ref/id)` before `allSkipIds.add(...)` |
 
-**Dev diagnostics:** `import.meta.env.DEV` console logs (`[dup-check]`) print each ID's raw/normalized form and skip decision at the cross-batch filter step.
+**Why:** Excel cells carry invisible Unicode (zero-width spaces, soft hyphen, NBSP, BOM) that survive `.trim()`. `Set.has()` is byte-exact — a visually-identical ID with a hidden character fails dedup silently.
+
+**Never use literal Unicode chars in the regex** — esbuild rejects them in character class ranges. Use `\uXXXX` escape sequences.
 
 ---
 
@@ -166,6 +171,7 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 **Utility:** `src/utils/generateTransactionId.ts` → `generateFallbackTransactionId(date, amount, description, bankName)`
 - Inputs lowercased and trimmed before hashing
 - Same inputs always produce the same ID (idempotent across imports)
+- Output is a hex string — no invisible chars; `normalizeId` is not required on its output
 
 **Import wizard (`ImportModal.tsx`):**
 - Applied inside the row-building loop via `if (!row.transaction_ref)` / `if (!row.transaction_id)`
