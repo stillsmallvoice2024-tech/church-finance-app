@@ -100,8 +100,8 @@ const ALIAS_MAP: Record<string, string[]> = {
   transaction_ref:  ['ref', 'reference', 'txnref', 'transref', 'transactionid', 'txnid'],
   currency:         ['currency', 'ccy', 'curr'],
   // bank_statement virtual fields
-  credit:           ['credit', 'cr', 'deposit', 'deposits', 'inflow', 'in', 'creditamt'],
-  debit:            ['debit', 'dr', 'withdrawal', 'withdrawals', 'outflow', 'out', 'debitamt'],
+  credit:           ['credit', 'cr', 'deposit', 'deposits', 'inflow', 'in', 'income', 'incoming', 'inward', 'creditamt'],
+  debit:            ['debit', 'dr', 'withdrawal', 'withdrawals', 'outflow', 'out', 'payment', 'payments', 'charge', 'charges', 'debitamt'],
   reference:        ['reference', 'ref', 'txnref', 'transref', 'transactionid', 'txnid', 'sessionid'],
   balance:          ['balance', 'runningbalance', 'closingbalance', 'closingbal', 'runningbal'],
   deposit:          ['deposit', 'credit', 'inflow', 'in'],
@@ -143,11 +143,14 @@ function autoMapColumn(header: string, fields: FieldDef[]): string {
   for (const f of fields) {
     if (f.key.replace(/_/g, '') === h) return f.key
   }
-  // 2. alias match
+  // 2. alias match — short aliases (≤2 chars) use prefix/suffix only to avoid false mid-word matches
   for (const f of fields) {
     const aliases = ALIAS_MAP[f.key] ?? []
     for (const alias of aliases) {
-      if (h === alias || h.includes(alias)) return f.key
+      const match = alias.length <= 2
+        ? (h === alias || h.startsWith(alias) || h.endsWith(alias))
+        : (h === alias || h.includes(alias))
+      if (match) return f.key
     }
   }
   return SKIP
