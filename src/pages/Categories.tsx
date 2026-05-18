@@ -358,10 +358,22 @@ export default function Categories() {
   const [editGroupName, setEditGroupName] = useState('')
   const [savingGroup,   setSavingGroup]   = useState(false)
 
-  const handleModalClose = () => {
-    setModalOpen(false)
-    const y = scrollYRef.current
+  const pendingScrollRef = useRef<number | null>(null)
+
+  // Restore scroll only after loading=false. When refetch fires, loading=true collapses
+  // the table to skeleton loaders — page height shrinks and browser clamps window.scrollY
+  // to 0. A scrollTo while the skeleton is visible is a no-op. Waiting for the full
+  // table to re-render before restoring ensures the page is tall enough.
+  useEffect(() => {
+    if (modalOpen || loading || pendingScrollRef.current === null) return
+    const y = pendingScrollRef.current
+    pendingScrollRef.current = null
     requestAnimationFrame(() => window.scrollTo(0, y))
+  }, [modalOpen, loading])
+
+  const handleModalClose = () => {
+    pendingScrollRef.current = scrollYRef.current
+    setModalOpen(false)
   }
 
   const openAdd  = () => { scrollYRef.current = window.scrollY; setEditRecord(null); setModalOpen(true) }
