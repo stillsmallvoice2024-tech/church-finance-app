@@ -9,6 +9,8 @@ interface SortableHeaderProps {
   onSort: (key: string, dir: SortDirection) => void
   className?: string
   rightAlign?: boolean
+  /** Override inactive text colour, e.g. "text-success hover:text-success/80" */
+  inactiveCls?: string
   children?: React.ReactNode
 }
 
@@ -19,6 +21,7 @@ export function SortableHeader({
   onSort,
   className = '',
   rightAlign = false,
+  inactiveCls = 'text-gray-500 hover:text-gray-700',
   children,
 }: SortableHeaderProps) {
   const isActive = field.key === activeSortKey
@@ -39,7 +42,7 @@ export function SortableHeader({
         onClick={handleClick}
         className={`inline-flex items-center gap-1 transition-colors group whitespace-nowrap ${
           rightAlign ? 'ml-auto flex-row-reverse' : ''
-        } ${isActive ? 'text-primary' : 'text-gray-500 hover:text-gray-700'}`}
+        } ${isActive ? 'text-primary' : inactiveCls}`}
       >
         {label}
         <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}>

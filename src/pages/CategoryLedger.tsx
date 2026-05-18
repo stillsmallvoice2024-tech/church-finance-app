@@ -883,7 +883,7 @@ export default function CategoryLedger() {
               )}
 
               {ledgerRows.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {/* Data Controls — immediately above data */}
                   <DataControlsBar
                     sortFields={LEDGER_SORT_FIELDS}
@@ -940,7 +940,8 @@ export default function CategoryLedger() {
                               activeSortDir={ledgerViewState.sortDir}
                               onSort={ledgerViewState.setSort}
                               rightAlign
-                              className="px-4 py-3 text-success"
+                              className="px-4 py-3"
+                              inactiveCls="text-success/80 hover:text-success"
                             />
                             <SortableHeader
                               field={LEDGER_SORT_FIELDS[2]}
@@ -948,7 +949,8 @@ export default function CategoryLedger() {
                               activeSortDir={ledgerViewState.sortDir}
                               onSort={ledgerViewState.setSort}
                               rightAlign
-                              className="px-4 py-3 text-danger"
+                              className="px-4 py-3"
+                              inactiveCls="text-danger/80 hover:text-danger"
                             />
                             <SortableHeader
                               field={LEDGER_SORT_FIELDS[3]}
