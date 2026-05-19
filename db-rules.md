@@ -177,6 +177,8 @@ if (!updatedRows?.length) throw new Error('Record not found or update silently r
 
 Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `useUpdateBank`, `useUpdateCategory`. Any new UPDATE hook must follow the same pattern.
 
+**Row-count check on UPSERT**: same pattern applies — chain `.select('id')` and throw if `data?.length === 0`. PostgREST upserts silently no-op when RLS blocks the INSERT or UPDATE without returning an error. `upsertCategoryOpeningBalance` is the reference implementation.
+
 **Filtering / deleting SQL NULL via PostgREST**: `.eq('column', null)` matches the string `"null"`, NOT SQL NULL. To match SQL NULL use `.is('column', null)` (renders as `column=is.null`). Applies to both SELECT filters and DELETE `.eq()` chains.
 
 ---
