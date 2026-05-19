@@ -15,6 +15,7 @@ import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { formatCurrency, parseCurrency } from '../../utils/currency'
 import { useToastStore } from '../../store/toastStore'
+import { propagateBankOpeningBalance } from '../../utils/bankOpeningBalance'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -266,6 +267,18 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         console.log('[bank-modal] inserting bank')
         await add(payload)
         console.log('[bank-modal] bank insert succeeded')
+      }
+
+      // ── Propagate Balance Brought Forward into bank ledger ────────────────────
+      try {
+        await propagateBankOpeningBalance(
+          values.name,
+          values.starting_balance ?? null,
+          isEdit && editRecord && editRecord.name !== values.name ? editRecord.name : undefined,
+        )
+      } catch (e) {
+        console.error('[bank-modal] B/F propagation failed', e)
+        toast('Bank saved — Balance Brought Forward entry could not be updated in Bank Ledger. Please reload Bank Ledger if needed.', 'error')
       }
 
       // ── Propagate opening balances into category_opening_balances ──────────────

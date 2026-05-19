@@ -24,11 +24,14 @@ import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 const TXN_TYPE_LABELS: Record<string, string> = {
-  refund:              'Refund',
-  reversal:            'Reversal',
-  bank_deposit:        'Bank Deposit',
-  intrabank_transfer:  'Intrabank Transfer',
+  refund:                   'Refund',
+  reversal:                 'Reversal',
+  bank_deposit:             'Bank Deposit',
+  intrabank_transfer:       'Intrabank Transfer',
+  balance_brought_forward:  'Balance Brought Forward',
 }
+
+const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
 interface LedgerRow {
   id:               string
@@ -319,19 +322,21 @@ export default function BankLedger() {
                 ))
               ) : sortedRows.length === 0 ? (
                 <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
-              ) : pagedRows.map(row => (
-                <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+              ) : pagedRows.map(row => {
+                const isBF = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
+                return (
+                <div key={row.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white ${isBF ? 'border-blue-200' : 'border-gray-200'}`}>
                   {/* Card header */}
-                  <div className="px-4 pt-3.5 pb-3">
+                  <div className={`px-4 pt-3.5 pb-3 ${isBF ? 'bg-blue-50/60' : ''}`}>
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      <p className="text-[11px] font-semibold text-gray-400">{isBF ? 'Opening' : formatDate(row.date)}</p>
                       <div className="flex items-center gap-1.5">
                         {row.transaction_type && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${isBF ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                             {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                           </span>
                         )}
-                        {canWrite() && (
+                        {canWrite() && !isBF && (
                           <button
                             onClick={() => row.entity_type === 'inflow' && row.inflowData
                               ? setEditInflow(row.inflowData)
@@ -344,7 +349,9 @@ export default function BankLedger() {
                         )}
                       </div>
                     </div>
-                    {row.description && (
+                    {isBF ? (
+                      <p className="text-sm text-blue-700 font-medium">{row.description}</p>
+                    ) : row.description && (
                       <div className="text-sm">
                         <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                       </div>
@@ -371,7 +378,7 @@ export default function BankLedger() {
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -398,40 +405,49 @@ export default function BankLedger() {
                     <tr><td colSpan={6}>
                       <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
                     </td></tr>
-                  ) : pagedRows.map(row => (
-                    <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 max-w-[280px]">
+                  ) : pagedRows.map(row => {
+                    const isBF = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
+                    return (
+                    <tr key={row.id} className={`transition-colors ${isBF ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{isBF ? '—' : formatDate(row.date)}</td>
+                      <td className="px-4 py-3 text-sm max-w-[280px]">
                         <div className="flex items-start gap-1.5 min-w-0">
                           {row.transaction_type && (
-                            <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                            <span className={`inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${isBF ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                               {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                             </span>
                           )}
-                          <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          {isBF ? (
+                            <span className="text-blue-700 font-medium">{row.description}</span>
+                          ) : (
+                            <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          )}
                         </div>
                       </td>
                       <AmountCell value={row.inflow}   mode="inflow"  />
                       <AmountCell value={row.outflow}  mode="outflow" />
                       <AmountCell value={row.balance}  mode="balance" showZero />
                       <td className="px-2 py-3">
-                        <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
+                        {!isBF && <ReceiptBadge entityType={row.entity_type} entityId={row.id} />}
                       </td>
                       {canWrite() && (
                         <td className="px-2 py-3">
-                          <button
-                            onClick={() => row.entity_type === 'inflow' && row.inflowData
-                              ? setEditInflow(row.inflowData)
-                              : row.outflowData && setEditOutflow(row.outflowData)}
-                            className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                            title="Edit source record"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
+                          {!isBF && (
+                            <button
+                              onClick={() => row.entity_type === 'inflow' && row.inflowData
+                                ? setEditInflow(row.inflowData)
+                                : row.outflowData && setEditOutflow(row.outflowData)}
+                              className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                              title="Edit source record"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </td>
                       )}
                     </tr>
-                  ))}
+                  )})}
+
                 </tbody>
               </table>
             </div>
