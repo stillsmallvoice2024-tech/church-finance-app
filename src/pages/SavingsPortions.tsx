@@ -3,7 +3,6 @@ import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucid
 import { supabase } from '../lib/supabase'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency } from '../utils/formatters'
-import { useCategories } from '../hooks/useCategories'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { useDataViewState } from '../hooks/useDataViewState'
@@ -29,8 +28,6 @@ const SVP_SEARCH_COLS = [
 
 export default function SavingsPortions() {
   usePageTitle('Savings Portions')
-
-  const { categories } = useCategories()
 
   const [rows,    setRows]    = useState<SavingsRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,7 +61,6 @@ export default function SavingsPortions() {
     }
 
     const cobData = cobRes.error ? [] : (cobRes.data ?? [])
-    const cobCatNames = new Set(cobData.map(r => (r.categories as unknown as { name: string } | null)?.name ?? ''))
 
     // Accumulate per category
     const map = new Map<string, { deposited: number; withdrawn: number }>()
@@ -79,22 +75,13 @@ export default function SavingsPortions() {
     }
     for (const r of outflowRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      // prefer actual_amount (net after refunds/charges), fall back to amount_disbursed
       ensure(cat).withdrawn += Number(r.actual_amount || r.amount_disbursed || 0)
     }
 
-    // Opening balances from new table
     for (const ob of cobData) {
       const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
       if (!catName) continue
       ensure(catName).deposited += Number(ob.amount)
-    }
-    // Fallback: old starting_balance field for categories not yet in new table
-    for (const cat of categories) {
-      if (cobCatNames.has(cat.name)) continue
-      if (!cat.starting_balance || cat.starting_balance === 0) continue
-      if (cat.starting_balance_budget_portion !== 'Savings') continue
-      ensure(cat.name).deposited += cat.starting_balance
     }
 
     const result: SavingsRow[] = [...map.entries()].map(([category, v]) => ({
@@ -106,7 +93,7 @@ export default function SavingsPortions() {
 
     setRows(result)
     setLoading(false)
-  }, [categories])
+  }, [])
 
   useEffect(() => { load() }, [load])
 

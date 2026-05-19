@@ -61,12 +61,16 @@ const CAT_SEARCH_COLS = [
 // ── Deletion check ─────────────────────────────────────────────────────────────
 
 async function categoryHasLinkedData(cat: Category): Promise<boolean> {
-  if (cat.starting_balance && cat.starting_balance !== 0) return true
-  const [inf, out] = await Promise.all([
+  const [inf, out, cob] = await Promise.all([
     supabase.from('inflow_transactions').select('id', { count: 'exact', head: true }).eq('stage_code_1', cat.name),
     supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('stage_code_1', cat.name),
+    supabase.from('category_opening_balances').select('id', { count: 'exact', head: true }).eq('category_id', cat.id),
   ])
-  return (inf.count ?? 0) > 0 || (out.count ?? 0) > 0
+  if ((inf.count ?? 0) > 0 || (out.count ?? 0) > 0) return true
+  if ((cob.count ?? 0) > 0) return true
+  // Legacy safety-net: category table still has a balance (pre-migration)
+  if (cat.starting_balance && cat.starting_balance !== 0) return true
+  return false
 }
 
 // ── Category form modal ────────────────────────────────────────────────────────
@@ -128,9 +132,14 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           console.log('[CategoryModal] loading ob rows from table', validFetched)
           setObRows(validFetched.map(r => ({ budget_portion: r.budget_portion, amount: String(r.amount) })))
         } else if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
-          console.log('[CategoryModal] falling back to legacy starting_balance', { starting_balance: editRecord.starting_balance, starting_balance_budget_portion: editRecord.starting_balance_budget_portion })
-          // Migrate from old single-field
-          setObRows([{ budget_portion: editRecord.starting_balance_budget_portion as BudgetPortion, amount: String(editRecord.starting_balance) }])
+          const bp  = editRecord.starting_balance_budget_portion as BudgetPortion
+          const amt = editRecord.starting_balance
+          console.log('[CategoryModal] migrating legacy starting_balance → COB', { bp, amt })
+          setObRows([{ budget_portion: bp, amount: String(amt) }])
+          // Auto-migrate: write to COB so future reads don't rely on the legacy field
+          upsertCategoryOpeningBalance(editRecord.id, bp, amt).catch(migrErr => {
+            console.warn('[CategoryModal] background COB migration failed', migrErr)
+          })
         } else {
           console.log('[CategoryModal] no ob rows and no legacy balance — obRows stays empty')
         }
