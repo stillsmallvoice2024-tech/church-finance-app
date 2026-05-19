@@ -16,8 +16,20 @@ import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
-import { normalizeId } from '../../utils/normalizeId'
 
+// ── ID normalization ──────────────────────────────────────────────────────────
+// Strips invisible characters (zero-width spaces, soft hyphen, BOM, NBSP, etc.),
+// applies Unicode NFC, collapses whitespace, and trims.
+// Case is preserved — bank-provided IDs are case-sensitive.
+function normalizeId(raw: string): string {
+  // U+00AD soft-hyphen, U+00A0 NBSP, U+200B–U+200D zero-width chars,
+  // U+2028–U+2029 line/para separators, U+FEFF BOM
+  return raw
+    .normalize('NFC')
+    .replace(/\u00ad|\u00a0|\u200b|\u200c|\u200d|\u2028|\u2029|\ufeff/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -454,9 +466,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   // ── Step 3 → 4 (bank_statement) or Step 3 → 5 (fx_transactions) ─────────
 
   // bank_statement: pre-populate rowStageCodes from mapped columns, go to step 4
-  // Dup check runs on entry to step 4 so results are visible BEFORE the user clicks Next.
-  // wizardDupLoading disables the step-4 Next button, preventing premature advance.
-  const proceedToRowConfig = useCallback(async () => {
+  const proceedToRowConfig = useCallback(() => {
     if (!sheet || !config || targetTable !== 'bank_statement') return
 
     const s1ColIdx = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
@@ -475,24 +485,35 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       initial[ri] = { s1, s2 }
     }
     setRowStageCodes(initial)
-    setSkipWizardDups(false)
-    setWizardDupsFound([])
     setStep(4)
+  }, [sheet, config, targetTable, mapping])
 
-    // Run dup check immediately — user sees results in step 4 and can toggle "Skip duplicates"
+  // fx_transactions (and any future non-bank_statement): skip step 4, go straight to step 5 + dup check
+  const proceedToImport = useCallback(async () => {
+    if (!sheet || !config || !targetTable) return
+    setStep(5)
+
+    // Dup check for bank_statement only
+    if (targetTable !== 'bank_statement') return
+
     const refHeader = Object.keys(mapping).find(h => mapping[h] === 'reference')
     if (!refHeader) return
+
     const refColIdx = sheet.headers.indexOf(refHeader)
     if (refColIdx < 0) return
+
     const ids = sheet.rows
       .map(r => normalizeId(String((r as unknown[])[refColIdx] ?? '')))
       .filter(id => id.length > 0)
     if (ids.length === 0) return
 
     setWizardDupLoading(true)
+    setWizardDupsFound([])
     const uniqueIds = [...new Set(ids)]
+
     try {
       const results: Array<{ id: string; table: string }> = []
+
       const { data: inflowData, error: inflowErr } = await supabase
         .from('inflow_transactions')
         .select('transaction_ref')
@@ -506,6 +527,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (r.transaction_ref) results.push({ id: normalizeId(r.transaction_ref), table: 'inflow_transactions' })
         }
       }
+
       const { data: outflowData, error: outflowErr } = await supabase
         .from('outflow_transactions')
         .select('transaction_id')
@@ -519,18 +541,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (r.transaction_id) results.push({ id: normalizeId(r.transaction_id), table: 'outflow_transactions' })
         }
       }
+
       setWizardDupsFound(results)
     } finally {
       setWizardDupLoading(false)
     }
   }, [sheet, config, targetTable, mapping])
-
-  // Step 4 → step 5 (bank_statement) or step 3 → step 5 (fx_transactions).
-  // Dup check for bank_statement has already completed in proceedToRowConfig.
-  const proceedToImport = useCallback(() => {
-    if (!sheet || !config || !targetTable) return
-    setStep(5)
-  }, [sheet, config, targetTable])
 
   // ── Step 4: Import ────────────────────────────────────────────────────────
 
@@ -677,41 +693,32 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit === 0 && debit === 0) skipped++
       }
 
-      // Cross-batch dup check: query DB for any IDs (bank-provided or fallback) already present.
-      // Errors are handled explicitly — a silent failure here would let duplicates slip through.
+      // Cross-batch dup check: query DB for any IDs (bank-provided or fallback) already present
       const pendingInflowIds  = inflowRows.map(r  => r.transaction_ref as string).filter(Boolean)
       const pendingOutflowIds = outflowRows.map(r => r.transaction_id  as string).filter(Boolean)
       if (pendingInflowIds.length > 0) {
-        const { data, error: cbInflowErr } = await supabase
+        const { data } = await supabase
           .from('inflow_transactions')
           .select('transaction_ref')
           .in('transaction_ref', pendingInflowIds)
-        if (cbInflowErr) {
-          if (import.meta.env.DEV) console.warn('[dup-check] cross-batch inflow query failed:', cbInflowErr.message)
-        } else {
-          for (const r of data ?? []) {
-            if (r.transaction_ref) {
-              const nid = normalizeId(r.transaction_ref)
-              if (import.meta.env.DEV) console.debug('[dup-check] inflow DB hit:', JSON.stringify(r.transaction_ref), '→', JSON.stringify(nid))
-              allSkipIds.add(nid)
-            }
+        for (const r of data ?? []) {
+          if (r.transaction_ref) {
+            const nid = normalizeId(r.transaction_ref)
+            if (import.meta.env.DEV) console.debug('[dup-check] inflow DB hit:', JSON.stringify(r.transaction_ref), '→ normalized:', JSON.stringify(nid))
+            allSkipIds.add(nid)
           }
         }
       }
       if (pendingOutflowIds.length > 0) {
-        const { data, error: cbOutflowErr } = await supabase
+        const { data } = await supabase
           .from('outflow_transactions')
           .select('transaction_id')
           .in('transaction_id', pendingOutflowIds)
-        if (cbOutflowErr) {
-          if (import.meta.env.DEV) console.warn('[dup-check] cross-batch outflow query failed:', cbOutflowErr.message)
-        } else {
-          for (const r of data ?? []) {
-            if (r.transaction_id) {
-              const nid = normalizeId(r.transaction_id)
-              if (import.meta.env.DEV) console.debug('[dup-check] outflow DB hit:', JSON.stringify(r.transaction_id), '→', JSON.stringify(nid))
-              allSkipIds.add(nid)
-            }
+        for (const r of data ?? []) {
+          if (r.transaction_id) {
+            const nid = normalizeId(r.transaction_id)
+            if (import.meta.env.DEV) console.debug('[dup-check] outflow DB hit:', JSON.stringify(r.transaction_id), '→ normalized:', JSON.stringify(nid))
+            allSkipIds.add(nid)
           }
         }
       }
@@ -1717,8 +1724,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               onBack={() => setStep(3)}
               onNext={proceedToImport}
               nextLabel={`Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
-              nextDisabled={wizardDupLoading}
-              nextLoading={wizardDupLoading}
             />
           </div>
         )}
