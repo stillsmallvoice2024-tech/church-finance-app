@@ -89,7 +89,7 @@ export default function BankLedger() {
         .from('inflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
-        .neq('transaction_type', BALANCE_BROUGHT_FORWARD_TYPE)
+        .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)
         .order('date', { ascending: true }),
       supabase
         .from('outflow_transactions')
