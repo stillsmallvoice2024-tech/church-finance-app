@@ -128,6 +128,16 @@ Toast container uses `.toast-safe-bottom` (CSS var `--tab-bar-height: 64px`) on 
 
 ---
 
+## Add/Edit Modal — editRecord Interface Convention
+
+- `editRecord` prop is typed as the matching DB row interface (e.g. `InflowTransaction | null`)
+- DB row interfaces in `src/hooks/useTransactions.ts` must include **all** DB columns that modal forms read on edit — including `allocation_config_id`, `fx_amount`, `fx_rate`
+- Never cast `editRecord as Record<string, unknown>` to access missing fields — extend the interface instead
+- `onSaved` callback in modals that return a created entity: type as `(cfg?: T) => void` (optional param) so call sites that don't need the return value can still call `onSaved()` without arguments
+- `onClose` must not be `undefined` at runtime — use `() => {}` (no-op) when you need to suppress closing, not `undefined`
+
+---
+
 ## Infrastructure / Schema Error Display
 
 Never show raw SQL, migration instructions, or PostgREST/Supabase terminology in the normal workflow UI.

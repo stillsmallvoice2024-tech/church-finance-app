@@ -137,6 +137,18 @@ This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no 
 
 ---
 
+## Supabase FK Join Type Inference
+
+Supabase JS v2 infers many-to-one FK joins (e.g. `.select('amount, categories(name)')`) as `{ name: any }[]` (array) in TypeScript, even though the runtime value is a single object. Direct casts (`r.categories as { name: string }`) trigger TS2352 ("conversion may be a mistake").
+
+**Fix**: double-cast via `unknown` to bypass the overlap check:
+```ts
+(r.categories as unknown as { name: string } | null)?.name ?? ''
+```
+This is safe — many-to-one FK joins genuinely return a single object at runtime.
+
+---
+
 ## Audit Trail Pattern
 
 Every UPDATE in the app must:
