@@ -7,7 +7,7 @@ import { useCategories } from '../hooks/useCategories'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
 interface SavingsRow {
   category:     string
@@ -17,9 +17,14 @@ interface SavingsRow {
 }
 
 const SVP_SORT_FIELDS: SortField[] = [
-  { key: 'category', label: 'Category', type: 'text' },
-  { key: 'deposited', label: 'Total Saved', type: 'numeric' },
-  { key: 'balance', label: 'Net Balance', type: 'numeric' },
+  { key: 'category', label: 'Category',   type: 'text',    primary: true },
+  { key: 'deposited', label: 'Total Saved', type: 'numeric', primary: true },
+  { key: 'balance',   label: 'Net Balance', type: 'numeric', primary: true },
+]
+
+const SVP_SEARCH_COLS = [
+  { key: 'all',      label: 'All Columns' },
+  { key: 'category', label: 'Category' },
 ]
 
 export default function SavingsPortions() {
@@ -111,16 +116,18 @@ export default function SavingsPortions() {
     return q ? rows.filter(r => r.category.toLowerCase().includes(q)) : rows
   }, [rows, svpState.search])
 
+  const getSvpValue = (r: SavingsRow, k: string) => {
+    if (k === 'category') return r.category
+    if (k === 'deposited') return r.deposited
+    return r.balance
+  }
+
   // Sort
-  const sortedRows = useMemo(() =>
-    sortRows(visibleRows, (r, k) => {
-      if (k === 'category') return r.category
-      if (k === 'deposited') return r.deposited
-      if (k === 'balance')   return r.balance
-      return r.balance
-    }, svpState.sortKey, svpState.sortDir, SVP_SORT_FIELDS),
-    [visibleRows, svpState.sortKey, svpState.sortDir],
-  )
+  const sortedRows = useMemo(() => {
+    const adv = svpState.advancedSort
+    if (adv.length > 0) return multiSortRows(visibleRows, getSvpValue, adv, SVP_SORT_FIELDS)
+    return sortRows(visibleRows, getSvpValue, svpState.sortKey, svpState.sortDir, SVP_SORT_FIELDS)
+  }, [visibleRows, svpState.sortKey, svpState.sortDir, svpState.advancedSort])
 
   // Totals reflect visible (filtered) data
   const totalDeposited = visibleRows.reduce((s, r) => s + r.deposited, 0)
@@ -210,9 +217,16 @@ export default function SavingsPortions() {
               sortKey={svpState.sortKey}
               sortDir={svpState.sortDir}
               onSort={svpState.setSort}
+              defaultSortKey="balance"
+              defaultSortDir="desc"
               search={svpState.search}
               onSearchChange={svpState.setSearch}
               searchPlaceholder="Search categories…"
+              searchColumns={SVP_SEARCH_COLS}
+              searchCol={svpState.searchCol}
+              onSearchColChange={svpState.setSearchCol}
+              advancedSort={svpState.advancedSort}
+              onAdvancedSort={svpState.setAdvancedSort}
             />
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">

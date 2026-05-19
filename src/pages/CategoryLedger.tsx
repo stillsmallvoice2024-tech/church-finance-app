@@ -12,24 +12,35 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, directionLabel } from '../utils/sortUtils'
+import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
 import type { SortField } from '../utils/sortUtils'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
 const SUMMARY_SORT_FIELDS: SortField[] = [
-  { key: 'name',                label: 'Category',      type: 'text' },
-  { key: 'percentage',          label: '% Alloc',       type: 'numeric' },
-  { key: 'percentageAllocated', label: '₦ Allocated',   type: 'numeric' },
-  { key: 'specificSeed',        label: 'Specific Seed', type: 'numeric' },
-  { key: 'savingsNet',          label: 'Savings Net',   type: 'numeric' },
+  { key: 'name',                label: 'Category',      type: 'text',    primary: true },
+  { key: 'percentage',          label: '% Alloc',       type: 'numeric', primary: true },
+  { key: 'percentageAllocated', label: '₦ Allocated',   type: 'numeric', primary: true },
+  { key: 'specificSeed',        label: 'Specific Seed', type: 'numeric', primary: true },
+  { key: 'savingsNet',          label: 'Savings Net',   type: 'numeric', primary: true },
 ]
 
 const LEDGER_SORT_FIELDS: SortField[] = [
-  { key: 'date',    label: 'Date',    type: 'date' },
-  { key: 'inflow',  label: 'Inflow',  type: 'numeric' },
-  { key: 'outflow', label: 'Outflow', type: 'numeric' },
-  { key: 'balance', label: 'Balance', type: 'numeric' },
+  { key: 'date',        label: 'Date',        type: 'date',    primary: true },
+  { key: 'inflow',      label: 'Inflow',      type: 'numeric', primary: true },
+  { key: 'outflow',     label: 'Outflow',     type: 'numeric', primary: true },
+  { key: 'balance',     label: 'Balance',     type: 'numeric', primary: true },
+  { key: 'description', label: 'Description', type: 'text' },
+]
+
+const SUMMARY_SEARCH_COLS = [
+  { key: 'all',  label: 'All Columns' },
+  { key: 'name', label: 'Category' },
+]
+
+const LEDGER_SEARCH_COLS = [
+  { key: 'all',         label: 'All Columns' },
+  { key: 'description', label: 'Description' },
 ]
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -398,23 +409,20 @@ export default function CategoryLedger() {
     [filteredRows, summaryViewState.search],
   )
 
-  const summarySorted = useMemo(
-    () => sortRows(
-      summarySearchFiltered,
-      (row, key) => {
-        if (key === 'name') return row.name
-        if (key === 'percentage') return row.percentage ?? -Infinity
-        if (key === 'percentageAllocated') return row.percentageAllocated
-        if (key === 'specificSeed') return row.specificSeed
-        if (key === 'savingsNet') return row.savingsIn - row.savingsOut
-        return null
-      },
-      summaryViewState.sortKey,
-      summaryViewState.sortDir,
-      SUMMARY_SORT_FIELDS,
-    ),
-    [summarySearchFiltered, summaryViewState.sortKey, summaryViewState.sortDir],
-  )
+  const getSummaryValue = (row: CategoryRow, key: string) => {
+    if (key === 'name')                return row.name
+    if (key === 'percentage')          return row.percentage ?? -Infinity
+    if (key === 'percentageAllocated') return row.percentageAllocated
+    if (key === 'specificSeed')        return row.specificSeed
+    if (key === 'savingsNet')          return row.savingsIn - row.savingsOut
+    return null
+  }
+
+  const summarySorted = useMemo(() => {
+    const adv = summaryViewState.advancedSort
+    if (adv.length > 0) return multiSortRows(summarySearchFiltered, getSummaryValue, adv, SUMMARY_SORT_FIELDS)
+    return sortRows(summarySearchFiltered, getSummaryValue, summaryViewState.sortKey, summaryViewState.sortDir, SUMMARY_SORT_FIELDS)
+  }, [summarySearchFiltered, summaryViewState.sortKey, summaryViewState.sortDir, summaryViewState.advancedSort])
 
   const totals = useMemo(
     () => summarySorted.reduce(
@@ -454,22 +462,20 @@ export default function CategoryLedger() {
     [ledgerRows, ledgerViewState.search],
   )
 
-  const ledgerSorted = useMemo(
-    () => sortRows(
-      ledgerFiltered,
-      (row, key) => {
-        if (key === 'date') return row.date
-        if (key === 'inflow') return row.inflow
-        if (key === 'outflow') return row.outflow
-        if (key === 'balance') return row.balance
-        return null
-      },
-      ledgerViewState.sortKey,
-      ledgerViewState.sortDir,
-      LEDGER_SORT_FIELDS,
-    ),
-    [ledgerFiltered, ledgerViewState.sortKey, ledgerViewState.sortDir],
-  )
+  const getLedgerValue = (row: LedgerRow, key: string) => {
+    if (key === 'date')        return row.date
+    if (key === 'inflow')      return row.inflow
+    if (key === 'outflow')     return row.outflow
+    if (key === 'balance')     return row.balance
+    if (key === 'description') return row.description
+    return null
+  }
+
+  const ledgerSorted = useMemo(() => {
+    const adv = ledgerViewState.advancedSort
+    if (adv.length > 0) return multiSortRows(ledgerFiltered, getLedgerValue, adv, LEDGER_SORT_FIELDS)
+    return sortRows(ledgerFiltered, getLedgerValue, ledgerViewState.sortKey, ledgerViewState.sortDir, LEDGER_SORT_FIELDS)
+  }, [ledgerFiltered, ledgerViewState.sortKey, ledgerViewState.sortDir, ledgerViewState.advancedSort])
 
   const ledgerPagedRows = useMemo(
     () => ledgerSorted.slice(
@@ -622,9 +628,16 @@ export default function CategoryLedger() {
                 sortKey={summaryViewState.sortKey}
                 sortDir={summaryViewState.sortDir}
                 onSort={summaryViewState.setSort}
+                defaultSortKey="name"
+                defaultSortDir="asc"
                 search={summaryViewState.search}
                 onSearchChange={summaryViewState.setSearch}
                 searchPlaceholder="Search categories…"
+                searchColumns={SUMMARY_SEARCH_COLS}
+                searchCol={summaryViewState.searchCol}
+                onSearchColChange={summaryViewState.setSearchCol}
+                advancedSort={summaryViewState.advancedSort}
+                onAdvancedSort={summaryViewState.setAdvancedSort}
               />
 
               {summarySorted.length === 0 ? (
@@ -890,11 +903,18 @@ export default function CategoryLedger() {
                     sortKey={ledgerViewState.sortKey}
                     sortDir={ledgerViewState.sortDir}
                     onSort={ledgerViewState.setSort}
+                    defaultSortKey="date"
+                    defaultSortDir="asc"
                     view={ledgerViewState.view}
                     onViewChange={ledgerViewState.setView}
                     search={ledgerViewState.search}
                     onSearchChange={ledgerViewState.setSearch}
                     searchPlaceholder="Search descriptions…"
+                    searchColumns={LEDGER_SEARCH_COLS}
+                    searchCol={ledgerViewState.searchCol}
+                    onSearchColChange={ledgerViewState.setSearchCol}
+                    advancedSort={ledgerViewState.advancedSort}
+                    onAdvancedSort={ledgerViewState.setAdvancedSort}
                   />
 
                   {/* Top pagination — compact */}

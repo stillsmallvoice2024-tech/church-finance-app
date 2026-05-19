@@ -11,7 +11,7 @@ import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -39,9 +39,27 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 }
 
 const INF_SORT_FIELDS: SortField[] = [
-  { key: 'date',   label: 'Date',   type: 'date'    },
-  { key: 'amount', label: 'Amount', type: 'numeric' },
+  { key: 'date',        label: 'Date',        type: 'date',    primary: true },
+  { key: 'amount',      label: 'Amount',      type: 'numeric', primary: true },
+  { key: 'bank_name',   label: 'Bank',        type: 'text' },
+  { key: 'description', label: 'Description', type: 'text' },
 ]
+
+const INF_SEARCH_COLS = [
+  { key: 'all',             label: 'All Columns' },
+  { key: 'description',     label: 'Description' },
+  { key: 'bank_name',       label: 'Bank' },
+  { key: 'transaction_ref', label: 'Txn Ref' },
+  { key: 'amount',          label: 'Amount' },
+]
+
+function infColVal(r: InflowTransaction, col: string): string {
+  if (col === 'description')     return r.description ?? ''
+  if (col === 'bank_name')       return r.bank_name ?? ''
+  if (col === 'transaction_ref') return r.transaction_ref ?? ''
+  if (col === 'amount')          return String(r.amount)
+  return ''
+}
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -116,13 +134,26 @@ export default function Inflows() {
   const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc' })
 
   // Client-side sort of current page
-  const sorted = useMemo(() =>
-    sortRows(data, (r, k) => {
-      if (k === 'amount') return Number(r.amount)
-      return r.date
-    }, infState.sortKey, infState.sortDir, INF_SORT_FIELDS),
-    [data, infState.sortKey, infState.sortDir],
-  )
+  const getValue = (r: InflowTransaction, k: string) => {
+    if (k === 'amount')      return Number(r.amount)
+    if (k === 'bank_name')   return r.bank_name ?? ''
+    if (k === 'description') return r.description ?? ''
+    return r.date
+  }
+
+  const sorted = useMemo(() => {
+    const adv = infState.advancedSort
+    if (adv.length > 0) return multiSortRows(data, getValue, adv, INF_SORT_FIELDS)
+    return sortRows(data, getValue, infState.sortKey, infState.sortDir, INF_SORT_FIELDS)
+  }, [data, infState.sortKey, infState.sortDir, infState.advancedSort])
+
+  // Column-specific client filter (on top of server search)
+  const displayed = useMemo(() => {
+    const q = searchInput.trim().toLowerCase()
+    const col = infState.searchCol
+    if (!q || col === 'all') return sorted
+    return sorted.filter(r => infColVal(r, col).toLowerCase().includes(q))
+  }, [sorted, searchInput, infState.searchCol])
 
   const [editRecord,        setEditRecord]        = useState<InflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
@@ -250,11 +281,18 @@ export default function Inflows() {
           sortKey={infState.sortKey}
           sortDir={infState.sortDir}
           onSort={infState.setSort}
+          defaultSortKey="date"
+          defaultSortDir="desc"
           view={infState.view}
           onViewChange={infState.setView}
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
           searchPlaceholder="Search descriptions…"
+          searchColumns={INF_SEARCH_COLS}
+          searchCol={infState.searchCol}
+          onSearchColChange={infState.setSearchCol}
+          advancedSort={infState.advancedSort}
+          onAdvancedSort={infState.setAdvancedSort}
         />
 
         {/* Compact pagination above content */}
@@ -283,7 +321,7 @@ export default function Inflows() {
               ))
             ) : data.length === 0 ? (
               <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
-            ) : sorted.map(row => {
+            ) : displayed.map(row => {
               const it = incomeTypes.find(t => t.id === row.income_type_id)
               return (
                 <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
@@ -413,7 +451,7 @@ export default function Inflows() {
                     </td>
                   </tr>
                 ) : (
-                  sorted.flatMap(row => {
+                  displayed.flatMap(row => {
                     const expanded = expandedId === row.id
                     const rows = [
                       <tr

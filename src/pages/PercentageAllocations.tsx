@@ -7,11 +7,16 @@ import { formatDate } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
 const PCA_SORT_FIELDS: SortField[] = [
-  { key: 'category_name', label: 'Category', type: 'text' },
-  { key: 'percentage', label: 'Percentage', type: 'numeric' },
+  { key: 'category_name', label: 'Category',   type: 'text',    primary: true },
+  { key: 'percentage',    label: 'Percentage', type: 'numeric', primary: true },
+]
+
+const PCA_SEARCH_COLS = [
+  { key: 'all',           label: 'All Columns' },
+  { key: 'category_name', label: 'Category' },
 ]
 
 export default function PercentageAllocations() {
@@ -39,14 +44,16 @@ export default function PercentageAllocations() {
     return q ? base.filter(r => r.category_name.toLowerCase().includes(q)) : base
   }, [config?.rows, pcaState.search])
 
-  const sortedConfigRows = useMemo(() =>
-    sortRows(filteredRows, (r, k) => {
-      if (k === 'category_name') return r.category_name
-      if (k === 'percentage')    return Number(r.percentage)
-      return r.category_name
-    }, pcaState.sortKey, pcaState.sortDir, PCA_SORT_FIELDS),
-    [filteredRows, pcaState.sortKey, pcaState.sortDir],
-  )
+  const getPcaValue = (r: { category_name: string; percentage?: number }, k: string) => {
+    if (k === 'percentage') return Number(r.percentage ?? 0)
+    return r.category_name
+  }
+
+  const sortedConfigRows = useMemo(() => {
+    const adv = pcaState.advancedSort
+    if (adv.length > 0) return multiSortRows(filteredRows, getPcaValue, adv, PCA_SORT_FIELDS)
+    return sortRows(filteredRows, getPcaValue, pcaState.sortKey, pcaState.sortDir, PCA_SORT_FIELDS)
+  }, [filteredRows, pcaState.sortKey, pcaState.sortDir, pcaState.advancedSort])
 
   return (
     <div className="space-y-5">
@@ -143,9 +150,16 @@ export default function PercentageAllocations() {
                 sortKey={pcaState.sortKey}
                 sortDir={pcaState.sortDir}
                 onSort={pcaState.setSort}
+                defaultSortKey="category_name"
+                defaultSortDir="asc"
                 search={pcaState.search}
                 onSearchChange={pcaState.setSearch}
                 searchPlaceholder="Search categories…"
+                searchColumns={PCA_SEARCH_COLS}
+                searchCol={pcaState.searchCol}
+                onSearchColChange={pcaState.setSearchCol}
+                advancedSort={pcaState.advancedSort}
+                onAdvancedSort={pcaState.setAdvancedSort}
               />
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-500 flex items-center justify-between">

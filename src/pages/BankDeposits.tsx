@@ -7,7 +7,7 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -55,9 +55,19 @@ type FormValues = z.infer<typeof schema>
 // ── Sort fields ────────────────────────────────────────────────────────────────
 
 const BD_SORT_FIELDS: SortField[] = [
-  { key: 'date',      label: 'Date',   type: 'date'    },
-  { key: 'amount',    label: 'Amount', type: 'numeric' },
-  { key: 'bank_name', label: 'Bank',   type: 'text'    },
+  { key: 'date',            label: 'Date',        type: 'date',    primary: true },
+  { key: 'amount',          label: 'Amount',      type: 'numeric', primary: true },
+  { key: 'bank_name',       label: 'Bank',        type: 'text',    primary: true },
+  { key: 'description',     label: 'Description', type: 'text' },
+  { key: 'transaction_ref', label: 'Reference',   type: 'text' },
+]
+
+const BD_SEARCH_COLS = [
+  { key: 'all',             label: 'All Columns' },
+  { key: 'description',     label: 'Description' },
+  { key: 'bank_name',       label: 'Bank' },
+  { key: 'transaction_ref', label: 'Reference' },
+  { key: 'amount',          label: 'Amount' },
 ]
 
 // ── Add/Edit modal ─────────────────────────────────────────────────────────────
@@ -306,23 +316,33 @@ export default function BankDeposits() {
   // Search filter
   const searchFiltered = useMemo(() => {
     const q = bdState.search.trim().toLowerCase()
-    return q
-      ? dateFiltered.filter(r =>
-          r.description?.toLowerCase().includes(q) ||
-          r.transaction_ref?.toLowerCase().includes(q)
-        )
-      : dateFiltered
-  }, [dateFiltered, bdState.search])
+    const col = bdState.searchCol
+    if (!q) return dateFiltered
+    if (col === 'all') return dateFiltered.filter(r =>
+      r.description?.toLowerCase().includes(q) ||
+      r.transaction_ref?.toLowerCase().includes(q)
+    )
+    if (col === 'description')     return dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
+    if (col === 'bank_name')       return dateFiltered.filter(r => (r.bank_name ?? '').toLowerCase().includes(q))
+    if (col === 'transaction_ref') return dateFiltered.filter(r => (r.transaction_ref ?? '').toLowerCase().includes(q))
+    if (col === 'amount')          return dateFiltered.filter(r => String(r.amount).includes(q))
+    return dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
+  }, [dateFiltered, bdState.search, bdState.searchCol])
+
+  const getBdValue = (r: DepositRow, k: string) => {
+    if (k === 'amount')          return r.amount
+    if (k === 'bank_name')       return r.bank_name ?? ''
+    if (k === 'description')     return r.description ?? ''
+    if (k === 'transaction_ref') return r.transaction_ref ?? ''
+    return r.date
+  }
 
   // Sort
-  const sortedRows = useMemo(() =>
-    sortRows(searchFiltered, (r, k) => {
-      if (k === 'amount')    return r.amount
-      if (k === 'bank_name') return r.bank_name ?? ''
-      return r.date
-    }, bdState.sortKey, bdState.sortDir, BD_SORT_FIELDS),
-    [searchFiltered, bdState.sortKey, bdState.sortDir],
-  )
+  const sortedRows = useMemo(() => {
+    const adv = bdState.advancedSort
+    if (adv.length > 0) return multiSortRows(searchFiltered, getBdValue, adv, BD_SORT_FIELDS)
+    return sortRows(searchFiltered, getBdValue, bdState.sortKey, bdState.sortDir, BD_SORT_FIELDS)
+  }, [searchFiltered, bdState.sortKey, bdState.sortDir, bdState.advancedSort])
 
   // Pagination
   const pagedRows = useMemo(() => {
@@ -450,11 +470,18 @@ export default function BankDeposits() {
             sortKey={bdState.sortKey}
             sortDir={bdState.sortDir}
             onSort={bdState.setSort}
+            defaultSortKey="date"
+            defaultSortDir="desc"
             view={bdState.view}
             onViewChange={bdState.setView}
             search={bdState.search}
             onSearchChange={bdState.setSearch}
             searchPlaceholder="Search deposits…"
+            searchColumns={BD_SEARCH_COLS}
+            searchCol={bdState.searchCol}
+            onSearchColChange={bdState.setSearchCol}
+            advancedSort={bdState.advancedSort}
+            onAdvancedSort={bdState.setAdvancedSort}
           />
         </div>
         <PaginationBar

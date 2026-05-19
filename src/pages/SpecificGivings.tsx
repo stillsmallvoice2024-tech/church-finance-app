@@ -7,7 +7,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
 interface SpecificRow {
   id:                       string
@@ -25,8 +25,13 @@ interface GroupedCategory {
 }
 
 const SG_SORT_FIELDS: SortField[] = [
-  { key: 'category', label: 'Category', type: 'text' },
-  { key: 'total', label: 'Total', type: 'numeric' },
+  { key: 'category', label: 'Category', type: 'text',    primary: true },
+  { key: 'total',    label: 'Total',    type: 'numeric', primary: true },
+]
+
+const SG_SEARCH_COLS = [
+  { key: 'all',      label: 'All Columns' },
+  { key: 'category', label: 'Category' },
 ]
 
 function groupRows(rows: SpecificRow[]): GroupedCategory[] {
@@ -145,14 +150,16 @@ export default function SpecificGivings() {
     return q ? allGrouped.filter(g => g.category.toLowerCase().includes(q)) : allGrouped
   }, [allGrouped, sgState.search])
 
-  const grouped = useMemo(() =>
-    sortRows(filteredGrouped, (g, k) => {
-      if (k === 'category') return g.category
-      if (k === 'total')    return g.total
-      return g.total
-    }, sgState.sortKey, sgState.sortDir, SG_SORT_FIELDS),
-    [filteredGrouped, sgState.sortKey, sgState.sortDir],
-  )
+  const getSgValue = (g: GroupedCategory, k: string) => {
+    if (k === 'category') return g.category
+    return g.total
+  }
+
+  const grouped = useMemo(() => {
+    const adv = sgState.advancedSort
+    if (adv.length > 0) return multiSortRows(filteredGrouped, getSgValue, adv, SG_SORT_FIELDS)
+    return sortRows(filteredGrouped, getSgValue, sgState.sortKey, sgState.sortDir, SG_SORT_FIELDS)
+  }, [filteredGrouped, sgState.sortKey, sgState.sortDir, sgState.advancedSort])
 
   const grandTotal = rows.reduce((s, r) => s + Number(r.amount), 0)
 
@@ -210,9 +217,16 @@ export default function SpecificGivings() {
             sortKey={sgState.sortKey}
             sortDir={sgState.sortDir}
             onSort={sgState.setSort}
+            defaultSortKey="total"
+            defaultSortDir="desc"
             search={sgState.search}
             onSearchChange={sgState.setSearch}
             searchPlaceholder="Search categories…"
+            searchColumns={SG_SEARCH_COLS}
+            searchCol={sgState.searchCol}
+            onSearchColChange={sgState.setSearchCol}
+            advancedSort={sgState.advancedSort}
+            onAdvancedSort={sgState.setAdvancedSort}
           />
 
           {/* Grand total strip */}
