@@ -499,6 +499,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     let imported = 0
     let skipped  = 0
     const errors: string[] = []
+    try {
 
     const { configs: latestConfigs } = useAllocationStore.getState()
 
@@ -709,7 +710,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
 
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
-      setImporting(false)
     }
 
     // ── FX transactions ───────────────────────────────────────────────────────
@@ -760,6 +760,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
 
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
+    }
+    } catch (e: unknown) {
+      errors.push(e instanceof Error ? e.message : 'Unexpected error during import')
+      setResult({ imported, skipped, errors, fallbackIdCount: 0, collisions: [] })
+    } finally {
       setImporting(false)
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
