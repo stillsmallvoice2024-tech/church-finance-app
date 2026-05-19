@@ -32,11 +32,14 @@ import { filterInputCls } from '../components/ui/FormField'
 const PAGE_SIZE = 25
 
 const TXN_TYPE_LABELS: Record<string, string> = {
-  refund:              'Refund',
-  reversal:            'Reversal',
-  bank_deposit:        'Bank Deposit',
-  intrabank_transfer:  'Intrabank Transfer',
+  refund:                   'Refund',
+  reversal:                 'Reversal',
+  bank_deposit:             'Bank Deposit',
+  intrabank_transfer:       'Intrabank Transfer',
+  balance_brought_forward:  'Balance Brought Forward',
 }
+
+const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
 const INF_SORT_FIELDS: SortField[] = [
   { key: 'date',        label: 'Date',        type: 'date',    primary: true },
@@ -334,7 +337,7 @@ export default function Inflows() {
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
                         )}
                         {row.transaction_type && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                             {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                           </span>
                         )}
@@ -357,12 +360,12 @@ export default function Inflows() {
                       <p className="text-sm font-mono font-bold tabular-nums text-success">{formatCurrency(Number(row.amount))}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                      {canWrite() && (
+                      {canWrite() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
                         <button onClick={() => openEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      {canDelete() && (
+                      {canDelete() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
                         <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -498,7 +501,7 @@ export default function Inflows() {
                               ) : null
                             })()}
                             {row.transaction_type ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-slate-100 text-slate-500">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                                 {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                               </span>
                             ) : null}
@@ -513,12 +516,12 @@ export default function Inflows() {
                         <AmountCell value={Number(row.amount)} mode="inflow" />
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
-                            {canWrite() && (
+                            {canWrite() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
                               <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                                 <Pencil className="w-4 h-4" />
                               </button>
                             )}
-                            {canDelete() && (
+                            {canDelete() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
                               <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                                 <Trash2 className="w-4 h-4" />
                               </button>
