@@ -332,9 +332,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
 
   // In-wizard dup check
-  const [wizardDupLoading, setWizardDupLoading] = useState(false)
-  const [wizardDupsFound,  setWizardDupsFound]  = useState<Array<{ id: string; table: string }>>([])
-  const [skipWizardDups,   setSkipWizardDups]   = useState(false)
 
   // Special configs (is_special = true) loaded when modal opens
   const [specialConfigs,   setSpecialConfigs]   = useState<typeof allocConfigs>([])
@@ -383,9 +380,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowIncomeTypes({})
     setSelectedInflowRis(new Set())
     setSelectedOutflowRis(new Set())
-    setWizardDupLoading(false)
-    setWizardDupsFound([])
-    setSkipWizardDups(false)
     // NOTE: intentionally do NOT reset internalBank — persists across "Import Another"
   }, [])
 
@@ -488,65 +482,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setStep(4)
   }, [sheet, config, targetTable, mapping])
 
-  // fx_transactions (and any future non-bank_statement): skip step 4, go straight to step 5 + dup check
-  const proceedToImport = useCallback(async () => {
+  const proceedToImport = useCallback(() => {
     if (!sheet || !config || !targetTable) return
     setStep(5)
-
-    // Dup check for bank_statement only
-    if (targetTable !== 'bank_statement') return
-
-    const refHeader = Object.keys(mapping).find(h => mapping[h] === 'reference')
-    if (!refHeader) return
-
-    const refColIdx = sheet.headers.indexOf(refHeader)
-    if (refColIdx < 0) return
-
-    const ids = sheet.rows
-      .map(r => normalizeId(String((r as unknown[])[refColIdx] ?? '')))
-      .filter(id => id.length > 0)
-    if (ids.length === 0) return
-
-    setWizardDupLoading(true)
-    setWizardDupsFound([])
-    const uniqueIds = [...new Set(ids)]
-
-    try {
-      const results: Array<{ id: string; table: string }> = []
-
-      const { data: inflowData, error: inflowErr } = await supabase
-        .from('inflow_transactions')
-        .select('transaction_ref')
-        .in('transaction_ref', uniqueIds)
-      if (inflowErr) {
-        if (inflowErr.message.includes('invalid input syntax for type uuid')) {
-          results.push({ id: '__schema_error_inflow__', table: 'inflow_transactions' })
-        }
-      } else {
-        for (const r of inflowData ?? []) {
-          if (r.transaction_ref) results.push({ id: normalizeId(r.transaction_ref), table: 'inflow_transactions' })
-        }
-      }
-
-      const { data: outflowData, error: outflowErr } = await supabase
-        .from('outflow_transactions')
-        .select('transaction_id')
-        .in('transaction_id', uniqueIds)
-      if (outflowErr) {
-        if (outflowErr.message.includes('invalid input syntax for type uuid')) {
-          results.push({ id: '__schema_error_outflow__', table: 'outflow_transactions' })
-        }
-      } else {
-        for (const r of outflowData ?? []) {
-          if (r.transaction_id) results.push({ id: normalizeId(r.transaction_id), table: 'outflow_transactions' })
-        }
-      }
-
-      setWizardDupsFound(results)
-    } finally {
-      setWizardDupLoading(false)
-    }
-  }, [sheet, config, targetTable, mapping])
+  }, [sheet, config, targetTable])
 
   // ── Step 4: Import ────────────────────────────────────────────────────────
 
@@ -563,11 +502,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
     const { configs: latestConfigs } = useAllocationStore.getState()
 
-    // Combined dup skip set (pre-import Excel dups + in-wizard dups)
-    const wizardSkipIds = skipWizardDups
-      ? new Set(wizardDupsFound.filter(d => !d.id.startsWith('__schema_error')).map(d => normalizeId(d.id)))
-      : new Set<string>()
-    const allSkipIds = new Set([...(skipTxnIds ?? []).map(normalizeId), ...wizardSkipIds])
+    // Dup skip set — built from pre-import stage only (skipTxnIds passed from Import.tsx)
+    const allSkipIds = new Set([...(skipTxnIds ?? []).map(normalizeId)])
     let fallbackIdCount = 0
     const collisions: string[] = []
 
@@ -693,49 +629,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit === 0 && debit === 0) skipped++
       }
 
-      // Cross-batch dup check: query DB for any IDs (bank-provided or fallback) already present
-      const pendingInflowIds  = inflowRows.map(r  => r.transaction_ref as string).filter(Boolean)
-      const pendingOutflowIds = outflowRows.map(r => r.transaction_id  as string).filter(Boolean)
-      if (pendingInflowIds.length > 0) {
-        const { data } = await supabase
-          .from('inflow_transactions')
-          .select('transaction_ref')
-          .in('transaction_ref', pendingInflowIds)
-        for (const r of data ?? []) {
-          if (r.transaction_ref) {
-            const nid = normalizeId(r.transaction_ref)
-            if (import.meta.env.DEV) console.debug('[dup-check] inflow DB hit:', JSON.stringify(r.transaction_ref), '→ normalized:', JSON.stringify(nid))
-            allSkipIds.add(nid)
-          }
-        }
-      }
-      if (pendingOutflowIds.length > 0) {
-        const { data } = await supabase
-          .from('outflow_transactions')
-          .select('transaction_id')
-          .in('transaction_id', pendingOutflowIds)
-        for (const r of data ?? []) {
-          if (r.transaction_id) {
-            const nid = normalizeId(r.transaction_id)
-            if (import.meta.env.DEV) console.debug('[dup-check] outflow DB hit:', JSON.stringify(r.transaction_id), '→ normalized:', JSON.stringify(nid))
-            allSkipIds.add(nid)
-          }
-        }
-      }
-
-      if (import.meta.env.DEV) {
-        console.debug('[dup-check] allSkipIds size:', allSkipIds.size, [...allSkipIds].slice(0, 10))
-        for (const r of inflowRows) {
-          const id = r.transaction_ref as string | undefined
-          if (id) console.debug('[dup-check] inflow row id:', JSON.stringify(id), 'skip?', allSkipIds.has(id))
-        }
-        for (const r of outflowRows) {
-          const id = r.transaction_id as string | undefined
-          if (id) console.debug('[dup-check] outflow row id:', JSON.stringify(id), 'skip?', allSkipIds.has(id))
-        }
-      }
-
-      // Apply dup skip filter
+      // Apply dup skip filter (allSkipIds comes from pre-import stage only)
       const inflowToInsert  = allSkipIds.size > 0
         ? inflowRows.filter(r => { const id = r.transaction_ref as string | undefined; return !id || !allSkipIds.has(id) })
         : inflowRows
@@ -871,7 +765,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
       dateFormat, fxCurrency, batchPendingDeduction,
       rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
-      skipWizardDups, wizardDupsFound, internalBank,
+      internalBank,
       rowIncomeTypes, incomeTypes])
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1792,63 +1686,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               </div>
             )}
 
-            {/* D12: In-wizard dup check results */}
-            {wizardDupLoading && (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                Checking transaction IDs for duplicates…
-              </div>
-            )}
-            {!wizardDupLoading && wizardDupsFound.length > 0 && (() => {
-              const schemaErrInflow  = wizardDupsFound.some(d => d.id === '__schema_error_inflow__')
-              const schemaErrOutflow = wizardDupsFound.some(d => d.id === '__schema_error_outflow__')
-              const realDups = wizardDupsFound.filter(d => !d.id.startsWith('__schema_error'))
-              return (
-                <div className="space-y-2">
-                  {schemaErrInflow && (
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span>Inflow dup check unavailable — run: <code className="font-mono bg-amber-100 px-1 rounded">ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;</code></span>
-                    </div>
-                  )}
-                  {schemaErrOutflow && (
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span>Outflow dup check unavailable — run: <code className="font-mono bg-amber-100 px-1 rounded">ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;</code></span>
-                    </div>
-                  )}
-                  {realDups.length > 0 && (
-                    <div className="rounded-lg bg-amber-50 border border-amber-200 overflow-hidden">
-                      <div className="flex items-center justify-between px-3 py-2 border-b border-amber-100">
-                        <span className="text-xs font-semibold text-amber-700">
-                          {realDups.length} duplicate{realDups.length !== 1 ? 's' : ''} found in database
-                        </span>
-                        <label className="flex items-center gap-1.5 text-xs text-amber-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={skipWizardDups}
-                            onChange={e => setSkipWizardDups(e.target.checked)}
-                            className="rounded border-amber-300 text-amber-600 focus:ring-amber-400/30"
-                          />
-                          Skip duplicates
-                        </label>
-                      </div>
-                      <ul className="divide-y divide-amber-100 max-h-32 overflow-y-auto">
-                        {realDups.map(d => (
-                          <li key={`${d.table}:${d.id}`} className="flex items-center justify-between px-3 py-1.5">
-                            <span className="font-mono text-xs text-amber-800">{d.id}</span>
-                            <span className="text-[10px] font-medium text-amber-500 bg-amber-100 px-1.5 py-0.5 rounded">
-                              {d.table === 'inflow_transactions' ? 'Inflow' : 'Outflow'}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-
             {/* First 3 rows preview mapped */}
             {sheet.rows.slice(0, 3).length > 0 && (
               <div>
@@ -1949,9 +1786,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 step={step}
                 onBack={() => setStep(targetTable === 'bank_statement' ? 4 : 3)}
                 onNext={runImport}
-                nextDisabled={importing || wizardDupLoading || !internalBank}
+                nextDisabled={importing || !internalBank}
                 nextLabel={importing ? 'Importing…' : 'Start Import'}
-                nextLoading={importing || wizardDupLoading}
+                nextLoading={importing}
               />
             ) : (
               <div className="flex justify-end gap-3">
