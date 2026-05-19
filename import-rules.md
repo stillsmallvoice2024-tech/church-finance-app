@@ -88,12 +88,18 @@ Algorithm:
 Some bank statement Excel files split a single transaction across two rows — the narration or reference overflows into the next row, which has no date and no amount.
 
 Pre-pass algorithm:
-1. Build shallow copy of sheet rows (`mergedRows`)
+1. Build shallow copy of sheet rows (`merged`)
 2. Scan each row: if no valid date, no credit, no debit, but has non-empty description or reference text → it's a continuation row
 3. Append its text (space-separated) to the nearest preceding row with a valid date
-4. Main loop iterates `mergedRows`; continuation rows are skipped (no date), but primary row carries complete merged text
+4. Apply `normalizeId()` to every description cell (strips invisible Unicode, collapses whitespace, trims)
+5. Store result in `processedRows` state
 
 Row indices are preserved — per-row UI state (income type, stage codes, allocation config) remains correct. Normal imports with no continuation rows are unaffected.
+
+**Timing:** Merging and normalization happen in `proceedToRowConfig` (Step 3→4 transition), **before** Step 4 renders. `runImport` consumes `processedRows` directly — no second merge pass. This ensures descriptions shown in Step 4 match exactly what is hashed for fallback transaction ID generation.
+
+- `processedRows` is reset to `null` in `reset()` alongside all other Step 4 state
+- Fallback: `runImport` uses `processedRows ?? sheet.rows` defensively if state is somehow missing
 
 ---
 
