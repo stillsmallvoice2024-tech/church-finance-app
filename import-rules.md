@@ -135,11 +135,10 @@ Both import paths use a **strip-and-retry** pattern when PostgREST rejects an IN
 **Utility:** `src/utils/normalizeId.ts` — shared between `Import.tsx` and `ImportModal.tsx`.
 
 ```ts
-// Strips U+00AD, U+00A0, U+200B–U+200D, U+2028–U+2029, U+FEFF; NFC; collapse whitespace; trim.
 export function normalizeId(raw: string): string {
   return raw
     .normalize('NFC')
-    .replace(/­| |​|‌|‍| | |﻿/g, '')
+    .replace(/\u00ad|\u00a0|\u200b|\u200c|\u200d|\u2028|\u2029|\ufeff/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -151,14 +150,14 @@ export function normalizeId(raw: string): string {
 |---|---|
 | `Import.tsx` pre-modal check | File row extraction → `normalizeId(String(raw))` |
 | `Import.tsx` pre-modal check | DB results → `normalizeId(r.transaction_ref/id)` before push to `found[]` |
-| `ImportModal.tsx` wizard dup check | File row extraction → `normalizeId(String(raw[refColIdx]))` |
-| `ImportModal.tsx` wizard dup check | DB results → `normalizeId(r.transaction_ref/id)` before push to `results[]` |
 | `ImportModal.tsx` `runImport` | File ref extraction → `normalizeId(String(raw[refIdx])) \|\| null` |
-| `ImportModal.tsx` `runImport` | `skipTxnIds` → `(skipTxnIds ?? []).map(normalizeId)` |
-| `ImportModal.tsx` `runImport` | `wizardDupsFound` → `.map(d => normalizeId(d.id))` |
-| `ImportModal.tsx` `runImport` cross-batch | DB results → `normalizeId(r.transaction_ref/id)` before `allSkipIds.add(...)` |
+| `ImportModal.tsx` `runImport` | `skipTxnIds` → `[...skipTxnIds].map(normalizeId)` |
 
 **Why:** Excel cells carry invisible Unicode (zero-width spaces, soft hyphen, NBSP, BOM) that survive `.trim()`. `Set.has()` is byte-exact — a visually-identical ID with a hidden character fails dedup silently.
+
+**`skipTxnIds` is `Set<string>`, not an array.** Always spread before calling `.map()`:
+- ✅ `skipTxnIds ? [...skipTxnIds].map(normalizeId) : []`
+- ❌ `(skipTxnIds ?? []).map(normalizeId)` — `Set` has no `.map()`, throws at runtime and causes 0 rows imported
 
 **Never use literal Unicode chars in the regex** — esbuild rejects them in character class ranges. Use `\uXXXX` escape sequences.
 
@@ -176,10 +175,17 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 **Import wizard (`ImportModal.tsx`):**
 - Applied inside the row-building loop via `if (!row.transaction_ref)` / `if (!row.transaction_id)`
 - **Within-batch collision suffix:** if two rows in the same batch hash identically, the second gets `hash-1`, third `hash-2`, etc. (tracked by `inflowIdCounts`/`outflowIdCounts` Maps). Suffixed IDs flag potential duplicates for manual review.
-- **Cross-batch duplicate detection:** after all rows are built, `runImport` queries the DB for all pending `transaction_ref`/`transaction_id` values (bank-provided + fallback) and adds matches to `allSkipIds` before the filter step. Re-importing identical data is fully skipped.
 - **Result panel visibility:** `ImportResult` carries `fallbackIdCount: number` and `collisions: string[]`. After import: blue line shows fallback count; amber section lists each collision-suffixed row (`type | date | amount | description | …last-10-chars-of-id`). Both hidden when zero.
 
 **Manual entry (`Import.tsx`):** `doSaveInflow` and `doSaveOutflow` generate a fallback when the user leaves Transaction Ref/ID blank.
+
+---
+
+## `runImport` Safety Rules
+
+- **Always wrap the full `runImport` body in `try/finally`** with `setImporting(false)` in the `finally` block. Any unhandled exception (network error, `crypto.subtle` failure, Supabase timeout) otherwise leaves `importing=true` forever — spinner rolls indefinitely, no result shown, no way to recover without closing the modal.
+- **Duplicate skip set** (`allSkipIds`) is built exclusively from `skipTxnIds` (passed from `Import.tsx` pre-import check). No in-wizard DB queries during import. `allSkipIds = new Set(skipTxnIds ? [...skipTxnIds].map(normalizeId) : [])`.
+- **In-wizard dup check removed.** The previous `proceedToImport` async DB queries and cross-batch check were removed — they blocked the Start Import button via `wizardDupLoading` and could hang indefinitely on slow DB responses.
 
 ---
 
