@@ -74,7 +74,9 @@ This ensures special-config inflows (e.g. Easter offering) use the correct perce
 - **Supersedes** `categories.starting_balance` (legacy field)
 - All consumers (`CategoryLedger`, `SavingsPortions`, `SpecificGivings`) query new table first, fall back to `categories.starting_balance`
 - `CategoryModal` pre-populates from new table on edit; migrates from legacy field if no new-table rows exist
+- **On load**, `CategoryModal` filters out rows with `budget_portion = NULL` before populating `obRows` — rows with null portion are invisible to the `validRows` filter and would permanently block saves if loaded
 - **On save**, `CategoryModal.handleSubmit` mirrors the first valid ob-row into `categories.starting_balance` / `starting_balance_budget_portion` in the same UPDATE — ensures the balance persists via the legacy field if `category_opening_balances` hasn't been migrated yet; upsert to new table still runs when the table exists
+- **On save (stale cleanup)**, after the per-portion delete loop, also deletes null-`budget_portion` rows via `.is('budget_portion', null)` — `.eq('budget_portion', null)` matches the string `"null"` in PostgREST, not SQL NULL, so the loop alone cannot remove them
 - Helper functions in `useCategories.ts`: `upsertCategoryOpeningBalance()`, `deleteCategoryOpeningBalance()`, `fetchCategoryOpeningBalances()`
 
 ### Bank Opening Balance Propagation

@@ -177,6 +177,8 @@ if (!updatedRows?.length) throw new Error('Record not found or update silently r
 
 Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `useUpdateBank`, `useUpdateCategory`. Any new UPDATE hook must follow the same pattern.
 
+**Filtering / deleting SQL NULL via PostgREST**: `.eq('column', null)` matches the string `"null"`, NOT SQL NULL. To match SQL NULL use `.is('column', null)` (renders as `column=is.null`). Applies to both SELECT filters and DELETE `.eq()` chains.
+
 ---
 
 ## Supabase RLS
