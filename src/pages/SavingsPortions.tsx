@@ -64,7 +64,7 @@ export default function SavingsPortions() {
     }
 
     const cobData = cobRes.error ? [] : (cobRes.data ?? [])
-    const cobCatNames = new Set(cobData.map(r => (r.categories as { name: string } | null)?.name ?? ''))
+    const cobCatNames = new Set(cobData.map(r => (r.categories as unknown as { name: string } | null)?.name ?? ''))
 
     // Accumulate per category
     const map = new Map<string, { deposited: number; withdrawn: number }>()
@@ -85,7 +85,7 @@ export default function SavingsPortions() {
 
     // Opening balances from new table
     for (const ob of cobData) {
-      const catName = (ob.categories as { name: string } | null)?.name ?? ''
+      const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
       if (!catName) continue
       ensure(catName).deposited += Number(ob.amount)
     }

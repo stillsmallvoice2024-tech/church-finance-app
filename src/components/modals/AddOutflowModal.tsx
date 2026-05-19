@@ -13,8 +13,6 @@ import { useBanks } from '../../hooks/useBanks'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 
-const FX_CURRENCIES = ['USD', 'GBP', 'EUR', 'CNY', 'AED', 'CAD', 'CHF', 'ZAR']
-
 const TXN_TYPES = [
   { value: '',                   label: 'Normal' },
   { value: 'refund',             label: 'Refund' },
@@ -94,9 +92,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       resetForm({
         date:                    editRecord.date,
         created_at_date:         editRecord.created_at ? editRecord.created_at.slice(0, 10) : '',
-        recorded_at_date:        (editRecord as Record<string, unknown>).recorded_at
-          ? ((editRecord as Record<string, unknown>).recorded_at as string).slice(0, 10)
-          : '',
+        recorded_at_date:        editRecord.recorded_at?.slice(0, 10) ?? '',
         amount_disbursed:        editRecord.amount_disbursed,
         bank_name:               editRecord.bank_name               ?? '',
         description:             editRecord.description             ?? '',
@@ -106,8 +102,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         stage_code_2:            editRecord.stage_code_2            ?? '',
         remarks:                 editRecord.remarks                 ?? '',
         fx_currency:             editRecord.fx_currency             ?? '',
-        fx_amount:               (editRecord as Record<string, unknown>).fx_amount as number ?? '',
-        fx_rate:                 (editRecord as Record<string, unknown>).fx_rate   as number ?? '',
+        fx_amount:               editRecord.fx_amount               ?? undefined,
+        fx_rate:                 editRecord.fx_rate                 ?? undefined,
         transaction_type:        editRecord.transaction_type        ?? '',
         original_transaction_id: editRecord.original_transaction_id ?? '',
       })

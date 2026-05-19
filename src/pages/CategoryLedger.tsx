@@ -136,7 +136,7 @@ export default function CategoryLedger() {
     }
 
     const cobRows = cobRes.error ? [] : (cobRes.data ?? [])
-    const cobCatNames = new Set(cobRows.map(r => (r.categories as { name: string } | null)?.name ?? ''))
+    const cobCatNames = new Set(cobRows.map(r => (r.categories as unknown as { name: string } | null)?.name ?? ''))
 
     const today  = new Date().toISOString().slice(0, 10)
     const active = configs
@@ -165,7 +165,7 @@ export default function CategoryLedger() {
     }
 
     for (const ob of cobRows) {
-      const catName = (ob.categories as { name: string } | null)?.name ?? ''
+      const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
       if (!catName) continue
       const row = ensure(catName)
       if (ob.budget_portion === 'Specific Seed') row.specificSeed += Number(ob.amount)
@@ -199,7 +199,7 @@ export default function CategoryLedger() {
 
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
-      const catName = (ob.categories as { name: string } | null)?.name ?? ''
+      const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
       if (!catName) continue
       allocMap.set(catName, (allocMap.get(catName) ?? 0) + Number(ob.amount))
     }

@@ -257,7 +257,7 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
   return (
     <Modal
       open={open}
-      onClose={deleting ? undefined : onClose}
+      onClose={deleting ? () => {} : onClose}
       title="Reset All Data"
       size="max-w-lg"
     >

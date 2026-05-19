@@ -369,7 +369,7 @@ export function useDeleteTransaction(table: DeletableTable): MutationHook<string
   const [error,   setError]   = useState<string | null>(null)
 
   const mutate = useCallback(async (id: string): Promise<void> => {
-    const { user, role } = useAuthStore.getState()
+    const { user } = useAuthStore.getState()
 
     if (!user?.id) throw new Error('You must be signed in to delete records.')
 

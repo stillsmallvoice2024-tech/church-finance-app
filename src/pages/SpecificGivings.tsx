@@ -103,12 +103,13 @@ export default function SpecificGivings() {
       .eq('budget_portion', 'Specific Seed')
 
     const cobData = cobRes.error ? [] : (cobRes.data ?? [])
-    const cobCatNames = new Set(cobData.map(r => (r.categories as { name: string } | null)?.name ?? ''))
+    const cobCatNames = new Set(cobData.map(r => (r.categories as unknown as { name: string } | null)?.name ?? ''))
 
     const cobOpeningRows: SpecificRow[] = cobData
-      .map(r => {
-        const catName = (r.categories as { name: string; id: string } | null)?.name ?? ''
-        const catId   = (r.categories as { name: string; id: string } | null)?.id ?? ''
+      .map((r): SpecificRow | null => {
+        const cats    = r.categories as unknown as { name: string; id: string } | null
+        const catName = cats?.name ?? ''
+        const catId   = cats?.id ?? ''
         if (!catName) return null
         return {
           id:                        `ob-${catId}`,

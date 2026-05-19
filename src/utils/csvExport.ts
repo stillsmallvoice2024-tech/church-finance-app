@@ -8,9 +8,9 @@
 export function exportCSV(
   filename: string,
   headers: string[],
-  rows: (string | number | null | undefined)[][],
+  rows: unknown[][],
 ): void {
-  const escape = (v: string | number | null | undefined): string =>
+  const escape = (v: unknown): string =>
     `"${String(v ?? '').replace(/"/g, '""')}"`
 
   const lines = [

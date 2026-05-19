@@ -12,7 +12,6 @@ interface DescriptionCellProps {
 export function DescriptionCell({
   id,
   text,
-  tooltip,
   setTooltip,
   textCls = 'text-gray-700',
 }: DescriptionCellProps) {

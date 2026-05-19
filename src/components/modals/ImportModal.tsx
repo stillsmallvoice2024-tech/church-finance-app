@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
-  CheckCircle2, AlertTriangle, RefreshCw, FileText, Loader2, Sparkles,
+  CheckCircle2, AlertTriangle, RefreshCw, FileText, Sparkles,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
@@ -1818,8 +1818,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
     <CreateSpecialConfigModal
       open={createConfigOpen || createConfigPendingRow !== null}
+      mode="new_group"
       onClose={() => { setCreateConfigOpen(false); setCreateConfigPendingRow(null) }}
       onSaved={cfg => {
+        if (!cfg) return
         setSpecialConfigs(prev => [...prev, cfg])
         if (createConfigPendingRow === 'apply') {
           setApplyInflowConfig(cfg.id)
