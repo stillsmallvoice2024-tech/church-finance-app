@@ -504,7 +504,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     const { configs: latestConfigs } = useAllocationStore.getState()
 
     // Dup skip set — built from pre-import stage only (skipTxnIds passed from Import.tsx)
-    const allSkipIds = new Set([...(skipTxnIds ?? []).map(normalizeId)])
+    const allSkipIds = new Set(skipTxnIds ? [...skipTxnIds].map(normalizeId) : [])
     let fallbackIdCount = 0
     const collisions: string[] = []
 
