@@ -966,6 +966,25 @@ DO $\$ BEGIN
   CREATE POLICY "rl_write" ON public.recalculation_logs FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
 EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
 
+-- Balance Brought Forward: deduplicate existing rows, then enforce uniqueness
+DO $$ BEGIN
+  DELETE FROM inflow_transactions
+  WHERE transaction_type = 'balance_brought_forward'
+    AND id NOT IN (
+      SELECT DISTINCT ON (bank_name) id
+      FROM inflow_transactions
+      WHERE transaction_type = 'balance_brought_forward'
+      ORDER BY bank_name, created_at DESC NULLS LAST
+    );
+EXCEPTION WHEN others THEN NULL; END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inflow_bf_unique_bank
+  ON inflow_transactions (bank_name)
+  WHERE transaction_type = 'balance_brought_forward';
+
+CREATE INDEX IF NOT EXISTS idx_inflow_bank_name  ON inflow_transactions(bank_name);
+CREATE INDEX IF NOT EXISTS idx_outflow_bank_name ON outflow_transactions(bank_name);
+
 -- Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';`
 
