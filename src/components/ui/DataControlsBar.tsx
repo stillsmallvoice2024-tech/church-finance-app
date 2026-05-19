@@ -133,7 +133,7 @@ export function DataControlsBar({
             <button
               type="button"
               onClick={() => setSearchColOpen(o => !o)}
-              className={`flex items-center gap-1 px-2 py-1.5 text-xs border border-r-0 rounded-l-lg transition-colors whitespace-nowrap ${
+              className={`h-full flex items-center gap-1 px-2 py-1.5 text-xs border border-r-0 rounded-l-lg transition-colors whitespace-nowrap ${
                 searchColOpen
                   ? 'border-primary/40 bg-primary/5 text-primary'
                   : 'border-gray-200 bg-gray-50 text-gray-500 hover:text-gray-700'
@@ -174,11 +174,13 @@ export function DataControlsBar({
             value={search}
             onChange={e => onSearchChange(e.target.value)}
             placeholder={
-              searchColumns && searchCol !== 'all' && activeSearchCol
-                ? `Search ${activeSearchCol.label.toLowerCase()}…`
+              searchColumns && searchColumns.length > 0
+                ? (searchCol === 'all' || !activeSearchCol
+                    ? 'Search all'
+                    : `Search ${activeSearchCol.label.toLowerCase()}`)
                 : searchPlaceholder
             }
-            className={`w-full pl-8 pr-7 py-1.5 text-sm border border-gray-200 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors ${
+            className={`w-full pl-8 pr-7 py-1 text-sm border border-gray-200 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors ${
               searchColumns && searchColumns.length > 0 ? 'rounded-r-lg' : 'rounded-lg'
             }`}
           />
