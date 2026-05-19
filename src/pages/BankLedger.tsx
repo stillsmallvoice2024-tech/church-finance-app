@@ -20,6 +20,7 @@ import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeningBalance'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -30,8 +31,6 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   intrabank_transfer:       'Intrabank Transfer',
   balance_brought_forward:  'Balance Brought Forward',
 }
-
-const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
 interface LedgerRow {
   id:               string
@@ -80,7 +79,7 @@ export default function BankLedger() {
   const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
-  const load = useCallback(async (bankName: string) => {
+  const load = useCallback(async (bankName: string, openingBalance: number = 0) => {
     if (!bankName) { setLedgerRows([]); return }
     setLoading(true)
     setError(null)
@@ -90,6 +89,7 @@ export default function BankLedger() {
         .from('inflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
+        .neq('transaction_type', BALANCE_BROUGHT_FORWARD_TYPE)
         .order('date', { ascending: true }),
       supabase
         .from('outflow_transactions')
@@ -104,7 +104,7 @@ export default function BankLedger() {
       return
     }
 
-    // Merge & sort chronologically
+    // Merge & sort chronologically (B/F DB rows excluded above)
     type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -125,27 +125,45 @@ export default function BankLedger() {
       })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
 
-    // Compute running balance
-    let running = 0
+    // Running balance starts from opening balance so all subsequent rows are correct
+    let running = openingBalance
     const withBalance: LedgerRow[] = merged.map(r => {
       running += r.inflow - r.outflow
       return { ...r, balance: running }
     })
 
-    setLedgerRows(withBalance)
+    // Synthetic B/F row — generated from bank.starting_balance, filter-immune
+    const rows: LedgerRow[] = openingBalance > 0
+      ? [
+          {
+            id:               '__bf__',
+            date:             '1900-01-01',
+            description:      BF_DESCRIPTION,
+            inflow:           openingBalance,
+            outflow:          0,
+            balance:          openingBalance,
+            transaction_type: BALANCE_BROUGHT_FORWARD_TYPE,
+            entity_type:      'inflow',
+          },
+          ...withBalance,
+        ]
+      : withBalance
+
+    setLedgerRows(rows)
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    const bankName = banks.find(b => b.id === selectedBank)?.name ?? ''
-    load(bankName)
+    const bank = banks.find(b => b.id === selectedBank)
+    load(bank?.name ?? '', bank?.starting_balance ?? 0)
   }, [selectedBank, banks, load])
 
   // Reset page when bank or date changes
   useEffect(() => { blState.setPage(0) }, [selectedBank, dateFrom, dateTo, blState.setPage])
 
-  // Date-range filter (unchanged logic)
+  // Date-range filter — B/F row always shown regardless of date filter
   const dateFiltered = useMemo(() => ledgerRows.filter(r => {
+    if (r.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE) return true
     if (dateFrom && r.date < dateFrom) return false
     if (dateTo   && r.date > dateTo)   return false
     return true
@@ -186,7 +204,8 @@ export default function BankLedger() {
   const totalOutflow = dateFiltered.reduce((s, r) => s + r.outflow, 0)
   const netBalance   = totalInflow - totalOutflow
 
-  const selectedBankName = banks.find(b => b.id === selectedBank)?.name ?? ''
+  const selectedBankObj  = banks.find(b => b.id === selectedBank)
+  const selectedBankName = selectedBankObj?.name ?? ''
 
   return (
     <div className="space-y-5">
@@ -253,7 +272,7 @@ export default function BankLedger() {
           <AlertCircle className="w-10 h-10 text-danger" />
           <p className="font-semibold text-gray-800">Failed to load ledger</p>
           <p className="text-sm text-gray-500">{error}</p>
-          <button onClick={() => load(selectedBankName)}
+          <button onClick={() => load(selectedBankName, selectedBankObj?.starting_balance ?? 0)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light">
             <RefreshCw className="w-4 h-4" /> Retry
           </button>
@@ -466,13 +485,13 @@ export default function BankLedger() {
       <AddInflowModal
         open={!!editInflow}
         onClose={() => setEditInflow(null)}
-        onSuccess={() => { setEditInflow(null); load(selectedBankName) }}
+        onSuccess={() => { setEditInflow(null); load(selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
         editRecord={editInflow}
       />
       <AddOutflowModal
         open={!!editOutflow}
         onClose={() => setEditOutflow(null)}
-        onSuccess={() => { setEditOutflow(null); load(selectedBankName) }}
+        onSuccess={() => { setEditOutflow(null); load(selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
         editRecord={editOutflow}
       />
       <DescriptionTooltip tooltip={descTooltip} />

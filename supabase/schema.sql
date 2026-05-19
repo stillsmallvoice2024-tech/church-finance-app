@@ -715,3 +715,12 @@ create policy "rl_write" on public.recalculation_logs
   for all using (auth.uid() is not null) with check (auth.uid() is not null);
 
 create index if not exists idx_report_templates_user on public.report_templates(created_by);
+
+
+-- Balance Brought Forward deduplication + uniqueness constraint
+create unique index if not exists idx_inflow_bf_unique_bank
+  on inflow_transactions (bank_name)
+  where transaction_type = 'balance_brought_forward';
+
+create index if not exists idx_inflow_bank_name  on inflow_transactions(bank_name);
+create index if not exists idx_outflow_bank_name on outflow_transactions(bank_name);
