@@ -372,6 +372,74 @@ const { view, setView } = useViewToggle('my-page-view')
 
 ---
 
+## Data Controls System (`DataControlsBar` + `useDataViewState`)
+
+All list pages use `DataControlsBar` + `useDataViewState` for unified sort/search/view state.
+
+### `useDataViewState` (`src/hooks/useDataViewState.ts`)
+
+```ts
+const state = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc' })
+```
+
+Returns: `view/setView`, `sortKey/sortDir/setSort`, `page/setPage`, `pageSize/setPageSize`, `search/setSearch`, `searchCol/setSearchCol`, `advancedSort/setAdvancedSort`.
+
+Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSort` persist to localStorage under `${storageKey}:*`. `search` is session-only.
+
+### `DataControlsBar` props
+
+```tsx
+<DataControlsBar
+  sortFields={FIELDS}           // SortField[] — primary:true = shown by default, no flag = "More Fields"
+  sortKey={state.sortKey}
+  sortDir={state.sortDir}
+  onSort={state.setSort}
+  defaultSortKey="date"         // enables "Clear Sort" button in dropdown
+  defaultSortDir="desc"
+  view={state.view}             // optional — omit to hide view toggle
+  onViewChange={state.setView}
+  search={state.search}
+  onSearchChange={state.setSearch}
+  searchPlaceholder="Search…"
+  searchColumns={SEARCH_COLS}   // optional — Array<{key,label}>; first entry must be {key:'all',label:'All Columns'}
+  searchCol={state.searchCol}
+  onSearchColChange={state.setSearchCol}
+  advancedSort={state.advancedSort}   // optional — enables Advanced Sort modal
+  onAdvancedSort={state.setAdvancedSort}
+/>
+```
+
+### Sort field conventions
+
+- `primary: true` — shown in main sort list (commonly used: Date, Amount, Balance, etc.)
+- no `primary` — shown under "More Fields" expandable (text fields: Description, Bank, etc.)
+- If no field has `primary: true` (backward compat), all fields show in the main list
+
+### Sort behaviours
+
+- **Clear Sort**: appears inside dropdown when `sortKey !== defaultSortKey || sortDir !== defaultSortDir || advancedSort.length > 0`; click restores defaults and clears advanced sort
+- **Advanced Sort** (`AdvancedSortModal`, `src/components/ui/AdvancedSortModal.tsx`): up to 3 levels, field + direction per level, add/remove/clear all; when active, `multiSortRows` is used instead of `sortRows`; Sort button shows `Layers` icon + "Multi-Sort · N"
+
+### Search column selector
+
+- Compact prefix selector left of search input; shows "All" when `searchCol === 'all'` (default)
+- When a specific column is selected, placeholder updates to "Search [column name]…"
+- For server-paginated pages (Inflows, Outflows): column filter applied client-side on top of server results
+- For client-side pages: existing multi-column filter replaced by column-specific filter
+
+### Sort utilities (`src/utils/sortUtils.ts`)
+
+- `sortRows(data, getValue, key, dir, fields)` — single-level sort (unchanged)
+- `multiSortRows(data, getValue, levels, fields)` — multi-level sort; `levels: AdvancedSortLevel[]`
+- `AdvancedSortLevel: { key: string; dir: SortDirection }`
+- Pages use: `if (state.advancedSort.length > 0) multiSortRows(...) else sortRows(...)`
+
+### Pages using DataControlsBar (11)
+
+Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), SpecificGivings (`sg`), PercentageAllocations (`pca`), SavingsPortions (`svp`), Receipts (`rcp`).
+
+---
+
 ## Receipts Folder Navigation (responsive)
 
 - Mobile (`< md`): horizontal scrollable pill tabs — `flex overflow-x-auto gap-2 md:hidden`
