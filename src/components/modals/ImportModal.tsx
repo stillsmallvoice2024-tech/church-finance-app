@@ -306,6 +306,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [rowConfigs, setRowConfigs] = useState<Record<number, string>>({})
 
   // Step 4 — Configure Rows
+  // Pre-merged, description-normalized rows built at proceedToRowConfig time; null before Step 4
+  const [processedRows,   setProcessedRows]   = useState<unknown[][] | null>(null)
   const [rowStageCodes,   setRowStageCodes]   = useState<Record<number, { s1: string; s2: string }>>({})
   const [rowTxnTypes,     setRowTxnTypes]     = useState<Record<number, string>>({})
   const [rowOrigTxnIds,   setRowOrigTxnIds]   = useState<Record<number, string>>({})
@@ -365,6 +367,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setDateFormat('DD/MM/YYYY')
     setFxCurrency('')
     setRowConfigs({})
+    setProcessedRows(null)
     setRowStageCodes({})
     setRowTxnTypes({})
     setRowOrigTxnIds({})
@@ -459,17 +462,47 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // ── Step 3 → 4 (bank_statement) or Step 3 → 5 (fx_transactions) ─────────
 
-  // bank_statement: pre-populate rowStageCodes from mapped columns, go to step 4
+  // bank_statement: merge continuation rows, normalize descriptions, pre-populate rowStageCodes
   const proceedToRowConfig = useCallback(() => {
     if (!sheet || !config || targetTable !== 'bank_statement') return
 
-    const s1ColIdx = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
-    const s2ColIdx = sheet.headers.findIndex(h => mapping[h] === 'stage_code_2')
-    const debitIdx = sheet.headers.findIndex(h => mapping[h] === 'debit')
+    const s1ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
+    const s2ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_2')
+    const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
+    const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
+    const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
+    const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
+    const refIdx    = sheet.headers.findIndex(h => mapping[h] === 'reference')
+
+    // Merge continuation rows (no date, no amounts, has text) into preceding primary row,
+    // then normalizeId every description cell so Step 4 shows clean single-line text.
+    // runImport reuses these same rows — no second normalization pass needed.
+    const merged = (sheet.rows as unknown[][]).map(r => [...r])
+    for (let ri = 1; ri < merged.length; ri++) {
+      const row = merged[ri]
+      if (parseDate(row[dateIdx], dateFormat) !== null) continue
+      if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseDebitAmount(row[debitIdx]) > 0)) continue
+      const hasDesc = descIdx >= 0 && row[descIdx] != null && String(row[descIdx]).trim() !== ''
+      const hasRef  = refIdx  >= 0 && row[refIdx]  != null && String(row[refIdx]).trim()  !== ''
+      if (!hasDesc && !hasRef) continue
+      let prevRi = ri - 1
+      while (prevRi >= 0 && parseDate(merged[prevRi][dateIdx], dateFormat) === null) prevRi--
+      if (prevRi < 0) continue
+      const prev = merged[prevRi]
+      if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).replace(/\s+/g, ' ').trim()
+      if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).replace(/\s+/g, ' ').trim()
+    }
+    if (descIdx >= 0) {
+      for (const row of merged) {
+        const raw = row[descIdx]
+        if (raw != null && raw !== '') row[descIdx] = normalizeId(String(raw)) || raw
+      }
+    }
+    setProcessedRows(merged)
 
     const initial: Record<number, { s1: string; s2: string }> = {}
-    for (let ri = 0; ri < sheet.rows.length; ri++) {
-      const raw   = sheet.rows[ri] as unknown[]
+    for (let ri = 0; ri < merged.length; ri++) {
+      const raw   = merged[ri]
       const debit = debitIdx >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
       if (debit <= 0) continue
       const s1 = s1ColIdx >= 0 && raw[s1ColIdx] != null && raw[s1ColIdx] !== ''
@@ -480,7 +513,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     }
     setRowStageCodes(initial)
     setStep(4)
-  }, [sheet, config, targetTable, mapping])
+  }, [sheet, config, targetTable, mapping, dateFormat])
 
   const proceedToImport = useCallback(() => {
     if (!sheet || !config || !targetTable) return
@@ -527,22 +560,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const inflowIdCounts  = new Map<string, number>()
       const outflowIdCounts = new Map<string, number>()
 
-      // Merge continuation rows (no date, no amounts, but has text) into preceding primary row
-      const mergedRows = (sheet.rows as unknown[][]).map(r => [...r])
-      for (let ri = 1; ri < mergedRows.length; ri++) {
-        const row = mergedRows[ri]
-        if (parseDate(row[dateIdx], dateFormat) !== null) continue
-        if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseDebitAmount(row[debitIdx]) > 0)) continue
-        const hasDesc = descIdx >= 0 && row[descIdx] != null && String(row[descIdx]).trim() !== ''
-        const hasRef  = refIdx  >= 0 && row[refIdx]  != null && String(row[refIdx]).trim()  !== ''
-        if (!hasDesc && !hasRef) continue
-        let prevRi = ri - 1
-        while (prevRi >= 0 && parseDate(mergedRows[prevRi][dateIdx], dateFormat) === null) prevRi--
-        if (prevRi < 0) continue
-        const prev = mergedRows[prevRi]
-        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).replace(/\s+/g, ' ').trim()
-        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).replace(/\s+/g, ' ').trim()
-      }
+      // Rows pre-merged and description-normalized at proceedToRowConfig; fall back defensively
+      const mergedRows = processedRows ?? (sheet.rows as unknown[][]).map(r => [...r])
 
       for (let ri = 0; ri < mergedRows.length; ri++) {
         const raw  = mergedRows[ri]
@@ -1146,7 +1165,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
               const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
 
-              const allRows = sheet.rows.map((raw, ri) => {
+              const allRows = (processedRows ?? sheet.rows).map((raw, ri) => {
                 const r = raw as unknown[]
                 return {
                   ri,
