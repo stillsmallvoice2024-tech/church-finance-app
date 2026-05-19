@@ -6,7 +6,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 // Holds the client reference so the fetch wrapper can trigger auth recovery.
 // Set immediately after createClient() below — safe because fetch is never
 // called during module initialisation, only later when user code runs.
-let _client: ReturnType<typeof createClient> | null = null
+let _client: { auth: { refreshSession(): Promise<unknown> } } | null = null
 
 // Apply a 20-second timeout ONLY to data (PostgREST) requests.
 // Auth requests (/auth/v1/*) are excluded — aborting a token refresh causes

@@ -31,7 +31,7 @@ ALTER TABLE income_types
 interface Props {
   open:             boolean
   onClose:          () => void
-  onSaved:          () => void
+  onSaved:          (cfg?: AllocationConfig) => void
   mode:             'new_group' | 'new_version'
   group?:           SpecialConfigGroupWithVersions | null
   copyFromVersion?: AllocationConfig | null

@@ -16,7 +16,7 @@ import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { formatDate } from '../utils/formatters'
-import { formatCurrency, parseCurrency } from '../utils/currency'
+import { formatCurrency } from '../utils/currency'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 // inflowTypes import removed — income type classification replaces hardcoded types
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
@@ -594,7 +594,7 @@ function ManualEntryForm() {
         if (col && col in input) {
           const retry = { ...input } as Record<string, unknown>
           delete retry[col]
-          await addInflow.mutate(retry as AddInflowInput)
+          await addInflow.mutate(retry as unknown as AddInflowInput)
           toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
         } else {
           throw firstErr
@@ -646,7 +646,7 @@ function ManualEntryForm() {
         if (col && col in input) {
           const retry = { ...input } as Record<string, unknown>
           delete retry[col]
-          await addOutflow.mutate(retry as AddOutflowInput)
+          await addOutflow.mutate(retry as unknown as AddOutflowInput)
           toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
         } else {
           throw firstErr

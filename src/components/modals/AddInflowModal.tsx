@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -100,7 +100,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     formState: { errors, isDirty },
     reset: resetForm,
     watch,
-    setValue,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   const description     = watch('description')
@@ -160,15 +159,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setConfigManuallySet(false)
     setIncomeTypeAutoSet(false)
     if (editRecord) {
-      setSelectedConfigId((editRecord as Record<string, unknown>).allocation_config_id as string ?? '')
+      setSelectedConfigId(editRecord.allocation_config_id ?? '')
       setConfigManuallySet(true)
       setIncomeTypeId(editRecord.income_type_id ?? '')
       resetForm({
         date:                       editRecord.date,
         created_at_date:            editRecord.created_at ? editRecord.created_at.slice(0, 10) : '',
-        recorded_at_date:           (editRecord as Record<string, unknown>).recorded_at
-          ? ((editRecord as Record<string, unknown>).recorded_at as string).slice(0, 10)
-          : '',
+        recorded_at_date:           editRecord.recorded_at?.slice(0, 10) ?? '',
         amount:                     editRecord.amount,
         description:                editRecord.description ?? '',
         bank_name:                  editRecord.bank_name ?? '',
@@ -178,8 +175,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         specific_seed_description:  editRecord.specific_seed_description ?? '',
         remark:                     editRecord.remark ?? '',
         fx_currency:                editRecord.fx_currency ?? '',
-        fx_amount:                  (editRecord as Record<string, unknown>).fx_amount as number ?? '',
-        fx_rate:                    (editRecord as Record<string, unknown>).fx_rate   as number ?? '',
+        fx_amount:                  editRecord.fx_amount ?? undefined,
+        fx_rate:                    editRecord.fx_rate   ?? undefined,
         transaction_type:           editRecord.transaction_type ?? '',
         original_transaction_id:    editRecord.original_transaction_id ?? '',
       })

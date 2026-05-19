@@ -33,7 +33,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const isEdit = !!editRecord
   const addMutation    = useAddFXTransaction()
   const updateMutation = useUpdateFXTransaction()
-  const { mutate, loading, error, reset } = isEdit ? updateMutation : addMutation
+  const { loading, error, reset } = isEdit ? updateMutation : addMutation
 
   const { register, control, handleSubmit, watch, formState: { errors }, reset: resetForm } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -46,7 +46,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
     if (editRecord) {
       resetForm({
         date:            editRecord.date,
-        currency:        editRecord.currency,
+        currency:        editRecord.currency as FXCurrency,
         type:            editRecord.deposit > 0 ? 'deposit' : 'withdrawal',
         amount:          editRecord.deposit > 0 ? editRecord.deposit : editRecord.withdrawal,
         narration:       editRecord.narration       ?? '',
@@ -81,7 +81,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           narration:       values.narration       || undefined,
           transaction_ref: values.transaction_ref || undefined,
         }
-        await (updateMutation.mutate as (i: UpdateFXTransactionInput) => Promise<void>)(input)
+        await (updateMutation.mutate as unknown as (i: UpdateFXTransactionInput) => Promise<void>)(input)
       } else {
         const input: AddFXTransactionInput = {
           date:            values.date,
@@ -92,7 +92,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           narration:       values.narration       || undefined,
           transaction_ref: values.transaction_ref || undefined,
         }
-        await (addMutation.mutate as (i: AddFXTransactionInput) => Promise<void>)(input)
+        await (addMutation.mutate as unknown as (i: AddFXTransactionInput) => Promise<void>)(input)
       }
       onSuccess?.()
       onClose()

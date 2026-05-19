@@ -16,6 +16,9 @@ export interface InflowTransaction {
   remark: string | null
   bank_name: string | null
   fx_currency: string | null
+  fx_amount: number | null
+  fx_rate: number | null
+  allocation_config_id: string | null
   transaction_type: string | null
   original_transaction_id: string | null
   income_type_id: string | null
@@ -42,6 +45,8 @@ export interface OutflowTransaction {
   is_pending_deduction: boolean
   bank_name: string | null
   fx_currency: string | null
+  fx_amount: number | null
+  fx_rate: number | null
   transaction_type: string | null
   original_transaction_id: string | null
   recorded_at: string | null
