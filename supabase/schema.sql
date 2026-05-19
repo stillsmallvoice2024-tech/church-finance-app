@@ -49,14 +49,12 @@ create table public.category_groups (
 -- CATEGORIES
 -- ============================================================
 create table public.categories (
-  id                               uuid default gen_random_uuid() primary key,
-  name                             text not null unique,
-  description                      text,
-  starting_balance                 numeric(15,2) default 0,
-  starting_balance_budget_portion  text,
-  group_id                         uuid references public.category_groups(id) on delete set null,
-  is_hidden                        boolean not null default false,
-  created_at                       timestamptz default now()
+  id          uuid default gen_random_uuid() primary key,
+  name        text not null unique,
+  description text,
+  group_id    uuid references public.category_groups(id) on delete set null,
+  is_hidden   boolean not null default false,
+  created_at  timestamptz default now()
 );
 
 -- ============================================================

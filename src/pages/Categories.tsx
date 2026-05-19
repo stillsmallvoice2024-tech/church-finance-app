@@ -45,7 +45,6 @@ CREATE POLICY "Auth users manage groups" ON public.category_groups
 
 ALTER TABLE public.categories
   ADD COLUMN IF NOT EXISTS group_id uuid REFERENCES public.category_groups(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
   ADD COLUMN IF NOT EXISTS is_hidden boolean NOT NULL DEFAULT false;`
 
 const CAT_SORT_FIELDS: SortField[] = [
@@ -66,11 +65,7 @@ async function categoryHasLinkedData(cat: Category): Promise<boolean> {
     supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('stage_code_1', cat.name),
     supabase.from('category_opening_balances').select('id', { count: 'exact', head: true }).eq('category_id', cat.id),
   ])
-  if ((inf.count ?? 0) > 0 || (out.count ?? 0) > 0) return true
-  if ((cob.count ?? 0) > 0) return true
-  // Legacy safety-net: category table still has a balance (pre-migration)
-  if (cat.starting_balance && cat.starting_balance !== 0) return true
-  return false
+  return (inf.count ?? 0) > 0 || (out.count ?? 0) > 0 || (cob.count ?? 0) > 0
 }
 
 // ── Category form modal ────────────────────────────────────────────────────────
@@ -124,30 +119,11 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     setShowNewGroup(false)
     setObRows([])
     if (editRecord?.id) {
-      console.log('[CategoryModal] opening edit', { id: editRecord.id, name: editRecord.name, starting_balance: editRecord.starting_balance, starting_balance_budget_portion: editRecord.starting_balance_budget_portion })
       fetchCategoryOpeningBalances(editRecord.id).then(rows => {
-        console.log('[CategoryModal] fetchCategoryOpeningBalances result', { categoryId: editRecord.id, rows })
         const validFetched = rows.filter(r => r.budget_portion)
-        if (validFetched.length > 0) {
-          console.log('[CategoryModal] loading ob rows from table', validFetched)
-          setObRows(validFetched.map(r => ({ budget_portion: r.budget_portion, amount: String(r.amount) })))
-        } else if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
-          const bp  = editRecord.starting_balance_budget_portion as BudgetPortion
-          const amt = editRecord.starting_balance
-          console.log('[CategoryModal] migrating legacy starting_balance → COB', { bp, amt })
-          setObRows([{ budget_portion: bp, amount: String(amt) }])
-          // Auto-migrate: write to COB so future reads don't rely on the legacy field
-          upsertCategoryOpeningBalance(editRecord.id, bp, amt).catch(migrErr => {
-            console.warn('[CategoryModal] background COB migration failed', migrErr)
-          })
-        } else {
-          console.log('[CategoryModal] no ob rows and no legacy balance — obRows stays empty')
-        }
+        setObRows(validFetched.map(r => ({ budget_portion: r.budget_portion, amount: String(r.amount) })))
       }).catch(err => {
         console.warn('[CategoryModal] fetchCategoryOpeningBalances error', err)
-        if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
-          setObRows([{ budget_portion: editRecord.starting_balance_budget_portion as BudgetPortion, amount: String(editRecord.starting_balance) }])
-        }
       })
     }
   }, [open, editRecord]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,40 +143,25 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     setObSaving(true)
     setObError(null)
     try {
-      // Compute before the update so we can mirror into legacy fields in the same call
       const validRows = obRows.filter(r => r.budget_portion && r.amount && parseFloat(r.amount) > 0)
-      const firstRow  = validRows[0]
-
-      console.log('[CategoryModal] handleSubmit', { id: editRecord?.id, name: name.trim(), obRows, validRows, firstRow })
 
       let savedId = editRecord?.id ?? ''
       if (isEdit && editRecord) {
-        const input: UpdateCategoryInput = {
+        await update({
           id:          editRecord.id,
           name:        name.trim(),
           description: desc.trim() || undefined,
-          // Mirror first ob-row into legacy single-value fields so the balance persists
-          // even when category_opening_balances table hasn't been migrated yet.
-          starting_balance:                firstRow ? parseFloat(firstRow.amount) : (editRecord.starting_balance ?? undefined),
-          starting_balance_budget_portion: firstRow ? firstRow.budget_portion     : (editRecord.starting_balance_budget_portion ?? undefined),
-          group_id: groupId || null,
-        }
-        console.log('[CategoryModal] calling update with', input)
-        await update(input)
-        console.log('[CategoryModal] update succeeded')
+          group_id:    groupId || null,
+        })
         savedId = editRecord.id
       } else {
-        const input: AddCategoryInput = {
+        savedId = await add({
           name:        name.trim(),
           description: desc.trim() || undefined,
-          starting_balance:                firstRow ? parseFloat(firstRow.amount) : undefined,
-          starting_balance_budget_portion: firstRow ? firstRow.budget_portion     : undefined,
           group_id:    groupId || null,
-        }
-        savedId = await add(input)
+        })
       }
 
-      // Persist opening balances to new table (silently skip if table not yet migrated)
       try {
         const usedPortions = new Set(validRows.map(r => r.budget_portion as BudgetPortion))
 
@@ -208,11 +169,9 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           const existing = await fetchCategoryOpeningBalances(editRecord.id)
           for (const ex of existing) {
             if (!usedPortions.has(ex.budget_portion)) {
-              console.log('[CategoryModal] deleting stale ob row', { category_id: editRecord.id, budget_portion: ex.budget_portion })
               await deleteCategoryOpeningBalance(editRecord.id, ex.budget_portion)
             }
           }
-          // Delete any rows where budget_portion IS NULL — .eq() can't match SQL NULL
           await supabase
             .from('category_opening_balances')
             .delete()
@@ -220,19 +179,9 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
             .is('budget_portion', null)
         }
         for (const row of validRows) {
-          console.log('[CategoryModal] upserting ob row', { category_id: savedId, budget_portion: row.budget_portion, amount: parseFloat(row.amount) })
           await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount))
-          console.log('[CategoryModal] upsert succeeded for', row.budget_portion)
         }
       } catch (obErr) {
-        if (/does not exist/i.test(String(obErr))) {
-          // Table not migrated yet — categories.starting_balance was already written, so this is safe to skip
-          console.warn('[CategoryModal] category_opening_balances table absent, skipped')
-          onSuccess()
-          onClose()
-          return
-        }
-        // Any other error (including silent-write detection) is surfaced in the modal
         const msg = obErr instanceof Error ? obErr.message : String(obErr)
         console.error('[CategoryModal] ob upsert failed', msg)
         setObError(msg)
@@ -612,12 +561,7 @@ export default function Categories() {
         <div className="space-y-3">
           {visibleSorted.map(cat => {
             const group = groups.find(g => g.id === cat.group_id)
-            const catBalances = allOpeningBalances.filter(b => b.category_id === cat.id)
-            const displayBalances: { budget_portion: string; amount: number }[] = catBalances.length > 0
-              ? catBalances
-              : (cat.starting_balance_budget_portion && cat.starting_balance != null && cat.starting_balance !== 0
-                  ? [{ budget_portion: cat.starting_balance_budget_portion, amount: cat.starting_balance }]
-                  : [])
+            const displayBalances = allOpeningBalances.filter(b => b.category_id === cat.id)
             return (
               <div key={cat.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200 ${cat.is_hidden ? 'opacity-50' : ''}`}>
                 {/* Card header */}
@@ -804,12 +748,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
 }) {
   const { tooltip, setTooltip } = useDescriptionExpand()
 
-  const catBalances = openingBalances.filter(b => b.category_id === cat.id)
-  const displayBalances: { budget_portion: string; amount: number }[] = catBalances.length > 0
-    ? catBalances
-    : (cat.starting_balance_budget_portion && cat.starting_balance != null && cat.starting_balance !== 0
-        ? [{ budget_portion: cat.starting_balance_budget_portion, amount: cat.starting_balance }]
-        : [])
+  const displayBalances = openingBalances.filter(b => b.category_id === cat.id)
 
   return (
     <tr className={`hover:bg-gray-50 transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
