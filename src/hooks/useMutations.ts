@@ -310,14 +310,28 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         ? { ...updates, updated_at: new Date().toISOString() }
         : updates
 
-      const { error: err, count } = await supabase
+      console.log('[useUpdateTransaction] payload', { table, id, updates: withTimestamp })
+
+      // Use .select('id') without head:true — head:true changes the method to HEAD
+      // which reads without writing, causing silent no-ops that appear successful.
+      const { data: updatedRows, error: err } = await supabase
         .from(table)
         .update(withTimestamp)
         .eq('id', id)
-        .select('id', { count: 'exact', head: true })
+        .select('id')
 
-      if (err) throw err
-      if (count === 0) throw new Error('Record not found or update blocked by permissions.')
+      console.log('[useUpdateTransaction] response', { updatedRows, err })
+
+      if (err) {
+        console.error('[useUpdateTransaction] error', { table, id, err })
+        throw err
+      }
+      if (!updatedRows?.length) {
+        console.warn('[useUpdateTransaction] 0 rows updated — RLS or stale ID?', { table, id })
+        throw new Error('Record not found or update blocked by permissions.')
+      }
+
+      console.log('[useUpdateTransaction] success', { table, id, updatedIds: updatedRows.map((r: { id: string }) => r.id) })
 
       logAudit({
         userId:    user.id,
