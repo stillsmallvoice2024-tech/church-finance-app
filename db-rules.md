@@ -148,7 +148,7 @@ Every UPDATE in the app must:
 
 Build the `updates` object as a named const before calling `.update()` so the same object can be passed to both `logAudit` and `logFieldChanges` without re-expressing the payload.
 
-**Row-count check on UPDATE**: always chain `.select('id')` and throw if `!updatedRows?.length` — PostgREST silently returns no error when RLS rejects the row or the record is missing. Example pattern used in `useUpdateBank`:
+**Row-count check on UPDATE**: always chain `.select('id')` and throw if `!updatedRows?.length` — PostgREST silently returns no error when RLS rejects the row or the record is missing. **Never use `head: true` in `.select()` after `.update()`** — `head: true` changes the HTTP method to HEAD, which reads without writing; PostgREST returns the count of matching rows (not rows updated), `err` is null, and the write silently no-ops while appearing successful. Example pattern used in `useUpdateBank`:
 
 **Conditional optional columns in UPDATE**: never fall back nullable migration columns to `[]` or `{}` — use a conditional spread so those fields are omitted entirely when not provided. Sending `starting_balance_allocations: []` on every bank UPDATE would trigger a PostgREST schema cache miss for users who haven't run the migration. Pattern used in `useUpdateBank`:
 ```ts
