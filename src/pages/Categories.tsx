@@ -2,7 +2,7 @@ import { useState, useEffect, Fragment, useMemo, useRef } from 'react'
 import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 import {
   useCategories, useCategoryGroups, useCategoryOpeningBalances,
   fetchCategoryOpeningBalances, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance,
@@ -49,7 +49,13 @@ ALTER TABLE public.categories
   ADD COLUMN IF NOT EXISTS is_hidden boolean NOT NULL DEFAULT false;`
 
 const CAT_SORT_FIELDS: SortField[] = [
-  { key: 'name', label: 'Name', type: 'text' },
+  { key: 'name', label: 'Name', type: 'text', primary: true },
+]
+
+const CAT_SEARCH_COLS = [
+  { key: 'all',   label: 'All Columns' },
+  { key: 'name',  label: 'Name' },
+  { key: 'group', label: 'Group' },
 ]
 
 // ── Deletion check ─────────────────────────────────────────────────────────────
@@ -446,22 +452,22 @@ export default function Categories() {
   }
 
   const q = catState.search.trim().toLowerCase()
+  const searchCol = catState.searchCol
   const visible  = categories.filter(c => {
     if (!showHidden && c.is_hidden) return false
     if (!q) return true
-    if (c.name.toLowerCase().includes(q)) return true
     const groupName = groups.find(g => g.id === c.group_id)?.name ?? ''
-    return groupName.toLowerCase().includes(q)
+    if (searchCol === 'name')  return c.name.toLowerCase().includes(q)
+    if (searchCol === 'group') return groupName.toLowerCase().includes(q)
+    return c.name.toLowerCase().includes(q) || groupName.toLowerCase().includes(q)
   })
   const hiddenCt = categories.filter(c => c.is_hidden).length
 
-  const visibleSorted = useMemo(() =>
-    sortRows(visible, (c, k) => {
-      if (k === 'name') return c.name
-      return c.name
-    }, catState.sortKey, catState.sortDir, CAT_SORT_FIELDS),
-    [visible, catState.sortKey, catState.sortDir],
-  )
+  const visibleSorted = useMemo(() => {
+    const adv = catState.advancedSort
+    if (adv.length > 0) return multiSortRows(visible, (c, k) => k === 'name' ? c.name : c.name, adv, CAT_SORT_FIELDS)
+    return sortRows(visible, (c, k) => k === 'name' ? c.name : c.name, catState.sortKey, catState.sortDir, CAT_SORT_FIELDS)
+  }, [visible, catState.sortKey, catState.sortDir, catState.advancedSort])
 
   // Bucket categories by group
   const groupMap = new Map<string | null, Category[]>()
@@ -504,11 +510,18 @@ export default function Categories() {
         sortKey={catState.sortKey}
         sortDir={catState.sortDir}
         onSort={catState.setSort}
+        defaultSortKey="name"
+        defaultSortDir="asc"
         view={catState.view}
         onViewChange={catState.setView}
         search={catState.search}
         onSearchChange={catState.setSearch}
         searchPlaceholder="Search by category or group name…"
+        searchColumns={CAT_SEARCH_COLS}
+        searchCol={catState.searchCol}
+        onSearchColChange={catState.setSearchCol}
+        advancedSort={catState.advancedSort}
+        onAdvancedSort={catState.setAdvancedSort}
       />
 
       {(error || groupsError) && (

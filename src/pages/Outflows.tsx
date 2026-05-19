@@ -12,7 +12,7 @@ import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -39,9 +39,29 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 }
 
 const OUT_SORT_FIELDS: SortField[] = [
-  { key: 'date',             label: 'Date',      type: 'date'    },
-  { key: 'amount_disbursed', label: 'Disbursed', type: 'numeric' },
+  { key: 'date',             label: 'Date',        type: 'date',    primary: true },
+  { key: 'amount_disbursed', label: 'Disbursed',   type: 'numeric', primary: true },
+  { key: 'bank_name',        label: 'Bank',        type: 'text' },
+  { key: 'description',      label: 'Description', type: 'text' },
 ]
+
+const OUT_SEARCH_COLS = [
+  { key: 'all',             label: 'All Columns' },
+  { key: 'description',     label: 'Description' },
+  { key: 'bank_name',       label: 'Bank' },
+  { key: 'transaction_id',  label: 'Txn ID' },
+  { key: 'stage_code_1',    label: 'Stage Code' },
+  { key: 'amount_disbursed', label: 'Amount' },
+]
+
+function outColVal(r: OutflowTransaction, col: string): string {
+  if (col === 'description')      return r.description ?? ''
+  if (col === 'bank_name')        return r.bank_name ?? ''
+  if (col === 'transaction_id')   return r.transaction_id ?? ''
+  if (col === 'stage_code_1')     return r.stage_code_1 ?? ''
+  if (col === 'amount_disbursed') return String(r.amount_disbursed)
+  return ''
+}
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -117,13 +137,25 @@ export default function Outflows() {
   const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'date', defaultSortDir: 'desc' })
 
   // Client-side sort of current page
-  const sorted = useMemo(() =>
-    sortRows(data, (r, k) => {
-      if (k === 'amount_disbursed') return Number(r.amount_disbursed)
-      return r.date
-    }, outState.sortKey, outState.sortDir, OUT_SORT_FIELDS),
-    [data, outState.sortKey, outState.sortDir],
-  )
+  const getOutValue = (r: OutflowTransaction, k: string) => {
+    if (k === 'amount_disbursed') return Number(r.amount_disbursed)
+    if (k === 'bank_name')        return r.bank_name ?? ''
+    if (k === 'description')      return r.description ?? ''
+    return r.date
+  }
+
+  const sorted = useMemo(() => {
+    const adv = outState.advancedSort
+    if (adv.length > 0) return multiSortRows(data, getOutValue, adv, OUT_SORT_FIELDS)
+    return sortRows(data, getOutValue, outState.sortKey, outState.sortDir, OUT_SORT_FIELDS)
+  }, [data, outState.sortKey, outState.sortDir, outState.advancedSort])
+
+  const displayed = useMemo(() => {
+    const q = searchInput.trim().toLowerCase()
+    const col = outState.searchCol
+    if (!q || col === 'all') return sorted
+    return sorted.filter(r => outColVal(r, col).toLowerCase().includes(q))
+  }, [sorted, searchInput, outState.searchCol])
 
   // UI state
   const [editRecord,        setEditRecord]        = useState<OutflowTransaction | null>(null)
@@ -260,11 +292,18 @@ export default function Outflows() {
           sortKey={outState.sortKey}
           sortDir={outState.sortDir}
           onSort={outState.setSort}
+          defaultSortKey="date"
+          defaultSortDir="desc"
           view={outState.view}
           onViewChange={outState.setView}
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
           searchPlaceholder="Search descriptions…"
+          searchColumns={OUT_SEARCH_COLS}
+          searchCol={outState.searchCol}
+          onSearchColChange={outState.setSearchCol}
+          advancedSort={outState.advancedSort}
+          onAdvancedSort={outState.setAdvancedSort}
         />
 
         {/* Compact pagination above content */}
@@ -293,7 +332,7 @@ export default function Outflows() {
               ))
             ) : data.length === 0 ? (
               <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
-            ) : sorted.map(row => {
+            ) : displayed.map(row => {
               const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
               const netDiffers = net !== Number(row.amount_disbursed)
               return (

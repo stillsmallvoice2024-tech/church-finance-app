@@ -6,11 +6,16 @@ import { useAllReceipts, type ReceiptEntityType, type Receipt } from '../hooks/u
 import { formatDate } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
 const RCP_SORT_FIELDS: SortField[] = [
-  { key: 'created_at', label: 'Upload Date', type: 'date' },
-  { key: 'file_name',  label: 'File Name',  type: 'text' },
+  { key: 'created_at', label: 'Upload Date', type: 'date', primary: true },
+  { key: 'file_name',  label: 'File Name',   type: 'text', primary: true },
+]
+
+const RCP_SEARCH_COLS = [
+  { key: 'all',       label: 'All Columns' },
+  { key: 'file_name', label: 'File Name' },
 ]
 
 const MIGRATION_SQL =
@@ -94,16 +99,20 @@ export default function Receipts() {
 
   const filtered = useMemo(() => {
     const q = rcpState.search.trim().toLowerCase()
-    return q ? receipts.filter(r => r.file_name.toLowerCase().includes(q)) : receipts
+    if (!q) return receipts
+    return receipts.filter(r => r.file_name.toLowerCase().includes(q))
   }, [receipts, rcpState.search])
 
-  const sortedReceipts = useMemo(() =>
-    sortRows(filtered, (r, k) => {
-      if (k === 'file_name') return r.file_name
-      return r.created_at
-    }, rcpState.sortKey, rcpState.sortDir, RCP_SORT_FIELDS),
-    [filtered, rcpState.sortKey, rcpState.sortDir],
-  )
+  const getRcpValue = (r: Receipt, k: string) => {
+    if (k === 'file_name') return r.file_name
+    return r.created_at
+  }
+
+  const sortedReceipts = useMemo(() => {
+    const adv = rcpState.advancedSort
+    if (adv.length > 0) return multiSortRows(filtered, getRcpValue, adv, RCP_SORT_FIELDS)
+    return sortRows(filtered, getRcpValue, rcpState.sortKey, rcpState.sortDir, RCP_SORT_FIELDS)
+  }, [filtered, rcpState.sortKey, rcpState.sortDir, rcpState.advancedSort])
 
   const countFor = (key: Folder) =>
     key === 'all' ? receipts.length : receipts.filter(r => r.entity_type === key).length
@@ -198,14 +207,21 @@ export default function Receipts() {
         {/* Main panel */}
         <div className="flex-1 min-w-0 space-y-4">
             <DataControlsBar
-            sortFields={RCP_SORT_FIELDS}
-            sortKey={rcpState.sortKey}
-            sortDir={rcpState.sortDir}
-            onSort={rcpState.setSort}
-            search={rcpState.search}
-            onSearchChange={rcpState.setSearch}
-            searchPlaceholder="Search file name…"
-          />
+              sortFields={RCP_SORT_FIELDS}
+              sortKey={rcpState.sortKey}
+              sortDir={rcpState.sortDir}
+              onSort={rcpState.setSort}
+              defaultSortKey="created_at"
+              defaultSortDir="desc"
+              search={rcpState.search}
+              onSearchChange={rcpState.setSearch}
+              searchPlaceholder="Search file name…"
+              searchColumns={RCP_SEARCH_COLS}
+              searchCol={rcpState.searchCol}
+              onSearchColChange={rcpState.setSearchCol}
+              advancedSort={rcpState.advancedSort}
+              onAdvancedSort={rcpState.setAdvancedSort}
+            />
 
           {loading ? (
             <Card>

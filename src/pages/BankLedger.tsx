@@ -19,7 +19,7 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -46,10 +46,16 @@ interface LedgerRow {
 // ── Sort fields ────────────────────────────────────────────────────────────────
 
 const BL_SORT_FIELDS: SortField[] = [
-  { key: 'date',    label: 'Date',    type: 'date'    },
-  { key: 'inflow',  label: 'Inflow',  type: 'numeric' },
-  { key: 'outflow', label: 'Outflow', type: 'numeric' },
-  { key: 'balance', label: 'Balance', type: 'numeric' },
+  { key: 'date',        label: 'Date',        type: 'date',    primary: true },
+  { key: 'inflow',      label: 'Inflow',      type: 'numeric', primary: true },
+  { key: 'outflow',     label: 'Outflow',     type: 'numeric', primary: true },
+  { key: 'balance',     label: 'Balance',     type: 'numeric', primary: true },
+  { key: 'description', label: 'Description', type: 'text' },
+]
+
+const BL_SEARCH_COLS = [
+  { key: 'all',         label: 'All Columns' },
+  { key: 'description', label: 'Description' },
 ]
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -145,21 +151,26 @@ export default function BankLedger() {
   // Search filter
   const searchFiltered = useMemo(() => {
     const q = blState.search.trim().toLowerCase()
-    return q
-      ? dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
-      : dateFiltered
-  }, [dateFiltered, blState.search])
+    const col = blState.searchCol
+    if (!q) return dateFiltered
+    if (col === 'all') return dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
+    return dateFiltered.filter(r => (r.description ?? '').toLowerCase().includes(q))
+  }, [dateFiltered, blState.search, blState.searchCol])
+
+  const getBlValue = (r: LedgerRow, k: string) => {
+    if (k === 'inflow')      return r.inflow
+    if (k === 'outflow')     return r.outflow
+    if (k === 'balance')     return r.balance
+    if (k === 'description') return r.description ?? ''
+    return r.date
+  }
 
   // Sort
-  const sortedRows = useMemo(() =>
-    sortRows(searchFiltered, (r, k) => {
-      if (k === 'inflow')  return r.inflow
-      if (k === 'outflow') return r.outflow
-      if (k === 'balance') return r.balance
-      return r.date
-    }, blState.sortKey, blState.sortDir, BL_SORT_FIELDS),
-    [searchFiltered, blState.sortKey, blState.sortDir],
-  )
+  const sortedRows = useMemo(() => {
+    const adv = blState.advancedSort
+    if (adv.length > 0) return multiSortRows(searchFiltered, getBlValue, adv, BL_SORT_FIELDS)
+    return sortRows(searchFiltered, getBlValue, blState.sortKey, blState.sortDir, BL_SORT_FIELDS)
+  }, [searchFiltered, blState.sortKey, blState.sortDir, blState.advancedSort])
 
   // Pagination
   const pagedRows = useMemo(() => {
@@ -263,11 +274,18 @@ export default function BankLedger() {
           sortKey={blState.sortKey}
           sortDir={blState.sortDir}
           onSort={blState.setSort}
+          defaultSortKey="date"
+          defaultSortDir="asc"
           view={blState.view}
           onViewChange={blState.setView}
           search={blState.search}
           onSearchChange={blState.setSearch}
           searchPlaceholder="Search descriptions…"
+          searchColumns={BL_SEARCH_COLS}
+          searchCol={blState.searchCol}
+          onSearchColChange={blState.setSearchCol}
+          advancedSort={blState.advancedSort}
+          onAdvancedSort={blState.setAdvancedSort}
         />
       )}
 

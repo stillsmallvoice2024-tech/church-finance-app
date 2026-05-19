@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
-import type { SortDirection } from '../utils/sortUtils'
+import type { SortDirection, AdvancedSortLevel } from '../utils/sortUtils'
 
 export type DataViewMode = 'table' | 'cards'
+export type { AdvancedSortLevel }
 
 interface Options {
   storageKey: string
@@ -37,6 +38,10 @@ export interface DataViewState {
   setPageSize: (s: number) => void
   search: string
   setSearch: (s: string) => void
+  searchCol: string
+  setSearchCol: (col: string) => void
+  advancedSort: AdvancedSortLevel[]
+  setAdvancedSort: (levels: AdvancedSortLevel[]) => void
 }
 
 export function useDataViewState({
@@ -58,6 +63,12 @@ export function useDataViewState({
     return isNaN(n) ? defaultPageSize : n
   })
   const [search, _setSearch] = useState('')
+  const [searchCol, _setSearchCol] = useState<string>(() => read(`${storageKey}:sc`) ?? 'all')
+  const [advancedSort, _setAdvancedSort] = useState<AdvancedSortLevel[]>(() => {
+    const stored = read(`${storageKey}:as`)
+    if (!stored) return []
+    try { return JSON.parse(stored) as AdvancedSortLevel[] } catch { return [] }
+  })
 
   const setView = useCallback((v: DataViewMode) => {
     _setView(v)
@@ -86,5 +97,25 @@ export function useDataViewState({
     _setPage(0)
   }, [])
 
-  return { view, setView, sortKey, sortDir, setSort, page, setPage, pageSize, setPageSize, search, setSearch }
+  const setSearchCol = useCallback((col: string) => {
+    _setSearchCol(col)
+    persist(`${storageKey}:sc`, col)
+    _setPage(0)
+  }, [storageKey])
+
+  const setAdvancedSort = useCallback((levels: AdvancedSortLevel[]) => {
+    _setAdvancedSort(levels)
+    persist(`${storageKey}:as`, JSON.stringify(levels))
+    _setPage(0)
+  }, [storageKey])
+
+  return {
+    view, setView,
+    sortKey, sortDir, setSort,
+    page, setPage,
+    pageSize, setPageSize,
+    search, setSearch,
+    searchCol, setSearchCol,
+    advancedSort, setAdvancedSort,
+  }
 }

@@ -10,13 +10,20 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
 
 const FX_SORT_FIELDS: SortField[] = [
-  { key: 'date',   label: 'Date',   type: 'date'    },
-  { key: 'amount', label: 'Amount', type: 'numeric' },
+  { key: 'date',     label: 'Date',     type: 'date',    primary: true },
+  { key: 'amount',   label: 'Amount',   type: 'numeric', primary: true },
+  { key: 'narration', label: 'Narration', type: 'text' },
+]
+
+const FX_SEARCH_COLS = [
+  { key: 'all',             label: 'All Columns' },
+  { key: 'narration',       label: 'Narration' },
+  { key: 'transaction_ref', label: 'Reference' },
 ]
 
 const FX_META: { code: FXCurrency; symbol: string; flag: string; name: string }[] = [
@@ -63,21 +70,28 @@ export default function ForeignCurrency() {
 
   const fxSearchFiltered = useMemo(() => {
     const q = fxState.search.trim().toLowerCase()
-    return q
-      ? transactions.filter(t =>
-          t.narration?.toLowerCase().includes(q) ||
-          t.transaction_ref?.toLowerCase().includes(q)
-        )
-      : transactions
-  }, [transactions, fxState.search])
+    const col = fxState.searchCol
+    if (!q) return transactions
+    if (col === 'all') return transactions.filter(t =>
+      t.narration?.toLowerCase().includes(q) ||
+      t.transaction_ref?.toLowerCase().includes(q)
+    )
+    if (col === 'narration')       return transactions.filter(t => (t.narration ?? '').toLowerCase().includes(q))
+    if (col === 'transaction_ref') return transactions.filter(t => (t.transaction_ref ?? '').toLowerCase().includes(q))
+    return transactions.filter(t => t.narration?.toLowerCase().includes(q))
+  }, [transactions, fxState.search, fxState.searchCol])
 
-  const fxSorted = useMemo(() =>
-    sortRows(fxSearchFiltered, (t, k) => {
-      if (k === 'amount') return t.deposit > 0 ? t.deposit : t.withdrawal
-      return t.date
-    }, fxState.sortKey, fxState.sortDir, FX_SORT_FIELDS),
-    [fxSearchFiltered, fxState.sortKey, fxState.sortDir],
-  )
+  const getFxValue = (t: FXTransaction, k: string) => {
+    if (k === 'amount')   return t.deposit > 0 ? t.deposit : t.withdrawal
+    if (k === 'narration') return t.narration ?? ''
+    return t.date
+  }
+
+  const fxSorted = useMemo(() => {
+    const adv = fxState.advancedSort
+    if (adv.length > 0) return multiSortRows(fxSearchFiltered, getFxValue, adv, FX_SORT_FIELDS)
+    return sortRows(fxSearchFiltered, getFxValue, fxState.sortKey, fxState.sortDir, FX_SORT_FIELDS)
+  }, [fxSearchFiltered, fxState.sortKey, fxState.sortDir, fxState.advancedSort])
 
   const handleExport = () => {
     exportCSV(
@@ -250,9 +264,16 @@ export default function ForeignCurrency() {
             sortKey={fxState.sortKey}
             sortDir={fxState.sortDir}
             onSort={fxState.setSort}
+            defaultSortKey="date"
+            defaultSortDir="desc"
             search={fxState.search}
             onSearchChange={fxState.setSearch}
             searchPlaceholder="Search narration or ref…"
+            searchColumns={FX_SEARCH_COLS}
+            searchCol={fxState.searchCol}
+            onSearchColChange={fxState.setSearchCol}
+            advancedSort={fxState.advancedSort}
+            onAdvancedSort={fxState.setAdvancedSort}
           />
         </div>
 
