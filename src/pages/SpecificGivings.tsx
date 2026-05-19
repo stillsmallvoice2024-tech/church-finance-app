@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Gift, AlertCircle, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAccountingYearStore } from '../store/accountingYearStore'
-import { useCategories } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
@@ -65,7 +64,6 @@ export default function SpecificGivings() {
   usePageTitle('Specific Givings')
 
   const year = useAccountingYearStore(s => s.year)
-  const { categories } = useCategories()
 
   const [rows,    setRows]    = useState<SpecificRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -103,7 +101,6 @@ export default function SpecificGivings() {
       .eq('budget_portion', 'Specific Seed')
 
     const cobData = cobRes.error ? [] : (cobRes.data ?? [])
-    const cobCatNames = new Set(cobData.map(r => (r.categories as unknown as { name: string } | null)?.name ?? ''))
 
     const cobOpeningRows: SpecificRow[] = cobData
       .map((r): SpecificRow | null => {
@@ -122,25 +119,9 @@ export default function SpecificGivings() {
       })
       .filter((r): r is SpecificRow => r !== null)
 
-    // Fallback: old starting_balance field for unmigrated categories
-    const legacyOpeningRows: SpecificRow[] = categories
-      .filter(c =>
-        !cobCatNames.has(c.name) &&
-        c.starting_balance_budget_portion === 'Specific Seed' &&
-        (c.starting_balance ?? 0) > 0,
-      )
-      .map(c => ({
-        id:                        `ob-${c.id}`,
-        date:                      '0000-01-01',
-        stage_code_1:              c.name,
-        specific_seed_description: 'Opening Balance',
-        description:               null,
-        amount:                    c.starting_balance!,
-      }))
-
-    setRows([...cobOpeningRows, ...legacyOpeningRows, ...txRows])
+    setRows([...cobOpeningRows, ...txRows])
     setLoading(false)
-  }, [year, categories])
+  }, [year])
 
   useEffect(() => { load() }, [load])
 

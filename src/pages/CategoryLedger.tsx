@@ -136,7 +136,6 @@ export default function CategoryLedger() {
     }
 
     const cobRows = cobRes.error ? [] : (cobRes.data ?? [])
-    const cobCatNames = new Set(cobRows.map(r => (r.categories as unknown as { name: string } | null)?.name ?? ''))
 
     const today  = new Date().toISOString().slice(0, 10)
     const active = configs
@@ -172,15 +171,6 @@ export default function CategoryLedger() {
       else if (ob.budget_portion === 'Savings') row.savingsIn += Number(ob.amount)
     }
 
-    for (const cat of categories) {
-      if (cobCatNames.has(cat.name)) continue
-      if (!cat.starting_balance || cat.starting_balance === 0) continue
-      const portion = cat.starting_balance_budget_portion ?? ''
-      const row = ensure(cat.name)
-      if (portion === 'Specific Seed') row.specificSeed += cat.starting_balance
-      else if (portion === 'Savings') row.savingsIn += cat.starting_balance
-    }
-
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
@@ -202,13 +192,6 @@ export default function CategoryLedger() {
       const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
       if (!catName) continue
       allocMap.set(catName, (allocMap.get(catName) ?? 0) + Number(ob.amount))
-    }
-    for (const cat of categories) {
-      if (cobCatNames.has(cat.name)) continue
-      if (!cat.starting_balance || cat.starting_balance === 0) continue
-      if ((cat.starting_balance_budget_portion ?? '') === 'Percentage Allocation') {
-        allocMap.set(cat.name, (allocMap.get(cat.name) ?? 0) + cat.starting_balance)
-      }
     }
 
     const allNames = new Set<string>([
@@ -346,9 +329,7 @@ export default function CategoryLedger() {
           .eq('category_id', catRecord.id)
           .eq('budget_portion', portionMap[ledgerPortion])
           .maybeSingle()
-        const bfAmt = cobLedger?.amount
-          ? Number(cobLedger.amount)
-          : (catRecord.starting_balance_budget_portion === portionMap[ledgerPortion] ? (catRecord.starting_balance ?? 0) : 0)
+        const bfAmt = cobLedger?.amount ? Number(cobLedger.amount) : 0
         if (bfAmt !== 0) {
           bfRow.push({
             id:          'bal-bf',

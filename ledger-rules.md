@@ -77,6 +77,9 @@ This ensures special-config inflows (e.g. Easter offering) use the correct perce
 - **On load**, `CategoryModal` filters out rows with `budget_portion = NULL` before populating `obRows` — rows with null portion are invisible to the `validRows` filter and would permanently block saves if loaded
 - **On save**, `CategoryModal.handleSubmit` mirrors the first valid ob-row into `categories.starting_balance` / `starting_balance_budget_portion` in the same UPDATE — ensures the balance persists via the legacy field if `category_opening_balances` hasn't been migrated yet; upsert to new table still runs when the table exists
 - **On save (stale cleanup)**, after the per-portion delete loop, also deletes null-`budget_portion` rows via `.is('budget_portion', null)` — `.eq('budget_portion', null)` matches the string `"null"` in PostgREST, not SQL NULL, so the loop alone cannot remove them
+- **`upsertCategoryOpeningBalance()`** chains `.select('id')` and throws if `data?.length === 0` — catches silent RLS denials where the write no-ops without an error; `cob_write` policy must exist on `category_opening_balances` (run migration from Setup → Database if missing)
+- **Display priority**: `CategoryModal` and `CategoryRow` prefer `category_opening_balances` rows over `categories.starting_balance` when ob rows exist — if ob rows are stale (upsert was silently denied), the display shows the old value even if `starting_balance` was updated. The `.select('id')` check prevents this by surfacing the denial immediately.
+- **Ob error state**: `CategoryModal` has a separate `obError` state for upsert errors (distinct from hook mutation errors) — shown in the modal's error box so the user sees the failure and can run the migration SQL
 - Helper functions in `useCategories.ts`: `upsertCategoryOpeningBalance()`, `deleteCategoryOpeningBalance()`, `fetchCategoryOpeningBalances()`
 
 ### Bank Ledger Balance Brought Forward Propagation

@@ -600,13 +600,19 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
     setLoading(true); setError(null)
     try {
       const { data: oldData } = await supabase.from('categories').select('*').eq('id', input.id).single()
-      const updates = {
-        name:             input.name,
-        description:      input.description ?? null,
-        starting_balance: input.starting_balance ?? null,
-        starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
-        group_id:         input.group_id ?? null,
+      const updates: Record<string, unknown> = {
+        name:        input.name,
+        description: input.description ?? null,
+        group_id:    input.group_id ?? null,
         ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
+        // Only overwrite balance fields when explicitly supplied — prevents hide/show toggle
+        // (which omits these fields) from wiping the COB-mirrored starting_balance.
+        ...(input.starting_balance !== undefined
+          ? {
+              starting_balance:                input.starting_balance,
+              starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+            }
+          : {}),
       }
       console.log('[useUpdateCategory] payload', { id: input.id, updates })
       const { data: updatedRows, error: err } = await supabase
