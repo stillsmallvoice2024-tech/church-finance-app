@@ -175,7 +175,7 @@ if (err) throw err
 if (!updatedRows?.length) throw new Error('Record not found or update silently rejected — please refresh and try again.')
 ```
 
-Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `useUpdateBank`. Any new UPDATE hook must follow the same pattern.
+Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `useUpdateBank`, `useUpdateCategory`. Any new UPDATE hook must follow the same pattern.
 
 ---
 

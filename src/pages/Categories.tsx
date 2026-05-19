@@ -118,8 +118,9 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     setObRows([])
     if (editRecord?.id) {
       fetchCategoryOpeningBalances(editRecord.id).then(rows => {
-        if (rows.length > 0) {
-          setObRows(rows.map(r => ({ budget_portion: r.budget_portion, amount: String(r.amount) })))
+        const validFetched = rows.filter(r => r.budget_portion)
+        if (validFetched.length > 0) {
+          setObRows(validFetched.map(r => ({ budget_portion: r.budget_portion, amount: String(r.amount) })))
         } else if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
           // Migrate from old single-field
           setObRows([{ budget_portion: editRecord.starting_balance_budget_portion as BudgetPortion, amount: String(editRecord.starting_balance) }])
@@ -186,6 +187,12 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
               await deleteCategoryOpeningBalance(editRecord.id, ex.budget_portion)
             }
           }
+          // Delete any rows where budget_portion IS NULL — .eq() can't match SQL NULL
+          await supabase
+            .from('category_opening_balances')
+            .delete()
+            .eq('category_id', editRecord.id)
+            .is('budget_portion', null)
         }
         for (const row of validRows) {
           await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount))
