@@ -599,7 +599,7 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
-      const { error: err } = await supabase
+      const { data: updatedRows, error: err } = await supabase
         .from('categories')
         .update({
           name:             input.name,
@@ -610,7 +610,9 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
           ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
         })
         .eq('id', input.id)
+        .select('id')
       if (err) throw err
+      if (!updatedRows?.length) throw new Error('Category not found or update was denied.')
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, newData: input as unknown as Record<string, unknown> })
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)

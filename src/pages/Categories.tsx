@@ -146,15 +146,20 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     if (!name.trim()) return
     setObSaving(true)
     try {
+      // Compute before the update so we can mirror into legacy fields in the same call
+      const validRows = obRows.filter(r => r.budget_portion && r.amount && parseFloat(r.amount) > 0)
+      const firstRow  = validRows[0]
+
       let savedId = editRecord?.id ?? ''
       if (isEdit && editRecord) {
         const input: UpdateCategoryInput = {
           id:          editRecord.id,
           name:        name.trim(),
           description: desc.trim() || undefined,
-          // Preserve legacy fields; consumers prefer new table when category has entries there
-          starting_balance:                editRecord.starting_balance ?? undefined,
-          starting_balance_budget_portion: editRecord.starting_balance_budget_portion ?? undefined,
+          // Mirror first ob-row into legacy single-value fields so the balance persists
+          // even when category_opening_balances table hasn't been migrated yet.
+          starting_balance:                firstRow ? parseFloat(firstRow.amount) : (editRecord.starting_balance ?? undefined),
+          starting_balance_budget_portion: firstRow ? firstRow.budget_portion     : (editRecord.starting_balance_budget_portion ?? undefined),
           group_id: groupId || null,
         }
         await update(input)
@@ -163,6 +168,8 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
         const input: AddCategoryInput = {
           name:        name.trim(),
           description: desc.trim() || undefined,
+          starting_balance:                firstRow ? parseFloat(firstRow.amount) : undefined,
+          starting_balance_budget_portion: firstRow ? firstRow.budget_portion     : undefined,
           group_id:    groupId || null,
         }
         savedId = await add(input)
@@ -170,7 +177,6 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
 
       // Persist opening balances to new table (silently skip if table not yet migrated)
       try {
-        const validRows = obRows.filter(r => r.budget_portion && r.amount && parseFloat(r.amount) > 0)
         const usedPortions = new Set(validRows.map(r => r.budget_portion as BudgetPortion))
 
         if (isEdit && editRecord) {
