@@ -91,10 +91,12 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   const { mutate: update,   loading: updating,  error: updateErr, reset: resetUpdate } = updateMutation
   const { mutate: addGroup, loading: addingGrp                                       } = addGroupMutation
 
-  const [obSaving,     setObSaving]     = useState(false)
+  const [obSaving, setObSaving] = useState(false)
+  const [obError,  setObError]  = useState<string | null>(null)
 
-  const loading = adding || updating || obSaving
-  const error   = addErr || updateErr
+  const loading      = adding || updating || obSaving
+  const error        = addErr || updateErr
+  const displayError = error || obError
 
   const isMigrationError = !!error && /column.*does not exist|does not exist|relation.*does not exist/i.test(error)
 
@@ -110,6 +112,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   useEffect(() => {
     if (!open) return
     resetAdd(); resetUpdate()
+    setObError(null)
     setName(editRecord?.name ?? '')
     setDesc(editRecord?.description ?? '')
     setGroupId(editRecord?.group_id ?? '')
@@ -117,15 +120,22 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     setShowNewGroup(false)
     setObRows([])
     if (editRecord?.id) {
+      console.log('[CategoryModal] opening edit', { id: editRecord.id, name: editRecord.name, starting_balance: editRecord.starting_balance, starting_balance_budget_portion: editRecord.starting_balance_budget_portion })
       fetchCategoryOpeningBalances(editRecord.id).then(rows => {
+        console.log('[CategoryModal] fetchCategoryOpeningBalances result', { categoryId: editRecord.id, rows })
         const validFetched = rows.filter(r => r.budget_portion)
         if (validFetched.length > 0) {
+          console.log('[CategoryModal] loading ob rows from table', validFetched)
           setObRows(validFetched.map(r => ({ budget_portion: r.budget_portion, amount: String(r.amount) })))
         } else if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
+          console.log('[CategoryModal] falling back to legacy starting_balance', { starting_balance: editRecord.starting_balance, starting_balance_budget_portion: editRecord.starting_balance_budget_portion })
           // Migrate from old single-field
           setObRows([{ budget_portion: editRecord.starting_balance_budget_portion as BudgetPortion, amount: String(editRecord.starting_balance) }])
+        } else {
+          console.log('[CategoryModal] no ob rows and no legacy balance — obRows stays empty')
         }
-      }).catch(() => {
+      }).catch(err => {
+        console.warn('[CategoryModal] fetchCategoryOpeningBalances error', err)
         if (editRecord.starting_balance && editRecord.starting_balance !== 0 && editRecord.starting_balance_budget_portion) {
           setObRows([{ budget_portion: editRecord.starting_balance_budget_portion as BudgetPortion, amount: String(editRecord.starting_balance) }])
         }
@@ -146,10 +156,13 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     e.preventDefault()
     if (!name.trim()) return
     setObSaving(true)
+    setObError(null)
     try {
       // Compute before the update so we can mirror into legacy fields in the same call
       const validRows = obRows.filter(r => r.budget_portion && r.amount && parseFloat(r.amount) > 0)
       const firstRow  = validRows[0]
+
+      console.log('[CategoryModal] handleSubmit', { id: editRecord?.id, name: name.trim(), obRows, validRows, firstRow })
 
       let savedId = editRecord?.id ?? ''
       if (isEdit && editRecord) {
@@ -163,7 +176,9 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           starting_balance_budget_portion: firstRow ? firstRow.budget_portion     : (editRecord.starting_balance_budget_portion ?? undefined),
           group_id: groupId || null,
         }
+        console.log('[CategoryModal] calling update with', input)
         await update(input)
+        console.log('[CategoryModal] update succeeded')
         savedId = editRecord.id
       } else {
         const input: AddCategoryInput = {
@@ -184,6 +199,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           const existing = await fetchCategoryOpeningBalances(editRecord.id)
           for (const ex of existing) {
             if (!usedPortions.has(ex.budget_portion)) {
+              console.log('[CategoryModal] deleting stale ob row', { category_id: editRecord.id, budget_portion: ex.budget_portion })
               await deleteCategoryOpeningBalance(editRecord.id, ex.budget_portion)
             }
           }
@@ -195,15 +211,28 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
             .is('budget_portion', null)
         }
         for (const row of validRows) {
+          console.log('[CategoryModal] upserting ob row', { category_id: savedId, budget_portion: row.budget_portion, amount: parseFloat(row.amount) })
           await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount))
+          console.log('[CategoryModal] upsert succeeded for', row.budget_portion)
         }
       } catch (obErr) {
-        if (!/does not exist/i.test(String(obErr))) throw obErr
+        if (/does not exist/i.test(String(obErr))) {
+          // Table not migrated yet — categories.starting_balance was already written, so this is safe to skip
+          console.warn('[CategoryModal] category_opening_balances table absent, skipped')
+          onSuccess()
+          onClose()
+          return
+        }
+        // Any other error (including silent-write detection) is surfaced in the modal
+        const msg = obErr instanceof Error ? obErr.message : String(obErr)
+        console.error('[CategoryModal] ob upsert failed', msg)
+        setObError(msg)
+        return
       }
 
       onSuccess()
       onClose()
-    } catch { /* surfaced via hook error */ } finally {
+    } catch { /* hook error state already set by update/add mutators */ } finally {
       setObSaving(false)
     }
   }
@@ -211,11 +240,11 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Category' : 'New Category'} size="max-w-md">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        {error && (
+        {displayError && (
           <div className="space-y-2">
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{isMigrationError ? 'Database migration required — run the SQL below in your Supabase SQL Editor, then try again.' : error}</span>
+              <span>{isMigrationError ? 'Database migration required — run the SQL below in your Supabase SQL Editor, then try again.' : displayError}</span>
             </div>
             {isMigrationError && (
               <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
