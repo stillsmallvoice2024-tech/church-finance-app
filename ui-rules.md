@@ -423,7 +423,8 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 ### Search column selector
 
 - Compact prefix selector left of search input; shows "All" when `searchCol === 'all'` (default)
-- When a specific column is selected, placeholder updates to "Search [column name]…"
+- Placeholder derives from column scope: `"Search all"` for all-columns, `"Search [column label]"` for specific column; `searchPlaceholder` prop used only when no `searchColumns` are configured
+- Selector button has `h-full` so its border fills the `items-stretch` flex container flush against the input; input uses `py-1` (not `py-1.5`) so both land at 28px despite differing text sizes
 - For server-paginated pages (Inflows, Outflows): column filter applied client-side on top of server results
 - For client-side pages: existing multi-column filter replaced by column-specific filter
 
