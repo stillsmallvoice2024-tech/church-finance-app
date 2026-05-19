@@ -75,11 +75,13 @@ export async function upsertCategoryOpeningBalance(
   budgetPortion: BudgetPortion,
   amount: number,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('category_opening_balances')
     .upsert({ category_id: categoryId, budget_portion: budgetPortion, amount },
              { onConflict: 'category_id,budget_portion' })
+    .select('id')
   if (error) throw new Error(error.message)
+  if (!data?.length) throw new Error('Opening balance write was silently rejected — run the category_opening_balances migration from Setup → Database.')
 }
 
 export async function deleteCategoryOpeningBalance(

@@ -599,21 +599,29 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
+      const { data: oldData } = await supabase.from('categories').select('*').eq('id', input.id).single()
+      const updates = {
+        name:             input.name,
+        description:      input.description ?? null,
+        starting_balance: input.starting_balance ?? null,
+        starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
+        group_id:         input.group_id ?? null,
+        ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
+      }
+      console.log('[useUpdateCategory] payload', { id: input.id, updates })
       const { data: updatedRows, error: err } = await supabase
         .from('categories')
-        .update({
-          name:             input.name,
-          description:      input.description ?? null,
-          starting_balance: input.starting_balance ?? null,
-          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
-          group_id:         input.group_id ?? null,
-          ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
-        })
+        .update(updates)
         .eq('id', input.id)
         .select('id')
+      console.log('[useUpdateCategory] response', { updatedRows, err })
       if (err) throw err
-      if (!updatedRows?.length) throw new Error('Category not found or update was denied.')
-      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, newData: input as unknown as Record<string, unknown> })
+      if (!updatedRows?.length) {
+        console.warn('[useUpdateCategory] 0 rows updated — RLS or stale ID?', { id: input.id })
+        throw new Error('Category not found or update was denied.')
+      }
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })
+      if (oldData) logFieldChanges(user.id, 'categories', input.id, oldData as Record<string, unknown>, updates as Record<string, unknown>)
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
