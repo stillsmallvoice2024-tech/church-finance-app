@@ -87,16 +87,27 @@ This ensures special-config inflows (e.g. Easter offering) use the correct perce
 ### Bank Ledger Balance Brought Forward Propagation
 
 `AddBankModal` calls `propagateBankOpeningBalance()` (`src/utils/bankOpeningBalance.ts`) after every successful bank save:
-- Upserts a synthetic `inflow_transactions` row: `transaction_type = 'balance_brought_forward'`, `date = '1900-01-01'`, `description = 'Balance Brought Forward'`, `bank_name = bankName`
-- Deduplication keyed on `bank_name + transaction_type = 'balance_brought_forward'` — one entry per bank, no duplicates
+- Upserts a DB audit row in `inflow_transactions`: `transaction_type = 'balance_brought_forward'`, `date = '1900-01-01'`, `description = 'Balance Brought Forward'`, `bank_name = bankName`
+- DB row is for audit/export/backup only — **BankLedger never displays it directly**
+- Deduplication: `.limit(2)` (not `.maybeSingle()`) to avoid PGRST116 when duplicates exist; inline cleanup deletes extras before proceeding
 - Balance > 0 → insert (if none) or update `amount` (if exists)
-- Balance cleared / ≤ 0 → delete the propagated entry
+- Balance cleared / ≤ 0 → delete the DB entry
 - Bank rename (`previousBankName !== bankName`) → delete entry under old name first, then upsert under new name
 - Propagation failure → warning toast; bank save is NOT rolled back
-- **BankLedger**: B/F row rendered with blue highlight (`bg-blue-50/60`), blue badge (`bg-blue-100 text-blue-700`), no edit button, no `ReceiptBadge`; date column shows "—"
+- DB uniqueness enforced by partial unique index `idx_inflow_bf_unique_bank ON inflow_transactions(bank_name) WHERE transaction_type = 'balance_brought_forward'`
+
+**BankLedger synthetic-first rendering** (`src/pages/BankLedger.tsx`):
+- `load(bankName, openingBalance)` queries with `.neq('transaction_type', BALANCE_BROUGHT_FORWARD_TYPE)` — DB B/F rows excluded from query entirely
+- If `openingBalance > 0`: synthetic B/F row `{ id: '__bf__', inflow: openingBalance, ... }` prepended in memory from `bank.starting_balance`
+- Running balance seeds from `openingBalance` so all subsequent rows carry correct cumulative totals
+- `dateFiltered` exempts `transaction_type === BALANCE_BROUGHT_FORWARD_TYPE` rows — B/F always visible regardless of date filter
+- Self-healing: even if DB propagation fails, BankLedger always shows the correct balance from authoritative `banks.starting_balance`
+- Rendered with blue highlight (`bg-blue-50/60`), blue badge (`bg-blue-100 text-blue-700`), no edit button, no `ReceiptBadge`; date column shows "—"
+
+**Other consumers:**
 - **Inflows page**: edit + delete buttons suppressed for `transaction_type === 'balance_brought_forward'`; blue badge applied
 - **CategoryLedger**: B/F entry has `transaction_type` set → skipped in allocation (correct — category amounts already via `category_opening_balances`)
-- **Backup/restore**: entry lives in `inflow_transactions` → included in standard backup automatically
+- **Backup/restore**: DB entry lives in `inflow_transactions` → included in standard backup automatically
 
 ### Bank Opening Balance Propagation (Category)
 

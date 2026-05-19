@@ -56,6 +56,7 @@
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
 | `currency text NOT NULL DEFAULT 'NGN'`, `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section — also requires `bank_schema_check` view + GRANT (see SQL below) |
 | `recorded_at timestamptz` | `inflow_transactions`, `outflow_transactions` | Financial Report basis selector (Recorded Date mode); "Recorded" column on Inflows/Outflows pages; editable in AddInflowModal/AddOutflowModal; **defaults to current date/time on all creation paths** |
+| `UNIQUE INDEX idx_inflow_bf_unique_bank (bank_name) WHERE transaction_type = 'balance_brought_forward'` + `idx_inflow_bank_name` + `idx_outflow_bank_name` | `inflow_transactions`, `outflow_transactions` | B/F dedup constraint + query perf; dedup cleanup step in `MIGRATION_SQL` runs first to clear existing duplicates |
 | `config_group_id uuid`, `effective_from date`, `effective_to date`, `version_number int` | `allocation_configs` | Special config versioning — see Special Config Versioning section |
 | `special_config_group_id uuid` | `income_types` | Links income type to a config group (replaces per-version `special_config_id` link) |
 
