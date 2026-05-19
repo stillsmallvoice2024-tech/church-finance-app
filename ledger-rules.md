@@ -79,7 +79,21 @@ This ensures special-config inflows (e.g. Easter offering) use the correct perce
 - **On save (stale cleanup)**, after the per-portion delete loop, also deletes null-`budget_portion` rows via `.is('budget_portion', null)` — `.eq('budget_portion', null)` matches the string `"null"` in PostgREST, not SQL NULL, so the loop alone cannot remove them
 - Helper functions in `useCategories.ts`: `upsertCategoryOpeningBalance()`, `deleteCategoryOpeningBalance()`, `fetchCategoryOpeningBalances()`
 
-### Bank Opening Balance Propagation
+### Bank Ledger Balance Brought Forward Propagation
+
+`AddBankModal` calls `propagateBankOpeningBalance()` (`src/utils/bankOpeningBalance.ts`) after every successful bank save:
+- Upserts a synthetic `inflow_transactions` row: `transaction_type = 'balance_brought_forward'`, `date = '1900-01-01'`, `description = 'Balance Brought Forward'`, `bank_name = bankName`
+- Deduplication keyed on `bank_name + transaction_type = 'balance_brought_forward'` — one entry per bank, no duplicates
+- Balance > 0 → insert (if none) or update `amount` (if exists)
+- Balance cleared / ≤ 0 → delete the propagated entry
+- Bank rename (`previousBankName !== bankName`) → delete entry under old name first, then upsert under new name
+- Propagation failure → warning toast; bank save is NOT rolled back
+- **BankLedger**: B/F row rendered with blue highlight (`bg-blue-50/60`), blue badge (`bg-blue-100 text-blue-700`), no edit button, no `ReceiptBadge`; date column shows "—"
+- **Inflows page**: edit + delete buttons suppressed for `transaction_type === 'balance_brought_forward'`; blue badge applied
+- **CategoryLedger**: B/F entry has `transaction_type` set → skipped in allocation (correct — category amounts already via `category_opening_balances`)
+- **Backup/restore**: entry lives in `inflow_transactions` → included in standard backup automatically
+
+### Bank Opening Balance Propagation (Category)
 
 `AddBankModal` propagates allocations into `category_opening_balances` after saving the bank record:
 - Each allocation row has `apply_to_category: boolean` — `true` = new/unrecorded amount, `false` = already in transaction records (skip)
@@ -246,5 +260,6 @@ Pages that show type-filtered views of `inflow_transactions` / `outflow_transact
 | `'refund'` | `RefundTransactions.tsx` | `.eq('transaction_type', 'refund')` on both tables |
 | `'bank_deposit'` | `BankDeposits.tsx` | merged into page alongside `bank_deposits` table |
 | `'intrabank_transfer'` | *(IntraBankTransfers queries `intrabank_transfers` table — tagged txns not surfaced there)* | gap open |
+| `'balance_brought_forward'` | BankLedger (blue row, no edit), Inflows (blue badge, no edit/delete) | synthetic; managed by `src/utils/bankOpeningBalance.ts` |
 
 > If Reversals or Refunds pages show an error or empty results: verify the `transaction_type` column exists in the live DB (see `db-rules.md`). The application query logic is correct.
