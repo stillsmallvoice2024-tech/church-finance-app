@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   TrendingDown, Download, Pencil, Trash2,
-  AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { Modal }                   from '../components/ui/Modal'
@@ -28,6 +28,7 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
+import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
 
 const PAGE_SIZE = 25
 
@@ -46,16 +47,18 @@ const OUT_SORT_FIELDS: SortField[] = [
 ]
 
 const OUT_SEARCH_COLS = [
-  { key: 'all',             label: 'All Columns' },
-  { key: 'description',     label: 'Description' },
-  { key: 'bank_name',       label: 'Bank' },
-  { key: 'transaction_id',  label: 'Txn ID' },
-  { key: 'stage_code_1',    label: 'Stage Code' },
+  { key: 'all',              label: 'All Columns' },
+  { key: 'description',      label: 'Description' },
+  { key: 'bank_description', label: 'Bank Narration' },
+  { key: 'bank_name',        label: 'Bank' },
+  { key: 'transaction_id',   label: 'Txn ID' },
+  { key: 'stage_code_1',     label: 'Stage Code' },
   { key: 'amount_disbursed', label: 'Amount' },
 ]
 
 function outColVal(r: OutflowTransaction, col: string): string {
-  if (col === 'description')      return r.description ?? ''
+  if (col === 'description')      return r.cleaned_description
+  if (col === 'bank_description') return r.bank_description ?? ''
   if (col === 'bank_name')        return r.bank_name ?? ''
   if (col === 'transaction_id')   return r.transaction_id ?? ''
   if (col === 'stage_code_1')     return r.stage_code_1 ?? ''
@@ -140,7 +143,7 @@ export default function Outflows() {
   const getOutValue = (r: OutflowTransaction, k: string) => {
     if (k === 'amount_disbursed') return Number(r.amount_disbursed)
     if (k === 'bank_name')        return r.bank_name ?? ''
-    if (k === 'description')      return r.description ?? ''
+    if (k === 'description')      return r.cleaned_description
     return r.date
   }
 
@@ -165,6 +168,9 @@ export default function Outflows() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkDeleting,      setBulkDeleting]      = useState(false)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
+  const [expandedId,        setExpandedId]        = useState<string | null>(null)
+
+  const toggleExpand = (id: string) => setExpandedId(prev => prev === id ? null : id)
 
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const { push: toast }                             = useToastStore()
@@ -212,9 +218,9 @@ export default function Outflows() {
   const handleExport = () => {
     exportCSV(
       `outflows-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Date', 'Txn ID', 'Description', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Remarks'],
+      ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Remarks'],
       data.map(r => [
-        r.date, r.transaction_id, r.description,
+        r.date, r.transaction_id, r.cleaned_description, r.bank_description,
         r.amount_disbursed, r.amount_refunded, r.transfer_charge,
         Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge),
         r.stage_code_1, r.remarks,
@@ -354,14 +360,14 @@ export default function Outflows() {
                     </div>
                     {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
                     <div className="text-sm">
-                      <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      <DescriptionCell id={`card-${row.id}`} text={row.cleaned_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
-                    {row.stage_code_1 && <p className="text-[11px] text-gray-400 mt-1">{row.stage_code_1}</p>}
-                    {row.remarks && (
-                      <div className="text-xs mt-1.5">
-                        <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
+                    {row.bank_description && row.bank_description !== row.description && (
+                      <div className="text-xs mt-1">
+                        <DescriptionCell id={`card-raw-${row.id}`} text={row.bank_description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
                       </div>
                     )}
+                    {row.stage_code_1 && <p className="text-[11px] text-gray-400 mt-1">{row.stage_code_1}</p>}
                   </div>
                   {/* Metrics footer */}
                   <div className={`border-t border-gray-100 bg-gray-50/40 px-4 py-3 ${netDiffers ? 'grid grid-cols-3' : 'grid grid-cols-2'}`}>
@@ -444,16 +450,11 @@ export default function Outflows() {
                       onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())}
                     />
                   </th>
+                  <th className="w-8 px-1 py-3" />
                   <SortableHeader field={OUT_SORT_FIELDS[0]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Recorded</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Bank</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Txn ID</th>
+                  <SortableHeader field={OUT_SORT_FIELDS[2]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
                   <SortableHeader field={OUT_SORT_FIELDS[1]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right whitespace-nowrap">Refunded (₦)</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right whitespace-nowrap">Net (₦)</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Stage Code 1</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Remarks</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">📎</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
                 </tr>
@@ -462,7 +463,7 @@ export default function Outflows() {
                 {loading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 13 }).map((_, j) => (
+                      {Array.from({ length: 8 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -471,79 +472,69 @@ export default function Outflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={13}>
+                    <td colSpan={8}>
                       <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
                     </td>
                   </tr>
                 ) : (
                   sorted.map(row => {
-                    const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
+                    const isExpanded = expandedId === row.id
                     return (
-                      <tr
-                        key={row.id}
-                        className={`hover:bg-gray-50 transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
-                      >
-                        <td className="pl-4 pr-2 py-3 w-10">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded border-gray-300"
-                            checked={selectedIds.has(row.id)}
-                            onChange={e => {
-                              const next = new Set(selectedIds)
-                              if (e.target.checked) next.add(row.id)
-                              else next.delete(row.id)
-                              setSelectedIds(next)
-                            }}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                          {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[180px]">
-                          <DescriptionCell id={`ref-${row.id}`} text={row.transaction_id ?? null} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[220px]">
-                          <div className="flex items-start gap-1.5 min-w-0">
-                            {row.is_pending_deduction && (
-                              <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
-                                Pending
-                              </span>
-                            )}
-                            {row.transaction_type && (
-                              <span className="inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
-                                {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
-                              </span>
-                            )}
-                            <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                          </div>
-                        </td>
-                        <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
-                        <AmountCell value={Number(row.amount_refunded)} mode="neutral" bold={false} />
-                        <AmountCell value={net} mode="neutral" />
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
-                          <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                        </td>
-                        <td className="px-2 py-3">
-                          <ReceiptBadge entityType="outflow" entityId={row.id} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            {canWrite() && (
-                              <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                            )}
-                            {canDelete() && (
-                              <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                      <>
+                        <tr
+                          key={row.id}
+                          className={`hover:bg-gray-50 transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
+                        >
+                          <td className="pl-4 pr-2 py-3 w-10">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-gray-300"
+                              checked={selectedIds.has(row.id)}
+                              onChange={e => {
+                                const next = new Set(selectedIds)
+                                if (e.target.checked) next.add(row.id)
+                                else next.delete(row.id)
+                                setSelectedIds(next)
+                              }}
+                            />
+                          </td>
+                          <td className="w-8 px-1 py-3">
+                            <button
+                              onClick={() => toggleExpand(row.id)}
+                              className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                              title={isExpanded ? 'Collapse' : 'Expand details'}
+                            >
+                              {isExpanded
+                                ? <ChevronDown className="w-3.5 h-3.5" />
+                                : <ChevronRight className="w-3.5 h-3.5" />}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-800 max-w-[280px]">
+                            <DescriptionCell id={row.id} text={row.cleaned_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          </td>
+                          <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
+                          <td className="px-2 py-3">
+                            <ReceiptBadge entityType="outflow" entityId={row.id} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              {canWrite() && (
+                                <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                              )}
+                              {canDelete() && (
+                                <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && <OutflowRowDetail key={`detail-${row.id}`} row={row} colSpan={8} />}
+                      </>
                     )
                   })
                 )}
