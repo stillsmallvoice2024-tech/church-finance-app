@@ -308,6 +308,8 @@ export default function BankLedger() {
           onSearchColChange={blState.setSearchCol}
           advancedSort={blState.advancedSort}
           onAdvancedSort={blState.setAdvancedSort}
+          pageSize={blState.pageSize}
+          onPageSizeChange={blState.setPageSize}
         />
       )}
 
@@ -476,7 +478,6 @@ export default function BankLedger() {
             pageSize={blState.pageSize}
             total={sortedRows.length}
             onPageChange={blState.setPage}
-            onPageSizeChange={blState.setPageSize}
             variant="full"
           />
         </Card>

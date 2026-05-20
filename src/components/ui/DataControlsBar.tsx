@@ -30,7 +30,13 @@ interface DataControlsBarProps {
   // clear sort
   defaultSortKey?: string
   defaultSortDir?: SortDirection
+  // page size
+  pageSize?: number
+  onPageSizeChange?: (s: number) => void
+  pageSizeOptions?: number[]
 }
+
+const DEFAULT_PAGE_SIZE_OPTIONS = [25, 50, 100]
 
 export function DataControlsBar({
   sortFields, sortKey, sortDir, onSort,
@@ -39,6 +45,7 @@ export function DataControlsBar({
   searchColumns, searchCol = 'all', onSearchColChange,
   advancedSort = [], onAdvancedSort,
   defaultSortKey, defaultSortDir,
+  pageSize, onPageSizeChange, pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
 }: DataControlsBarProps) {
   const [sortOpen,       setSortOpen]       = useState(false)
   const [moreOpen,       setMoreOpen]       = useState(false)
@@ -317,6 +324,23 @@ export function DataControlsBar({
             </div>
           )}
         </div>
+
+        {/* Page size selector */}
+        {onPageSizeChange != null && pageSize != null && (
+          <>
+            <div className="h-4 w-px bg-gray-200 mx-0.5" aria-hidden="true" />
+            <div className="flex items-center gap-1 text-xs text-gray-500 whitespace-nowrap">
+              <span className="hidden sm:inline">Rows:</span>
+              <select
+                value={pageSize}
+                onChange={e => onPageSizeChange(parseInt(e.target.value, 10))}
+                className="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {pageSizeOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          </>
+        )}
 
         {/* Subtle divider */}
         {view !== undefined && onViewChange && (

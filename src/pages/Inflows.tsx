@@ -29,7 +29,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 
-const PAGE_SIZE = 25
+const DEFAULT_PAGE_SIZE = 25
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   refund:                   'Refund',
@@ -119,22 +119,22 @@ export default function Inflows() {
   // Clear selection on page change
   useEffect(() => { setSelectedIds(new Set()) }, [page])
 
+  // Data controls state
+  const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
+
   // Data
   const { data, count, loading, error, refetch } = useInflowTransactions({
     dateFrom:  dateFrom  || undefined,
     dateTo:    dateTo    || undefined,
     search:    debouncedSearch || undefined,
     page,
-    pageSize:  PAGE_SIZE,
+    pageSize:  infState.pageSize,
   })
 
   // Summary
   const total   = useMemo(() => data.reduce((s, r) => s + Number(r.amount), 0), [data])
   const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount))) : 0, [data])
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
-
-  // Data controls state
-  const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc' })
 
   // Client-side sort of current page
   const getValue = (r: InflowTransaction, k: string) => {
@@ -296,12 +296,14 @@ export default function Inflows() {
           onSearchColChange={infState.setSearchCol}
           advancedSort={infState.advancedSort}
           onAdvancedSort={infState.setAdvancedSort}
+          pageSize={infState.pageSize}
+          onPageSizeChange={infState.setPageSize}
         />
 
         {/* Compact pagination above content */}
         <PaginationBar
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={infState.pageSize}
           total={count}
           onPageChange={setPage}
           variant="compact"
@@ -380,7 +382,7 @@ export default function Inflows() {
         {infState.view === 'cards' && (
           <PaginationBar
             page={page}
-            pageSize={PAGE_SIZE}
+            pageSize={infState.pageSize}
             total={count}
             onPageChange={setPage}
             variant="full"
@@ -548,7 +550,7 @@ export default function Inflows() {
           </div>
           <PaginationBar
             page={page}
-            pageSize={PAGE_SIZE}
+            pageSize={infState.pageSize}
             total={count}
             onPageChange={setPage}
             variant="full"

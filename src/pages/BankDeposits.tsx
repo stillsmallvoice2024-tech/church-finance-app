@@ -482,6 +482,8 @@ export default function BankDeposits() {
             onSearchColChange={bdState.setSearchCol}
             advancedSort={bdState.advancedSort}
             onAdvancedSort={bdState.setAdvancedSort}
+            pageSize={bdState.pageSize}
+            onPageSizeChange={bdState.setPageSize}
           />
         </div>
         <PaginationBar
@@ -619,7 +621,6 @@ export default function BankDeposits() {
           pageSize={bdState.pageSize}
           total={sortedRows.length}
           onPageChange={bdState.setPage}
-          onPageSizeChange={bdState.setPageSize}
           variant="full"
         />
       </Card>

@@ -896,6 +896,8 @@ export default function CategoryLedger() {
                     onSearchColChange={ledgerViewState.setSearchCol}
                     advancedSort={ledgerViewState.advancedSort}
                     onAdvancedSort={ledgerViewState.setAdvancedSort}
+                    pageSize={ledgerViewState.pageSize}
+                    onPageSizeChange={ledgerViewState.setPageSize}
                   />
 
                   {/* Top pagination — compact */}
@@ -1076,7 +1078,6 @@ export default function CategoryLedger() {
                     pageSize={ledgerViewState.pageSize}
                     total={ledgerSorted.length}
                     onPageChange={ledgerViewState.setPage}
-                    onPageSizeChange={ledgerViewState.setPageSize}
                     variant="full"
                   />
                 </div>

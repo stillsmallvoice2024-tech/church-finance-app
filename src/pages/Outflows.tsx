@@ -29,7 +29,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 
-const PAGE_SIZE = 25
+const DEFAULT_PAGE_SIZE = 25
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   refund:              'Refund',
@@ -118,6 +118,9 @@ export default function Outflows() {
   // Clear selection on page change
   useEffect(() => { setSelectedIds(new Set()) }, [page])
 
+  // Data controls state
+  const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
+
   // Data
   const { data, count, loading, error, refetch } = useOutflowTransactions({
     dateFrom:  dateFrom  || undefined,
@@ -125,16 +128,13 @@ export default function Outflows() {
     stageCode: stageCode || undefined,
     search:    debouncedSearch || undefined,
     page,
-    pageSize:  PAGE_SIZE,
+    pageSize:  outState.pageSize,
   })
 
   // Summary (disbursed amounts)
   const total   = useMemo(() => data.reduce((s, r) => s + Number(r.amount_disbursed), 0), [data])
   const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount_disbursed))) : 0, [data])
   const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
-
-  // Data controls state
-  const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'date', defaultSortDir: 'desc' })
 
   // Client-side sort of current page
   const getOutValue = (r: OutflowTransaction, k: string) => {
@@ -304,12 +304,14 @@ export default function Outflows() {
           onSearchColChange={outState.setSearchCol}
           advancedSort={outState.advancedSort}
           onAdvancedSort={outState.setAdvancedSort}
+          pageSize={outState.pageSize}
+          onPageSizeChange={outState.setPageSize}
         />
 
         {/* Compact pagination above content */}
         <PaginationBar
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={outState.pageSize}
           total={count}
           onPageChange={setPage}
           variant="compact"
@@ -396,7 +398,7 @@ export default function Outflows() {
         {outState.view === 'cards' && (
           <PaginationBar
             page={page}
-            pageSize={PAGE_SIZE}
+            pageSize={outState.pageSize}
             total={count}
             onPageChange={setPage}
             variant="full"
@@ -552,7 +554,7 @@ export default function Outflows() {
           </div>
           <PaginationBar
             page={page}
-            pageSize={PAGE_SIZE}
+            pageSize={outState.pageSize}
             total={count}
             onPageChange={setPage}
             variant="full"
