@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, Download, TrendingUp, TrendingDown, Pencil } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -9,6 +9,7 @@ import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
+import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
@@ -92,6 +93,13 @@ export default function ForeignCurrency() {
     if (adv.length > 0) return multiSortRows(fxSearchFiltered, getFxValue, adv, FX_SORT_FIELDS)
     return sortRows(fxSearchFiltered, getFxValue, fxState.sortKey, fxState.sortDir, FX_SORT_FIELDS)
   }, [fxSearchFiltered, fxState.sortKey, fxState.sortDir, fxState.advancedSort])
+
+  useEffect(() => { fxState.setPage(0) }, [filterCcy, fxState.setPage])
+
+  const fxPage = useMemo(
+    () => fxSorted.slice(fxState.page * fxState.pageSize, (fxState.page + 1) * fxState.pageSize),
+    [fxSorted, fxState.page, fxState.pageSize],
+  )
 
   const handleExport = () => {
     exportCSV(
@@ -274,6 +282,8 @@ export default function ForeignCurrency() {
             onSearchColChange={fxState.setSearchCol}
             advancedSort={fxState.advancedSort}
             onAdvancedSort={fxState.setAdvancedSort}
+            pageSize={fxState.pageSize}
+            onPageSizeChange={fxState.setPageSize}
           />
         </div>
 
@@ -303,7 +313,7 @@ export default function ForeignCurrency() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {fxSorted.map(t => {
+                {fxPage.map(t => {
                   const isDeposit = t.deposit > 0
                   const meta      = FX_META.find(m => m.code === t.currency)!
                   return (
@@ -360,6 +370,13 @@ export default function ForeignCurrency() {
                 })}
               </tbody>
             </table>
+            <PaginationBar
+              page={fxState.page}
+              pageSize={fxState.pageSize}
+              total={fxSorted.length}
+              onPageChange={fxState.setPage}
+              variant="full"
+            />
           </div>
         )}
       </div>

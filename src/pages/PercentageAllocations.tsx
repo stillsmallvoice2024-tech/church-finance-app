@@ -6,6 +6,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
+import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
@@ -54,6 +55,11 @@ export default function PercentageAllocations() {
     if (adv.length > 0) return multiSortRows(filteredRows, getPcaValue, adv, PCA_SORT_FIELDS)
     return sortRows(filteredRows, getPcaValue, pcaState.sortKey, pcaState.sortDir, PCA_SORT_FIELDS)
   }, [filteredRows, pcaState.sortKey, pcaState.sortDir, pcaState.advancedSort])
+
+  const pcaPage = useMemo(
+    () => sortedConfigRows.slice(pcaState.page * pcaState.pageSize, (pcaState.page + 1) * pcaState.pageSize),
+    [sortedConfigRows, pcaState.page, pcaState.pageSize],
+  )
 
   return (
     <div className="space-y-5">
@@ -160,6 +166,8 @@ export default function PercentageAllocations() {
                 onSearchColChange={pcaState.setSearchCol}
                 advancedSort={pcaState.advancedSort}
                 onAdvancedSort={pcaState.setAdvancedSort}
+                pageSize={pcaState.pageSize}
+                onPageSizeChange={pcaState.setPageSize}
               />
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-500 flex items-center justify-between">
@@ -178,9 +186,9 @@ export default function PercentageAllocations() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {sortedConfigRows.map((row, i) => (
+                  {pcaPage.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 text-gray-400 text-xs">{i + 1}</td>
+                      <td className="px-5 py-3 text-gray-400 text-xs">{pcaState.page * pcaState.pageSize + i + 1}</td>
                       <td className="px-5 py-3 font-medium text-gray-800">{row.category_name}</td>
                       <td className="px-5 py-3 text-right">
                         <span className="font-mono font-semibold text-primary">
@@ -208,6 +216,13 @@ export default function PercentageAllocations() {
                 </tfoot>
               </table>
               </div>
+              <PaginationBar
+                page={pcaState.page}
+                pageSize={pcaState.pageSize}
+                total={sortedConfigRows.length}
+                onPageChange={pcaState.setPage}
+                variant="full"
+              />
             </div>
           )}
         </>

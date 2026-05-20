@@ -5,6 +5,7 @@ import { useAccountingYearStore } from '../store/accountingYearStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
@@ -143,6 +144,11 @@ export default function SpecificGivings() {
     return sortRows(filteredGrouped, getSgValue, sgState.sortKey, sgState.sortDir, SG_SORT_FIELDS)
   }, [filteredGrouped, sgState.sortKey, sgState.sortDir, sgState.advancedSort])
 
+  const sgPage = useMemo(
+    () => grouped.slice(sgState.page * sgState.pageSize, (sgState.page + 1) * sgState.pageSize),
+    [grouped, sgState.page, sgState.pageSize],
+  )
+
   const grandTotal = rows.reduce((s, r) => s + Number(r.amount), 0)
 
   return (
@@ -209,6 +215,8 @@ export default function SpecificGivings() {
             onSearchColChange={sgState.setSearchCol}
             advancedSort={sgState.advancedSort}
             onAdvancedSort={sgState.setAdvancedSort}
+            pageSize={sgState.pageSize}
+            onPageSizeChange={sgState.setPageSize}
           />
 
           {/* Grand total strip */}
@@ -218,7 +226,7 @@ export default function SpecificGivings() {
           </div>
 
           {/* Per-category cards */}
-          {grouped.map(group => (
+          {sgPage.map(group => (
             <div key={group.category} className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               {/* Category header */}
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
@@ -255,6 +263,13 @@ export default function SpecificGivings() {
               </table>
             </div>
           ))}
+          <PaginationBar
+            page={sgState.page}
+            pageSize={sgState.pageSize}
+            total={grouped.length}
+            onPageChange={sgState.setPage}
+            variant="full"
+          />
         </div>
       )}
     </div>

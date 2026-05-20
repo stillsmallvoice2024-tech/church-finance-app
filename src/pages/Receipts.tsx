@@ -5,6 +5,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useAllReceipts, type ReceiptEntityType, type Receipt } from '../hooks/useReceipts'
 import { formatDate } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
@@ -114,6 +115,11 @@ export default function Receipts() {
     return sortRows(filtered, getRcpValue, rcpState.sortKey, rcpState.sortDir, RCP_SORT_FIELDS)
   }, [filtered, rcpState.sortKey, rcpState.sortDir, rcpState.advancedSort])
 
+  const rcpPage = useMemo(
+    () => sortedReceipts.slice(rcpState.page * rcpState.pageSize, (rcpState.page + 1) * rcpState.pageSize),
+    [sortedReceipts, rcpState.page, rcpState.pageSize],
+  )
+
   const countFor = (key: Folder) =>
     key === 'all' ? receipts.length : receipts.filter(r => r.entity_type === key).length
 
@@ -221,6 +227,8 @@ export default function Receipts() {
               onSearchColChange={rcpState.setSearchCol}
               advancedSort={rcpState.advancedSort}
               onAdvancedSort={rcpState.setAdvancedSort}
+              pageSize={rcpState.pageSize}
+              onPageSizeChange={rcpState.setPageSize}
             />
 
           {loading ? (
@@ -238,7 +246,7 @@ export default function Receipts() {
             </Card>
           ) : !error && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {sortedReceipts.map(r => (
+              {rcpPage.map(r => (
                 <div
                   key={r.id}
                   className="bg-white border border-gray-100 rounded-xl p-3 space-y-2 hover:shadow-md transition-shadow group"
@@ -277,6 +285,15 @@ export default function Receipts() {
                 </div>
               ))}
             </div>
+          )}
+          {sortedReceipts.length > 0 && (
+            <PaginationBar
+              page={rcpState.page}
+              pageSize={rcpState.pageSize}
+              total={sortedReceipts.length}
+              onPageChange={rcpState.setPage}
+              variant="full"
+            />
           )}
         </div>
       </div>

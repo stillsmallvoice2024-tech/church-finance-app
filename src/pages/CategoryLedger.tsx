@@ -405,6 +405,14 @@ export default function CategoryLedger() {
     return sortRows(summarySearchFiltered, getSummaryValue, summaryViewState.sortKey, summaryViewState.sortDir, SUMMARY_SORT_FIELDS)
   }, [summarySearchFiltered, summaryViewState.sortKey, summaryViewState.sortDir, summaryViewState.advancedSort])
 
+  const summaryPage = useMemo(
+    () => summarySorted.slice(
+      summaryViewState.page * summaryViewState.pageSize,
+      (summaryViewState.page + 1) * summaryViewState.pageSize,
+    ),
+    [summarySorted, summaryViewState.page, summaryViewState.pageSize],
+  )
+
   const totals = useMemo(
     () => summarySorted.reduce(
       (acc, r) => ({
@@ -602,6 +610,7 @@ export default function CategoryLedger() {
           )}
 
           {!loading && !error && filteredRows.length > 0 && (
+            <>
             <div className="space-y-2">
               {/* Data Controls — immediately above table */}
               <DataControlsBar
@@ -619,6 +628,8 @@ export default function CategoryLedger() {
                 onSearchColChange={summaryViewState.setSearchCol}
                 advancedSort={summaryViewState.advancedSort}
                 onAdvancedSort={summaryViewState.setAdvancedSort}
+                pageSize={summaryViewState.pageSize}
+                onPageSizeChange={summaryViewState.setPageSize}
               />
 
               {summarySorted.length === 0 ? (
@@ -690,9 +701,9 @@ export default function CategoryLedger() {
                       {(() => {
                         const nameToGroupId = new Map(categories.map(c => [c.name, c.group_id]))
                         const groupedSections = groups
-                          .map(g => ({ group: g, rows: summarySorted.filter(r => nameToGroupId.get(r.name) === g.id) }))
+                          .map(g => ({ group: g, rows: summaryPage.filter(r => nameToGroupId.get(r.name) === g.id) }))
                           .filter(s => s.rows.length > 0)
-                        const ungroupedRows = summarySorted.filter(r => !nameToGroupId.get(r.name))
+                        const ungroupedRows = summaryPage.filter(r => !nameToGroupId.get(r.name))
 
                         const CategoryDataRow = ({ row }: { row: CategoryRow }) => (
                           <tr className="hover:bg-gray-50 transition-colors">
@@ -787,6 +798,14 @@ export default function CategoryLedger() {
                 </div>
               )}
             </div>
+            <PaginationBar
+              page={summaryViewState.page}
+              pageSize={summaryViewState.pageSize}
+              total={summarySorted.length}
+              onPageChange={summaryViewState.setPage}
+              variant="full"
+            />
+            </>
           )}
         </>
       )}

@@ -5,6 +5,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
+import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 
@@ -116,6 +117,11 @@ export default function SavingsPortions() {
     return sortRows(visibleRows, getSvpValue, svpState.sortKey, svpState.sortDir, SVP_SORT_FIELDS)
   }, [visibleRows, svpState.sortKey, svpState.sortDir, svpState.advancedSort])
 
+  const svpPage = useMemo(
+    () => sortedRows.slice(svpState.page * svpState.pageSize, (svpState.page + 1) * svpState.pageSize),
+    [sortedRows, svpState.page, svpState.pageSize],
+  )
+
   // Totals reflect visible (filtered) data
   const totalDeposited = visibleRows.reduce((s, r) => s + r.deposited, 0)
   const totalWithdrawn = visibleRows.reduce((s, r) => s + r.withdrawn, 0)
@@ -214,6 +220,8 @@ export default function SavingsPortions() {
               onSearchColChange={svpState.setSearchCol}
               advancedSort={svpState.advancedSort}
               onAdvancedSort={svpState.setAdvancedSort}
+              pageSize={svpState.pageSize}
+              onPageSizeChange={svpState.setPageSize}
             />
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
@@ -226,7 +234,7 @@ export default function SavingsPortions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {sortedRows.map(row => (
+                {svpPage.map(row => (
                   <tr key={row.category} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
                     <td className="px-5 py-3 text-right text-success font-mono">
@@ -255,6 +263,13 @@ export default function SavingsPortions() {
               </tfoot>
             </table>
           </div>
+          <PaginationBar
+            page={svpState.page}
+            pageSize={svpState.pageSize}
+            total={sortedRows.length}
+            onPageChange={svpState.setPage}
+            variant="full"
+          />
           </div>
         </>
       )}

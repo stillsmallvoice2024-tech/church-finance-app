@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment, useMemo, useRef } from 'react'
 import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
+import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
 import {
@@ -469,9 +470,11 @@ export default function Categories() {
     return sortRows(visible, (c, k) => k === 'name' ? c.name : c.name, catState.sortKey, catState.sortDir, CAT_SORT_FIELDS)
   }, [visible, catState.sortKey, catState.sortDir, catState.advancedSort])
 
+  const catPage = visibleSorted.slice(catState.page * catState.pageSize, (catState.page + 1) * catState.pageSize)
+
   // Bucket categories by group
   const groupMap = new Map<string | null, Category[]>()
-  for (const cat of visibleSorted) {
+  for (const cat of catPage) {
     const key = cat.group_id ?? null
     if (!groupMap.has(key)) groupMap.set(key, [])
     groupMap.get(key)!.push(cat)
@@ -522,6 +525,8 @@ export default function Categories() {
         onSearchColChange={catState.setSearchCol}
         advancedSort={catState.advancedSort}
         onAdvancedSort={catState.setAdvancedSort}
+        pageSize={catState.pageSize}
+        onPageSizeChange={catState.setPageSize}
       />
 
       {(error || groupsError) && (
@@ -701,6 +706,14 @@ export default function Categories() {
         editRecord={editRecord}
         groups={groups}
         onGroupCreated={refetchGroups}
+      />
+
+      <PaginationBar
+        page={catState.page}
+        pageSize={catState.pageSize}
+        total={visibleSorted.length}
+        onPageChange={catState.setPage}
+        variant="full"
       />
 
       <DeleteDialog
