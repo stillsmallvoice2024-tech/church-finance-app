@@ -19,7 +19,6 @@ import type { SortField } from '../utils/sortUtils'
 
 const SUMMARY_SORT_FIELDS: SortField[] = [
   { key: 'name',                label: 'Category',      type: 'text',    primary: true },
-  { key: 'percentage',          label: '% Alloc',       type: 'numeric', primary: true },
   { key: 'percentageAllocated', label: '₦ Allocated',   type: 'numeric', primary: true },
   { key: 'specificSeed',        label: 'Specific Seed', type: 'numeric', primary: true },
   { key: 'savingsNet',          label: 'Savings Net',   type: 'numeric', primary: true },
@@ -392,7 +391,6 @@ export default function CategoryLedger() {
 
   const getSummaryValue = (row: CategoryRow, key: string) => {
     if (key === 'name')                return row.name
-    if (key === 'percentage')          return row.percentage ?? -Infinity
     if (key === 'percentageAllocated') return row.percentageAllocated
     if (key === 'specificSeed')        return row.specificSeed
     if (key === 'savingsNet')          return row.savingsIn - row.savingsOut
@@ -408,12 +406,11 @@ export default function CategoryLedger() {
   const totals = useMemo(
     () => summarySorted.reduce(
       (acc, r) => ({
-        pct:   acc.pct   + (r.percentage ?? 0),
         alloc: acc.alloc + r.percentageAllocated,
         seed:  acc.seed  + r.specificSeed,
         sav:   acc.sav   + (r.savingsIn - r.savingsOut),
       }),
-      { pct: 0, alloc: 0, seed: 0, sav: 0 },
+      { alloc: 0, seed: 0, sav: 0 },
     ),
     [summarySorted],
   )
@@ -650,9 +647,9 @@ export default function CategoryLedger() {
                           activeSortDir={summaryViewState.sortDir}
                           onSort={summaryViewState.setSort}
                           rightAlign
-                          className="px-4 py-3"
+                          className="px-4 py-3 hidden md:table-cell"
                         >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> % Alloc</span>
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocated</span>
                         </SortableHeader>
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[2]}
@@ -662,20 +659,10 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-4 py-3 hidden md:table-cell"
                         >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocated</span>
-                        </SortableHeader>
-                        <SortableHeader
-                          field={SUMMARY_SORT_FIELDS[3]}
-                          activeSortKey={summaryViewState.sortKey}
-                          activeSortDir={summaryViewState.sortDir}
-                          onSort={summaryViewState.setSort}
-                          rightAlign
-                          className="px-4 py-3 hidden md:table-cell"
-                        >
                           <span className="flex items-center justify-end gap-1"><Gift className="w-3 h-3" /> Specific Seed</span>
                         </SortableHeader>
                         <SortableHeader
-                          field={SUMMARY_SORT_FIELDS[4]}
+                          field={SUMMARY_SORT_FIELDS[3]}
                           activeSortKey={summaryViewState.sortKey}
                           activeSortDir={summaryViewState.sortDir}
                           onSort={summaryViewState.setSort}
@@ -697,11 +684,6 @@ export default function CategoryLedger() {
                         const CategoryDataRow = ({ row }: { row: CategoryRow }) => (
                           <tr className="hover:bg-gray-50 transition-colors">
                             <td className="px-5 py-3 font-medium text-gray-800">{row.name}</td>
-                            <td className="px-4 py-3 text-right">
-                              {row.percentage !== null
-                                ? <span className="font-mono font-semibold text-primary">{Number(row.percentage).toFixed(1)}%</span>
-                                : <span className="text-gray-300 text-xs">—</span>}
-                            </td>
                             <td className="px-4 py-3 text-right hidden md:table-cell">
                               {row.percentageAllocated > 0
                                 ? <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated)}</span>
@@ -721,14 +703,12 @@ export default function CategoryLedger() {
                         )
 
                         const GroupSubtotalRow = ({ sectionRows, label }: { sectionRows: CategoryRow[]; label: string }) => {
-                          const sPct   = sectionRows.reduce((s, r) => s + (r.percentage ?? 0), 0)
                           const sAlloc = sectionRows.reduce((s, r) => s + r.percentageAllocated, 0)
                           const sSeed  = sectionRows.reduce((s, r) => s + r.specificSeed, 0)
                           const sSav   = sectionRows.reduce((s, r) => s + (r.savingsIn - r.savingsOut), 0)
                           return (
                             <tr className="bg-gray-50 border-t border-gray-100 text-xs font-semibold text-gray-600">
                               <td className="px-5 py-2 pl-8">↳ {label} subtotal</td>
-                              <td className="px-4 py-2 text-right font-mono text-primary">{sPct > 0 ? `${sPct.toFixed(1)}%` : '—'}</td>
                               <td className="px-4 py-2 text-right font-mono text-primary hidden md:table-cell">{sAlloc > 0 ? formatCurrency(sAlloc) : '—'}</td>
                               <td className="px-4 py-2 text-right font-mono text-amber-700 hidden md:table-cell">{sSeed > 0 ? formatCurrency(sSeed) : '—'}</td>
                               <td className={`px-5 py-2 text-right font-mono ${sSav >= 0 ? 'text-success' : 'text-danger'}`}>{sSav !== 0 ? formatCurrency(sSav) : '—'}</td>
@@ -741,7 +721,7 @@ export default function CategoryLedger() {
                             {groupedSections.map(({ group, rows: gRows }) => (
                               <Fragment key={group.id}>
                                 <tr className="bg-gray-100 border-y border-gray-200">
-                                  <td colSpan={5} className="px-5 py-2">
+                                  <td colSpan={4} className="px-5 py-2">
                                     <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{group.name}</span>
                                   </td>
                                 </tr>
@@ -768,9 +748,6 @@ export default function CategoryLedger() {
                           {summaryViewState.search && (
                             <span className="ml-1.5 font-normal text-gray-400">({summarySorted.length} shown)</span>
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-primary">
-                          {totals.pct > 0 ? `${totals.pct.toFixed(1)}%` : '—'}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-primary hidden md:table-cell">
                           {totals.alloc > 0 ? formatCurrency(totals.alloc) : '—'}
