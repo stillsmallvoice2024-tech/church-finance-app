@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { type OutflowTransaction } from '../../hooks/useTransactions'
 import { formatDate, formatCurrency } from '../../utils/formatters'
 
@@ -23,7 +24,7 @@ interface OutflowRowDetailProps {
   colSpan: number
 }
 
-export function OutflowRowDetail({ row, colSpan }: OutflowRowDetailProps) {
+export const OutflowRowDetail = memo(function OutflowRowDetail({ row, colSpan }: OutflowRowDetailProps) {
   const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
 
   return (
@@ -35,7 +36,7 @@ export function OutflowRowDetail({ row, colSpan }: OutflowRowDetailProps) {
           {row.transaction_id && (
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Txn ID</p>
-              <p className="text-xs font-mono text-gray-700 break-words line-clamp-2">{row.transaction_id}</p>
+              <p className="text-xs font-mono text-gray-700 break-all whitespace-normal select-text">{row.transaction_id}</p>
             </div>
           )}
 
@@ -85,4 +86,4 @@ export function OutflowRowDetail({ row, colSpan }: OutflowRowDetailProps) {
       </td>
     </tr>
   )
-}
+})

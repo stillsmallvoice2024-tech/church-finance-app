@@ -35,7 +35,7 @@ export interface OutflowTransaction {
   transaction_id: string | null
   bank_description: string | null
   description: string | null
-  cleaned_description: string  // computed client-side, never stored to DB
+  display_description: string  // computed client-side from bank_description; never stored to DB or used for matching
   amount_disbursed: number
   amount_refunded: number
   transfer_charge: number
@@ -191,10 +191,10 @@ export function useOutflowTransactions(
     } else {
       setData(
         (rows ?? []).map(r => ({
-          ...(r as Omit<OutflowTransaction, 'cleaned_description'>),
-          cleaned_description: normalizeNarration(
-            (r as { description?: string | null }).description ??
-            (r as { bank_description?: string | null }).bank_description
+          ...(r as Omit<OutflowTransaction, 'display_description'>),
+          display_description: normalizeNarration(
+            (r as { bank_description?: string | null }).bank_description ??
+            (r as { description?: string | null }).description
           ),
         })) as OutflowTransaction[]
       )

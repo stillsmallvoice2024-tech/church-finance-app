@@ -57,7 +57,7 @@ const OUT_SEARCH_COLS = [
 ]
 
 function outColVal(r: OutflowTransaction, col: string): string {
-  if (col === 'description')      return r.cleaned_description
+  if (col === 'description')      return r.display_description
   if (col === 'bank_description') return r.bank_description ?? ''
   if (col === 'bank_name')        return r.bank_name ?? ''
   if (col === 'transaction_id')   return r.transaction_id ?? ''
@@ -143,7 +143,7 @@ export default function Outflows() {
   const getOutValue = (r: OutflowTransaction, k: string) => {
     if (k === 'amount_disbursed') return Number(r.amount_disbursed)
     if (k === 'bank_name')        return r.bank_name ?? ''
-    if (k === 'description')      return r.cleaned_description
+    if (k === 'description')      return r.display_description
     return r.date
   }
 
@@ -220,7 +220,7 @@ export default function Outflows() {
       `outflows-${new Date().toISOString().slice(0, 10)}.csv`,
       ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Remarks'],
       data.map(r => [
-        r.date, r.transaction_id, r.cleaned_description, r.bank_description,
+        r.date, r.transaction_id, r.display_description, r.bank_description,
         r.amount_disbursed, r.amount_refunded, r.transfer_charge,
         Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge),
         r.stage_code_1, r.remarks,
@@ -360,7 +360,7 @@ export default function Outflows() {
                     </div>
                     {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
                     <div className="text-sm">
-                      <DescriptionCell id={`card-${row.id}`} text={row.cleaned_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      <DescriptionCell id={`card-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                     {row.bank_description && row.bank_description !== row.description && (
                       <div className="text-xs mt-1">
@@ -512,7 +512,7 @@ export default function Outflows() {
                           <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                           <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                           <td className="px-4 py-3 text-sm text-gray-800 max-w-[280px]">
-                            <DescriptionCell id={row.id} text={row.cleaned_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                            <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </td>
                           <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
                           <td className="px-2 py-3">
