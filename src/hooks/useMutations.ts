@@ -542,11 +542,9 @@ export function useDeleteAccount(): MutationHook<string> {
 // ── useAddCategory ─────────────────────────────────────────────────────────────
 
 export interface AddCategoryInput {
-  name:              string
-  description?:      string
-  starting_balance?: number
-  starting_balance_budget_portion?: string
-  group_id?:         string | null
+  name:         string
+  description?: string
+  group_id?:    string | null
 }
 
 export function useAddCategory(): MutationHook<AddCategoryInput, string> {
@@ -560,11 +558,9 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('categories').insert({
-          name:             input.name,
-          description:      input.description ?? null,
-          starting_balance: input.starting_balance ?? null,
-          starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
-          group_id:         input.group_id ?? null,
+          name:        input.name,
+          description: input.description ?? null,
+          group_id:    input.group_id ?? null,
         }).select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
@@ -581,13 +577,11 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
 // ── useUpdateCategory ──────────────────────────────────────────────────────────
 
 export interface UpdateCategoryInput {
-  id:                string
-  name:              string
-  description?:      string
-  starting_balance?: number
-  starting_balance_budget_portion?: string
-  group_id?:         string | null
-  is_hidden?:        boolean
+  id:          string
+  name:        string
+  description?: string
+  group_id?:   string | null
+  is_hidden?:  boolean
 }
 
 export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
@@ -605,14 +599,6 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
         description: input.description ?? null,
         group_id:    input.group_id ?? null,
         ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
-        // Only overwrite balance fields when explicitly supplied — prevents hide/show toggle
-        // (which omits these fields) from wiping the COB-mirrored starting_balance.
-        ...(input.starting_balance !== undefined
-          ? {
-              starting_balance:                input.starting_balance,
-              starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,
-            }
-          : {}),
       }
       console.log('[useUpdateCategory] payload', { id: input.id, updates })
       const { data: updatedRows, error: err } = await supabase

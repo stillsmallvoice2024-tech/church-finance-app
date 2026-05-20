@@ -18,14 +18,12 @@ export interface CategoryGroup {
 }
 
 export interface Category {
-  id:               string
-  name:             string
-  description:      string | null
-  starting_balance: number | null
-  starting_balance_budget_portion: string | null
-  group_id:         string | null
-  is_hidden:        boolean
-  created_at:       string
+  id:          string
+  name:        string
+  description: string | null
+  group_id:    string | null
+  is_hidden:   boolean
+  created_at:  string
 }
 
 export function useCategories() {
