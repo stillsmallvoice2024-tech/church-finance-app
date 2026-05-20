@@ -9,9 +9,9 @@
 | Table | Purpose |
 |---|---|
 | `profiles` | Extends auth.users; `full_name`, `username`, `role` |
-| `categories` | Budget categories; `starting_balance`, `group_id`, `is_hidden` |
+| `categories` | Budget categories; `group_id`, `is_hidden` — `starting_balance` and `starting_balance_budget_portion` columns dropped (see migration script) |
 | `category_groups` | Groups categories for ledger display |
-| `category_opening_balances` | Multi-portion opening balances; supersedes `categories.starting_balance` |
+| `category_opening_balances` | Multi-portion opening balances; **sole source of truth** for category opening balances |
 | `banks` | Bank accounts; `currency` (default NGN); starting balance cols: `starting_balance`, `starting_balance_category`, `starting_balance_budget_portion`, `starting_balance_alloc_type`, `starting_balance_allocations jsonb`; opening balance propagated to `inflow_transactions` as `transaction_type = 'balance_brought_forward'` via `src/utils/bankOpeningBalance.ts` |
 | `currencies` | User-managed currency list; code PK, name, symbol, flag emoji |
 | `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type`; versioning cols: `config_group_id` → `special_config_groups(id)`, `effective_from date`, `effective_to date`, `version_number int` |
@@ -177,13 +177,6 @@ if (!updatedRows?.length) throw new Error('Record not found or update silently r
 ```
 
 Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `useUpdateBank`, `useUpdateCategory`. Any new UPDATE hook must follow the same pattern.
-
-**Conditional optional columns in UPDATE also applies to `useUpdateCategory`**: `starting_balance` and `starting_balance_budget_portion` are omitted from the payload when not provided — prevents callers that only update `name` or `is_hidden` (e.g. hide/show toggle) from wiping the balance fields:
-```ts
-...(input.starting_balance !== undefined
-  ? { starting_balance: input.starting_balance, starting_balance_budget_portion: input.starting_balance_budget_portion ?? null }
-  : {})
-```
 
 **Row-count check on UPSERT**: same pattern applies — chain `.select('id')` and throw if `data?.length === 0`. PostgREST upserts silently no-op when RLS blocks the INSERT or UPDATE without returning an error. `upsertCategoryOpeningBalance` is the reference implementation.
 

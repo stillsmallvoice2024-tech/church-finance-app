@@ -71,17 +71,15 @@ This ensures special-config inflows (e.g. Easter offering) use the correct perce
 
 - Table: `category_opening_balances` — one row per category per budget portion
 - `UNIQUE(category_id, budget_portion)` constraint
-- **Sole authoritative source** for opening balances — `categories.starting_balance` is a legacy mirror only
-- All consumers (`CategoryLedger`, `SavingsPortions`, `SpecificGivings`, `useReportEngine`) read exclusively from `category_opening_balances`; no fallback to `categories.starting_balance` in any calculation path
-- `CategoryModal` pre-populates from COB table on edit; if COB is empty but `categories.starting_balance` exists, displays legacy value AND immediately fires a background `upsertCategoryOpeningBalance()` call to migrate it — no user action required
-- **On load**, `CategoryModal` filters out rows with `budget_portion = NULL` before populating `obRows` — rows with null portion are invisible to the `validRows` filter and would permanently block saves if loaded
-- **On save**, `CategoryModal.handleSubmit` mirrors the first valid ob-row into `categories.starting_balance` / `starting_balance_budget_portion` in the same UPDATE — backup for pre-migration installs; upsert to COB table still runs
-- **On save (stale cleanup)**, after the per-portion delete loop, also deletes null-`budget_portion` rows via `.is('budget_portion', null)` — `.eq('budget_portion', null)` matches the string `"null"` in PostgREST, not SQL NULL
-- **`upsertCategoryOpeningBalance()`** chains `.select('id')` and throws if `data?.length === 0` — catches silent RLS denials; `cob_write` policy must exist (run migration from Setup → Database if missing)
-- **Display priority**: `CategoryModal` and `CategoryRow` prefer `category_opening_balances` rows; fall back to `categories.starting_balance` only for display (not calculations)
+- **Sole and exclusive source** for category opening balances — `categories.starting_balance` and `categories.starting_balance_budget_portion` columns have been **dropped** from the DB
+- `Category` interface no longer includes balance fields; `AddCategoryInput` / `UpdateCategoryInput` have no balance fields
+- All consumers (`CategoryLedger`, `SavingsPortions`, `SpecificGivings`, `useReportEngine`) read exclusively from `category_opening_balances`
+- `CategoryModal` pre-populates from COB on edit; saves write only to COB (no legacy mirror)
+- **On save (stale cleanup)**, deletes stale portions then upserts new ones; null-`budget_portion` rows cleaned via `.is('budget_portion', null)` (`.eq()` matches the string `"null"`, not SQL NULL)
+- **`upsertCategoryOpeningBalance()`** chains `.select('id')` and throws if `data?.length === 0` — catches silent RLS denials; `cob_write` policy must exist
 - **Ob error state**: `CategoryModal` has a separate `obError` state for upsert errors — shown in the modal's error box
-- **`categoryHasLinkedData()`**: checks `category_opening_balances` (by `category_id`) in addition to transactions — prevents deleting categories with COB-only balances
-- **`useUpdateCategory` balance fields**: `starting_balance` and `starting_balance_budget_portion` are only included in the UPDATE payload when explicitly provided — callers that omit them (e.g. hide/show toggle) will not wipe the legacy field
+- **`categoryHasLinkedData()`**: checks `category_opening_balances` (count > 0) + inflow/outflow transactions
+- **Migration script**: `supabase/migrate_drop_category_starting_balance.sql` — backfills legacy values into COB then drops the two columns; run **after** deploying updated code
 - Helper functions in `useCategories.ts`: `upsertCategoryOpeningBalance()`, `deleteCategoryOpeningBalance()`, `fetchCategoryOpeningBalances()`
 
 ### Bank Ledger Balance Brought Forward Propagation
