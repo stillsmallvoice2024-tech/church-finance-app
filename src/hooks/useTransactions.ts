@@ -193,8 +193,8 @@ export function useOutflowTransactions(
         (rows ?? []).map(r => ({
           ...(r as Omit<OutflowTransaction, 'display_description'>),
           display_description: normalizeNarration(
-            (r as { bank_description?: string | null }).bank_description ??
-            (r as { description?: string | null }).description
+            (r as { description?: string | null }).description ??
+            (r as { bank_description?: string | null }).bank_description
           ),
         })) as OutflowTransaction[]
       )
