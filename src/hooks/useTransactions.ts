@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { normalizeNarration } from '../utils/normalizeNarration'
 
 // ── DB row types (mirror the exact columns in schema.sql) ──────────────────────
 
@@ -34,6 +35,7 @@ export interface OutflowTransaction {
   transaction_id: string | null
   bank_description: string | null
   description: string | null
+  display_description: string  // computed client-side from bank_description; never stored to DB or used for matching
   amount_disbursed: number
   amount_refunded: number
   transfer_charge: number
@@ -187,7 +189,15 @@ export function useOutflowTransactions(
     if (err) {
       setError(err.message)
     } else {
-      setData((rows ?? []) as OutflowTransaction[])
+      setData(
+        (rows ?? []).map(r => ({
+          ...(r as Omit<OutflowTransaction, 'display_description'>),
+          display_description: normalizeNarration(
+            (r as { bank_description?: string | null }).bank_description ??
+            (r as { description?: string | null }).description
+          ),
+        })) as OutflowTransaction[]
+      )
       setCount(total ?? 0)
     }
     setLoading(false)
