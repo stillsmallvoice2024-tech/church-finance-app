@@ -228,6 +228,63 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 
 ---
 
+## Narration Normalization (`normalizeNarration`)
+
+**Utility:** `src/utils/normalizeNarration.ts` — converts raw bank narration strings to clean `display_description` values for UI display.
+
+**Pipeline order** (each step feeds the next):
+1. `normalizeId()` — strip invisible Unicode, NFC, collapse whitespace
+2. `extractSlashSegments()` — if first slash-segment is a known channel code (`TRF`, `USSD`, `APP`, `WEB`, `MOB`, `NIP`, `FIP`), strip it and strip the last segment when ≥3 parts (assumed reference token)
+3. `extractSpecialPrefix()` — detect `VAT` or `COMM`/`COMMISSION` prefix; strip it and pass remainder to `extractTargetName()`
+4. `cleanCoreNarration()` — transfer pattern (`NIP TRANSFER TO …`), POS pattern, then general leading-keyword/trailing-noise strip
+
+**NEVER use `normalizeNarration` output for deduplication, reconciliation, or audit matching** — those paths must use the raw `description` / `bank_description` fields directly.
+
+### `extractSpecialPrefix` — COMM/VAT separator formats
+
+Handles both connector styles:
+- `COMM ON …` / `COMMISSION FOR …` / `VAT ON …` (keyword connector)
+- `COMM - …` / `VAT - …` (dash separator — common in GT Bank statements)
+
+Strip regexes:
+```
+VAT:  /^VAT(?:\s*-\s*|\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*)/i
+COMM: /^COMM(?:ISSION)?(?:\s*-\s*|\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*)/i
+```
+
+### `extractSemanticSlashSegment()` — slash narrations inside COMM/VAT context
+
+Called from `extractTargetName()`. Handles the pattern `To <bank>/Description/PayeeName` that appears in COMM/VAT remainders.
+
+**Rules:**
+- Strip leading segment if it matches `To <single-word>` (routing label: To pay, To Gtb, To Opay, To PalmPay, To Kuda, To Moniepoint, To Access, To Uba, To Zenith, To Firstbank, To Sterling, To Fidelity)
+- Strip trailing segment **only when** (a) a routing prefix was present, (b) ≥2 segments remain after prefix strip, and (c) `looksLikePersonOrBeneficiary()` returns true (2–5 uppercase-initial tokens, no digits)
+- Plain slash narrations without a routing prefix are **untouched** — `School Fees/May Session` stays unchanged
+
+**Key examples:**
+
+| Input (remainder after COMM/VAT strip) | Output |
+|---|---|
+| `To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti` | `Volunteers Tag - God-encounters Benin` |
+| `To Gtb/Fuel Purchase/John Doe` | `Fuel Purchase` |
+| `To Opay/Monthly Salary/Chinedu Okafor` | `Monthly Salary` |
+| `To Gtb/Monthly Salary` | `Monthly Salary` |
+| `School Fees/May Session` | `School Fees/May Session` (untouched) |
+
+**Full pipeline examples:**
+
+| Raw narration | `display_description` |
+|---|---|
+| `COMM - To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti` | `COMM - Volunteers Tag - God-encounters Benin` |
+| `VAT - To Gtb/Fuel Purchase/John Doe` | `VAT - Fuel Purchase` |
+| `COMMISSION ON TRANSFER TO JANE` | `COMM - Jane` |
+| `VAT ON NIP TRANSFER TO JOHN DOE` | `VAT - John Doe` |
+| `NIP TRANSFER TO JOHN DOE REF 48291 SUCCESSFUL` | `Transfer - John Doe` |
+| `POS PAYMT SHOPRITE IKEJA TERMINAL 22391` | `POS - Shoprite Ikeja` |
+| `TRF MOBILE/Fuel 30/Bvshrjrb` | `Fuel 30` |
+
+---
+
 ## `runImport` Safety Rules
 
 - **Always wrap the full `runImport` body in `try/finally`** with `setImporting(false)` in the `finally` block. Any unhandled exception (network error, `crypto.subtle` failure, Supabase timeout) otherwise leaves `importing=true` forever — spinner rolls indefinitely, no result shown, no way to recover without closing the modal.
