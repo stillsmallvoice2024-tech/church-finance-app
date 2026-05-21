@@ -333,6 +333,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [selectedInflowRis,  setSelectedInflowRis]  = useState<Set<number>>(new Set())
   const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
 
+  // ── Import pipeline: pre-computed IDs + duplicate detection ──────────────
+  // Set during proceedToRowConfig (Step 3→4 transition), BEFORE Step 4 opens.
+  // IDs are generated after description normalization so they are stable and
+  // deterministic across repeated imports of the same file.
+  const [precomputedInflowIds,  setPrecomputedInflowIds]  = useState<Record<number, string>>({})
+  const [precomputedOutflowIds, setPrecomputedOutflowIds] = useState<Record<number, string>>({})
+  // Row indices identified as DB duplicates — excluded from Step 4 configuration entirely.
+  const [duplicateRis,    setDuplicateRis]    = useState<Set<number>>(new Set())
+  const [dupCheckLoading, setDupCheckLoading] = useState(false)
+  const [dupStats,        setDupStats]        = useState<{ total: number; newCount: number; dupCount: number } | null>(null)
+  const [dupSkipOpen,     setDupSkipOpen]     = useState(false)
+
   // In-wizard dup check
 
   // Special configs (is_special = true) loaded when modal opens
@@ -383,6 +395,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowIncomeTypes({})
     setSelectedInflowRis(new Set())
     setSelectedOutflowRis(new Set())
+    setPrecomputedInflowIds({})
+    setPrecomputedOutflowIds({})
+    setDuplicateRis(new Set())
+    setDupCheckLoading(false)
+    setDupStats(null)
+    setDupSkipOpen(false)
     // NOTE: intentionally do NOT reset internalBank — persists across "Import Another"
   }, [])
 
@@ -462,58 +480,163 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // ── Step 3 → 4 (bank_statement) or Step 3 → 5 (fx_transactions) ─────────
 
-  // bank_statement: merge continuation rows, normalize descriptions, pre-populate rowStageCodes
-  const proceedToRowConfig = useCallback(() => {
+  // ── Import pipeline (bank_statement, Step 3→4 transition) ─────────────────
+  // Pipeline order (all before Step 4 opens):
+  //   1. Merge continuation rows
+  //   2. Normalize descriptions
+  //   3. Generate fallback transaction IDs AFTER normalization (stable, deterministic)
+  //   4. Query DB for ALL computed IDs (preset + fallback) to find duplicates
+  //   5. Mark duplicate rows → excluded from Step 4 entirely
+  //   6. Step 4 receives ONLY non-duplicate rows for configuration
+  const proceedToRowConfig = useCallback(async () => {
     if (!sheet || !config || targetTable !== 'bank_statement') return
+    setDupCheckLoading(true)
 
-    const s1ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
-    const s2ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_2')
-    const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
-    const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
-    const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
-    const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
-    const refIdx    = sheet.headers.findIndex(h => mapping[h] === 'reference')
+    try {
+      const s1ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
+      const s2ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_2')
+      const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
+      const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
+      const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
+      const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
+      const refIdx    = sheet.headers.findIndex(h => mapping[h] === 'reference')
 
-    // Merge continuation rows (no date, no amounts, has text) into preceding primary row,
-    // then normalizeId every description cell so Step 4 shows clean single-line text.
-    // runImport reuses these same rows — no second normalization pass needed.
-    const merged = (sheet.rows as unknown[][]).map(r => [...r])
-    for (let ri = 1; ri < merged.length; ri++) {
-      const row = merged[ri]
-      if (parseDate(row[dateIdx], dateFormat) !== null) continue
-      if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseDebitAmount(row[debitIdx]) > 0)) continue
-      const hasDesc = descIdx >= 0 && row[descIdx] != null && String(row[descIdx]).trim() !== ''
-      const hasRef  = refIdx  >= 0 && row[refIdx]  != null && String(row[refIdx]).trim()  !== ''
-      if (!hasDesc && !hasRef) continue
-      let prevRi = ri - 1
-      while (prevRi >= 0 && parseDate(merged[prevRi][dateIdx], dateFormat) === null) prevRi--
-      if (prevRi < 0) continue
-      const prev = merged[prevRi]
-      if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).replace(/\s+/g, ' ').trim()
-      if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).replace(/\s+/g, ' ').trim()
-    }
-    if (descIdx >= 0) {
-      for (const row of merged) {
-        const raw = row[descIdx]
-        if (raw != null && raw !== '') row[descIdx] = normalizeId(String(raw)) || raw
+      // ── Stage 1: Merge continuation rows + normalize descriptions ─────────
+      // runImport reuses processedRows — no second normalization pass needed.
+      const merged = (sheet.rows as unknown[][]).map(r => [...r])
+      for (let ri = 1; ri < merged.length; ri++) {
+        const row = merged[ri]
+        if (parseDate(row[dateIdx], dateFormat) !== null) continue
+        if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseDebitAmount(row[debitIdx]) > 0)) continue
+        const hasDesc = descIdx >= 0 && row[descIdx] != null && String(row[descIdx]).trim() !== ''
+        const hasRef  = refIdx  >= 0 && row[refIdx]  != null && String(row[refIdx]).trim()  !== ''
+        if (!hasDesc && !hasRef) continue
+        let prevRi = ri - 1
+        while (prevRi >= 0 && parseDate(merged[prevRi][dateIdx], dateFormat) === null) prevRi--
+        if (prevRi < 0) continue
+        const prev = merged[prevRi]
+        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).replace(/\s+/g, ' ').trim()
+        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).replace(/\s+/g, ' ').trim()
       }
-    }
-    setProcessedRows(merged)
+      if (descIdx >= 0) {
+        for (const row of merged) {
+          const raw = row[descIdx]
+          if (raw != null && raw !== '') row[descIdx] = normalizeId(String(raw)) || raw
+        }
+      }
+      setProcessedRows(merged)
 
-    const initial: Record<number, { s1: string; s2: string }> = {}
-    for (let ri = 0; ri < merged.length; ri++) {
-      const raw   = merged[ri]
-      const debit = debitIdx >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
-      if (debit <= 0) continue
-      const s1 = s1ColIdx >= 0 && raw[s1ColIdx] != null && raw[s1ColIdx] !== ''
-        ? String(raw[s1ColIdx]).trim() : ''
-      const s2 = s2ColIdx >= 0 && raw[s2ColIdx] != null && raw[s2ColIdx] !== ''
-        ? String(raw[s2ColIdx]).trim() : ''
-      initial[ri] = { s1, s2 }
+      // ── Stage 2: Pre-populate rowStageCodes for debit rows ───────────────
+      const initial: Record<number, { s1: string; s2: string }> = {}
+      for (let ri = 0; ri < merged.length; ri++) {
+        const raw   = merged[ri]
+        const debit = debitIdx >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
+        if (debit <= 0) continue
+        const s1 = s1ColIdx >= 0 && raw[s1ColIdx] != null && raw[s1ColIdx] !== ''
+          ? String(raw[s1ColIdx]).trim() : ''
+        const s2 = s2ColIdx >= 0 && raw[s2ColIdx] != null && raw[s2ColIdx] !== ''
+          ? String(raw[s2ColIdx]).trim() : ''
+        initial[ri] = { s1, s2 }
+      }
+      setRowStageCodes(initial)
+
+      // ── Stage 3: Generate fallback IDs AFTER normalization ────────────────
+      // Separate maps for inflow (transaction_ref) and outflow (transaction_id).
+      // Fallback IDs use normalized descriptions so they match on re-import.
+      // Bank-provided refs are used directly (no hashing needed).
+      const newInflowIds:  Record<number, string> = {}
+      const newOutflowIds: Record<number, string> = {}
+      const inflowIdList:  string[] = []
+      const outflowIdList: string[] = []
+
+      for (let ri = 0; ri < merged.length; ri++) {
+        const raw    = merged[ri]
+        const date   = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
+        if (!date) continue
+        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
+        const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
+        const desc   = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+        const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
+                         ? normalizeId(String(raw[refIdx])) || null : null
+
+        if (credit > 0) {
+          const id = ref ?? await generateFallbackTransactionId(
+            String(date), String(credit), desc, internalBank?.name ?? ''
+          )
+          newInflowIds[ri] = id
+          inflowIdList.push(id)
+        }
+        if (debit > 0) {
+          const id = ref ?? await generateFallbackTransactionId(
+            String(date), String(debit), desc, internalBank?.name ?? ''
+          )
+          newOutflowIds[ri] = id
+          outflowIdList.push(id)
+        }
+      }
+      setPrecomputedInflowIds(newInflowIds)
+      setPrecomputedOutflowIds(newOutflowIds)
+
+      // ── Stage 4: Duplicate detection against the database ─────────────────
+      // Query DB for ALL pre-computed IDs — both bank-provided and fallback.
+      // This catches duplicates for accounts with OR without preset transaction IDs.
+      const uniqueInflowIds  = [...new Set(inflowIdList)].filter(Boolean)
+      const uniqueOutflowIds = [...new Set(outflowIdList)].filter(Boolean)
+
+      const [inflowRes, outflowRes] = await Promise.all([
+        uniqueInflowIds.length > 0
+          ? supabase.from('inflow_transactions').select('transaction_ref').in('transaction_ref', uniqueInflowIds)
+          : Promise.resolve({ data: [] as { transaction_ref: string }[], error: null }),
+        uniqueOutflowIds.length > 0
+          ? supabase.from('outflow_transactions').select('transaction_id').in('transaction_id', uniqueOutflowIds)
+          : Promise.resolve({ data: [] as { transaction_id: string }[], error: null }),
+      ])
+
+      const existingInflowRefs = new Set(
+        (inflowRes.data ?? []).map(r => normalizeId(r.transaction_ref ?? '')).filter(Boolean)
+      )
+      const existingOutflowIds = new Set(
+        (outflowRes.data ?? []).map(r => normalizeId(r.transaction_id ?? '')).filter(Boolean)
+      )
+
+      // Merge in skipTxnIds from Import.tsx pre-stage (when user chose "Skip Duplicates")
+      if (skipTxnIds) {
+        for (const id of skipTxnIds) {
+          const normalized = normalizeId(id)
+          existingInflowRefs.add(normalized)
+          existingOutflowIds.add(normalized)
+        }
+      }
+
+      // ── Stage 5: Mark duplicate rows + compute stats ──────────────────────
+      // Only rows with valid dates and amounts are counted.
+      const newDuplicateRis = new Set<number>()
+      let totalCount = 0, dupCount = 0
+
+      for (let ri = 0; ri < merged.length; ri++) {
+        const raw    = merged[ri]
+        const date   = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
+        if (!date) continue
+        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
+        const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
+        if (credit === 0 && debit === 0) continue
+
+        totalCount++
+        let isDup = false
+        const inflowId  = newInflowIds[ri]
+        const outflowId = newOutflowIds[ri]
+        if (credit > 0 && inflowId  && existingInflowRefs.has(normalizeId(inflowId)))  isDup = true
+        if (debit  > 0 && outflowId && existingOutflowIds.has(normalizeId(outflowId))) isDup = true
+        if (isDup) { newDuplicateRis.add(ri); dupCount++ }
+      }
+
+      setDuplicateRis(newDuplicateRis)
+      setDupStats({ total: totalCount, newCount: totalCount - dupCount, dupCount })
+      setStep(4)
+    } finally {
+      setDupCheckLoading(false)
     }
-    setRowStageCodes(initial)
-    setStep(4)
-  }, [sheet, config, targetTable, mapping, dateFormat])
+  }, [sheet, config, targetTable, mapping, dateFormat, internalBank, skipTxnIds])
 
   const proceedToImport = useCallback(() => {
     if (!sheet || !config || !targetTable) return
@@ -568,6 +691,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const date = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
         if (!date) { skipped++; continue }
 
+        // Rows already in the database were excluded from Step 4 configuration.
+        if (duplicateRis.has(ri)) { skipped++; continue }
+
         const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx])      : 0
         const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
         const desc   = descIdx >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
@@ -602,9 +728,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {
-            const baseId = await generateFallbackTransactionId(
-              String(date), String(credit), desc ?? '', internalBank?.name ?? ''
-            )
+            // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
+            // Falls back to on-the-fly generation as a safety net.
+            const baseId = precomputedInflowIds[ri]
+              ?? await generateFallbackTransactionId(
+                String(date), String(credit), desc ?? '', internalBank?.name ?? ''
+              )
             const count = inflowIdCounts.get(baseId) ?? 0
             inflowIdCounts.set(baseId, count + 1)
             row.transaction_ref = count === 0 ? baseId : `${baseId}-${count}`
@@ -624,9 +753,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (!txnType && cfg) row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_id) {
-            const baseId = await generateFallbackTransactionId(
-              String(date), String(debit), desc ?? '', internalBank?.name ?? ''
-            )
+            // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
+            const baseId = precomputedOutflowIds[ri]
+              ?? await generateFallbackTransactionId(
+                String(date), String(debit), desc ?? '', internalBank?.name ?? ''
+              )
             const count = outflowIdCounts.get(baseId) ?? 0
             outflowIdCounts.set(baseId, count + 1)
             row.transaction_id = count === 0 ? baseId : `${baseId}-${count}`
@@ -790,7 +921,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       dateFormat, fxCurrency, batchPendingDeduction,
       rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
       internalBank,
-      rowIncomeTypes, incomeTypes])
+      rowIncomeTypes, incomeTypes,
+      duplicateRis, precomputedInflowIds, precomputedOutflowIds])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -1094,10 +1226,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               onNext={targetTable === 'bank_statement' ? proceedToRowConfig : proceedToImport}
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
-                return config.fields.some(f => f.required && !mappedFields.has(f.key))
+                return config.fields.some(f => f.required && !mappedFields.has(f.key)) || dupCheckLoading
               })()}
+              nextLoading={dupCheckLoading}
               nextLabel={targetTable === 'bank_statement'
-                ? `Configure Rows (${sheet.rowCount.toLocaleString()})`
+                ? dupCheckLoading
+                  ? 'Checking for duplicates…'
+                  : `Configure Rows (${sheet.rowCount.toLocaleString()})`
                 : `Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
             />
           </div>
@@ -1127,6 +1262,65 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
               )}
             </div>
+
+            {/* ── Duplicate detection summary ───────────────────────────── */}
+            {dupStats && (
+              <div className={`rounded-lg border px-4 py-3 text-sm ${
+                dupStats.dupCount > 0
+                  ? 'bg-amber-50 border-amber-200'
+                  : 'bg-green-50 border-green-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className={`flex items-center gap-2 font-medium ${
+                    dupStats.dupCount > 0 ? 'text-amber-800' : 'text-green-700'
+                  }`}>
+                    {dupStats.dupCount > 0
+                      ? <AlertTriangle className="w-4 h-4 shrink-0" />
+                      : <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    }
+                    {dupStats.dupCount > 0
+                      ? `${dupStats.total} rows · ${dupStats.dupCount} already in database · ${dupStats.newCount} new to configure`
+                      : `${dupStats.total} rows · all new — no duplicates found`
+                    }
+                  </div>
+                  {dupStats.dupCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDupSkipOpen(o => !o)}
+                      className="text-xs text-amber-600 hover:text-amber-800 underline ml-3 shrink-0"
+                    >
+                      {dupSkipOpen ? 'Hide skipped' : 'View skipped'}
+                    </button>
+                  )}
+                </div>
+                {dupStats.dupCount > 0 && dupSkipOpen && (() => {
+                  const _dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
+                  const _descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
+                  const _creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
+                  const _debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
+                  return (
+                    <div className="mt-3 pt-3 border-t border-amber-200 space-y-1 max-h-48 overflow-y-auto">
+                      {[...duplicateRis].sort((a, b) => a - b).map(ri => {
+                        const raw    = (processedRows ?? sheet.rows)[ri] as unknown[]
+                        const date   = _dateIdx   >= 0 ? (parseDate(raw[_dateIdx],   dateFormat) ?? '') : ''
+                        const desc   = _descIdx   >= 0 && raw[_descIdx] != null ? String(raw[_descIdx]).trim() : ''
+                        const credit = _creditIdx >= 0 ? parseNumber(raw[_creditIdx]) : 0
+                        const debit  = _debitIdx  >= 0 ? parseDebitAmount(raw[_debitIdx]) : 0
+                        return (
+                          <div key={ri} className="flex items-center gap-3 text-xs text-amber-700 py-1 border-b border-amber-100 last:border-0">
+                            <span className="font-mono text-amber-400 shrink-0 w-5 text-right">{ri + 1}</span>
+                            <span className="text-amber-500 shrink-0">{date}</span>
+                            <span className="truncate flex-1 min-w-0">{desc || '—'}</span>
+                            {credit > 0 && <span className="tabular-nums shrink-0 text-green-700">+₦{credit.toLocaleString()}</span>}
+                            {debit  > 0 && <span className="tabular-nums shrink-0 text-red-700">−₦{debit.toLocaleString()}</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="flex items-center justify-between border-b border-gray-200">
@@ -1174,8 +1368,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                   debit:  debitIdx  >= 0 ? parseDebitAmount(r[debitIdx]) : 0,
                 }
               })
-              const creditRows = allRows.filter(r => r.credit > 0)
-              const debitRows  = allRows.filter(r => r.debit  > 0)
+              // Exclude duplicate rows — identified by DB check before Step 4 opened.
+              // Only genuinely new transactions are shown for configuration.
+              const creditRows = allRows.filter(r => r.credit > 0 && !duplicateRis.has(r.ri))
+              const debitRows  = allRows.filter(r => r.debit  > 0 && !duplicateRis.has(r.ri))
 
               // ── Inflow tab ───────────────────────────────────────────────
               if (bsConfigTab === 'inflow') {
@@ -1641,7 +1837,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               step={step}
               onBack={() => setStep(3)}
               onNext={proceedToImport}
-              nextLabel={`Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
+              nextLabel={`Preview & Import (${(dupStats?.newCount ?? sheet.rowCount).toLocaleString()} rows)`}
             />
           </div>
         )}
@@ -1682,8 +1878,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             {/* Summary */}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-lg bg-gray-50 px-3 py-3">
-                <div className="text-2xl font-bold text-gray-900">{sheet.rowCount.toLocaleString()}</div>
-                <div className="text-xs text-gray-500 mt-0.5">Rows to import</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {(dupStats?.newCount ?? sheet.rowCount).toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Rows to import{dupStats?.dupCount ? ` (${dupStats.dupCount} skipped)` : ''}
+                </div>
               </div>
               <div className="rounded-lg bg-gray-50 px-3 py-3">
                 <div className="text-2xl font-bold text-gray-900">
