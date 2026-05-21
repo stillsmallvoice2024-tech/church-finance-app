@@ -103,6 +103,42 @@ Row indices are preserved — per-row UI state (income type, stage codes, alloca
 
 ---
 
+## Import Pipeline Order (`proceedToRowConfig`, bank_statement mode)
+
+`proceedToRowConfig` is **async** — it runs a full duplicate-detection pipeline before advancing to Step 4. Step 4 receives **only genuinely new transactions**.
+
+Pipeline stages (all before Step 4 opens):
+1. **Merge continuation rows** — append overflow narration/reference rows to preceding dated row
+2. **Normalize descriptions** — `normalizeId()` on every description cell; stored in `processedRows`
+3. **Pre-populate `rowStageCodes`** — seed stage codes from mapped spreadsheet columns for debit rows
+4. **Generate fallback IDs AFTER normalization** — SHA-256 hashes from normalized description + date + amount + bank; stored in `precomputedInflowIds` / `precomputedOutflowIds` (separate maps for inflow `transaction_ref` and outflow `transaction_id`)
+5. **Query DB** — `Promise.all` over `inflow_transactions.transaction_ref IN (...)` and `outflow_transactions.transaction_id IN (...)` for all computed IDs
+6. **Merge `skipTxnIds`** from `Import.tsx` pre-stage into existing-ID sets
+7. **Build `duplicateRis: Set<number>`** — row indices confirmed as DB duplicates
+8. **Compute `dupStats`** — `{ total, newCount, dupCount }` shown in Step 4 summary banner
+9. **Advance to Step 4** — only after all above completes
+
+**State set by this pipeline:**
+
+| State | Type | Purpose |
+|---|---|---|
+| `precomputedInflowIds` | `Record<number, string>` | Per-row inflow ID (bank ref or fallback hash) |
+| `precomputedOutflowIds` | `Record<number, string>` | Per-row outflow ID (bank ref or fallback hash) |
+| `duplicateRis` | `Set<number>` | Row indices excluded from Step 4 and `runImport` |
+| `dupStats` | `{ total, newCount, dupCount }` | Drives summary banner in Step 4 |
+| `dupCheckLoading` | `boolean` | Loading spinner on Step 3 NavButton during DB check |
+
+**Step 4 filtering:** `creditRows` and `debitRows` in the Step 4 IIFE filter `!duplicateRis.has(r.ri)` — duplicates are not rendered, not configurable, not counted.
+
+**`runImport` integration:**
+- Skips `duplicateRis.has(ri)` rows (`skipped++; continue`) at loop entry
+- Uses `precomputedInflowIds[ri] ?? generateFallbackTransactionId(...)` — same ID used for dedup, preventing drift; within-batch collision suffix logic still applies
+- `allSkipIds` (from `skipTxnIds`) retained as safety net
+
+**UX in Step 4:** Amber/green summary banner — "X rows · Y already in database · Z new to configure". Collapsible "View skipped" shows each duplicate's row number, date, description, and amount. Step 3 NavButton shows "Checking for duplicates…" spinner during async check.
+
+---
+
 ## Supported File Types
 
 - **Excel** — parsed with `xlsx`
@@ -156,8 +192,11 @@ export function normalizeId(raw: string): string {
 |---|---|
 | `Import.tsx` pre-modal check | File row extraction → `normalizeId(String(raw))` |
 | `Import.tsx` pre-modal check | DB results → `normalizeId(r.transaction_ref/id)` before push to `found[]` |
+| `ImportModal.tsx` `proceedToRowConfig` | Bank-provided ref → `normalizeId(String(raw[refIdx])) \|\| null` |
+| `ImportModal.tsx` `proceedToRowConfig` | DB result normalization → `normalizeId(r.transaction_ref/id)` |
+| `ImportModal.tsx` `proceedToRowConfig` | `skipTxnIds` merge → `normalizeId(id)` per entry |
 | `ImportModal.tsx` `runImport` | File ref extraction → `normalizeId(String(raw[refIdx])) \|\| null` |
-| `ImportModal.tsx` `runImport` | `skipTxnIds` → `[...skipTxnIds].map(normalizeId)` |
+| `ImportModal.tsx` `runImport` | `skipTxnIds` safety net → `[...skipTxnIds].map(normalizeId)` |
 
 **Why:** Excel cells carry invisible Unicode (zero-width spaces, soft hyphen, NBSP, BOM) that survive `.trim()`. `Set.has()` is byte-exact — a visually-identical ID with a hidden character fails dedup silently.
 
@@ -179,7 +218,9 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 - Output is a hex string — no invisible chars; `normalizeId` is not required on its output
 
 **Import wizard (`ImportModal.tsx`):**
-- Applied inside the row-building loop via `if (!row.transaction_ref)` / `if (!row.transaction_id)`
+- **Generated in `proceedToRowConfig` (Step 3→4), not in `runImport`** — IDs are computed after description normalization, before Step 4 renders, and stored in `precomputedInflowIds` / `precomputedOutflowIds`.
+- This ensures the same ID is used for both duplicate detection (Step 3→4 DB query) and actual insert (`runImport`), preventing drift.
+- `runImport` reads `precomputedInflowIds[ri]` / `precomputedOutflowIds[ri]`; falls back to on-the-fly generation as a safety net.
 - **Within-batch collision suffix:** if two rows in the same batch hash identically, the second gets `hash-1`, third `hash-2`, etc. (tracked by `inflowIdCounts`/`outflowIdCounts` Maps). Suffixed IDs flag potential duplicates for manual review.
 - **Result panel visibility:** `ImportResult` carries `fallbackIdCount: number` and `collisions: string[]`. After import: blue line shows fallback count; amber section lists each collision-suffixed row (`type | date | amount | description | …last-10-chars-of-id`). Both hidden when zero.
 
@@ -190,8 +231,9 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 ## `runImport` Safety Rules
 
 - **Always wrap the full `runImport` body in `try/finally`** with `setImporting(false)` in the `finally` block. Any unhandled exception (network error, `crypto.subtle` failure, Supabase timeout) otherwise leaves `importing=true` forever — spinner rolls indefinitely, no result shown, no way to recover without closing the modal.
-- **Duplicate skip set** (`allSkipIds`) is built exclusively from `skipTxnIds` (passed from `Import.tsx` pre-import check). No in-wizard DB queries during import. `allSkipIds = new Set(skipTxnIds ? [...skipTxnIds].map(normalizeId) : [])`.
-- **In-wizard dup check removed.** The previous `proceedToImport` async DB queries and cross-batch check were removed — they blocked the Start Import button via `wizardDupLoading` and could hang indefinitely on slow DB responses.
+- **Primary dedup:** `duplicateRis.has(ri)` skip at loop entry — rows identified by the Step 3→4 DB check are skipped before any processing.
+- **Safety net:** `allSkipIds` built from `skipTxnIds` (Import.tsx pre-stage) filters any remaining duplicates after `inflowRows`/`outflowRows` are built. Redundant with `duplicateRis` in normal flow but retained for edge cases.
+- **Precomputed IDs:** `precomputedInflowIds[ri] ?? generateFallbackTransactionId(...)` — uses the ID generated at Step 3→4 transition; falls back to on-the-fly generation if missing. Within-batch collision suffix (`-1`, `-2`) still applies.
 
 ---
 
