@@ -166,9 +166,47 @@ const TRANSFER_ROUTING_PREFIX_RE = /^to\s+\S+$/i
 // no digits. Matches personal names ("Alice Oyepeju Adeoti", "John Doe") and
 // entity names ("Adebayo Enterprises Ltd").
 function looksLikePersonOrBeneficiary(s: string): boolean {
-  if (/\d/.test(s)) return false
-  const words = s.trim().split(/\s+/)
-  return words.length >= 2 && words.length <= 5 && words.every(w => /^[A-Z]/i.test(w))
+if (!s || /\d/.test(s)) return false
+
+const words = s.trim().split(/\s+/)
+if (words.length < 2 || words.length > 5) return false
+
+// Strong business/activity keywords → NOT a beneficiary
+const BUSINESS_HINTS = [
+'fuel',
+'purchase',
+'subscription',
+'salary',
+'school',
+'fees',
+'tag',
+'event',
+'church',
+'tithes',
+'offering',
+'rent',
+'invoice',
+'payment',
+'shop',
+'supermarket',
+'ikeja',
+'benin',
+'conference',
+'donation',
+]
+
+const lower = s.toLowerCase()
+
+if (BUSINESS_HINTS.some(k => lower.includes(k))) {
+return false
+}
+
+// Personal-name heuristic:
+// 2–4 words
+// mostly alphabetic
+// each starts uppercase
+// avoids slash/business phrases
+return words.every(w => /^[A-Z][a-z'.-]+$/.test(w))
 }
 
 function extractSemanticSlashSegment(s: string): string {
@@ -192,7 +230,7 @@ function extractSemanticSlashSegment(s: string): string {
     remaining.pop()
   }
 
-  return remaining.length > 0 ? remaining.join(' / ') : s
+  return remaining.length > 0 ? remaining.join(' - ') : s
 }
 
 // ── Target extractor (for use inside VAT / COMM context) ─────────────────────
