@@ -43,7 +43,7 @@ export default function PercentageAllocations() {
     const q = pcaState.search.trim().toLowerCase()
     const base = config?.rows ?? []
     return q ? base.filter(r => r.category_name.toLowerCase().includes(q)) : base
-  }, [config?.rows, pcaState.search])
+  }, [config?.rows, pcaState.search, pcaState.searchCol])
 
   const getPcaValue = (r: { category_name: string; percentage?: number }, k: string) => {
     if (k === 'percentage') return Number(r.percentage ?? 0)

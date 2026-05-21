@@ -102,7 +102,7 @@ export default function SavingsPortions() {
   const visibleRows = useMemo(() => {
     const q = svpState.search.trim().toLowerCase()
     return q ? rows.filter(r => r.category.toLowerCase().includes(q)) : rows
-  }, [rows, svpState.search])
+  }, [rows, svpState.search, svpState.searchCol])
 
   const getSvpValue = (r: SavingsRow, k: string) => {
     if (k === 'category') return r.category

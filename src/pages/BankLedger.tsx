@@ -58,6 +58,8 @@ const BL_SORT_FIELDS: SortField[] = [
 const BL_SEARCH_COLS = [
   { key: 'all',         label: 'All Columns' },
   { key: 'description', label: 'Description' },
+  { key: 'inflow',      label: 'Inflow' },
+  { key: 'outflow',     label: 'Outflow' },
 ]
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -174,7 +176,14 @@ export default function BankLedger() {
     const q = blState.search.trim().toLowerCase()
     const col = blState.searchCol
     if (!q) return dateFiltered
-    if (col === 'all') return dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
+    if (col === 'all') return dateFiltered.filter(r =>
+      r.description?.toLowerCase().includes(q) ||
+      (r.inflow  > 0 && String(r.inflow).includes(q)) ||
+      (r.outflow > 0 && String(r.outflow).includes(q))
+    )
+    if (col === 'description') return dateFiltered.filter(r => (r.description ?? '').toLowerCase().includes(q))
+    if (col === 'inflow')  return dateFiltered.filter(r => r.inflow  > 0 && String(r.inflow).includes(q))
+    if (col === 'outflow') return dateFiltered.filter(r => r.outflow > 0 && String(r.outflow).includes(q))
     return dateFiltered.filter(r => (r.description ?? '').toLowerCase().includes(q))
   }, [dateFiltered, blState.search, blState.searchCol])
 

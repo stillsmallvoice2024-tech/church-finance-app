@@ -102,7 +102,7 @@ export default function Receipts() {
     const q = rcpState.search.trim().toLowerCase()
     if (!q) return receipts
     return receipts.filter(r => r.file_name.toLowerCase().includes(q))
-  }, [receipts, rcpState.search])
+  }, [receipts, rcpState.search, rcpState.searchCol])
 
   const getRcpValue = (r: Receipt, k: string) => {
     if (k === 'file_name') return r.file_name

@@ -385,9 +385,10 @@ export default function CategoryLedger() {
     () => {
       const lower = summaryViewState.search.toLowerCase().trim()
       if (!lower) return filteredRows
+      // 'all' and 'name' both search category name (only text column)
       return filteredRows.filter(r => r.name.toLowerCase().includes(lower))
     },
-    [filteredRows, summaryViewState.search],
+    [filteredRows, summaryViewState.search, summaryViewState.searchCol],
   )
 
   const getSummaryValue = (row: CategoryRow, key: string) => {
@@ -444,11 +445,12 @@ export default function CategoryLedger() {
     () => {
       const lower = ledgerViewState.search.toLowerCase().trim()
       if (!lower) return ledgerRows
+      // 'all' and 'description' both search description (only text column)
       return ledgerRows.filter(r =>
         r.id === 'bal-bf' || r.description.toLowerCase().includes(lower)
       )
     },
-    [ledgerRows, ledgerViewState.search],
+    [ledgerRows, ledgerViewState.search, ledgerViewState.searchCol],
   )
 
   const getLedgerValue = (row: LedgerRow, key: string) => {

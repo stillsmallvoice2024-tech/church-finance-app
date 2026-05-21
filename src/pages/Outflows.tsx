@@ -129,7 +129,7 @@ export default function Outflows() {
     dateFrom:  dateFrom  || undefined,
     dateTo:    dateTo    || undefined,
     stageCode: stageCode || undefined,
-    search:    debouncedSearch || undefined,
+    search:    (outState.searchCol === 'all' ? debouncedSearch : '') || undefined,
     page,
     pageSize:  outState.pageSize,
   })
