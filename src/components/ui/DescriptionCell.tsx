@@ -28,7 +28,7 @@ export function DescriptionCell({
         role="button"
         tabIndex={0}
         aria-label={text}
-        className={`${textCls} truncate cursor-pointer select-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50`}
+        className={`${textCls} truncate cursor-pointer select-text rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50`}
         style={{ touchAction: 'manipulation' }}
         onPointerEnter={e => { if (e.pointerType === 'mouse') show(e.currentTarget) }}
         onPointerLeave={e => { if (e.pointerType === 'mouse') setTooltip(null) }}

@@ -9,12 +9,12 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   intrabank_transfer: 'Intrabank Transfer',
 }
 
-function DetailField({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
+function DetailField({ label, value, mono = false, valueCls = '' }: { label: string; value: React.ReactNode; mono?: boolean; valueCls?: string }) {
   if (value === null || value === undefined || value === '' || value === false) return null
   return (
     <div className="min-w-0">
       <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">{label}</p>
-      <p className={`text-xs text-gray-700 break-words${mono ? ' font-mono' : ''}`}>{value}</p>
+      <p className={`text-xs text-gray-700 break-words select-text${mono ? ' font-mono' : ''}${valueCls ? ' ' + valueCls : ''}`}>{value}</p>
     </div>
   )
 }
@@ -41,8 +41,19 @@ export const OutflowRowDetail = memo(function OutflowRowDetail({ row, colSpan }:
           )}
 
           <DetailField label="Recorded" value={row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null} />
-          <DetailField label="Bank Narration" value={row.bank_description} />
-          <DetailField label="Remarks" value={row.remarks} />
+          {row.display_description && (
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Display Description</p>
+              <p className="text-xs text-gray-700 break-all whitespace-normal select-text">{row.display_description}</p>
+            </div>
+          )}
+          {row.bank_description && (
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Raw Bank Narration</p>
+              <p className="text-xs text-gray-700 break-all whitespace-normal select-text">{row.bank_description}</p>
+            </div>
+          )}
+          <DetailField label="Remarks" value={row.remarks} valueCls="break-all whitespace-normal" />
 
           {Number(row.amount_refunded) > 0 && (
             <DetailField label="Refunded (₦)" value={formatCurrency(Number(row.amount_refunded))} mono />
