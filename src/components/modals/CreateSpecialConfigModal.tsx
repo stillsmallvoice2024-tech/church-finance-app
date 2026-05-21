@@ -152,7 +152,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     try {
       if (mode === 'new_group') {
         const prevLinked = incomeTypeOptions.find(o => o.special_config_id != null && o.id === selectedIncomeTypeId)
-        const gId = await createGroupWithFirstVersion({
+        const { groupId, config } = await createGroupWithFirstVersion({
           name:            name.trim(),
           allocation_type: allocType,
           total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
@@ -162,8 +162,8 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           income_type_id:  selectedIncomeTypeId || null,
           prev_income_type_id: prevLinked?.id ?? null,
         })
-        setSavedGroupId(gId)
-        onSaved()
+        setSavedGroupId(groupId)
+        onSaved(config)
       } else {
         if (!group) throw new Error('Group is required for new_version mode')
         const vId = await createNewVersion({
