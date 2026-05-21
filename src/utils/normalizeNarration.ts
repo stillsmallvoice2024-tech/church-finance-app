@@ -39,18 +39,22 @@ function extractSlashSegments(s: string): string {
 //
 // "VAT ON NIP TRANSFER TO JOHN DOE"        → { label: 'VAT',  remainder: 'NIP TRANSFER TO JOHN DOE' }
 // "COMMISSION FOR NIP TRANSFER TO JOHN"    → { label: 'COMM', remainder: 'NIP TRANSFER TO JOHN' }
+// "VAT - To Gtb/Fuel Purchase/John Doe"    → { label: 'VAT',  remainder: 'To Gtb/Fuel Purchase/John Doe' }
+// "COMM - To pay/Volunteers Tag/Alice A."  → { label: 'COMM', remainder: 'To pay/Volunteers Tag/Alice A.' }
 
 function extractSpecialPrefix(s: string): { label: string; remainder: string } | null {
   if (/^VAT\b/i.test(s)) {
     return {
       label: 'VAT',
-      remainder: s.replace(/^VAT\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*/i, '').trim(),
+      // handles "VAT ON …", "VAT FOR …", and "VAT - …" separator formats
+      remainder: s.replace(/^VAT(?:\s*-\s*|\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*)/i, '').trim(),
     }
   }
   if (/^COMM(?:ISSION)?\b/i.test(s)) {
     return {
       label: 'COMM',
-      remainder: s.replace(/^COMM(?:ISSION)?\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*/i, '').trim(),
+      // handles "COMM ON …", "COMMISSION FOR …", and "COMM - …" separator formats
+      remainder: s.replace(/^COMM(?:ISSION)?(?:\s*-\s*|\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*)/i, '').trim(),
     }
   }
   return null
@@ -132,28 +136,63 @@ function stripLeadingKeywords(s: string): string {
   return s.trim()
 }
 
-// ── "To [word]/" prefix handler for COMM/VAT remainders ──────────────────────
-// When a COMM/VAT remainder contains slash-segments starting with "To [word]",
-// strip that transfer-to prefix and the final name/ref segment.
+// ── Semantic slash-segment extractor ─────────────────────────────────────────
+// For slash-separated narrations that contain a leading transfer/channel prefix
+// ("To pay", "To Gtb", "To Opay", "To Kuda", etc.) and/or a trailing
+// payee/beneficiary name.
 //
-// "To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti"
-//   → "Volunteers Tag - God-encounters Benin"
-// "To Gtb/Monthly Salary/REF123"
-//   → "Monthly Salary"
-// "To Gtb/Monthly Salary"      (2 parts, no trailing ref)
-//   → "Monthly Salary"
+// Rules:
+//   1. If the first segment is "To <word>" (routing label), strip it.
+//   2. If a prefix was stripped AND ≥2 segments remain AND the last segment
+//      looks like a person/beneficiary name, strip the last segment too.
+//   3. Plain slash narrations with no routing prefix are returned unchanged
+//      (safety rule — "School Fees/May Session" must not be modified).
+//
+// Examples:
+//   "To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti"
+//     → "Volunteers Tag - God-encounters Benin"
+//   "To Gtb/Fuel Purchase/John Doe"       → "Fuel Purchase"
+//   "To Opay/Monthly Salary/Chinedu Okafor" → "Monthly Salary"
+//   "To Gtb/Monthly Salary"               → "Monthly Salary"  (2 parts, no trailing strip)
+//   "To pay/Church Tithes"                → "Church Tithes"
+//   "School Fees/May Session"             → "School Fees/May Session"  (no prefix → untouched)
 
-const TO_WORD_PREFIX_RE = /^to\s+\S+$/i  // "To pay", "To Gtb", "To bank" — single word after "To"
+// Any segment that is "To" followed by exactly one word — routing/channel label
+// Covers: To pay, To Gtb, To Opay, To PalmPay, To Kuda, To Moniepoint,
+//         To Access, To Uba, To Zenith, To Firstbank, To Sterling, To Fidelity
+const TRANSFER_ROUTING_PREFIX_RE = /^to\s+\S+$/i
 
-function extractToPaySlash(s: string): string {
+// Heuristic: 2–5 space-separated tokens each starting with an uppercase letter,
+// no digits. Matches personal names ("Alice Oyepeju Adeoti", "John Doe") and
+// entity names ("Adebayo Enterprises Ltd").
+function looksLikePersonOrBeneficiary(s: string): boolean {
+  if (/\d/.test(s)) return false
+  const words = s.trim().split(/\s+/)
+  return words.length >= 2 && words.length <= 5 && words.every(w => /^[A-Z]/i.test(w))
+}
+
+function extractSemanticSlashSegment(s: string): string {
   if (!s.includes('/')) return s
   const parts = s.split('/').map(p => p.trim()).filter(Boolean)
   if (parts.length < 2) return s
-  if (!TO_WORD_PREFIX_RE.test(parts[0])) return s
-  const rest = parts.slice(1)
-  // Strip last segment when 2+ remain (assumed payee name or reference)
-  if (rest.length > 1) rest.pop()
-  return rest.join(' / ')
+
+  const hasTransferPrefix = TRANSFER_ROUTING_PREFIX_RE.test(parts[0])
+  const start = hasTransferPrefix ? 1 : 0
+  if (start >= parts.length) return s
+
+  const remaining = parts.slice(start)
+
+  // Only strip trailing payee when a transfer prefix was present,
+  // at least 2 segments remain, and the last looks like a person/beneficiary.
+  if (
+    hasTransferPrefix &&
+    remaining.length > 1 &&
+    looksLikePersonOrBeneficiary(remaining[remaining.length - 1])
+  ) {
+    remaining.pop()
+  }
+
+  return remaining.length > 0 ? remaining.join(' / ') : s
 }
 
 // ── Target extractor (for use inside VAT / COMM context) ─────────────────────
@@ -166,8 +205,8 @@ function extractToPaySlash(s: string): string {
 //                            → "Volunteers Tag - God-encounters Benin"
 
 function extractTargetName(s: string): string {
-  // Handle "To [word]/..." slash patterns (COMM/VAT transfer-to contexts)
-  s = extractToPaySlash(s)
+  // Handle slash patterns: strip routing prefix and trailing payee/beneficiary
+  s = extractSemanticSlashSegment(s)
 
   if (TRANSFER_KEYWORD_RE.test(s)) {
     const m = s.match(TO_NAME_RE)
@@ -213,6 +252,8 @@ function cleanCoreNarration(s: string): string {
 //   "COMMISSION FOR NIP TRANSFER TO JOHN"                                   → "COMM - John"
 //   "COMMISSION ON To pay/Volunteers Tag - God-encounters Benin/Alice A."   → "COMM - Volunteers Tag - God-encounters Benin"
 //   "VAT ON To Gtb/Monthly Salary/REF123"                                   → "VAT - Monthly Salary"
+//   "COMM - To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti" → "COMM - Volunteers Tag - God-encounters Benin"
+//   "VAT - To Gtb/Fuel Purchase/John Doe"                                   → "VAT - Fuel Purchase"
 //   "TRF MOBILE/Fuel 30/Bvshrjrb"                                          → "Fuel 30"
 //   "USSD TRANSFER/Shoprite Ikeja/993828"                                   → "Shoprite Ikeja"
 //   "APP PAYMENT/DSTV Subscription/REF88281"                               → "DSTV Subscription"
@@ -242,5 +283,6 @@ export function normalizeNarration(raw: string | null | undefined): string {
 // Exported individually for unit testing
 export const _internal: Record<string, NarrationRule | ((s: string) => string | null)> = {
   extractSlashSegments,
+  extractSemanticSlashSegment,
   cleanCoreNarration,
 }
