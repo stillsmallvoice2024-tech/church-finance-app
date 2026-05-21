@@ -132,14 +132,43 @@ function stripLeadingKeywords(s: string): string {
   return s.trim()
 }
 
+// ── "To [word]/" prefix handler for COMM/VAT remainders ──────────────────────
+// When a COMM/VAT remainder contains slash-segments starting with "To [word]",
+// strip that transfer-to prefix and the final name/ref segment.
+//
+// "To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti"
+//   → "Volunteers Tag - God-encounters Benin"
+// "To Gtb/Monthly Salary/REF123"
+//   → "Monthly Salary"
+// "To Gtb/Monthly Salary"      (2 parts, no trailing ref)
+//   → "Monthly Salary"
+
+const TO_WORD_PREFIX_RE = /^to\s+\S+$/i  // "To pay", "To Gtb", "To bank" — single word after "To"
+
+function extractToPaySlash(s: string): string {
+  if (!s.includes('/')) return s
+  const parts = s.split('/').map(p => p.trim()).filter(Boolean)
+  if (parts.length < 2) return s
+  if (!TO_WORD_PREFIX_RE.test(parts[0])) return s
+  const rest = parts.slice(1)
+  // Strip last segment when 2+ remain (assumed payee name or reference)
+  if (rest.length > 1) rest.pop()
+  return rest.join(' / ')
+}
+
 // ── Target extractor (for use inside VAT / COMM context) ─────────────────────
 // Returns just the merchant/person name without a "Transfer -" or "POS -" prefix,
 // because the outer label (VAT / COMM) already provides that structure.
 //
 // "NIP TRANSFER TO JOHN DOE" → "John Doe"
 // "POS PAYMT SHOPRITE"       → "Shoprite"
+// "To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti"
+//                            → "Volunteers Tag - God-encounters Benin"
 
 function extractTargetName(s: string): string {
+  // Handle "To [word]/..." slash patterns (COMM/VAT transfer-to contexts)
+  s = extractToPaySlash(s)
+
   if (TRANSFER_KEYWORD_RE.test(s)) {
     const m = s.match(TO_NAME_RE)
     if (m) return toTitleCase(m[1].trim())
@@ -151,7 +180,7 @@ function extractTargetName(s: string): string {
   let t = stripTrailingNoise(s)
   t = stripLeadingKeywords(t)
   t = t.replace(/\s{2,}/g, ' ').trim()
-  return toTitleCase(t)
+  return t || s  // preserve original casing if it's already clean
 }
 
 // ── Core normalization (after special-prefix extraction) ──────────────────────
@@ -175,17 +204,19 @@ function cleanCoreNarration(s: string): string {
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 //
 // Examples (raw → display_description):
-//   "NIP TRANSFER TO JOHN DOE REF 48291 SUCCESSFUL"  → "Transfer - John Doe"
-//   "POS PAYMT SHOPRITE IKEJA TERMINAL 22391"         → "POS - Shoprite Ikeja"
-//   "MOB NIP TRF TO GTB JOHN REF:992883"             → "Transfer - GTB John"
-//   "VAT ON NIP TRANSFER TO JOHN DOE"                → "VAT - John Doe"
-//   "VAT ON POS PAYMT SHOPRITE"                      → "VAT - Shoprite"
-//   "COMMISSION ON TRANSFER TO JANE"                 → "COMM - Jane"
-//   "COMMISSION FOR NIP TRANSFER TO JOHN"            → "COMM - John"
-//   "TRF MOBILE/Fuel 30/Bvshrjrb"                   → "Fuel 30"
-//   "USSD TRANSFER/Shoprite Ikeja/993828"            → "Shoprite Ikeja"
-//   "APP PAYMENT/DSTV Subscription/REF88281"         → "DSTV Subscription"
-//   "School Fees/May Session"                        → "School Fees/May Session"
+//   "NIP TRANSFER TO JOHN DOE REF 48291 SUCCESSFUL"                         → "Transfer - John Doe"
+//   "POS PAYMT SHOPRITE IKEJA TERMINAL 22391"                               → "POS - Shoprite Ikeja"
+//   "MOB NIP TRF TO GTB JOHN REF:992883"                                    → "Transfer - GTB John"
+//   "VAT ON NIP TRANSFER TO JOHN DOE"                                       → "VAT - John Doe"
+//   "VAT ON POS PAYMT SHOPRITE"                                             → "VAT - Shoprite"
+//   "COMMISSION ON TRANSFER TO JANE"                                        → "COMM - Jane"
+//   "COMMISSION FOR NIP TRANSFER TO JOHN"                                   → "COMM - John"
+//   "COMMISSION ON To pay/Volunteers Tag - God-encounters Benin/Alice A."   → "COMM - Volunteers Tag - God-encounters Benin"
+//   "VAT ON To Gtb/Monthly Salary/REF123"                                   → "VAT - Monthly Salary"
+//   "TRF MOBILE/Fuel 30/Bvshrjrb"                                          → "Fuel 30"
+//   "USSD TRANSFER/Shoprite Ikeja/993828"                                   → "Shoprite Ikeja"
+//   "APP PAYMENT/DSTV Subscription/REF88281"                               → "DSTV Subscription"
+//   "School Fees/May Session"                                               → "School Fees/May Session"
 //
 // NEVER used for duplicate detection, reconciliation, or audit matching.
 // All those paths must use raw description / bank_description fields directly.
