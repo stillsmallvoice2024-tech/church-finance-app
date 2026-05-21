@@ -14,7 +14,7 @@ import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
-import { resolveConfigForIncomeType } from '../../utils/resolveImportConfig'
+import { resolveFinalRowConfig, resolveConfigForIncomeType } from '../../utils/resolveImportConfig'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
@@ -715,17 +715,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
           // Non-Normal transactions skip allocation entirely
           if (!txnType) {
-            const overrideCfgId = rowConfigs[ri]
-            const linkedCfgId   = effIncomeTypeId
-              ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
-              : null
-            if (overrideCfgId) {
-              row.allocation_config_id = overrideCfgId
-            } else if (linkedCfgId) {
-              row.allocation_config_id = linkedCfgId
-            } else if (cfg) {
-              row.allocation_config_id = cfg.id
-            }
+            // undefined = no explicit decision; '' = explicit General; uuid = explicit special
+            const manualConfigId = ri in rowConfigs ? rowConfigs[ri] : undefined
+            const resolvedId = resolveFinalRowConfig({
+              manualConfigId,
+              incomeTypeId: effIncomeTypeId ?? null,
+              incomeTypes,
+              generalConfigId: cfg?.id ?? null,
+            })
+            if (resolvedId) row.allocation_config_id = resolvedId
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {

@@ -152,6 +152,29 @@ Pipeline stages (all before Step 4 opens):
 
 ---
 
+## Config Propagation Precedence (Import Modal)
+
+**Resolver:** `src/utils/resolveImportConfig.ts` — single source of truth.
+
+```ts
+resolveConfigForIncomeType(incomeTypeId, incomeTypes) → string  // '' = general
+```
+
+**Precedence (highest first):**
+1. Manual user override (stored in `rowConfigs[ri]`)
+2. Income type linked config (`incomeType.special_config_id`)
+3. General date-based config (empty string → `getConfigForDate`)
+
+**Per-row propagation:** Income type `onChange` calls `resolveConfigForIncomeType` and writes result into `rowConfigs[ri]` immediately — Allocation Config dropdown updates in real time. Next income type change overwrites any prior manual selection.
+
+**Auto-classified rows:** `displaySelId` uses `ri in rowConfigs` guard (not `?? ''`) so rows with auto-detected income types show the linked config without polluting `rowConfigs` until the user explicitly interacts.
+
+**Bulk Apply:** Applying an income type without an explicit config also propagates the linked config into `rowConfigs` for all target rows. Explicit config selection always wins over income-type propagation when both are set simultaneously.
+
+**`runImport` safety net:** The linked-config branch in `runImport` (lines ~717–727) is preserved as a fallback for auto-classified rows that were never explicitly interacted with.
+
+---
+
 ## Missing Column / Schema Cache Error Handling
 
 Both import paths use a **strip-and-retry** pattern when PostgREST rejects an INSERT due to a missing or cache-invisible column.
