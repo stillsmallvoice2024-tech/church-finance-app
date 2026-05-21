@@ -41,16 +41,10 @@ export const OutflowRowDetail = memo(function OutflowRowDetail({ row, colSpan }:
           )}
 
           <DetailField label="Recorded" value={row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null} />
-          {row.display_description && (
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Display Description</p>
-              <p className="text-xs text-gray-700 break-all whitespace-normal select-text">{row.display_description}</p>
-            </div>
-          )}
-          {row.bank_description && (
+          {row.description && (
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Raw Bank Narration</p>
-              <p className="text-xs text-gray-700 break-all whitespace-normal select-text">{row.bank_description}</p>
+              <p className="text-xs text-gray-700 break-all whitespace-normal select-text">{row.description}</p>
             </div>
           )}
           <DetailField label="Remarks" value={row.remarks} valueCls="break-all whitespace-normal" />
