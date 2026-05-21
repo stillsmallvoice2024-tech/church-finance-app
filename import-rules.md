@@ -306,3 +306,15 @@ Called from `extractTargetName()`. Handles the pattern `To <bank>/Description/Pa
 Applies to both:
 - `ImportModal.tsx` batch wizard — guarded with `if (!txnType)` before config resolution block (inflow) and `if (!txnType && cfg)` (outflow)
 - `Import.tsx` ManualEntryForm — `effectiveConfigId` set to `undefined` when `txnType` is set (inflow); `txnType ? undefined : getConfigForDate(...)` (outflow)
+
+---
+
+## Special Config Creation — Step 4 Integration
+
+`CreateSpecialConfigModal` is rendered alongside `ImportModal` with `mode="new_group"`. The `onSaved(cfg)` callback **must** receive the created `AllocationConfig` — `ImportModal` uses it to:
+1. Add the config to the `specialConfigs` dropdown immediately (no refetch)
+2. Auto-select it for the triggering row (`createConfigPendingRow`)
+
+- `createConfigPendingRow` tracks context: `'apply'` = bulk inflow apply, `number` = per-row assignment, `null` = standalone open
+- `createGroupWithFirstVersion` returns `{ groupId, config: AllocationConfig }` — the config is the full DB row from `.select('*').single()` on the insert, available immediately without a second fetch
+- **Never call `onSaved()` without the arg** in the `new_group` path — `ImportModal`'s callback guards on `!cfg` and silently exits, leaving the dropdown stale
