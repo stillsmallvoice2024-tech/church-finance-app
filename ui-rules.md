@@ -482,12 +482,15 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 - Rendered in the controls cluster (right of sort button, left of view toggle) when `pageSize` + `onPageSizeChange` props are provided
 - Always visible regardless of total row count; default options: `[25, 50, 100]`
 - Do NOT pass `onPageSizeChange` to `PaginationBar` on pages that also pass it to `DataControlsBar` — selector lives in one place only
-- `Inflows`/`Outflows`: `useDataViewState` declared **before** the query hook so `state.pageSize` is available for the server-side `pageSize` argument
-- `ChangeLog`, `IntraFlow`, `PendingDeductions`: still use hardcoded `PAGE_SIZE`; opt-in when those pages are refactored to use `DataControlsBar`
+- `Inflows`/`Outflows`/`IntraFlow`: `useDataViewState` declared **before** the query hook so `state.pageSize` is available for the server-side `pageSize` argument
 
-### Pages using DataControlsBar (11)
+### Pages using DataControlsBar (14)
 
-Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), SpecificGivings (`sg`), PercentageAllocations (`pca`), SavingsPortions (`svp`), Receipts (`rcp`).
+Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), SpecificGivings (`sg`), PercentageAllocations (`pca`), SavingsPortions (`svp`), Receipts (`rcp`), IntraFlow (`ifl`), ChangeLog (`cl`), PendingDeductions (`pd`).
+
+**IntraFlow** — server search (description ilike) fires only for `col='all'`; domain filters (date, accountFrom, accountTo) stay in filter card above DataControlsBar; view toggle managed via DataControlsBar `view` prop.
+**ChangeLog** — client-side sort + search only (server supplies current page by table+date filter); defaultPageSize 50, pageSizeOptions `[25, 50, 100, 200]`.
+**PendingDeductions** — client-side sort + search only (server supplies pending outflows); search cols: description, bank_name.
 
 ---
 
