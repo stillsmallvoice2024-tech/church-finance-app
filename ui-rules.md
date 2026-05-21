@@ -438,8 +438,37 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 - Compact prefix selector left of search input; shows "All" when `searchCol === 'all'` (default)
 - Placeholder derives from column scope: `"Search all"` for all-columns, `"Search [column label]"` for specific column; `searchPlaceholder` prop used only when no `searchColumns` are configured
 - Selector button has `h-full` so its border fills the `items-stretch` flex container flush against the input; input uses `py-1` (not `py-1.5`) so both land at 28px despite differing text sizes
-- For server-paginated pages (Inflows, Outflows): column filter applied client-side on top of server results
-- For client-side pages: existing multi-column filter replaced by column-specific filter
+- First entry of `searchColumns` **must** be `{ key: 'all', label: 'All Columns' }`
+
+### Search filter implementation rules
+
+**Server-paginated pages (Inflows, Outflows):**
+- `search` passed to server only when `searchCol === 'all'` — server filters `description` via ilike
+- When `searchCol !== 'all'`: pass `search: undefined` to server; filter client-side on current page only
+- Pattern: `search: (state.searchCol === 'all' ? debouncedSearch : '') || undefined`
+- Client `displayed` filter: `if (!q || col === 'all') return sorted; return sorted.filter(r => colVal(r, col)…)`
+
+**Client-side pages (all others):**
+- Filter `useMemo` must dispatch on `col` — never hardcode `description`
+- `col === 'all'` branch must search **all** searchable text fields for that page (e.g. BankDeposits: description + transaction_ref + bank_name)
+- `searchCol` **must** be included in the `useMemo` dependency array for all filter derivations
+- Fallback (unknown col): default to `description` or the page's primary text field
+
+**Per-page searchable columns:**
+| Page | `all` searches | Specific cols |
+|---|---|---|
+| Inflows | server description | bank_name, transaction_ref, amount |
+| Outflows | server description | bank_name, transaction_id, stage_code_1, amount_disbursed |
+| BankLedger | description + inflow + outflow | description, inflow, outflow |
+| BankDeposits | description + transaction_ref + bank_name | description, bank_name, transaction_ref, amount |
+| ForeignCurrency | narration + transaction_ref | narration, transaction_ref |
+| Categories | name + group name | name, group |
+| CategoryLedger summary | category name | name |
+| CategoryLedger ledger | description | description |
+| PCA / SavingsPortions / SpecificGivings | category name | category |
+| Receipts | file_name | file_name |
+
+**Do not add** `balance` as a searchable column on BankLedger or CategoryLedger — running balance searches produce misleading partial matches.
 
 ### Sort utilities (`src/utils/sortUtils.ts`)
 
