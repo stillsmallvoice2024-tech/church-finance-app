@@ -1,8 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useYearRange } from '../hooks/useYearRange'
 import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
-import { Pagination }               from '../components/ui/Pagination'
+import { DataControlsBar }          from '../components/ui/DataControlsBar'
+import { SortableHeader }           from '../components/ui/SortableHeader'
+import { PaginationBar }            from '../components/ui/PaginationBar'
+import { useDataViewState }         from '../hooks/useDataViewState'
+import { sortRows, multiSortRows }  from '../utils/sortUtils'
+import type { SortField }           from '../utils/sortUtils'
 import { AddOutflowModal }          from '../components/modals/AddOutflowModal'
 import { CanWrite }                 from '../components/auth/RoleGates'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
@@ -11,11 +16,34 @@ import { useToastStore }            from '../store/toastStore'
 import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 
-const PAGE_SIZE = 25
+// ── Sort / search config ───────────────────────────────────────────────────────
+
+const PD_SORT_FIELDS: SortField[] = [
+  { key: 'date',             label: 'Date',      type: 'date',    primary: true },
+  { key: 'amount_disbursed', label: 'Disbursed', type: 'numeric', primary: true },
+]
+
+const PD_SEARCH_COLS = [
+  { key: 'all',         label: 'All Columns' },
+  { key: 'description', label: 'Description' },
+  { key: 'bank_name',   label: 'Bank' },
+]
+
+// ── Column value helper ────────────────────────────────────────────────────────
+
+function pdColVal(r: OutflowTransaction, col: string): string {
+  if (col === 'description') return r.description ?? ''
+  if (col === 'bank_name')   return r.bank_name ?? ''
+  return ''
+}
+
+// ── Page component ─────────────────────────────────────────────────────────────
 
 export default function PendingDeductions() {
   const { dateFrom, dateTo } = useYearRange()
-  const [page, setPage] = useState(0)
+
+  const pdState = useDataViewState({ storageKey: 'pd', defaultSortKey: 'date', defaultSortDir: 'desc' })
+
   const [editRecord, setEditRecord] = useState<OutflowTransaction | null>(null)
   const [modalOpen, setModalOpen]   = useState(false)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
@@ -24,8 +52,8 @@ export default function PendingDeductions() {
     pendingOnly: true,
     dateFrom,
     dateTo,
-    page,
-    pageSize: PAGE_SIZE,
+    page: pdState.page,
+    pageSize: pdState.pageSize,
   })
 
   const total   = useMemo(() => data.reduce((s, r) => s + Number(r.amount_disbursed), 0), [data])
@@ -35,6 +63,28 @@ export default function PendingDeductions() {
   const updateMutation = useUpdateTransaction('outflow_transactions')
 
   usePageTitle('Pending Deductions')
+
+  // Reset page when search changes
+  useEffect(() => { pdState.setPage(0) }, [pdState.search, pdState.setPage])
+
+  // Sort
+  const getPdValue = (r: OutflowTransaction, k: string) => {
+    if (k === 'amount_disbursed') return Number(r.amount_disbursed)
+    return r.date
+  }
+  const sorted = useMemo(() => {
+    const adv = pdState.advancedSort
+    if (adv.length > 0) return multiSortRows(data, getPdValue, adv, PD_SORT_FIELDS)
+    return sortRows(data, getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
+  }, [data, pdState.sortKey, pdState.sortDir, pdState.advancedSort])
+
+  // Search filter (client-side — pending list is small)
+  const displayed = useMemo(() => {
+    const q = pdState.search.trim().toLowerCase()
+    const col = pdState.searchCol
+    if (!q || col === 'all') return sorted
+    return sorted.filter(r => pdColVal(r, col).toLowerCase().includes(q))
+  }, [sorted, pdState.search, pdState.searchCol])
 
   const handleResolve = async (row: OutflowTransaction) => {
     if (!row.stage_code_1?.trim() || !row.stage_code_2?.trim()) {
@@ -138,17 +188,39 @@ export default function PendingDeductions() {
           ))}
         </div>
 
+        {/* Controls */}
+        <DataControlsBar
+          sortFields={PD_SORT_FIELDS}
+          sortKey={pdState.sortKey}
+          sortDir={pdState.sortDir}
+          onSort={pdState.setSort}
+          defaultSortKey="date"
+          defaultSortDir="desc"
+          search={pdState.search}
+          onSearchChange={pdState.setSearch}
+          searchColumns={PD_SEARCH_COLS}
+          searchCol={pdState.searchCol}
+          onSearchColChange={pdState.setSearchCol}
+          advancedSort={pdState.advancedSort}
+          onAdvancedSort={pdState.setAdvancedSort}
+          pageSize={pdState.pageSize}
+          onPageSizeChange={pdState.setPageSize}
+        />
+
         {/* Table */}
         <Card padding={false}>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'Description', 'Disbursed (₦)', 'Transfer Charge (₦)', 'Net (₦)', 'Stage Code', 'Remarks', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
+                  <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
+                  <SortableHeader field={PD_SORT_FIELDS[1]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Transfer Charge (₦)</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Net (₦)</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Stage Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Remarks</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -162,7 +234,7 @@ export default function PendingDeductions() {
                       ))}
                     </tr>
                   ))
-                ) : data.length === 0 ? (
+                ) : displayed.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-20 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
@@ -173,7 +245,7 @@ export default function PendingDeductions() {
                     </td>
                   </tr>
                 ) : (
-                  data.map(row => {
+                  displayed.map(row => {
                     const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
                     const isResolving = resolvingId === row.id
                     return (
@@ -220,7 +292,13 @@ export default function PendingDeductions() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
+          <PaginationBar
+            page={pdState.page}
+            pageSize={pdState.pageSize}
+            total={count}
+            onPageChange={pdState.setPage}
+            variant="full"
+          />
         </Card>
       </div>
 
