@@ -14,6 +14,7 @@ import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
+import { resolveConfigForIncomeType } from '../../utils/resolveImportConfig'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
@@ -1459,8 +1460,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           setRowConfigs(prev => {
                             const next = { ...prev }
                             if (applyInflowConfig) {
+                              // Explicit config selection — always wins
                               for (const ri of inflowTargetRis)
                                 next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
+                            } else if (applyIncomeType) {
+                              // No explicit config: propagate the income type's linked config
+                              const linkedCfgId = resolveConfigForIncomeType(applyIncomeType || null, incomeTypes)
+                              for (const ri of inflowTargetRis) next[ri] = linkedCfgId
                             }
                             return next
                           })
@@ -1516,12 +1522,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           : filtered.map(({ ri, raw, credit }) => {
                               const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
                               const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                              const selId   = rowConfigs[ri] ?? ''
                               const txnType = rowTxnTypes[ri] ?? ''
                               const origId  = rowOrigTxnIds[ri] ?? ''
                               const autoType = desc ? classifyIncomeType(desc, '', incomeTypes) : null
                               const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
                               const effIncomeType = incomeTypes.find(t => t.id === effIncomeTypeId)
+                              // Precedence: manual rowConfigs override → income-type linked config → general ('')
+                              const autoLinkedCfgId = resolveConfigForIncomeType(effIncomeTypeId || null, incomeTypes)
+                              const displaySelId = ri in rowConfigs ? rowConfigs[ri] : autoLinkedCfgId
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
                                 <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
@@ -1555,7 +1563,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       <div className="text-gray-400">{date}</div>
                                     </div>
                                     <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
-                                    <select value={selId}
+                                    <select value={displaySelId}
                                       onChange={e => {
                                         if (e.target.value === '__create__') { setCreateConfigPendingRow(ri) }
                                         else setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
@@ -1568,7 +1576,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <div className="relative">
                                       <select
                                         value={effIncomeTypeId}
-                                        onChange={e => setRowIncomeTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                        onChange={e => {
+                                          const newId = e.target.value
+                                          setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
+                                          // Propagate linked config from the newly selected income type
+                                          setRowConfigs(prev => ({ ...prev, [ri]: resolveConfigForIncomeType(newId || null, incomeTypes) }))
+                                        }}
                                         className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                                       >
                                         <option value="">— None —</option>
