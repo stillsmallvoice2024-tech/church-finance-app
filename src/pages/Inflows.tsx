@@ -126,7 +126,7 @@ export default function Inflows() {
   const { data, count, loading, error, refetch } = useInflowTransactions({
     dateFrom:  dateFrom  || undefined,
     dateTo:    dateTo    || undefined,
-    search:    debouncedSearch || undefined,
+    search:    (infState.searchCol === 'all' ? debouncedSearch : '') || undefined,
     page,
     pageSize:  infState.pageSize,
   })

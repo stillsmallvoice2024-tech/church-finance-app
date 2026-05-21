@@ -131,7 +131,7 @@ export default function SpecificGivings() {
   const filteredGrouped = useMemo(() => {
     const q = sgState.search.trim().toLowerCase()
     return q ? allGrouped.filter(g => g.category.toLowerCase().includes(q)) : allGrouped
-  }, [allGrouped, sgState.search])
+  }, [allGrouped, sgState.search, sgState.searchCol])
 
   const getSgValue = (g: GroupedCategory, k: string) => {
     if (k === 'category') return g.category

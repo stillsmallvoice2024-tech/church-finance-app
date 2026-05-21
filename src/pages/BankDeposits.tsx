@@ -320,7 +320,8 @@ export default function BankDeposits() {
     if (!q) return dateFiltered
     if (col === 'all') return dateFiltered.filter(r =>
       r.description?.toLowerCase().includes(q) ||
-      r.transaction_ref?.toLowerCase().includes(q)
+      r.transaction_ref?.toLowerCase().includes(q) ||
+      (r.bank_name ?? '').toLowerCase().includes(q)
     )
     if (col === 'description')     return dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
     if (col === 'bank_name')       return dateFiltered.filter(r => (r.bank_name ?? '').toLowerCase().includes(q))
