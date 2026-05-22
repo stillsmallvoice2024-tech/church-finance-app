@@ -11,7 +11,9 @@ import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -41,31 +43,16 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 
 const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
-const INF_SORT_FIELDS: SortField[] = [
-  { key: 'date',             label: 'Date',        type: 'date',    primary: true },
-  { key: 'amount',           label: 'Amount',      type: 'numeric', primary: true },
-  { key: 'bank_name',        label: 'Bank',        type: 'text' },
-  { key: 'description',      label: 'Description', type: 'text' },
-  { key: 'transaction_type', label: 'Type',        type: 'text' },
+const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
+  { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description',      label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
+  { key: 'bank_name',        label: 'Bank',        sortType: 'text',    accessor: r => r.bank_name ?? '' },
+  { key: 'transaction_ref',  label: 'Txn Ref',                          accessor: r => r.transaction_ref ?? '' },
+  { key: 'transaction_type', label: 'Type',        sortType: 'text',    accessor: r => r.transaction_type ?? '' },
+  { key: 'amount',           label: 'Amount',      sortType: 'numeric', accessor: r => String(r.amount) },
 ]
 
-const INF_SEARCH_COLS = [
-  { key: 'all',              label: 'All Columns' },
-  { key: 'description',      label: 'Description' },
-  { key: 'bank_name',        label: 'Bank' },
-  { key: 'transaction_ref',  label: 'Txn Ref' },
-  { key: 'transaction_type', label: 'Type' },
-  { key: 'amount',           label: 'Amount' },
-]
-
-function infColVal(r: InflowTransaction, col: string): string {
-  if (col === 'description')      return r.description ?? ''
-  if (col === 'bank_name')        return r.bank_name ?? ''
-  if (col === 'transaction_ref')  return r.transaction_ref ?? ''
-  if (col === 'transaction_type') return r.transaction_type ?? ''
-  if (col === 'amount')           return String(r.amount)
-  return ''
-}
+const INF_SORT_FIELDS = deriveSortFields(INF_COLUMNS)
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -151,20 +138,10 @@ export default function Inflows() {
   }, [data, infState.sortKey, infState.sortDir, infState.advancedSort])
 
   // Client-side search across all fetched rows, then paginate the results
-  const allMatching = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase()
-    if (!q) return sorted
-    const col = infState.searchCol
-    if (col === 'all') {
-      return sorted.filter(r =>
-        (r.description ?? '').toLowerCase().includes(q) ||
-        (r.bank_name ?? '').toLowerCase().includes(q) ||
-        (r.transaction_ref ?? '').toLowerCase().includes(q) ||
-        (r.transaction_type ?? '').toLowerCase().includes(q)
-      )
-    }
-    return sorted.filter(r => infColVal(r, col).toLowerCase().includes(q))
-  }, [sorted, debouncedSearch, infState.searchCol])
+  const allMatching = useMemo(
+    () => searchRows(sorted, INF_COLUMNS, debouncedSearch, infState.searchCol),
+    [sorted, debouncedSearch, infState.searchCol],
+  )
 
   const displayed = useMemo(() => {
     if (!isSearching) return sorted
@@ -299,7 +276,7 @@ export default function Inflows() {
 
         {/* Data controls bar */}
         <DataControlsBar
-          sortFields={INF_SORT_FIELDS}
+          columns={INF_COLUMNS}
           sortKey={infState.sortKey}
           sortDir={infState.sortDir}
           onSort={infState.setSort}
@@ -310,7 +287,6 @@ export default function Inflows() {
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
           searchPlaceholder="Search transactions…"
-          searchColumns={INF_SEARCH_COLS}
           searchCol={infState.searchCol}
           onSearchColChange={infState.setSearchCol}
           advancedSort={infState.advancedSort}

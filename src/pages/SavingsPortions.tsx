@@ -7,7 +7,9 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
 interface SavingsRow {
   category:     string
@@ -16,16 +18,13 @@ interface SavingsRow {
   balance:      number
 }
 
-const SVP_SORT_FIELDS: SortField[] = [
-  { key: 'category', label: 'Category',   type: 'text',    primary: true },
-  { key: 'deposited', label: 'Total Saved', type: 'numeric', primary: true },
-  { key: 'balance',   label: 'Net Balance', type: 'numeric', primary: true },
+const SVP_COLUMNS: TableColumnDef<SavingsRow>[] = [
+  { key: 'category', label: 'Category',   sortType: 'text',    primary: true, accessor: r => r.category },
+  { key: 'deposited', label: 'Total Saved', sortType: 'numeric', primary: true },
+  { key: 'balance',   label: 'Net Balance', sortType: 'numeric', primary: true },
 ]
 
-const SVP_SEARCH_COLS = [
-  { key: 'all',      label: 'All Columns' },
-  { key: 'category', label: 'Category' },
-]
+const SVP_SORT_FIELDS = deriveSortFields(SVP_COLUMNS)
 
 export default function SavingsPortions() {
   usePageTitle('Savings Portions')
@@ -99,10 +98,10 @@ export default function SavingsPortions() {
   useEffect(() => { load() }, [load])
 
   // Filter by search
-  const visibleRows = useMemo(() => {
-    const q = svpState.search.trim().toLowerCase()
-    return q ? rows.filter(r => r.category.toLowerCase().includes(q)) : rows
-  }, [rows, svpState.search, svpState.searchCol])
+  const visibleRows = useMemo(
+    () => searchRows(rows, SVP_COLUMNS, svpState.search, svpState.searchCol),
+    [rows, svpState.search, svpState.searchCol],
+  )
 
   const getSvpValue = (r: SavingsRow, k: string) => {
     if (k === 'category') return r.category
@@ -206,7 +205,7 @@ export default function SavingsPortions() {
           {/* Per-category table */}
           <div className="space-y-1.5">
             <DataControlsBar
-              sortFields={SVP_SORT_FIELDS}
+              columns={SVP_COLUMNS}
               sortKey={svpState.sortKey}
               sortDir={svpState.sortDir}
               onSort={svpState.setSort}
@@ -215,7 +214,6 @@ export default function SavingsPortions() {
               search={svpState.search}
               onSearchChange={svpState.setSearch}
               searchPlaceholder="Search categories…"
-              searchColumns={SVP_SEARCH_COLS}
               searchCol={svpState.searchCol}
               onSearchColChange={svpState.setSearchCol}
               advancedSort={svpState.advancedSort}

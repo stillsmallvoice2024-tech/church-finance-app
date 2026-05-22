@@ -7,7 +7,9 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -54,21 +56,15 @@ type FormValues = z.infer<typeof schema>
 
 // ── Sort fields ────────────────────────────────────────────────────────────────
 
-const BD_SORT_FIELDS: SortField[] = [
-  { key: 'date',            label: 'Date',        type: 'date',    primary: true },
-  { key: 'amount',          label: 'Amount',      type: 'numeric', primary: true },
-  { key: 'bank_name',       label: 'Bank',        type: 'text',    primary: true },
-  { key: 'description',     label: 'Description', type: 'text' },
-  { key: 'transaction_ref', label: 'Reference',   type: 'text' },
+const BD_COLUMNS: TableColumnDef<DepositRow>[] = [
+  { key: 'date',            label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description',     label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
+  { key: 'bank_name',       label: 'Bank',        sortType: 'text',    primary: true, accessor: r => r.bank_name ?? '' },
+  { key: 'transaction_ref', label: 'Reference',   sortType: 'text',    accessor: r => r.transaction_ref ?? '' },
+  { key: 'amount',          label: 'Amount',      sortType: 'numeric', accessor: r => String(r.amount) },
 ]
 
-const BD_SEARCH_COLS = [
-  { key: 'all',             label: 'All Columns' },
-  { key: 'description',     label: 'Description' },
-  { key: 'bank_name',       label: 'Bank' },
-  { key: 'transaction_ref', label: 'Reference' },
-  { key: 'amount',          label: 'Amount' },
-]
+const BD_SORT_FIELDS = deriveSortFields(BD_COLUMNS)
 
 // ── Add/Edit modal ─────────────────────────────────────────────────────────────
 
@@ -314,21 +310,10 @@ export default function BankDeposits() {
   }), [rows, dateFrom, dateTo, bankFilter, selectedBankName])
 
   // Search filter
-  const searchFiltered = useMemo(() => {
-    const q = bdState.search.trim().toLowerCase()
-    const col = bdState.searchCol
-    if (!q) return dateFiltered
-    if (col === 'all') return dateFiltered.filter(r =>
-      r.description?.toLowerCase().includes(q) ||
-      r.transaction_ref?.toLowerCase().includes(q) ||
-      (r.bank_name ?? '').toLowerCase().includes(q)
-    )
-    if (col === 'description')     return dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
-    if (col === 'bank_name')       return dateFiltered.filter(r => (r.bank_name ?? '').toLowerCase().includes(q))
-    if (col === 'transaction_ref') return dateFiltered.filter(r => (r.transaction_ref ?? '').toLowerCase().includes(q))
-    if (col === 'amount')          return dateFiltered.filter(r => String(r.amount).includes(q))
-    return dateFiltered.filter(r => r.description?.toLowerCase().includes(q))
-  }, [dateFiltered, bdState.search, bdState.searchCol])
+  const searchFiltered = useMemo(
+    () => searchRows(dateFiltered, BD_COLUMNS, bdState.search, bdState.searchCol),
+    [dateFiltered, bdState.search, bdState.searchCol],
+  )
 
   const getBdValue = (r: DepositRow, k: string) => {
     if (k === 'amount')          return r.amount
@@ -467,7 +452,7 @@ export default function BankDeposits() {
       <Card padding={false}>
         <div className="p-3 border-b border-gray-100">
           <DataControlsBar
-            sortFields={BD_SORT_FIELDS}
+            columns={BD_COLUMNS}
             sortKey={bdState.sortKey}
             sortDir={bdState.sortDir}
             onSort={bdState.setSort}
@@ -478,7 +463,6 @@ export default function BankDeposits() {
             search={bdState.search}
             onSearchChange={bdState.setSearch}
             searchPlaceholder="Search deposits…"
-            searchColumns={BD_SEARCH_COLS}
             searchCol={bdState.searchCol}
             onSearchColChange={bdState.setSearchCol}
             advancedSort={bdState.advancedSort}

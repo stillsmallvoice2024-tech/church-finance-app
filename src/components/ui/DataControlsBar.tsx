@@ -1,9 +1,11 @@
 import { Search, X, ArrowUpDown, ChevronDown, Layers } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { SortField, SortDirection, AdvancedSortLevel } from '../../utils/sortUtils'
 import { directionLabel, defaultDirForType } from '../../utils/sortUtils'
 import type { DataViewMode } from '../../hooks/useDataViewState'
 import { AdvancedSortModal } from './AdvancedSortModal'
+import type { TableColumnDef } from '../../utils/tableColumns'
+import { deriveSortFields, deriveSearchCols } from '../../utils/tableColumns'
 
 export interface SearchColumn {
   key: string
@@ -11,7 +13,11 @@ export interface SearchColumn {
 }
 
 interface DataControlsBarProps {
-  sortFields: SortField[]
+  /** Unified column definitions — auto-derives both sortFields and searchColumns. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  columns?: TableColumnDef<any>[]
+  /** Explicit sort fields. Ignored when `columns` is provided. */
+  sortFields?: SortField[]
   sortKey: string
   sortDir: SortDirection
   onSort: (key: string, dir: SortDirection) => void
@@ -20,7 +26,7 @@ interface DataControlsBarProps {
   search: string
   onSearchChange: (s: string) => void
   searchPlaceholder?: string
-  // search column scoping
+  /** Explicit search column list. Ignored when `columns` is provided. */
   searchColumns?: SearchColumn[]
   searchCol?: string
   onSearchColChange?: (col: string) => void
@@ -39,14 +45,29 @@ interface DataControlsBarProps {
 const DEFAULT_PAGE_SIZE_OPTIONS = [25, 50, 100]
 
 export function DataControlsBar({
-  sortFields, sortKey, sortDir, onSort,
+  columns,
+  sortFields: sortFieldsProp = [],
+  sortKey, sortDir, onSort,
   view, onViewChange,
   search, onSearchChange, searchPlaceholder = 'Search…',
-  searchColumns, searchCol = 'all', onSearchColChange,
+  searchColumns: searchColumnsProp, searchCol = 'all', onSearchColChange,
   advancedSort = [], onAdvancedSort,
   defaultSortKey, defaultSortDir,
   pageSize, onPageSizeChange, pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
 }: DataControlsBarProps) {
+  const sortFields = useMemo(
+    () => (columns && columns.length > 0 ? deriveSortFields(columns) : sortFieldsProp),
+    [columns, sortFieldsProp],
+  )
+
+  const searchColumns = useMemo(() => {
+    if (columns && columns.length > 0) {
+      const derived = deriveSearchCols(columns)
+      console.log('[SEARCHABLE_COLUMNS]', derived)
+      return derived
+    }
+    return searchColumnsProp
+  }, [columns, searchColumnsProp])
   const [sortOpen,       setSortOpen]       = useState(false)
   const [moreOpen,       setMoreOpen]       = useState(false)
   const [searchColOpen,  setSearchColOpen]  = useState(false)

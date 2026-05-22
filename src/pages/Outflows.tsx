@@ -12,7 +12,9 @@ import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -39,37 +41,19 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   intrabank_transfer:  'Intrabank Transfer',
 }
 
-const OUT_SORT_FIELDS: SortField[] = [
-  { key: 'date',             label: 'Date',        type: 'date',    primary: true },
-  { key: 'amount_disbursed', label: 'Disbursed',   type: 'numeric', primary: true },
-  { key: 'bank_name',        label: 'Bank',        type: 'text' },
-  { key: 'description',      label: 'Description', type: 'text' },
-  { key: 'transaction_type', label: 'Type',        type: 'text' },
+const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
+  { key: 'date',             label: 'Date',         sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description',      label: 'Description',  sortType: 'text',    accessor: r => r.display_description },
+  { key: 'bank_name',        label: 'Bank',         sortType: 'text',    accessor: r => r.bank_name ?? '' },
+  { key: 'bank_description', label: 'Bank Narration',                    accessor: r => r.bank_description ?? '' },
+  { key: 'transaction_id',   label: 'Txn ID',                            accessor: r => r.transaction_id ?? '' },
+  { key: 'transaction_type', label: 'Type',         sortType: 'text',    accessor: r => r.transaction_type ?? '' },
+  { key: 'stage_code_1',     label: 'Stage Code',                        accessor: r => r.stage_code_1 ?? '' },
+  { key: 'amount_disbursed', label: 'Disbursed',    sortType: 'numeric', accessor: r => String(r.amount_disbursed) },
+  { key: 'net',              label: 'Net',                               accessor: r => String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge)) },
 ]
 
-const OUT_SEARCH_COLS = [
-  { key: 'all',              label: 'All Columns' },
-  { key: 'description',      label: 'Description' },
-  { key: 'bank_description', label: 'Bank Narration' },
-  { key: 'bank_name',        label: 'Bank' },
-  { key: 'transaction_id',   label: 'Txn ID' },
-  { key: 'transaction_type', label: 'Type' },
-  { key: 'stage_code_1',     label: 'Stage Code' },
-  { key: 'amount_disbursed', label: 'Disbursed' },
-  { key: 'net',              label: 'Net' },
-]
-
-function outColVal(r: OutflowTransaction, col: string): string {
-  if (col === 'description')      return r.display_description
-  if (col === 'bank_description') return r.bank_description ?? ''
-  if (col === 'bank_name')        return r.bank_name ?? ''
-  if (col === 'transaction_id')   return r.transaction_id ?? ''
-  if (col === 'transaction_type') return r.transaction_type ?? ''
-  if (col === 'stage_code_1')     return r.stage_code_1 ?? ''
-  if (col === 'amount_disbursed') return String(r.amount_disbursed)
-  if (col === 'net')              return String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge))
-  return ''
-}
+const OUT_SORT_FIELDS = deriveSortFields(OUT_COLUMNS)
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -156,22 +140,10 @@ export default function Outflows() {
   }, [data, outState.sortKey, outState.sortDir, outState.advancedSort])
 
   // Client-side search across all fetched rows, then paginate the results
-  const allMatching = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase()
-    if (!q) return sorted
-    const col = outState.searchCol
-    if (col === 'all') {
-      return sorted.filter(r =>
-        r.display_description.toLowerCase().includes(q) ||
-        (r.description ?? '').toLowerCase().includes(q) ||
-        (r.bank_name ?? '').toLowerCase().includes(q) ||
-        (r.transaction_id ?? '').toLowerCase().includes(q) ||
-        (r.transaction_type ?? '').toLowerCase().includes(q) ||
-        (r.stage_code_1 ?? '').toLowerCase().includes(q)
-      )
-    }
-    return sorted.filter(r => outColVal(r, col).toLowerCase().includes(q))
-  }, [sorted, debouncedSearch, outState.searchCol])
+  const allMatching = useMemo(
+    () => searchRows(sorted, OUT_COLUMNS, debouncedSearch, outState.searchCol),
+    [sorted, debouncedSearch, outState.searchCol],
+  )
 
   const displayed = useMemo(() => {
     if (!isSearching) return sorted
@@ -318,7 +290,7 @@ export default function Outflows() {
 
         {/* Data controls bar */}
         <DataControlsBar
-          sortFields={OUT_SORT_FIELDS}
+          columns={OUT_COLUMNS}
           sortKey={outState.sortKey}
           sortDir={outState.sortDir}
           onSort={outState.setSort}
@@ -329,7 +301,6 @@ export default function Outflows() {
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
           searchPlaceholder="Search transactions…"
-          searchColumns={OUT_SEARCH_COLS}
           searchCol={outState.searchCol}
           onSearchColChange={outState.setSearchCol}
           advancedSort={outState.advancedSort}

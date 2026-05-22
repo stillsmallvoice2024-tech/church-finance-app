@@ -11,21 +11,20 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
 
-const FX_SORT_FIELDS: SortField[] = [
-  { key: 'date',     label: 'Date',     type: 'date',    primary: true },
-  { key: 'amount',   label: 'Amount',   type: 'numeric', primary: true },
-  { key: 'narration', label: 'Narration', type: 'text' },
+const FX_COLUMNS: TableColumnDef<FXTransaction>[] = [
+  { key: 'date',            label: 'Date',      sortType: 'date',    primary: true, noSearch: true },
+  { key: 'amount',          label: 'Amount',    sortType: 'numeric', primary: true, accessor: t => t.deposit > 0 ? t.deposit : t.withdrawal },
+  { key: 'narration',       label: 'Narration', sortType: 'text',    accessor: t => t.narration ?? '' },
+  { key: 'transaction_ref', label: 'Reference',                      accessor: t => t.transaction_ref ?? '' },
 ]
 
-const FX_SEARCH_COLS = [
-  { key: 'all',             label: 'All Columns' },
-  { key: 'narration',       label: 'Narration' },
-  { key: 'transaction_ref', label: 'Reference' },
-]
+const FX_SORT_FIELDS = deriveSortFields(FX_COLUMNS)
 
 const FX_META: { code: FXCurrency; symbol: string; flag: string; name: string }[] = [
   { code: 'USD', symbol: '$', flag: '🇺🇸', name: 'US Dollar'      },
@@ -69,18 +68,10 @@ export default function ForeignCurrency() {
     [summaries],
   )
 
-  const fxSearchFiltered = useMemo(() => {
-    const q = fxState.search.trim().toLowerCase()
-    const col = fxState.searchCol
-    if (!q) return transactions
-    if (col === 'all') return transactions.filter(t =>
-      t.narration?.toLowerCase().includes(q) ||
-      t.transaction_ref?.toLowerCase().includes(q)
-    )
-    if (col === 'narration')       return transactions.filter(t => (t.narration ?? '').toLowerCase().includes(q))
-    if (col === 'transaction_ref') return transactions.filter(t => (t.transaction_ref ?? '').toLowerCase().includes(q))
-    return transactions.filter(t => t.narration?.toLowerCase().includes(q))
-  }, [transactions, fxState.search, fxState.searchCol])
+  const fxSearchFiltered = useMemo(
+    () => searchRows(transactions, FX_COLUMNS, fxState.search, fxState.searchCol),
+    [transactions, fxState.search, fxState.searchCol],
+  )
 
   const getFxValue = (t: FXTransaction, k: string) => {
     if (k === 'amount')   return t.deposit > 0 ? t.deposit : t.withdrawal
@@ -268,7 +259,7 @@ export default function ForeignCurrency() {
 
         <div className="px-4 py-2 border-b border-gray-100">
           <DataControlsBar
-            sortFields={FX_SORT_FIELDS}
+            columns={FX_COLUMNS}
             sortKey={fxState.sortKey}
             sortDir={fxState.sortDir}
             onSort={fxState.setSort}
@@ -277,7 +268,6 @@ export default function ForeignCurrency() {
             search={fxState.search}
             onSearchChange={fxState.setSearch}
             searchPlaceholder="Search narration or ref…"
-            searchColumns={FX_SEARCH_COLS}
             searchCol={fxState.searchCol}
             onSearchColChange={fxState.setSearchCol}
             advancedSort={fxState.advancedSort}
