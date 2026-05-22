@@ -80,7 +80,7 @@ export interface TransactionFilters {
   dateFrom?: string
   dateTo?: string
   stageCode?: string   // filters on stage_code_1
-  search?: string      // ilike match on description
+  search?: string      // ilike match across key text columns
   pendingOnly?: boolean // filter outflows by is_pending_deduction = true
   page?: number        // 0-indexed
   pageSize?: number
@@ -135,7 +135,7 @@ export function useInflowTransactions(
     if (dateFrom) query = query.gte('date', dateFrom)
     if (dateTo)   query = query.lte('date', dateTo)
     if (stageCode) query = query.eq('stage_code_1', stageCode)
-    if (search)   query = query.ilike('description', `%${search}%`)
+    if (search)   query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_ref.ilike.%${search}%`)
 
     const { data: rows, count: total, error: err } = await query
 
@@ -181,7 +181,7 @@ export function useOutflowTransactions(
     if (dateFrom)    query = query.gte('date', dateFrom)
     if (dateTo)      query = query.lte('date', dateTo)
     if (stageCode)   query = query.eq('stage_code_1', stageCode)
-    if (search)      query = query.ilike('description', `%${search}%`)
+    if (search)      query = query.or(`description.ilike.%${search}%,bank_description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_id.ilike.%${search}%,stage_code_1.ilike.%${search}%`)
     if (pendingOnly) query = query.eq('is_pending_deduction', true)
 
     const { data: rows, count: total, error: err } = await query

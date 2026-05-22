@@ -53,7 +53,8 @@ const OUT_SEARCH_COLS = [
   { key: 'bank_name',        label: 'Bank' },
   { key: 'transaction_id',   label: 'Txn ID' },
   { key: 'stage_code_1',     label: 'Stage Code' },
-  { key: 'amount_disbursed', label: 'Amount' },
+  { key: 'amount_disbursed', label: 'Outflow' },
+  { key: 'net',              label: 'Net' },
 ]
 
 function outColVal(r: OutflowTransaction, col: string): string {
@@ -63,6 +64,7 @@ function outColVal(r: OutflowTransaction, col: string): string {
   if (col === 'transaction_id')   return r.transaction_id ?? ''
   if (col === 'stage_code_1')     return r.stage_code_1 ?? ''
   if (col === 'amount_disbursed') return String(r.amount_disbursed)
+  if (col === 'net')              return String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge))
   return ''
 }
 
@@ -304,7 +306,7 @@ export default function Outflows() {
           onViewChange={outState.setView}
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
-          searchPlaceholder="Search descriptions…"
+          searchPlaceholder="Search transactions…"
           searchColumns={OUT_SEARCH_COLS}
           searchCol={outState.searchCol}
           onSearchColChange={outState.setSearchCol}
@@ -479,7 +481,7 @@ export default function Outflows() {
                     </td>
                   </tr>
                 ) : (
-                  sorted.map(row => {
+                  displayed.map(row => {
                     const isExpanded = expandedId === row.id
                     return (
                       <>

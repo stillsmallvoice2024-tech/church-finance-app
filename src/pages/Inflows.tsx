@@ -53,7 +53,7 @@ const INF_SEARCH_COLS = [
   { key: 'description',     label: 'Description' },
   { key: 'bank_name',       label: 'Bank' },
   { key: 'transaction_ref', label: 'Txn Ref' },
-  { key: 'amount',          label: 'Amount' },
+  { key: 'amount',          label: 'Inflow' },
 ]
 
 function infColVal(r: InflowTransaction, col: string): string {
@@ -290,7 +290,7 @@ export default function Inflows() {
           onViewChange={infState.setView}
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
-          searchPlaceholder="Search descriptions…"
+          searchPlaceholder="Search transactions…"
           searchColumns={INF_SEARCH_COLS}
           searchCol={infState.searchCol}
           onSearchColChange={infState.setSearchCol}
