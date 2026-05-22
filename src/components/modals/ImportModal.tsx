@@ -13,8 +13,11 @@ import { useAllocationStore, getConfigForDate } from '../../store/allocationStor
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
-import { classifyIncomeType } from '../../utils/classifyIncomeType'
-import { resolveFinalRowConfig, resolveConfigForIncomeType } from '../../utils/resolveImportConfig'
+import {
+  resolveDefaultIncomeType,
+  getFinalConfig,
+  type RowResolverState,
+} from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
@@ -327,12 +330,32 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [applyIncomeType,   setApplyIncomeType]   = useState('')
 
   // Per-row income type overrides (rowIndex → incomeTypeId)
-  const [rowIncomeTypes, setRowIncomeTypes] = useState<Record<number, string>>({})
+  const [rowIncomeTypes,     setRowIncomeTypes]     = useState<Record<number, string>>({})
+  // Per-row manual config override flag — true only when user explicitly changed the config dropdown
+  const [rowManualOverrides, setRowManualOverrides] = useState<Record<number, boolean>>({})
   const [tooltipState,   setTooltipState]   = useState<{ text: string; x: number; y: number } | null>(null)
 
   // Row selection (by sheet row index) — stable across filter/sort changes
   const [selectedInflowRis,  setSelectedInflowRis]  = useState<Set<number>>(new Set())
   const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
+
+  // ── Row-level memoized auto-classification ────────────────────────────────
+  // Pre-compute keyword-matched income types for all inflow rows once, keyed by ri.
+  // Avoids re-running classifyIncomeType for every row on every render (critical for 500+ rows).
+  const autoClassifiedTypes = useMemo(() => {
+    if (!processedRows || incomeTypes.length === 0) return {} as Record<number, import('../../hooks/useIncomeTypes').IncomeType | null>
+    const descIdx   = sheet?.headers.findIndex(h => mapping[h] === 'description') ?? -1
+    const creditIdx = sheet?.headers.findIndex(h => mapping[h] === 'credit') ?? -1
+    const result: Record<number, import('../../hooks/useIncomeTypes').IncomeType | null> = {}
+    for (let ri = 0; ri < processedRows.length; ri++) {
+      const raw    = processedRows[ri]
+      const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx] as unknown) : 0
+      if (credit <= 0) continue
+      const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+      result[ri] = desc ? resolveDefaultIncomeType(desc, '', incomeTypes) : null
+    }
+    return result
+  }, [processedRows, incomeTypes, sheet?.headers, mapping])
 
   // ── Import pipeline: pre-computed IDs + duplicate detection ──────────────
   // Set during proceedToRowConfig (Step 3→4 transition), BEFORE Step 4 opens.
@@ -394,6 +417,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setApplyS2('')
     setApplyIncomeType('')
     setRowIncomeTypes({})
+    setRowManualOverrides({})
     setSelectedInflowRis(new Set())
     setSelectedOutflowRis(new Set())
     setPrecomputedInflowIds({})
@@ -709,54 +733,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
-          // Resolve income type: per-row override → auto-classify
+          // Resolve income type: per-row override → keyword auto-classify
           const effIncomeTypeId = rowIncomeTypes[ri]
-            ?? (desc ? classifyIncomeType(desc, '', incomeTypes)?.id : undefined)
+            ?? (desc ? resolveDefaultIncomeType(desc, '', incomeTypes)?.id : undefined)
           if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
           // Non-Normal transactions skip allocation entirely
           if (!txnType) {
-            // undefined = no explicit decision; '' = explicit General; uuid = explicit special
-            const manualConfigId = ri in rowConfigs ? rowConfigs[ri] : undefined
-            const resolvedId = resolveFinalRowConfig({
-              manualConfigId,
-              incomeTypeId: effIncomeTypeId ?? null,
-              incomeTypes,
-              generalConfigId: cfg?.id ?? null,
-            })
-            if (resolvedId) row.allocation_config_id = resolvedId
-
-            // ── DIAGNOSTIC TRACE (remove after bug is confirmed fixed) ──────
-            const linkedSpecialConfigId = effIncomeTypeId
-              ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
-              : null
-            console.log('[ImportModal:runImport]', {
-              ri,
-              desc: (desc ?? '').slice(0, 50),
-              incomeTypesLoaded: incomeTypes.length,
-              rowIncomeTypesEntry: rowIncomeTypes[ri],
-              autoClassified: !rowIncomeTypes[ri] && !!effIncomeTypeId,
-              incomeTypeId:         effIncomeTypeId   ?? null,
-              linkedSpecialConfigId,
-              'rowConfigs[ri]':     manualConfigId,
-              riInRowConfigs:       ri in rowConfigs,
-              resolvedConfigId:     resolvedId,
-              finalAllocationConfigId: row.allocation_config_id ?? null,
-            })
-            // Invariant: if income type has a linked special config and no manual
-            // override exists, the resolved config MUST equal the linked config.
-            if (linkedSpecialConfigId && manualConfigId === undefined && resolvedId !== linkedSpecialConfigId) {
-              console.error('[INVARIANT VIOLATION]', {
-                ri,
-                desc: (desc ?? '').slice(0, 50),
-                incomeTypeId: effIncomeTypeId,
-                linkedSpecialConfigId,
-                resolvedConfigId: resolvedId,
-                generalConfigId: cfg?.id ?? null,
-                incomeTypesCount: incomeTypes.length,
-                rowConfigsKeys: Object.keys(rowConfigs),
-              })
+            const rowState: RowResolverState = {
+              incomeType:          incomeTypes.find(t => t.id === effIncomeTypeId) ?? null,
+              allocationConfigId:  rowConfigs[ri] ?? '',
+              isManualOverride:    rowManualOverrides[ri] ?? false,
             }
-            // ── END DIAGNOSTIC TRACE ─────────────────────────────────────────
+            const resolvedId = getFinalConfig(rowState, cfg?.id ?? null)
+            if (resolvedId) row.allocation_config_id = resolvedId
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {
@@ -960,7 +949,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
       dateFormat, fxCurrency, batchPendingDeduction,
-      rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
+      rowConfigs, rowManualOverrides, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
       internalBank,
       rowIncomeTypes, incomeTypes,
       duplicateRis, precomputedInflowIds, precomputedOutflowIds])
@@ -1497,25 +1486,34 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         type="button"
                         disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType) || inflowTargetRis.length === 0}
                         onClick={() => {
-                          setRowConfigs(prev => {
-                            const next = { ...prev }
-                            if (applyInflowConfig) {
-                              // Explicit config selection — always wins
-                              for (const ri of inflowTargetRis)
-                                next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
-                            } else if (applyIncomeType) {
-                              // No explicit config: propagate the income type's linked config
-                              const linkedCfgId = resolveConfigForIncomeType(applyIncomeType || null, incomeTypes)
-                              for (const ri of inflowTargetRis) next[ri] = linkedCfgId
-                            }
-                            return next
-                          })
+                          if (applyInflowConfig) {
+                            // Explicit config selection → mark affected rows as manual overrides
+                            const configVal = applyInflowConfig === '__general__' ? '' : applyInflowConfig
+                            setRowConfigs(prev => {
+                              const next = { ...prev }
+                              for (const ri of inflowTargetRis) next[ri] = configVal
+                              return next
+                            })
+                            setRowManualOverrides(prev => {
+                              const next = { ...prev }
+                              for (const ri of inflowTargetRis) next[ri] = true
+                              return next
+                            })
+                          }
                           if (applyIncomeType) {
                             setRowIncomeTypes(prev => {
                               const next = { ...prev }
                               for (const ri of inflowTargetRis) next[ri] = applyIncomeType
                               return next
                             })
+                            if (!applyInflowConfig) {
+                              // Income type only — clear manual overrides so linked config auto-applies
+                              setRowManualOverrides(prev => {
+                                const next = { ...prev }
+                                for (const ri of inflowTargetRis) delete next[ri]
+                                return next
+                              })
+                            }
                           }
                           if (batchTxnType !== '') {
                             setRowTxnTypes(prev => {
@@ -1564,30 +1562,17 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
                               const txnType = rowTxnTypes[ri] ?? ''
                               const origId  = rowOrigTxnIds[ri] ?? ''
-                              const autoType = desc ? classifyIncomeType(desc, '', incomeTypes) : null
+                              // Auto-classify from pre-computed map (avoids re-running keyword matching per render)
+                              const autoType        = autoClassifiedTypes[ri] ?? null
                               const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
-                              const effIncomeType = incomeTypes.find(t => t.id === effIncomeTypeId)
-                              // Precedence: manual rowConfigs override → income-type linked config → general ('')
-                              const autoLinkedCfgId = resolveConfigForIncomeType(effIncomeTypeId || null, incomeTypes)
-                              const displaySelId = ri in rowConfigs ? rowConfigs[ri] : autoLinkedCfgId
-                              // ── DIAGNOSTIC TRACE (Step 4 render) ──────────────────────────────
-                              if (autoLinkedCfgId) {
-                                console.log('[ImportModal:Step4 render]', {
-                                  ri,
-                                  desc: desc.slice(0, 50),
-                                  incomeTypesLoaded: incomeTypes.length,
-                                  'rowIncomeTypes[ri]': rowIncomeTypes[ri],
-                                  autoTypeId: autoType?.id ?? null,
-                                  effIncomeTypeId: effIncomeTypeId || null,
-                                  autoLinkedCfgId,
-                                  displaySelId,
-                                  'rowConfigs[ri]': rowConfigs[ri],
-                                  riInRowConfigs: ri in rowConfigs,
-                                  specialConfigsLoaded: specialConfigs.length,
-                                  linkedCfgInSpecialConfigs: specialConfigs.some(c => c.id === autoLinkedCfgId),
-                                })
+                              const effIncomeType   = incomeTypes.find(t => t.id === effIncomeTypeId) ?? null
+                              const rowState: RowResolverState = {
+                                incomeType:         effIncomeType,
+                                allocationConfigId: rowConfigs[ri] ?? '',
+                                isManualOverride:   rowManualOverrides[ri] ?? false,
                               }
-                              // ── END DIAGNOSTIC TRACE ────────────────────────────────────────
+                              // '' = "General (date-based)" in display; real general config resolved at import time
+                              const displaySelId = getFinalConfig(rowState, '') ?? ''
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
                                 <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
@@ -1623,8 +1608,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
                                     <select value={displaySelId}
                                       onChange={e => {
-                                        if (e.target.value === '__create__') { setCreateConfigPendingRow(ri) }
-                                        else setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                        if (e.target.value === '__create__') {
+                                          setCreateConfigPendingRow(ri)
+                                        } else {
+                                          // User explicitly chose a config — mark as manual override
+                                          setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                          setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
+                                        }
                                       }}
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                       <option value="">General (date-based)</option>
@@ -1636,19 +1626,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         value={effIncomeTypeId}
                                         onChange={e => {
                                           const newId = e.target.value
-                                          const linkedCfg = resolveConfigForIncomeType(newId || null, incomeTypes)
-                                          // ── DIAGNOSTIC ──────────────────────────────────────────────────────
-                                          console.log('[ImportModal:incomeType onChange]', {
-                                            ri,
-                                            newIncomeTypeId: newId,
-                                            resolvedLinkedConfig: linkedCfg,
-                                            incomeTypesLoaded: incomeTypes.length,
-                                            incomeTypeFound: incomeTypes.find(t => t.id === newId),
-                                          })
-                                          // ── END DIAGNOSTIC ──────────────────────────────────────────────────
+                                          // Update income type and clear manual override so the new
+                                          // type's linked config takes effect immediately
                                           setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
-                                          // Propagate linked config from the newly selected income type
-                                          setRowConfigs(prev => ({ ...prev, [ri]: linkedCfg }))
+                                          setRowManualOverrides(prev => {
+                                            const next = { ...prev }
+                                            delete next[ri]
+                                            return next
+                                          })
                                         }}
                                         className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                                       >
