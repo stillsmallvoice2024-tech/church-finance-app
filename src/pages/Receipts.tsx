@@ -7,17 +7,16 @@ import { formatDate } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
-const RCP_SORT_FIELDS: SortField[] = [
-  { key: 'created_at', label: 'Upload Date', type: 'date', primary: true },
-  { key: 'file_name',  label: 'File Name',   type: 'text', primary: true },
+const RCP_COLUMNS: TableColumnDef<Receipt>[] = [
+  { key: 'created_at', label: 'Upload Date', sortType: 'date', primary: true, noSearch: true },
+  { key: 'file_name',  label: 'File Name',   sortType: 'text', primary: true, accessor: r => r.file_name },
 ]
 
-const RCP_SEARCH_COLS = [
-  { key: 'all',       label: 'All Columns' },
-  { key: 'file_name', label: 'File Name' },
-]
+const RCP_SORT_FIELDS = deriveSortFields(RCP_COLUMNS)
 
 const MIGRATION_SQL =
 `-- Receipts table
@@ -98,11 +97,10 @@ export default function Receipts() {
 
   const isMigrationError = !!error && /relation.*does not exist|receipts|Could not find/i.test(error)
 
-  const filtered = useMemo(() => {
-    const q = rcpState.search.trim().toLowerCase()
-    if (!q) return receipts
-    return receipts.filter(r => r.file_name.toLowerCase().includes(q))
-  }, [receipts, rcpState.search])
+  const filtered = useMemo(
+    () => searchRows(receipts, RCP_COLUMNS, rcpState.search, rcpState.searchCol),
+    [receipts, rcpState.search, rcpState.searchCol],
+  )
 
   const getRcpValue = (r: Receipt, k: string) => {
     if (k === 'file_name') return r.file_name
@@ -213,7 +211,7 @@ export default function Receipts() {
         {/* Main panel */}
         <div className="flex-1 min-w-0 space-y-4">
             <DataControlsBar
-              sortFields={RCP_SORT_FIELDS}
+              columns={RCP_COLUMNS}
               sortKey={rcpState.sortKey}
               sortDir={rcpState.sortDir}
               onSort={rcpState.setSort}
@@ -222,7 +220,6 @@ export default function Receipts() {
               search={rcpState.search}
               onSearchChange={rcpState.setSearch}
               searchPlaceholder="Search file name…"
-              searchColumns={RCP_SEARCH_COLS}
               searchCol={rcpState.searchCol}
               onSearchColChange={rcpState.setSearchCol}
               advancedSort={rcpState.advancedSort}

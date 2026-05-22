@@ -85,7 +85,7 @@ export async function createGroupWithFirstVersion(params: {
   status:          'draft' | 'locked'
   income_type_id?: string | null
   prev_income_type_id?: string | null
-}): Promise<string> {
+}): Promise<{ groupId: string; config: AllocationConfig }> {
   const { data: grp, error: gErr } = await supabase
     .from('special_config_groups')
     .insert({ name: params.name })
@@ -94,7 +94,7 @@ export async function createGroupWithFirstVersion(params: {
   if (gErr) throw new Error(gErr.message)
   const groupId = (grp as { id: string }).id
 
-  const { error: vErr } = await supabase
+  const { data: configRow, error: vErr } = await supabase
     .from('allocation_configs')
     .insert({
       name:            params.name,
@@ -109,13 +109,15 @@ export async function createGroupWithFirstVersion(params: {
       start_date:      params.effective_from,
       status:          params.status,
     })
+    .select('*')
+    .single()
   if (vErr) throw new Error(vErr.message)
 
   if (params.income_type_id) {
     await setGroupIncomeTypeLink(groupId, params.income_type_id, params.prev_income_type_id ?? null)
   }
 
-  return groupId
+  return { groupId, config: configRow as AllocationConfig }
 }
 
 export async function createNewVersion(params: {

@@ -3,7 +3,9 @@ import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, Folde
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import {
   useCategories, useCategoryGroups, useCategoryOpeningBalances,
   fetchCategoryOpeningBalances, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance,
@@ -48,15 +50,12 @@ ALTER TABLE public.categories
   ADD COLUMN IF NOT EXISTS group_id uuid REFERENCES public.category_groups(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS is_hidden boolean NOT NULL DEFAULT false;`
 
-const CAT_SORT_FIELDS: SortField[] = [
-  { key: 'name', label: 'Name', type: 'text', primary: true },
+const CAT_COLUMNS: TableColumnDef<Category>[] = [
+  { key: 'name',  label: 'Name',  sortType: 'text', primary: true, accessor: c => c.name },
+  { key: 'group', label: 'Group',                   accessor: c => (c as unknown as { group?: { name?: string } }).group?.name ?? '' },
 ]
 
-const CAT_SEARCH_COLS = [
-  { key: 'all',   label: 'All Columns' },
-  { key: 'name',  label: 'Name' },
-  { key: 'group', label: 'Group' },
-]
+const CAT_SORT_FIELDS = deriveSortFields(CAT_COLUMNS)
 
 // ── Deletion check ─────────────────────────────────────────────────────────────
 
@@ -509,7 +508,7 @@ export default function Categories() {
       </div>
 
       <DataControlsBar
-        sortFields={CAT_SORT_FIELDS}
+        columns={CAT_COLUMNS}
         sortKey={catState.sortKey}
         sortDir={catState.sortDir}
         onSort={catState.setSort}
@@ -520,7 +519,6 @@ export default function Categories() {
         search={catState.search}
         onSearchChange={catState.setSearch}
         searchPlaceholder="Search by category or group name…"
-        searchColumns={CAT_SEARCH_COLS}
         searchCol={catState.searchCol}
         onSearchColChange={catState.setSearchCol}
         advancedSort={catState.advancedSort}

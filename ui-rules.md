@@ -133,7 +133,7 @@ Toast container uses `.toast-safe-bottom` (CSS var `--tab-bar-height: 64px`) on 
 - `editRecord` prop is typed as the matching DB row interface (e.g. `InflowTransaction | null`)
 - DB row interfaces in `src/hooks/useTransactions.ts` must include **all** DB columns that modal forms read on edit — including `allocation_config_id`, `fx_amount`, `fx_rate`
 - Never cast `editRecord as Record<string, unknown>` to access missing fields — extend the interface instead
-- `onSaved` callback in modals that return a created entity: type as `(cfg?: T) => void` (optional param) so call sites that don't need the return value can still call `onSaved()` without arguments
+- `onSaved` callback in modals that return a created entity: type as `(cfg?: T) => void` (optional param) so call sites that don't need the return value can still call `onSaved()` without arguments. **If the consumer needs the entity for immediate state update (e.g. adding to a dropdown, auto-selecting a row), the mutation must pass it: `onSaved(entity)` — never `onSaved()` in that path.** Calling `onSaved()` without the arg when the callback guards on `!cfg` causes silent no-ops.
 - `onClose` must not be `undefined` at runtime — use `() => {}` (no-op) when you need to suppress closing, not `undefined`
 
 ---
@@ -269,6 +269,12 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 `handleResolve` in `PendingDeductions.tsx` checks `stage_code_1` and `stage_code_2` before updating `is_pending_deduction`:
 - If either is blank/null → error toast + `openEdit(row)` — DB update is NOT called
 - Only proceeds to mark resolved when both stage codes are filled
+
+**Bulk resolve** (`handleBulkResolve`) applies the same guard at scale:
+- Rows missing either stage code are **skipped** (not errored) — info toast shows skipped count
+- Valid rows resolved sequentially via `updateMutation.mutate` loop
+- Toast order: skipped warning → failed count → resolved count
+- Selection cleared and `refetch()` called after loop completes
 
 ---
 
@@ -438,8 +444,51 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 - Compact prefix selector left of search input; shows "All" when `searchCol === 'all'` (default)
 - Placeholder derives from column scope: `"Search all"` for all-columns, `"Search [column label]"` for specific column; `searchPlaceholder` prop used only when no `searchColumns` are configured
 - Selector button has `h-full` so its border fills the `items-stretch` flex container flush against the input; input uses `py-1` (not `py-1.5`) so both land at 28px despite differing text sizes
-- For server-paginated pages (Inflows, Outflows): column filter applied client-side on top of server results
-- For client-side pages: existing multi-column filter replaced by column-specific filter
+- First entry of `searchColumns` **must** be `{ key: 'all', label: 'All Columns' }`
+
+### Search filter implementation rules
+
+**Inflows / Outflows — fetch-all pattern (global search):**
+When `debouncedSearch` is non-empty (`isSearching = true`), call hook with `fetchAll: true`:
+- Server returns all rows up to 10 000 matching active date/stageCode filters; no text filter applied
+- Client sorts then filters across every searchable column (all columns or column-specific)
+- Client re-paginates results; `PaginationBar` total + summary strip count use `allMatching.length`
+- When search is cleared, hook reverts to normal server-side paginated fetch (no `fetchAll`)
+
+```ts
+const isSearching = debouncedSearch.trim() !== ''
+// hook call — never pass search param; fetchAll handles it
+{ page: isSearching ? 0 : page, pageSize: isSearching ? undefined : state.pageSize, fetchAll: isSearching }
+// allMatching: sorted.filter(across all columns)
+// displayed: isSearching ? allMatching.slice(page*pageSize, ...) : sorted
+// PaginationBar total / SummaryStrip count: isSearching ? allMatching.length : count
+```
+
+**`fetchAll` flag in `useInflowTransactions` / `useOutflowTransactions`:** skips `.range()`, applies `.limit(10000)`, ignores `search` param. Falls back to paginated `.range()` when `fetchAll` is false.
+
+**Client-side pages (all others):**
+- Filter `useMemo` must dispatch on `col` — never hardcode `description`
+- `col === 'all'` branch must search **all** searchable text fields for that page
+- `searchCol` **must** be included in the `useMemo` dependency array for all filter derivations
+
+**Per-page searchable columns:**
+| Page | `all` searches | Specific cols |
+|---|---|---|
+| Inflows | description, bank_name, transaction_ref, transaction_type | bank_name, transaction_ref, Type, Amount |
+| Outflows | description, bank_name, transaction_id, stage_code_1, transaction_type, display_description | bank_name, transaction_id, Type, Stage Code, Disbursed, Net |
+| BankLedger | description + inflow + outflow | description, inflow, outflow |
+| BankDeposits | description + transaction_ref + bank_name | description, bank_name, transaction_ref, amount |
+| ForeignCurrency | narration + transaction_ref | narration, transaction_ref |
+| Categories | name + group name | name, group |
+| CategoryLedger summary | category name | name |
+| CategoryLedger ledger | description | description |
+| PCA / SavingsPortions / SpecificGivings | category name | category |
+| Receipts | file_name | file_name |
+| IntraFlow | server description | description |
+| ChangeLog | field_name + old_value + new_value | field_name, table_name |
+| PendingDeductions | description + bank_name (client) | description, bank_name |
+
+**Do not add** `balance` as a searchable column on BankLedger or CategoryLedger — running balance searches produce misleading partial matches.
 
 ### Sort utilities (`src/utils/sortUtils.ts`)
 
@@ -453,12 +502,15 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 - Rendered in the controls cluster (right of sort button, left of view toggle) when `pageSize` + `onPageSizeChange` props are provided
 - Always visible regardless of total row count; default options: `[25, 50, 100]`
 - Do NOT pass `onPageSizeChange` to `PaginationBar` on pages that also pass it to `DataControlsBar` — selector lives in one place only
-- `Inflows`/`Outflows`: `useDataViewState` declared **before** the query hook so `state.pageSize` is available for the server-side `pageSize` argument
-- `ChangeLog`, `IntraFlow`, `PendingDeductions`: still use hardcoded `PAGE_SIZE`; opt-in when those pages are refactored to use `DataControlsBar`
+- `Inflows`/`Outflows`/`IntraFlow`: `useDataViewState` declared **before** the query hook so `state.pageSize` is available for the server-side `pageSize` argument
 
-### Pages using DataControlsBar (11)
+### Pages using DataControlsBar (14)
 
-Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), SpecificGivings (`sg`), PercentageAllocations (`pca`), SavingsPortions (`svp`), Receipts (`rcp`).
+Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), SpecificGivings (`sg`), PercentageAllocations (`pca`), SavingsPortions (`svp`), Receipts (`rcp`), IntraFlow (`ifl`), ChangeLog (`cl`), PendingDeductions (`pd`).
+
+**IntraFlow** — server search (description ilike) fires only for `col='all'`; domain filters (date, accountFrom, accountTo) stay in filter card above DataControlsBar; view toggle managed via DataControlsBar `view` prop.
+**ChangeLog** — client-side sort + search only (server supplies current page by table+date filter); defaultPageSize 50, pageSizeOptions `[25, 50, 100, 200]`.
+**PendingDeductions** — client-side sort + search only (server supplies pending outflows); search cols: description, bank_name.
 
 ---
 
@@ -575,23 +627,30 @@ The **Optional Banking Details** section (`amount_refunded`, `transfer_charge`) 
 
 ---
 
-## Multi-Select Rows + Bulk Operations (Inflows / Outflows table view)
+## Multi-Select Rows + Bulk Operations
 
+Pages using multi-select: **Inflows**, **Outflows** (table view only), **PendingDeductions**.
+
+### Shared mechanics
 - `selectedIds: Set<string>` state; cleared on page change, filter change, and year reset
-- Checkbox column is first in table header and each row (`w-10 pl-4 pr-2`); header checkbox = select/deselect all on current page
+- Checkbox column is first (`w-10 pl-4 pr-2`); header checkbox = select/deselect all on current page; supports `indeterminate` via `useRef<HTMLInputElement>` synced in a `useEffect` on `[selectedIds, displayed]`
 - Selected rows get `bg-primary/5 hover:bg-primary/10` highlight
-- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0`:
-  - "Edit selected" (canWrite) → opens `BulkEditInflowModal` / `BulkEditOutflowModal`
-  - "Delete selected" (canDelete) → `DeleteDialog` with count-aware label → sequential `deleteRecord` loop → `refetch()`
-  - "Clear" → `setSelectedIds(new Set())`
-- **BulkEdit modal** (inline function component at bottom of page file):
-  - Inflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `income_type_id` (select, shown only when income types exist) + `stage_code_1` (category select) + `stage_code_2` (select: Percentage Allocation / Specific Seed / Savings); calls `useCategories()` + `useIncomeTypes()` internally
-  - Outflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `stage_code_1` (category select, from `categories` prop) + `stage_code_2` (select)
-  - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID; no way to bulk-clear `transaction_type` (individual edit only)
-  - **Strip-and-retry pattern**: `handleApply` builds a `const baseUpdates` snapshot before the loop. Each iteration derives `rowUpdates` by filtering out columns already in `strippedCols`. On schema error for a column: add to `strippedCols`, retry the current row with `retryUpdates` (base minus that column). **Never mutate `baseUpdates` or reassign an `updates` variable inside the loop** — doing so causes all subsequent rows to silently lose the stripped column. Per-column warning toast emitted once after loop. Toast order: column warnings → success/fail count.
-  - **Form reset on close (not on open)**: the reset `useEffect` uses `if (open) return` so it fires when the modal closes. State is clean before the next open — avoids previous-session values flashing on the first render of a new session. Also resets `saving` to `false` to prevent a stuck spinner if the modal is closed abnormally.
-- colSpan for loading/empty/expanded rows must equal total column count (10 for Inflows, 13 for Outflows)
+- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0` — count badge + action buttons + Clear
+
+### Inflows / Outflows
+- Actions: "Edit selected" (canWrite) → `BulkEditInflowModal` / `BulkEditOutflowModal`; "Delete selected" (canDelete) → `DeleteDialog` → sequential `deleteRecord` loop → `refetch()`
+- **BulkEdit modal** (inline component at bottom of page file):
+  - Inflows: `bank_name`, `recorded_at`, `transaction_type`, `income_type_id`, `stage_code_1`, `stage_code_2`
+  - Outflows: `bank_name`, `recorded_at`, `transaction_type`, `stage_code_1`, `stage_code_2`
+  - Blank fields skipped; `useUpdateTransaction` called per ID
+  - **Strip-and-retry pattern**: build `const baseUpdates` before loop; on schema error for a column → add to `strippedCols`, retry row without it; never mutate `baseUpdates` inside loop. Toast order: column warnings → success/fail count.
+  - **Form reset on close** (`if (open) return` guard so state is clean before next open)
+- colSpan: 10 (Inflows), 13 (Outflows)
 - Multi-select is **table view only** — cards view unchanged
+
+### PendingDeductions
+- Action: "Resolve selected" (canWrite) — see PendingDeductions Resolve Guard section for bulk behaviour
+- colSpan: 9 (Checkbox + Date + Description + Disbursed + Transfer Charge + Net + Stage Code + Remarks + Actions)
 
 ---
 
@@ -606,7 +665,10 @@ Row-level checkboxes in the Configure Rows step of `ImportModal.tsx`:
 - **Apply button disabled** when both no selection and no field values are chosen
 - **Row count display:** `{filtered.length} / {total} rows · X selected` (selected count only shown when > 0)
 - **Description cell — both tabs:** hover tooltip only (no click-expand, no ChevronDown); `onMouseEnter`/`onMouseLeave` on a plain `div` with `className="flex items-center"` — no `onClick`, no `cursor-pointer`, no `expandedRows`
-- Grid templates include a leading `24px` checkbox column: Credit `[24px_32px_1fr_72px_120px_120px_96px]`, Debit `[24px_36px_1fr_80px_110px_110px_90px]`
+- Grid templates include a leading `24px` checkbox column: Credit `[24px_32px_1fr_72px_120px_120px_96px]`, Debit `[24px_36px_1fr_80px_110px_110px_52px_90px]`
+- **Debit Pending column:** 7th column (52px) contains a per-row checkbox (`text-amber-500`); header label "Pending"; positioned between Stage Code 2 and Type
+- **Bulk pending actions:** "Mark Pending" (amber) and "Clear Pending" (gray) buttons in the outflow apply bar, separated from the Apply button by a vertical divider; operate on `outflowTargetRis` (selected or all filtered); always enabled when target rows exist — no field selection required
+- **`rowPendingDeductions: Set<number>`** — keyed by `ri`; reset in `reset()`; `runImport` reads `rowPendingDeductions.has(ri)` to set `is_pending_deduction = true` per row
 
 ## Schema Cache Error — Inline Display (Inflows / Outflows modals)
 

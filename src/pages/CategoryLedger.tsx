@@ -14,35 +14,29 @@ import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
-import type { SortField } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
-const SUMMARY_SORT_FIELDS: SortField[] = [
-  { key: 'name',                label: 'Category',      type: 'text',    primary: true },
-  { key: 'percentage',          label: '% Alloc',       type: 'numeric', primary: true },
-  { key: 'percentageAllocated', label: '₦ Allocated',   type: 'numeric', primary: true },
-  { key: 'specificSeed',        label: 'Specific Seed', type: 'numeric', primary: true },
-  { key: 'savingsNet',          label: 'Savings Net',   type: 'numeric', primary: true },
+const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
+  { key: 'name',                label: 'Category',      sortType: 'text',    primary: true, accessor: r => r.name },
+  { key: 'percentage',          label: '% Alloc',       sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
+  { key: 'percentageAllocated', label: '₦ Allocated',   sortType: 'numeric', primary: true },
+  { key: 'specificSeed',        label: 'Specific Seed', sortType: 'numeric', primary: true },
+  { key: 'savingsNet',          label: 'Savings Net',   sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut },
 ]
 
-const LEDGER_SORT_FIELDS: SortField[] = [
-  { key: 'date',        label: 'Date',        type: 'date',    primary: true },
-  { key: 'inflow',      label: 'Inflow',      type: 'numeric', primary: true },
-  { key: 'outflow',     label: 'Outflow',     type: 'numeric', primary: true },
-  { key: 'balance',     label: 'Balance',     type: 'numeric', primary: true },
-  { key: 'description', label: 'Description', type: 'text' },
+const LEDGER_COLUMNS: TableColumnDef<LedgerRow>[] = [
+  { key: 'date',        label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description', label: 'Description', sortType: 'text',    accessor: r => r.description },
+  { key: 'inflow',      label: 'Inflow',      sortType: 'numeric', primary: true, accessor: r => r.inflow > 0 ? String(r.inflow) : '' },
+  { key: 'outflow',     label: 'Outflow',     sortType: 'numeric', primary: true, accessor: r => r.outflow > 0 ? String(r.outflow) : '' },
+  { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true },
 ]
 
-const SUMMARY_SEARCH_COLS = [
-  { key: 'all',  label: 'All Columns' },
-  { key: 'name', label: 'Category' },
-]
-
-const LEDGER_SEARCH_COLS = [
-  { key: 'all',         label: 'All Columns' },
-  { key: 'description', label: 'Description' },
-]
+const SUMMARY_SORT_FIELDS = deriveSortFields(SUMMARY_COLUMNS)
+const LEDGER_SORT_FIELDS   = deriveSortFields(LEDGER_COLUMNS)
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -389,12 +383,8 @@ export default function CategoryLedger() {
   )
 
   const summarySearchFiltered = useMemo(
-    () => {
-      const lower = summaryViewState.search.toLowerCase().trim()
-      if (!lower) return filteredRows
-      return filteredRows.filter(r => r.name.toLowerCase().includes(lower))
-    },
-    [filteredRows, summaryViewState.search],
+    () => searchRows(filteredRows, SUMMARY_COLUMNS, summaryViewState.search, summaryViewState.searchCol),
+    [filteredRows, summaryViewState.search, summaryViewState.searchCol],
   )
 
   const getSummaryValue = (row: CategoryRow, key: string) => {
@@ -449,13 +439,14 @@ export default function CategoryLedger() {
 
   const ledgerFiltered = useMemo(
     () => {
-      const lower = ledgerViewState.search.toLowerCase().trim()
-      if (!lower) return ledgerRows
+      const q = ledgerViewState.search.trim().toLowerCase()
+      if (!q) return ledgerRows
       return ledgerRows.filter(r =>
-        r.id === 'bal-bf' || r.description.toLowerCase().includes(lower)
+        r.id === 'bal-bf' ||
+        searchRows([r], LEDGER_COLUMNS, q, ledgerViewState.searchCol).length > 0
       )
     },
-    [ledgerRows, ledgerViewState.search],
+    [ledgerRows, ledgerViewState.search, ledgerViewState.searchCol],
   )
 
   const getLedgerValue = (row: LedgerRow, key: string) => {
@@ -621,7 +612,7 @@ export default function CategoryLedger() {
             <div className="space-y-2">
               {/* Data Controls — immediately above table */}
               <DataControlsBar
-                sortFields={SUMMARY_SORT_FIELDS}
+                columns={SUMMARY_COLUMNS}
                 sortKey={summaryViewState.sortKey}
                 sortDir={summaryViewState.sortDir}
                 onSort={summaryViewState.setSort}
@@ -630,7 +621,6 @@ export default function CategoryLedger() {
                 search={summaryViewState.search}
                 onSearchChange={summaryViewState.setSearch}
                 searchPlaceholder="Search categories…"
-                searchColumns={SUMMARY_SEARCH_COLS}
                 searchCol={summaryViewState.searchCol}
                 onSearchColChange={summaryViewState.setSearchCol}
                 advancedSort={summaryViewState.advancedSort}
@@ -906,7 +896,7 @@ export default function CategoryLedger() {
                 <div className="space-y-1.5">
                   {/* Data Controls — immediately above data */}
                   <DataControlsBar
-                    sortFields={LEDGER_SORT_FIELDS}
+                    columns={LEDGER_COLUMNS}
                     sortKey={ledgerViewState.sortKey}
                     sortDir={ledgerViewState.sortDir}
                     onSort={ledgerViewState.setSort}
@@ -917,7 +907,6 @@ export default function CategoryLedger() {
                     search={ledgerViewState.search}
                     onSearchChange={ledgerViewState.setSearch}
                     searchPlaceholder="Search descriptions…"
-                    searchColumns={LEDGER_SEARCH_COLS}
                     searchCol={ledgerViewState.searchCol}
                     onSearchColChange={ledgerViewState.setSearchCol}
                     advancedSort={ledgerViewState.advancedSort}

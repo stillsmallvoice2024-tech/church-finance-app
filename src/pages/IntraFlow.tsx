@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   ArrowLeftRight, Plus, Download, Pencil, Trash2,
-  Search, AlertCircle, RefreshCw,
-  LayoutGrid, LayoutList,
+  AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
-import { Pagination }              from '../components/ui/Pagination'
+import { DataControlsBar }         from '../components/ui/DataControlsBar'
+import { SortableHeader }          from '../components/ui/SortableHeader'
+import { PaginationBar }           from '../components/ui/PaginationBar'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddIntraFlowModal }       from '../components/modals/AddIntraFlowModal'
 import { useIntraFlows, type IntraFlowRow } from '../hooks/useTransactions'
@@ -13,6 +14,10 @@ import { useDeleteTransaction }    from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
+import { useDataViewState }        from '../hooks/useDataViewState'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }  from '../hooks/useCategories'
@@ -21,7 +26,17 @@ import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls } from '../components/ui/FormField'
 
-const PAGE_SIZE = 25
+// ── Sort / search config ───────────────────────────────────────────────────────
+
+const IFL_COLUMNS: TableColumnDef<IntraFlowRow>[] = [
+  { key: 'date',         label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'total_amount', label: 'Amount',      sortType: 'numeric', primary: true },
+  { key: 'account_from', label: 'From',        sortType: 'text',    accessor: r => r.account_from ?? '' },
+  { key: 'account_to',   label: 'To',          sortType: 'text',    accessor: r => r.account_to ?? '' },
+  { key: 'description',  label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
+]
+
+const IFL_SORT_FIELDS = deriveSortFields(IFL_COLUMNS)
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -54,26 +69,27 @@ export default function IntraFlow() {
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
-  const [dateFrom,        setDateFrom]        = useState(yearStart)
-  const [dateTo,          setDateTo]          = useState(yearEnd)
-  const [accountFrom,     setAccountFrom]     = useState('')
-  const [accountTo,       setAccountTo]       = useState('')
-  const [searchInput,     setSearchInput]     = useState('')
+  const [dateFrom,    setDateFrom]    = useState(yearStart)
+  const [dateTo,      setDateTo]      = useState(yearEnd)
+  const [accountFrom, setAccountFrom] = useState('')
+  const [accountTo,   setAccountTo]   = useState('')
+
+  const iflState = useDataViewState({ storageKey: 'ifl', defaultSortKey: 'date', defaultSortDir: 'desc' })
+
+  // Debounce search for server (description ilike when col='all')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [page,            setPage]            = useState(0)
-
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchInput), 400)
+    const t = setTimeout(() => setDebouncedSearch(iflState.search), 400)
     return () => clearTimeout(t)
-  }, [searchInput])
+  }, [iflState.search])
 
-  useEffect(() => { setPage(0) }, [dateFrom, dateTo, accountFrom, accountTo, debouncedSearch])
+  useEffect(() => { iflState.setPage(0) }, [dateFrom, dateTo, accountFrom, accountTo, debouncedSearch, iflState.setPage])
 
   useEffect(() => {
     setDateFrom(`${year}-01-01`)
     setDateTo(`${year}-12-31`)
-    setPage(0)
-  }, [year])
+    iflState.setPage(0)
+  }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Data
   const { data, count, loading, error, refetch } = useIntraFlows({
@@ -81,10 +97,30 @@ export default function IntraFlow() {
     dateTo:      dateTo      || undefined,
     accountFrom: accountFrom || undefined,
     accountTo:   accountTo   || undefined,
-    search:      debouncedSearch || undefined,
-    page,
-    pageSize:    PAGE_SIZE,
+    search:      (iflState.searchCol === 'all' ? debouncedSearch : '') || undefined,
+    page:        iflState.page,
+    pageSize:    iflState.pageSize,
   })
+
+  // Sort + filter
+  const getIflValue = (r: IntraFlowRow, k: string) => {
+    if (k === 'total_amount') return Number(r.total_amount)
+    if (k === 'account_from') return r.account_from ?? ''
+    if (k === 'account_to')   return r.account_to ?? ''
+    if (k === 'description')  return r.description ?? ''
+    return r.date
+  }
+
+  const sorted = useMemo(() => {
+    const adv = iflState.advancedSort
+    if (adv.length > 0) return multiSortRows(data, getIflValue, adv, IFL_SORT_FIELDS)
+    return sortRows(data, getIflValue, iflState.sortKey, iflState.sortDir, IFL_SORT_FIELDS)
+  }, [data, iflState.sortKey, iflState.sortDir, iflState.advancedSort]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const displayed = useMemo(
+    () => iflState.searchCol === 'all' ? sorted : searchRows(sorted, IFL_COLUMNS, iflState.search, iflState.searchCol),
+    [sorted, iflState.search, iflState.searchCol],
+  )
 
   // Summary
   const total   = useMemo(() => data.reduce((s, r) => s + Number(r.total_amount), 0), [data])
@@ -96,7 +132,6 @@ export default function IntraFlow() {
   const [modalOpen,    setModalOpen]    = useState(false)
   const [deleteId,     setDeleteId]     = useState<string | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
-  const [displayMode,  setDisplayMode]  = useState<'table' | 'cards'>('table')
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
@@ -152,7 +187,7 @@ export default function IntraFlow() {
     </div>
   )
 
-  const hasActiveFilters = dateFrom || dateTo || accountFrom || accountTo || searchInput
+  const hasActiveFilters = dateFrom || dateTo || accountFrom || accountTo
 
   return (
     <>
@@ -165,17 +200,6 @@ export default function IntraFlow() {
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">
-            {/* View toggle */}
-            <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-              <button onClick={() => setDisplayMode('table')} title="Table view"
-                className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-                <LayoutList className="w-4 h-4" />
-              </button>
-              <button onClick={() => setDisplayMode('cards')} title="Card view"
-                className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-            </div>
             <button
               onClick={handleExport} disabled={data.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
@@ -216,19 +240,9 @@ export default function IntraFlow() {
                 ))}
               </select>
             </FilterGroup>
-            <FilterGroup label="Search" className="flex-1 min-w-[160px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input
-                  type="text" placeholder="Search description…" value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  className={`${filterInputCls} pl-9`}
-                />
-              </div>
-            </FilterGroup>
             {hasActiveFilters && (
               <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setAccountFrom(''); setAccountTo(''); setSearchInput('') }}
+                onClick={() => { setDateFrom(''); setDateTo(''); setAccountFrom(''); setAccountTo('') }}
                 className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Clear
@@ -237,12 +251,32 @@ export default function IntraFlow() {
           </div>
         </Card>
 
+        {/* Data controls bar */}
+        <DataControlsBar
+          columns={IFL_COLUMNS}
+          sortKey={iflState.sortKey}
+          sortDir={iflState.sortDir}
+          onSort={iflState.setSort}
+          defaultSortKey="date"
+          defaultSortDir="desc"
+          view={iflState.view}
+          onViewChange={iflState.setView}
+          search={iflState.search}
+          onSearchChange={v => { iflState.setSearch(v) }}
+          searchCol={iflState.searchCol}
+          onSearchColChange={iflState.setSearchCol}
+          advancedSort={iflState.advancedSort}
+          onAdvancedSort={iflState.setAdvancedSort}
+          pageSize={iflState.pageSize}
+          onPageSizeChange={iflState.setPageSize}
+        />
+
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
         {/* Table / Card view */}
         <Card padding={false}>
-          {displayMode === 'cards' ? (
+          {iflState.view === 'cards' ? (
             <div className="p-4 space-y-3">
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
@@ -256,13 +290,13 @@ export default function IntraFlow() {
                     </div>
                   </div>
                 ))
-              ) : data.length === 0 ? (
+              ) : displayed.length === 0 ? (
                 <div className="py-12 text-center text-gray-400">
                   <ArrowLeftRight className="w-10 h-10 text-gray-200 mx-auto mb-2" />
                   <p className="text-sm">No internal transfers match your filters.</p>
                 </div>
               ) : (
-                data.map(row => (
+                displayed.map(row => (
                   <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                     {/* Card header */}
                     <div className="px-4 pt-3.5 pb-3">
@@ -311,7 +345,36 @@ export default function IntraFlow() {
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage', 'To Stage', 'Remark', 'Actions'].map(h => (
+                    <SortableHeader
+                      field={IFL_SORT_FIELDS[0]}
+                      activeSortKey={iflState.sortKey}
+                      activeSortDir={iflState.sortDir}
+                      onSort={iflState.setSort}
+                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                    />
+                    <SortableHeader
+                      field={IFL_SORT_FIELDS[2]}
+                      activeSortKey={iflState.sortKey}
+                      activeSortDir={iflState.sortDir}
+                      onSort={iflState.setSort}
+                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                    />
+                    <SortableHeader
+                      field={IFL_SORT_FIELDS[3]}
+                      activeSortKey={iflState.sortKey}
+                      activeSortDir={iflState.sortDir}
+                      onSort={iflState.setSort}
+                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                    />
+                    <SortableHeader
+                      field={IFL_SORT_FIELDS[1]}
+                      activeSortKey={iflState.sortKey}
+                      activeSortDir={iflState.sortDir}
+                      onSort={iflState.setSort}
+                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                      rightAlign
+                    />
+                    {['From Stage', 'To Stage', 'Remark', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         {h}
                       </th>
@@ -329,7 +392,7 @@ export default function IntraFlow() {
                         ))}
                       </tr>
                     ))
-                  ) : data.length === 0 ? (
+                  ) : displayed.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-gray-400">
@@ -339,12 +402,12 @@ export default function IntraFlow() {
                       </td>
                     </tr>
                   ) : (
-                    data.map(row => (
+                    displayed.map(row => (
                       <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(Number(row.total_amount))}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap text-right">{formatCurrency(Number(row.total_amount))}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
@@ -371,7 +434,13 @@ export default function IntraFlow() {
               </table>
             </div>
           )}
-          <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
+          <PaginationBar
+            page={iflState.page}
+            pageSize={iflState.pageSize}
+            total={count}
+            onPageChange={iflState.setPage}
+            variant="full"
+          />
         </Card>
       </div>
 
@@ -394,7 +463,6 @@ export default function IntraFlow() {
 }
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
-
 
 function FilterGroup({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return (

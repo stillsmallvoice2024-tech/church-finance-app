@@ -1,16 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ClipboardList, Download, AlertCircle, RefreshCw } from 'lucide-react'
 import { Card }               from '../components/ui/Card'
-import { Pagination }         from '../components/ui/Pagination'
+import { PaginationBar }      from '../components/ui/PaginationBar'
+import { DataControlsBar }    from '../components/ui/DataControlsBar'
+import { SortableHeader }     from '../components/ui/SortableHeader'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { useFieldChanges }    from '../hooks/useFieldChanges'
+import type { FieldChangeEntry } from '../hooks/useFieldChanges'
 import { usePageTitle }       from '../hooks/usePageTitle'
+import { useDataViewState }   from '../hooks/useDataViewState'
 import { exportCSV }          from '../utils/csvExport'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { filterInputCls }     from '../components/ui/FormField'
 import { EmptyState }         from '../components/ui/EmptyState'
-
-const PAGE_SIZE = 200
 
 const TABLE_LABELS: Record<string, string> = {
   inflow_transactions:  'Inflow Transactions',
@@ -22,6 +27,16 @@ const TABLE_LABELS: Record<string, string> = {
   fx_transactions:      'FX Transactions',
   project_entries:      'Project Entries',
 }
+
+const CL_COLUMNS: TableColumnDef<FieldChangeEntry>[] = [
+  { key: 'changed_at', label: 'Timestamp', sortType: 'date', primary: true, noSearch: true },
+  { key: 'field_name', label: 'Field',     sortType: 'text', primary: true, accessor: e => e.field_name },
+  { key: 'table_name', label: 'Table',     sortType: 'text', primary: true, accessor: e => TABLE_LABELS[e.table_name] ?? e.table_name },
+  { key: 'old_value',  label: 'Old Value',                   accessor: e => e.old_value ?? '' },
+  { key: 'new_value',  label: 'New Value',                   accessor: e => e.new_value ?? '' },
+]
+
+const CL_SORT_FIELDS = deriveSortFields(CL_COLUMNS)
 
 function fmtTs(ts: string) {
   return new Date(ts).toLocaleString('en-NG', {
@@ -36,16 +51,22 @@ export default function ChangeLog() {
   const [tableFilter, setTableFilter] = useState('')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
-  const [page,        setPage]        = useState(0)
 
-  useEffect(() => { setPage(0) }, [tableFilter, dateFrom, dateTo])
+  const clState = useDataViewState({
+    storageKey:      'cl',
+    defaultSortKey:  'changed_at',
+    defaultSortDir:  'desc',
+    defaultPageSize: 50,
+  })
+
+  useEffect(() => { clState.setPage(0) }, [tableFilter, dateFrom, dateTo, clState.setPage])
 
   const { entries, count, loading, error, refetch } = useFieldChanges({
     tableName: tableFilter || undefined,
     dateFrom:  dateFrom    || undefined,
     dateTo:    dateTo      || undefined,
-    page,
-    pageSize:  PAGE_SIZE,
+    page:      clState.page,
+    pageSize:  clState.pageSize,
   })
 
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
@@ -97,6 +118,23 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
     )
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const getClValue = (e: (typeof entries)[number], k: string) => {
+    if (k === 'field_name') return e.field_name
+    if (k === 'table_name') return TABLE_LABELS[e.table_name] ?? e.table_name
+    return e.changed_at
+  }
+
+  const sorted = useMemo(() => {
+    const adv = clState.advancedSort
+    if (adv.length > 0) return multiSortRows(entries, getClValue, adv, CL_SORT_FIELDS)
+    return sortRows(entries, getClValue, clState.sortKey, clState.sortDir, CL_SORT_FIELDS)
+  }, [entries, clState.sortKey, clState.sortDir, clState.advancedSort, getClValue])
+
+  const displayed = useMemo(
+    () => searchRows(sorted, CL_COLUMNS, clState.search, clState.searchCol),
+    [sorted, clState.search, clState.searchCol],
+  )
 
   return (
     <div className="space-y-5">
@@ -147,17 +185,67 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
         </div>
       </Card>
 
+      {/* Sort / Search / Page-size controls */}
+      <DataControlsBar
+        columns={CL_COLUMNS}
+        sortKey={clState.sortKey}
+        sortDir={clState.sortDir}
+        onSort={clState.setSort}
+        defaultSortKey="changed_at"
+        defaultSortDir="desc"
+        search={clState.search}
+        onSearchChange={v => { clState.setSearch(v); clState.setPage(0) }}
+        searchCol={clState.searchCol}
+        onSearchColChange={clState.setSearchCol}
+        advancedSort={clState.advancedSort}
+        onAdvancedSort={clState.setAdvancedSort}
+        pageSize={clState.pageSize}
+        onPageSizeChange={clState.setPageSize}
+        pageSizeOptions={[25, 50, 100, 200]}
+      />
+
       {/* Table */}
       <Card padding={false}>
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
-                {['Timestamp', 'User', 'Table', 'Record ID', 'Field', 'Old Value', 'New Value'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
+                <SortableHeader
+                  label="Timestamp"
+                  sortKey="changed_at"
+                  currentSortKey={clState.sortKey}
+                  sortDir={clState.sortDir}
+                  onSort={clState.setSort}
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                />
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  User
+                </th>
+                <SortableHeader
+                  label="Table"
+                  sortKey="table_name"
+                  currentSortKey={clState.sortKey}
+                  sortDir={clState.sortDir}
+                  onSort={clState.setSort}
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                />
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Record ID
+                </th>
+                <SortableHeader
+                  label="Field"
+                  sortKey="field_name"
+                  currentSortKey={clState.sortKey}
+                  sortDir={clState.sortDir}
+                  onSort={clState.setSort}
+                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                />
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Old Value
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  New Value
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -171,14 +259,14 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
                     ))}
                   </tr>
                 ))
-              ) : entries.length === 0 ? (
+              ) : displayed.length === 0 ? (
                 <tr>
                   <td colSpan={7}>
                     <EmptyState icon={ClipboardList} title="No field changes recorded yet." compact />
                   </td>
                 </tr>
               ) : (
-                entries.map(e => (
+                displayed.map(e => (
                   <tr key={e.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.changed_at)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
@@ -209,7 +297,12 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
             </tbody>
           </table>
         </div>
-        <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
+        <PaginationBar
+          page={clState.page}
+          pageSize={clState.pageSize}
+          total={count}
+          onPageChange={clState.setPage}
+        />
       </Card>
       <DescriptionTooltip tooltip={descTooltip} />
     </div>

@@ -32,7 +32,8 @@ Also contains `ManualEntryForm` for single-transaction entry.
   - `stage_code_2` — budget portion dropdown (`Percentage Allocation` | `Specific Seed` | `Savings`)
 - Both passed to `doSaveOutflow` → `AddOutflowInput`; omitted if blank
 - Setting `stage_code_1` is what links a manually-entered outflow to **CategoryLedger**
-- Batch wizard outflow tab already has per-row stage code dropdowns (unchanged)
+- Batch wizard outflow tab has per-row stage code dropdowns and a per-row **Pending Deduction** checkbox (column 7 of the debit grid)
+- Pending deduction state: `rowPendingDeductions: Set<number>` (by `ri`); bulk "Mark Pending" / "Clear Pending" buttons in the apply bar target selected rows or all filtered rows; `runImport` writes `is_pending_deduction = true` only for rows in the set
 
 ---
 
@@ -152,6 +153,62 @@ Pipeline stages (all before Step 4 opens):
 
 ---
 
+## Config Propagation Precedence (Import Modal)
+
+**Resolver:** `src/utils/configResolver.ts` — single source of truth for all config resolution.
+
+```ts
+getFinalConfig(rowState: RowResolverState, generalConfigId, resolveGroupConfig?) → string | null
+resolveConfigForIncomeType(incomeType, generalConfigId, resolveGroupConfig?) → string | null
+resolveDefaultIncomeType(description, stageCode1, incomeTypes, userPrefs?) → IncomeType | null
+```
+
+**`RowResolverState`:**
+```ts
+{ incomeType: IncomeType | null; allocationConfigId: string; isManualOverride: boolean }
+```
+
+**`getFinalConfig` precedence (highest first):**
+1. `isManualOverride = true` → `allocationConfigId` (falls back to `generalConfigId` when blank)
+2. Income type is catch-all (zero rules) → always `generalConfigId` regardless of any linked config
+3. `incomeType.special_config_id` (direct linked config)
+4. `incomeType.special_config_group_id` → `resolveGroupConfig(groupId)` when provided
+5. `generalConfigId` (date-based general config)
+
+**`isManualOverride` flag:**
+- Set to `true` only when the user explicitly changes the Allocation Config dropdown for a row
+- Cleared whenever Income Type changes → new type's linked config auto-applies
+- `rowManualOverrides: Record<number, boolean>` — stored separately from `rowConfigs`
+
+**`resolveGroupConfig` callback:**
+- Required to handle income types linked via `special_config_group_id` (versioned config groups)
+- Step 4 display: `(groupId) => getSpecialConfigVersionForDate(allocConfigs, groupId, rowDate)?.id ?? null`
+- `runImport`: same pattern using the transaction's actual `date`
+- Both passed as third arg to `getFinalConfig`
+
+**`resolveDefaultIncomeType` fallback chain:**
+1. Keyword / stage-code rule match via `classifyIncomeType`
+2. `userPrefs.defaultIncomeTypeId` if provided
+3. Catch-all: first income type with zero rules (no keyword/stage rules = General)
+4. `null`
+
+**Per-row state:**
+- `rowIncomeTypes[ri]` — explicit user override of income type; absent = auto-classified
+- `rowConfigs[ri]` — explicit config value when `isManualOverride=true`; otherwise ignored
+- `autoClassifiedTypes` — `useMemo` map of `ri → IncomeType | null` computed once from `processedRows` + `incomeTypes`
+
+**Allocation configs reload:** `useAllocationStore.reload()` called every time the modal opens to ensure group config versions are always fresh.
+
+**Bulk Apply bar:**
+- Income type selected → `applyInflowConfig` auto-derives from linked config (`special_config_id` → direct UUID; `special_config_group_id` → `getSpecialConfigVersionForDate` with today's date)
+- Config selected explicitly → marks all target rows as `isManualOverride = true`
+- Income type applied without explicit config → clears `isManualOverride` for target rows so per-row `getFinalConfig` derives the linked config automatically
+- `applyBarSpecialConfigs` memo: deduplicates versioned group configs — only the today-active version per group appears in the dropdown (prevents multiple "Config 2024 / Config 2025" entries)
+
+**`src/utils/resolveImportConfig.ts`:** Backward-compat shim; re-exports everything from `configResolver.ts`. `resolveFinalRowConfig` is deprecated — delegates to `getFinalConfig` internally.
+
+---
+
 ## Missing Column / Schema Cache Error Handling
 
 Both import paths use a **strip-and-retry** pattern when PostgREST rejects an INSERT due to a missing or cache-invisible column.
@@ -228,6 +285,63 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 
 ---
 
+## Narration Normalization (`normalizeNarration`)
+
+**Utility:** `src/utils/normalizeNarration.ts` — converts raw bank narration strings to clean `display_description` values for UI display.
+
+**Pipeline order** (each step feeds the next):
+1. `normalizeId()` — strip invisible Unicode, NFC, collapse whitespace
+2. `extractSlashSegments()` — if first slash-segment is a known channel code (`TRF`, `USSD`, `APP`, `WEB`, `MOB`, `NIP`, `FIP`), strip it and strip the last segment when ≥3 parts (assumed reference token)
+3. `extractSpecialPrefix()` — detect `VAT` or `COMM`/`COMMISSION` prefix; strip it and pass remainder to `extractTargetName()`
+4. `cleanCoreNarration()` — transfer pattern (`NIP TRANSFER TO …`), POS pattern, then general leading-keyword/trailing-noise strip
+
+**NEVER use `normalizeNarration` output for deduplication, reconciliation, or audit matching** — those paths must use the raw `description` / `bank_description` fields directly.
+
+### `extractSpecialPrefix` — COMM/VAT separator formats
+
+Handles both connector styles:
+- `COMM ON …` / `COMMISSION FOR …` / `VAT ON …` (keyword connector)
+- `COMM - …` / `VAT - …` (dash separator — common in GT Bank statements)
+
+Strip regexes:
+```
+VAT:  /^VAT(?:\s*-\s*|\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*)/i
+COMM: /^COMM(?:ISSION)?(?:\s*-\s*|\s+(?:ON|FOR|FROM|CHARGE[SD]?)?\s*)/i
+```
+
+### `extractSemanticSlashSegment()` — slash narrations inside COMM/VAT context
+
+Called from `extractTargetName()`. Handles the pattern `To <bank>/Description/PayeeName` that appears in COMM/VAT remainders.
+
+**Rules:**
+- Strip leading segment if it matches `To <single-word>` (routing label: To pay, To Gtb, To Opay, To PalmPay, To Kuda, To Moniepoint, To Access, To Uba, To Zenith, To Firstbank, To Sterling, To Fidelity)
+- Strip trailing segment **only when** (a) a routing prefix was present, (b) ≥2 segments remain after prefix strip, and (c) `looksLikePersonOrBeneficiary()` returns true (2–5 uppercase-initial tokens, no digits)
+- Plain slash narrations without a routing prefix are **untouched** — `School Fees/May Session` stays unchanged
+
+**Key examples:**
+
+| Input (remainder after COMM/VAT strip) | Output |
+|---|---|
+| `To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti` | `Volunteers Tag - God-encounters Benin` |
+| `To Gtb/Fuel Purchase/John Doe` | `Fuel Purchase` |
+| `To Opay/Monthly Salary/Chinedu Okafor` | `Monthly Salary` |
+| `To Gtb/Monthly Salary` | `Monthly Salary` |
+| `School Fees/May Session` | `School Fees/May Session` (untouched) |
+
+**Full pipeline examples:**
+
+| Raw narration | `display_description` |
+|---|---|
+| `COMM - To pay/Volunteers Tag - God-encounters Benin/Alice Oyepeju Adeoti` | `COMM - Volunteers Tag - God-encounters Benin` |
+| `VAT - To Gtb/Fuel Purchase/John Doe` | `VAT - Fuel Purchase` |
+| `COMMISSION ON TRANSFER TO JANE` | `COMM - Jane` |
+| `VAT ON NIP TRANSFER TO JOHN DOE` | `VAT - John Doe` |
+| `NIP TRANSFER TO JOHN DOE REF 48291 SUCCESSFUL` | `Transfer - John Doe` |
+| `POS PAYMT SHOPRITE IKEJA TERMINAL 22391` | `POS - Shoprite Ikeja` |
+| `TRF MOBILE/Fuel 30/Bvshrjrb` | `Fuel 30` |
+
+---
+
 ## `runImport` Safety Rules
 
 - **Always wrap the full `runImport` body in `try/finally`** with `setImporting(false)` in the `finally` block. Any unhandled exception (network error, `crypto.subtle` failure, Supabase timeout) otherwise leaves `importing=true` forever — spinner rolls indefinitely, no result shown, no way to recover without closing the modal.
@@ -249,3 +363,15 @@ When a row has no bank-provided reference, a deterministic SHA-256 ID is generat
 Applies to both:
 - `ImportModal.tsx` batch wizard — guarded with `if (!txnType)` before config resolution block (inflow) and `if (!txnType && cfg)` (outflow)
 - `Import.tsx` ManualEntryForm — `effectiveConfigId` set to `undefined` when `txnType` is set (inflow); `txnType ? undefined : getConfigForDate(...)` (outflow)
+
+---
+
+## Special Config Creation — Step 4 Integration
+
+`CreateSpecialConfigModal` is rendered alongside `ImportModal` with `mode="new_group"`. The `onSaved(cfg)` callback **must** receive the created `AllocationConfig` — `ImportModal` uses it to:
+1. Add the config to the `specialConfigs` dropdown immediately (no refetch)
+2. Auto-select it for the triggering row (`createConfigPendingRow`)
+
+- `createConfigPendingRow` tracks context: `'apply'` = bulk inflow apply, `number` = per-row assignment, `null` = standalone open
+- `createGroupWithFirstVersion` returns `{ groupId, config: AllocationConfig }` — the config is the full DB row from `.select('*').single()` on the insert, available immediately without a second fetch
+- **Never call `onSaved()` without the arg** in the `new_group` path — `ImportModal`'s callback guards on `!cfg` and silently exits, leaving the dropdown stale

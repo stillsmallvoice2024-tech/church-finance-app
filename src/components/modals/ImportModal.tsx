@@ -9,11 +9,15 @@ import { Modal } from '../ui/Modal'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
-import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
+import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
-import { classifyIncomeType } from '../../utils/classifyIncomeType'
+import {
+  resolveDefaultIncomeType,
+  getFinalConfig,
+  type RowResolverState,
+} from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
@@ -275,8 +279,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const preview = sheet?.rows.slice(0, 5) ?? []
 
   // Allocation configs — load once so Step 4 and runImport can use them
-  const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: allocLoaded } = useAllocationStore()
-  useEffect(() => { if (!allocLoaded) fetchAllocConfigs() }, [allocLoaded, fetchAllocConfigs])
+  const { configs: allocConfigs, fetch: fetchAllocConfigs, reload: reloadAllocConfigs, loaded: allocLoaded } = useAllocationStore()
+  // Refresh configs every time the modal opens; fall back to lazy-load if already loaded
+  useEffect(() => {
+    if (open) reloadAllocConfigs()
+    else if (!allocLoaded) fetchAllocConfigs()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // Categories for stage code dropdowns
   const { categories } = useCategories()
@@ -293,8 +302,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     if (bank) setInternalBank(bank)
   }, [bank])
 
-  // Batch defaults
-  const [batchPendingDeduction, setBatchPendingDeduction] = useState(false)
+  // Per-row pending deduction (by sheet row index ri)
+  const [rowPendingDeductions, setRowPendingDeductions] = useState<Set<number>>(new Set())
 
   // Date format (Phase A)
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
@@ -325,13 +334,50 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [applyS2,           setApplyS2]           = useState('')
   const [applyIncomeType,   setApplyIncomeType]   = useState('')
 
+  // When the user picks an income type in the Apply bar, auto-derive its linked config
+  // so both fields stay in sync without requiring a separate manual selection.
+  useEffect(() => {
+    if (!applyIncomeType) return
+    const it = incomeTypes.find(t => t.id === applyIncomeType)
+    if (!it) return
+    if (it.rules.length === 0) {
+      setApplyInflowConfig('__general__')
+    } else if (it.special_config_id) {
+      setApplyInflowConfig(it.special_config_id)
+    } else if (it.special_config_group_id) {
+      const today = new Date().toISOString().slice(0, 10)
+      const v = getSpecialConfigVersionForDate(allocConfigs, it.special_config_group_id, today)
+      if (v) setApplyInflowConfig(v.id)
+    }
+  }, [applyIncomeType, incomeTypes, allocConfigs])
+
   // Per-row income type overrides (rowIndex → incomeTypeId)
-  const [rowIncomeTypes, setRowIncomeTypes] = useState<Record<number, string>>({})
+  const [rowIncomeTypes,     setRowIncomeTypes]     = useState<Record<number, string>>({})
+  // Per-row manual config override flag — true only when user explicitly changed the config dropdown
+  const [rowManualOverrides, setRowManualOverrides] = useState<Record<number, boolean>>({})
   const [tooltipState,   setTooltipState]   = useState<{ text: string; x: number; y: number } | null>(null)
 
   // Row selection (by sheet row index) — stable across filter/sort changes
   const [selectedInflowRis,  setSelectedInflowRis]  = useState<Set<number>>(new Set())
   const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
+
+  // ── Row-level memoized auto-classification ────────────────────────────────
+  // Pre-compute keyword-matched income types for all inflow rows once, keyed by ri.
+  // Avoids re-running classifyIncomeType for every row on every render (critical for 500+ rows).
+  const autoClassifiedTypes = useMemo(() => {
+    if (!processedRows || incomeTypes.length === 0) return {} as Record<number, import('../../hooks/useIncomeTypes').IncomeType | null>
+    const descIdx   = sheet?.headers.findIndex(h => mapping[h] === 'description') ?? -1
+    const creditIdx = sheet?.headers.findIndex(h => mapping[h] === 'credit') ?? -1
+    const result: Record<number, import('../../hooks/useIncomeTypes').IncomeType | null> = {}
+    for (let ri = 0; ri < processedRows.length; ri++) {
+      const raw    = processedRows[ri]
+      const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx] as unknown) : 0
+      if (credit <= 0) continue
+      const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+      result[ri] = desc ? resolveDefaultIncomeType(desc, '', incomeTypes) : null
+    }
+    return result
+  }, [processedRows, incomeTypes, sheet?.headers, mapping])
 
   // ── Import pipeline: pre-computed IDs + duplicate detection ──────────────
   // Set during proceedToRowConfig (Step 3→4 transition), BEFORE Step 4 opens.
@@ -347,19 +393,34 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // In-wizard dup check
 
-  // Special configs (is_special = true) loaded when modal opens
-  const [specialConfigs,   setSpecialConfigs]   = useState<typeof allocConfigs>([])
-  const [createConfigOpen, setCreateConfigOpen] = useState(false)
+  // Derived from the already-loaded allocConfigs store — no separate query needed.
+  // This avoids the race condition where a linked config UUID is in displaySelId
+  // but not yet present in a separately-loaded specialConfigs list, causing the
+  // <select> to silently fall back to showing "General (date-based)".
+  const specialConfigs = useMemo(
+    () => allocConfigs.filter(c => c.is_special),
+    [allocConfigs],
+  )
 
-  useEffect(() => {
-    if (open) {
-      supabase
-        .from('allocation_configs')
-        .select('*')
-        .eq('is_special', true)
-        .then(({ data }) => setSpecialConfigs((data ?? []) as typeof allocConfigs))
+  // Apply bar config list: for versioned group configs, only show the currently
+  // active version (by today's date) — avoids multiple versions of the same group
+  // appearing as separate options in the dropdown.
+  const applyBarSpecialConfigs = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const seenGroups = new Set<string>()
+    const result: typeof allocConfigs = []
+    for (const c of specialConfigs) {
+      if (!c.config_group_id) {
+        result.push(c)
+      } else if (!seenGroups.has(c.config_group_id)) {
+        seenGroups.add(c.config_group_id)
+        const active = getSpecialConfigVersionForDate(allocConfigs, c.config_group_id, today)
+        if (active) result.push(active)
+      }
     }
-  }, [open])
+    return result
+  }, [specialConfigs, allocConfigs])
+  const [createConfigOpen, setCreateConfigOpen] = useState(false)
 
   // ── Reset on open/close ──────────────────────────────────────────────────
 
@@ -375,7 +436,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setResult(null)
     setImporting(false)
     setParsing(false)
-    setBatchPendingDeduction(false)
+    setRowPendingDeductions(new Set())
     setDateFormat('DD/MM/YYYY')
     setFxCurrency('')
     setRowConfigs({})
@@ -393,6 +454,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setApplyS2('')
     setApplyIncomeType('')
     setRowIncomeTypes({})
+    setRowManualOverrides({})
     setSelectedInflowRis(new Set())
     setSelectedOutflowRis(new Set())
     setPrecomputedInflowIds({})
@@ -708,23 +770,23 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
-          // Resolve income type: per-row override → auto-classify
+          // Resolve income type: per-row override → keyword auto-classify
           const effIncomeTypeId = rowIncomeTypes[ri]
-            ?? (desc ? classifyIncomeType(desc, '', incomeTypes)?.id : undefined)
+            ?? (desc ? resolveDefaultIncomeType(desc, '', incomeTypes)?.id : undefined)
           if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
           // Non-Normal transactions skip allocation entirely
           if (!txnType) {
-            const overrideCfgId = rowConfigs[ri]
-            const linkedCfgId   = effIncomeTypeId
-              ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
-              : null
-            if (overrideCfgId) {
-              row.allocation_config_id = overrideCfgId
-            } else if (linkedCfgId) {
-              row.allocation_config_id = linkedCfgId
-            } else if (cfg) {
-              row.allocation_config_id = cfg.id
+            const rowState: RowResolverState = {
+              incomeType:          incomeTypes.find(t => t.id === effIncomeTypeId) ?? null,
+              allocationConfigId:  rowConfigs[ri] ?? '',
+              isManualOverride:    rowManualOverrides[ri] ?? false,
             }
+            const resolvedId = getFinalConfig(
+              rowState,
+              cfg?.id ?? null,
+              (groupId) => getSpecialConfigVersionForDate(latestConfigs, groupId, date)?.id ?? null,
+            )
+            if (resolvedId) row.allocation_config_id = resolvedId
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {
@@ -771,7 +833,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             if (sc.s1) row.stage_code_1 = sc.s1
             if (sc.s2) row.stage_code_2 = sc.s2
           }
-          if (batchPendingDeduction) row.is_pending_deduction = true
+          if (rowPendingDeductions.has(ri)) row.is_pending_deduction = true
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           row.recorded_at = importTimestamp
@@ -789,6 +851,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         : outflowRows
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
+
+      // ── DIAGNOSTIC: log actual objects before DB insert ─────────────────────
+      console.log('[ImportModal:runImport] PRE-INSERT inflow rows:', inflowToInsert.map(r => ({
+        ri: '(row)',
+        income_type_id:       r.income_type_id   ?? null,
+        allocation_config_id: r.allocation_config_id ?? null,
+        desc: String(r.description ?? '').slice(0, 40),
+      })))
+      // ── END DIAGNOSTIC ───────────────────────────────────────────────────────
 
       const total = inflowToInsert.length + outflowToInsert.length
       const BATCH = 100
@@ -918,8 +989,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       setImporting(false)
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
-      dateFormat, fxCurrency, batchPendingDeduction,
-      rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
+      dateFormat, fxCurrency, rowPendingDeductions,
+      rowConfigs, rowManualOverrides, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
       internalBank,
       rowIncomeTypes, incomeTypes,
       duplicateRis, precomputedInflowIds, precomputedOutflowIds])
@@ -1340,17 +1411,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                   </button>
                 ))}
               </div>
-              {bsConfigTab === 'outflow' && (
-                <label className="flex items-center gap-2 pb-2 cursor-pointer select-none text-xs text-gray-700 pr-2">
-                  <input
-                    type="checkbox"
-                    checked={batchPendingDeduction}
-                    onChange={e => setBatchPendingDeduction(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
-                  />
-                  Mark all debit rows as Pending Deduction
-                </label>
-              )}
             </div>
 
             {(() => {
@@ -1437,7 +1497,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
                         <option value="">— Allocation Config —</option>
                         <option value="__general__">General (date-based)</option>
-                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {applyBarSpecialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         <option value="__create__">＋ Create New Config…</option>
                       </select>
                       {incomeTypes.length > 0 && (
@@ -1456,20 +1516,34 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         type="button"
                         disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType) || inflowTargetRis.length === 0}
                         onClick={() => {
-                          setRowConfigs(prev => {
-                            const next = { ...prev }
-                            if (applyInflowConfig) {
-                              for (const ri of inflowTargetRis)
-                                next[ri] = applyInflowConfig === '__general__' ? '' : applyInflowConfig
-                            }
-                            return next
-                          })
+                          if (applyInflowConfig) {
+                            // Explicit config selection → mark affected rows as manual overrides
+                            const configVal = applyInflowConfig === '__general__' ? '' : applyInflowConfig
+                            setRowConfigs(prev => {
+                              const next = { ...prev }
+                              for (const ri of inflowTargetRis) next[ri] = configVal
+                              return next
+                            })
+                            setRowManualOverrides(prev => {
+                              const next = { ...prev }
+                              for (const ri of inflowTargetRis) next[ri] = true
+                              return next
+                            })
+                          }
                           if (applyIncomeType) {
                             setRowIncomeTypes(prev => {
                               const next = { ...prev }
                               for (const ri of inflowTargetRis) next[ri] = applyIncomeType
                               return next
                             })
+                            if (!applyInflowConfig) {
+                              // Income type only — clear manual overrides so linked config auto-applies
+                              setRowManualOverrides(prev => {
+                                const next = { ...prev }
+                                for (const ri of inflowTargetRis) delete next[ri]
+                                return next
+                              })
+                            }
                           }
                           if (batchTxnType !== '') {
                             setRowTxnTypes(prev => {
@@ -1516,12 +1590,23 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           : filtered.map(({ ri, raw, credit }) => {
                               const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
                               const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                              const selId   = rowConfigs[ri] ?? ''
                               const txnType = rowTxnTypes[ri] ?? ''
                               const origId  = rowOrigTxnIds[ri] ?? ''
-                              const autoType = desc ? classifyIncomeType(desc, '', incomeTypes) : null
+                              // Auto-classify from pre-computed map (avoids re-running keyword matching per render)
+                              const autoType        = autoClassifiedTypes[ri] ?? null
                               const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
-                              const effIncomeType = incomeTypes.find(t => t.id === effIncomeTypeId)
+                              const effIncomeType   = incomeTypes.find(t => t.id === effIncomeTypeId) ?? null
+                              const rowState: RowResolverState = {
+                                incomeType:         effIncomeType,
+                                allocationConfigId: rowConfigs[ri] ?? '',
+                                isManualOverride:   rowManualOverrides[ri] ?? false,
+                              }
+                              // '' = "General (date-based)" in display; real general config resolved at import time
+                              const displaySelId = getFinalConfig(
+                                rowState,
+                                '',
+                                (groupId) => getSpecialConfigVersionForDate(allocConfigs, groupId, date || new Date().toISOString().slice(0, 10))?.id ?? null,
+                              ) ?? ''
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
                                 <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
@@ -1555,20 +1640,40 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       <div className="text-gray-400">{date}</div>
                                     </div>
                                     <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
-                                    <select value={selId}
+                                    <select value={displaySelId}
                                       onChange={e => {
-                                        if (e.target.value === '__create__') { setCreateConfigPendingRow(ri) }
-                                        else setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                        if (e.target.value === '__create__') {
+                                          setCreateConfigPendingRow(ri)
+                                        } else {
+                                          // User explicitly chose a config — mark as manual override
+                                          setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                          setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
+                                        }
                                       }}
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                       <option value="">General (date-based)</option>
                                       {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                      {/* Render linked config as an option even if not yet in specialConfigs */}
+                                      {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
+                                        const extra = allocConfigs.find(c => c.id === displaySelId)
+                                        return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
+                                      })()}
                                       <option value="__create__">＋ Create New Config…</option>
                                     </select>
                                     <div className="relative">
                                       <select
                                         value={effIncomeTypeId}
-                                        onChange={e => setRowIncomeTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                        onChange={e => {
+                                          const newId = e.target.value
+                                          // Update income type and clear manual override so the new
+                                          // type's linked config takes effect immediately
+                                          setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
+                                          setRowManualOverrides(prev => {
+                                            const next = { ...prev }
+                                            delete next[ri]
+                                            return next
+                                          })
+                                        }}
                                         className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                                       >
                                         <option value="">— None —</option>
@@ -1712,6 +1817,31 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     >
                       Apply
                     </button>
+                    <div className="w-px self-stretch bg-gray-200 mx-1" />
+                    <button
+                      type="button"
+                      disabled={outflowTargetRis.length === 0}
+                      onClick={() => setRowPendingDeductions(prev => {
+                        const next = new Set(prev)
+                        for (const ri of outflowTargetRis) next.add(ri)
+                        return next
+                      })}
+                      className="px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      Mark Pending
+                    </button>
+                    <button
+                      type="button"
+                      disabled={outflowTargetRis.length === 0}
+                      onClick={() => setRowPendingDeductions(prev => {
+                        const next = new Set(prev)
+                        for (const ri of outflowTargetRis) next.delete(ri)
+                        return next
+                      })}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      Clear Pending
+                    </button>
                   </div>
                     )
                   })()}
@@ -1722,7 +1852,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     const someOutflowFilteredSelected = filtered.some(({ ri }) => selectedOutflowRis.has(ri))
                     return (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                       <input
                         type="checkbox"
                         checked={allOutflowFilteredSelected}
@@ -1737,7 +1867,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         }}
                         className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                       />
-                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span><span>Type</span>
+                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span><span>Pending</span><span>Type</span>
                     </div>
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                       {filtered.length === 0
@@ -1751,7 +1881,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             const isOutflowSelected = selectedOutflowRis.has(ri)
                             return (
                               <div key={ri} className={isOutflowSelected ? 'bg-primary/5' : undefined}>
-                                <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_90px] items-center px-3 py-2 gap-2 text-xs">
+                                <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] items-center px-3 py-2 gap-2 text-xs">
                                   <input
                                     type="checkbox"
                                     checked={isOutflowSelected}
@@ -1795,6 +1925,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <option value="Specific Seed">Specific Seed</option>
                                     <option value="Savings">Savings</option>
                                   </select>
+                                  <div className="flex justify-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={rowPendingDeductions.has(ri)}
+                                      onChange={e => setRowPendingDeductions(prev => {
+                                        const next = new Set(prev)
+                                        e.target.checked ? next.add(ri) : next.delete(ri)
+                                        return next
+                                      })}
+                                      title="Mark as Pending Deduction"
+                                      className="w-3.5 h-3.5 rounded border-gray-300 text-amber-500 focus:ring-amber-400/30 cursor-pointer"
+                                    />
+                                  </div>
                                   <select value={txnType}
                                     onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
@@ -2041,7 +2184,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       onClose={() => { setCreateConfigOpen(false); setCreateConfigPendingRow(null) }}
       onSaved={cfg => {
         if (!cfg) return
-        setSpecialConfigs(prev => [...prev, cfg])
+        reloadAllocConfigs()
         if (createConfigPendingRow === 'apply') {
           setApplyInflowConfig(cfg.id)
         } else if (typeof createConfigPendingRow === 'number') {

@@ -1,8 +1,14 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useYearRange } from '../hooks/useYearRange'
-import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal } from 'lucide-react'
+import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal, X } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
-import { Pagination }               from '../components/ui/Pagination'
+import { DataControlsBar }          from '../components/ui/DataControlsBar'
+import { SortableHeader }           from '../components/ui/SortableHeader'
+import { PaginationBar }            from '../components/ui/PaginationBar'
+import { useDataViewState }         from '../hooks/useDataViewState'
+import { sortRows, multiSortRows }  from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { AddOutflowModal }          from '../components/modals/AddOutflowModal'
 import { CanWrite }                 from '../components/auth/RoleGates'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
@@ -11,21 +17,37 @@ import { useToastStore }            from '../store/toastStore'
 import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 
-const PAGE_SIZE = 25
+// ── Sort / search config ───────────────────────────────────────────────────────
+
+const PD_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
+  { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'amount_disbursed', label: 'Disbursed',   sortType: 'numeric', primary: true },
+  { key: 'description',      label: 'Description',                      accessor: r => r.description ?? '' },
+  { key: 'bank_name',        label: 'Bank',                             accessor: r => r.bank_name ?? '' },
+]
+
+const PD_SORT_FIELDS = deriveSortFields(PD_COLUMNS)
+
+// ── Page component ─────────────────────────────────────────────────────────────
 
 export default function PendingDeductions() {
   const { dateFrom, dateTo } = useYearRange()
-  const [page, setPage] = useState(0)
-  const [editRecord, setEditRecord] = useState<OutflowTransaction | null>(null)
-  const [modalOpen, setModalOpen]   = useState(false)
-  const [resolvingId, setResolvingId] = useState<string | null>(null)
+
+  const pdState = useDataViewState({ storageKey: 'pd', defaultSortKey: 'date', defaultSortDir: 'desc' })
+
+  const [editRecord,    setEditRecord]    = useState<OutflowTransaction | null>(null)
+  const [modalOpen,     setModalOpen]     = useState(false)
+  const [resolvingId,   setResolvingId]   = useState<string | null>(null)
+  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
+  const [bulkResolving, setBulkResolving] = useState(false)
+  const headerCheckboxRef = useRef<HTMLInputElement>(null)
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
     pendingOnly: true,
     dateFrom,
     dateTo,
-    page,
-    pageSize: PAGE_SIZE,
+    page: pdState.page,
+    pageSize: pdState.pageSize,
   })
 
   const total   = useMemo(() => data.reduce((s, r) => s + Number(r.amount_disbursed), 0), [data])
@@ -35,6 +57,59 @@ export default function PendingDeductions() {
   const updateMutation = useUpdateTransaction('outflow_transactions')
 
   usePageTitle('Pending Deductions')
+
+  // Reset page + selection when search changes
+  useEffect(() => { pdState.setPage(0); setSelectedIds(new Set()) }, [pdState.search, pdState.setPage])
+  // Clear selection on page change
+  useEffect(() => { setSelectedIds(new Set()) }, [pdState.page])
+
+  // Sort
+  const getPdValue = (r: OutflowTransaction, k: string) => {
+    if (k === 'amount_disbursed') return Number(r.amount_disbursed)
+    return r.date
+  }
+  const sorted = useMemo(() => {
+    const adv = pdState.advancedSort
+    if (adv.length > 0) return multiSortRows(data, getPdValue, adv, PD_SORT_FIELDS)
+    return sortRows(data, getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
+  }, [data, pdState.sortKey, pdState.sortDir, pdState.advancedSort])
+
+  // Search filter (client-side — pending list is small)
+  const displayed = useMemo(
+    () => searchRows(sorted, PD_COLUMNS, pdState.search, pdState.searchCol),
+    [sorted, pdState.search, pdState.searchCol],
+  )
+
+  // Keep header checkbox indeterminate state in sync
+  useEffect(() => {
+    if (!headerCheckboxRef.current) return
+    const all  = displayed.length > 0 && displayed.every(r => selectedIds.has(r.id))
+    const some = displayed.some(r => selectedIds.has(r.id))
+    headerCheckboxRef.current.checked       = all
+    headerCheckboxRef.current.indeterminate = some && !all
+  }, [selectedIds, displayed])
+
+  const handleBulkResolve = async () => {
+    const rows    = displayed.filter(r => selectedIds.has(r.id))
+    const valid   = rows.filter(r => r.stage_code_1?.trim() && r.stage_code_2?.trim())
+    const skipped = rows.length - valid.length
+    if (skipped > 0)
+      toast(`${skipped} row(s) skipped — fill in both stage codes first`, 'info')
+    if (valid.length === 0) return
+    setBulkResolving(true)
+    let resolved = 0; let failed = 0
+    for (const row of valid) {
+      try {
+        await updateMutation.mutate({ id: row.id, updates: { is_pending_deduction: false } })
+        resolved++
+      } catch { failed++ }
+    }
+    setBulkResolving(false)
+    if (failed   > 0) toast(`${failed} row(s) failed to resolve`, 'error')
+    if (resolved > 0) toast(`${resolved} transaction(s) marked as resolved`, 'success')
+    setSelectedIds(new Set())
+    refetch()
+  }
 
   const handleResolve = async (row: OutflowTransaction) => {
     if (!row.stage_code_1?.trim() || !row.stage_code_2?.trim()) {
@@ -138,33 +213,91 @@ export default function PendingDeductions() {
           ))}
         </div>
 
+        {/* Controls */}
+        <DataControlsBar
+          columns={PD_COLUMNS}
+          sortKey={pdState.sortKey}
+          sortDir={pdState.sortDir}
+          onSort={pdState.setSort}
+          defaultSortKey="date"
+          defaultSortDir="desc"
+          search={pdState.search}
+          onSearchChange={pdState.setSearch}
+          searchCol={pdState.searchCol}
+          onSearchColChange={pdState.setSearchCol}
+          advancedSort={pdState.advancedSort}
+          onAdvancedSort={pdState.setAdvancedSort}
+          pageSize={pdState.pageSize}
+          onPageSizeChange={pdState.setPageSize}
+        />
+
         {/* Table */}
         <Card padding={false}>
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 border-b border-primary/10">
+              <span className="text-sm text-primary font-medium">{selectedIds.size} selected</span>
+              <CanWrite>
+                <button
+                  onClick={handleBulkResolve}
+                  disabled={bulkResolving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {bulkResolving
+                    ? <span className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                    : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Resolve selected
+                </button>
+              </CanWrite>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X className="w-3 h-3" /> Clear
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Date', 'Description', 'Disbursed (₦)', 'Transfer Charge (₦)', 'Net (₦)', 'Stage Code', 'Remarks', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
+                  {/* Header checkbox */}
+                  <th className="w-10 pl-4 pr-2 py-3">
+                    <input
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      aria-label="Select all on page"
+                      className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                      onChange={e => {
+                        if (e.target.checked) setSelectedIds(new Set(displayed.map(r => r.id)))
+                        else setSelectedIds(new Set())
+                      }}
+                    />
+                  </th>
+                  <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
+                  <SortableHeader field={PD_SORT_FIELDS[1]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Transfer Charge (₦)</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Net (₦)</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Stage Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Remarks</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
                       ))}
                     </tr>
                   ))
-                ) : data.length === 0 ? (
+                ) : displayed.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-20 text-center">
+                    <td colSpan={9} className="py-20 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <CheckCircle2 className="w-10 h-10 text-green-300" />
                         <p className="text-sm font-medium text-gray-600">No pending deductions</p>
@@ -173,11 +306,27 @@ export default function PendingDeductions() {
                     </td>
                   </tr>
                 ) : (
-                  data.map(row => {
+                  displayed.map(row => {
                     const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
                     const isResolving = resolvingId === row.id
+                    const isSelected  = selectedIds.has(row.id)
                     return (
-                      <tr key={row.id} className="hover:bg-amber-50/30 transition-colors">
+                      <tr key={row.id} className={`transition-colors ${isSelected ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-amber-50/30'}`}>
+                        <td className="w-10 pl-4 pr-2 py-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            aria-label="Select row"
+                            className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                            onChange={e => {
+                              setSelectedIds(prev => {
+                                const next = new Set(prev)
+                                e.target.checked ? next.add(row.id) : next.delete(row.id)
+                                return next
+                              })
+                            }}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate" title={row.display_description || row.description || undefined}>
                           {row.display_description || row.description || '—'}
@@ -220,7 +369,13 @@ export default function PendingDeductions() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} pageSize={PAGE_SIZE} total={count} onChange={setPage} />
+          <PaginationBar
+            page={pdState.page}
+            pageSize={pdState.pageSize}
+            total={count}
+            onPageChange={pdState.setPage}
+            variant="full"
+          />
         </Card>
       </div>
 

@@ -12,7 +12,9 @@ import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -39,32 +41,19 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   intrabank_transfer:  'Intrabank Transfer',
 }
 
-const OUT_SORT_FIELDS: SortField[] = [
-  { key: 'date',             label: 'Date',        type: 'date',    primary: true },
-  { key: 'amount_disbursed', label: 'Disbursed',   type: 'numeric', primary: true },
-  { key: 'bank_name',        label: 'Bank',        type: 'text' },
-  { key: 'description',      label: 'Description', type: 'text' },
+const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
+  { key: 'date',             label: 'Date',         sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description',      label: 'Description',  sortType: 'text',    accessor: r => r.display_description },
+  { key: 'bank_name',        label: 'Bank',         sortType: 'text',    accessor: r => r.bank_name ?? '' },
+  { key: 'bank_description', label: 'Bank Narration',                    accessor: r => r.bank_description ?? '' },
+  { key: 'transaction_id',   label: 'Txn ID',                            accessor: r => r.transaction_id ?? '' },
+  { key: 'transaction_type', label: 'Type',         sortType: 'text',    accessor: r => r.transaction_type ?? '' },
+  { key: 'stage_code_1',     label: 'Stage Code',                        accessor: r => r.stage_code_1 ?? '' },
+  { key: 'amount_disbursed', label: 'Disbursed',    sortType: 'numeric', accessor: r => String(r.amount_disbursed) },
+  { key: 'net',              label: 'Net',                               accessor: r => String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge)) },
 ]
 
-const OUT_SEARCH_COLS = [
-  { key: 'all',              label: 'All Columns' },
-  { key: 'description',      label: 'Description' },
-  { key: 'bank_description', label: 'Bank Narration' },
-  { key: 'bank_name',        label: 'Bank' },
-  { key: 'transaction_id',   label: 'Txn ID' },
-  { key: 'stage_code_1',     label: 'Stage Code' },
-  { key: 'amount_disbursed', label: 'Amount' },
-]
-
-function outColVal(r: OutflowTransaction, col: string): string {
-  if (col === 'description')      return r.display_description
-  if (col === 'bank_description') return r.bank_description ?? ''
-  if (col === 'bank_name')        return r.bank_name ?? ''
-  if (col === 'transaction_id')   return r.transaction_id ?? ''
-  if (col === 'stage_code_1')     return r.stage_code_1 ?? ''
-  if (col === 'amount_disbursed') return String(r.amount_disbursed)
-  return ''
-}
+const OUT_SORT_FIELDS = deriveSortFields(OUT_COLUMNS)
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -124,26 +113,23 @@ export default function Outflows() {
   // Data controls state
   const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
-  // Data
+  // Data — fetch all rows when searching so client can filter across every column and re-paginate
+  const isSearching = debouncedSearch.trim() !== ''
   const { data, count, loading, error, refetch } = useOutflowTransactions({
     dateFrom:  dateFrom  || undefined,
     dateTo:    dateTo    || undefined,
     stageCode: stageCode || undefined,
-    search:    debouncedSearch || undefined,
-    page,
-    pageSize:  outState.pageSize,
+    page:      isSearching ? 0 : page,
+    pageSize:  isSearching ? undefined : outState.pageSize,
+    fetchAll:  isSearching,
   })
 
-  // Summary (disbursed amounts)
-  const total   = useMemo(() => data.reduce((s, r) => s + Number(r.amount_disbursed), 0), [data])
-  const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount_disbursed))) : 0, [data])
-  const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
-
-  // Client-side sort of current page
+  // Sort all fetched rows
   const getOutValue = (r: OutflowTransaction, k: string) => {
     if (k === 'amount_disbursed') return Number(r.amount_disbursed)
     if (k === 'bank_name')        return r.bank_name ?? ''
     if (k === 'description')      return r.display_description
+    if (k === 'transaction_type') return r.transaction_type ?? ''
     return r.date
   }
 
@@ -153,12 +139,22 @@ export default function Outflows() {
     return sortRows(data, getOutValue, outState.sortKey, outState.sortDir, OUT_SORT_FIELDS)
   }, [data, outState.sortKey, outState.sortDir, outState.advancedSort])
 
+  // Client-side search across all fetched rows, then paginate the results
+  const allMatching = useMemo(
+    () => searchRows(sorted, OUT_COLUMNS, debouncedSearch, outState.searchCol),
+    [sorted, debouncedSearch, outState.searchCol],
+  )
+
   const displayed = useMemo(() => {
-    const q = searchInput.trim().toLowerCase()
-    const col = outState.searchCol
-    if (!q || col === 'all') return sorted
-    return sorted.filter(r => outColVal(r, col).toLowerCase().includes(q))
-  }, [sorted, searchInput, outState.searchCol])
+    if (!isSearching) return sorted
+    const from = page * outState.pageSize
+    return allMatching.slice(from, from + outState.pageSize)
+  }, [allMatching, isSearching, page, outState.pageSize, sorted])
+
+  // Summary (current page, disbursed amounts)
+  const total   = useMemo(() => displayed.reduce((s, r) => s + Number(r.amount_disbursed), 0), [displayed])
+  const largest = useMemo(() => displayed.length ? Math.max(...displayed.map(r => Number(r.amount_disbursed))) : 0, [displayed])
+  const average = useMemo(() => displayed.length ? total / displayed.length : 0, [total, displayed.length])
 
   // UI state
   const [editRecord,        setEditRecord]        = useState<OutflowTransaction | null>(null)
@@ -290,11 +286,11 @@ export default function Outflows() {
         </Card>
 
         {/* Summary strip */}
-        <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        <SummaryStrip total={total} count={isSearching ? allMatching.length : count} largest={largest} average={average} loading={loading} />
 
         {/* Data controls bar */}
         <DataControlsBar
-          sortFields={OUT_SORT_FIELDS}
+          columns={OUT_COLUMNS}
           sortKey={outState.sortKey}
           sortDir={outState.sortDir}
           onSort={outState.setSort}
@@ -304,8 +300,7 @@ export default function Outflows() {
           onViewChange={outState.setView}
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
-          searchPlaceholder="Search descriptions…"
-          searchColumns={OUT_SEARCH_COLS}
+          searchPlaceholder="Search transactions…"
           searchCol={outState.searchCol}
           onSearchColChange={outState.setSearchCol}
           advancedSort={outState.advancedSort}
@@ -318,7 +313,7 @@ export default function Outflows() {
         <PaginationBar
           page={page}
           pageSize={outState.pageSize}
-          total={count}
+          total={isSearching ? allMatching.length : count}
           onPageChange={setPage}
           variant="compact"
         />
@@ -405,7 +400,7 @@ export default function Outflows() {
           <PaginationBar
             page={page}
             pageSize={outState.pageSize}
-            total={count}
+            total={isSearching ? allMatching.length : count}
             onPageChange={setPage}
             variant="full"
           />
@@ -479,7 +474,7 @@ export default function Outflows() {
                     </td>
                   </tr>
                 ) : (
-                  sorted.map(row => {
+                  displayed.map(row => {
                     const isExpanded = expandedId === row.id
                     return (
                       <>
@@ -546,7 +541,7 @@ export default function Outflows() {
           <PaginationBar
             page={page}
             pageSize={outState.pageSize}
-            total={count}
+            total={isSearching ? allMatching.length : count}
             onPageChange={setPage}
             variant="full"
           />

@@ -11,7 +11,9 @@ import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -41,28 +43,16 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 
 const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
-const INF_SORT_FIELDS: SortField[] = [
-  { key: 'date',        label: 'Date',        type: 'date',    primary: true },
-  { key: 'amount',      label: 'Amount',      type: 'numeric', primary: true },
-  { key: 'bank_name',   label: 'Bank',        type: 'text' },
-  { key: 'description', label: 'Description', type: 'text' },
+const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
+  { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description',      label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
+  { key: 'bank_name',        label: 'Bank',        sortType: 'text',    accessor: r => r.bank_name ?? '' },
+  { key: 'transaction_ref',  label: 'Txn Ref',                          accessor: r => r.transaction_ref ?? '' },
+  { key: 'transaction_type', label: 'Type',        sortType: 'text',    accessor: r => r.transaction_type ?? '' },
+  { key: 'amount',           label: 'Amount',      sortType: 'numeric', accessor: r => String(r.amount) },
 ]
 
-const INF_SEARCH_COLS = [
-  { key: 'all',             label: 'All Columns' },
-  { key: 'description',     label: 'Description' },
-  { key: 'bank_name',       label: 'Bank' },
-  { key: 'transaction_ref', label: 'Txn Ref' },
-  { key: 'amount',          label: 'Amount' },
-]
-
-function infColVal(r: InflowTransaction, col: string): string {
-  if (col === 'description')     return r.description ?? ''
-  if (col === 'bank_name')       return r.bank_name ?? ''
-  if (col === 'transaction_ref') return r.transaction_ref ?? ''
-  if (col === 'amount')          return String(r.amount)
-  return ''
-}
+const INF_SORT_FIELDS = deriveSortFields(INF_COLUMNS)
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -122,25 +112,22 @@ export default function Inflows() {
   // Data controls state
   const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
-  // Data
+  // Data — fetch all rows when searching so client can filter across every column and re-paginate
+  const isSearching = debouncedSearch.trim() !== ''
   const { data, count, loading, error, refetch } = useInflowTransactions({
     dateFrom:  dateFrom  || undefined,
     dateTo:    dateTo    || undefined,
-    search:    debouncedSearch || undefined,
-    page,
-    pageSize:  infState.pageSize,
+    page:      isSearching ? 0 : page,
+    pageSize:  isSearching ? undefined : infState.pageSize,
+    fetchAll:  isSearching,
   })
 
-  // Summary
-  const total   = useMemo(() => data.reduce((s, r) => s + Number(r.amount), 0), [data])
-  const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount))) : 0, [data])
-  const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
-
-  // Client-side sort of current page
+  // Sort all fetched rows
   const getValue = (r: InflowTransaction, k: string) => {
-    if (k === 'amount')      return Number(r.amount)
-    if (k === 'bank_name')   return r.bank_name ?? ''
-    if (k === 'description') return r.display_description
+    if (k === 'amount')           return Number(r.amount)
+    if (k === 'bank_name')        return r.bank_name ?? ''
+    if (k === 'description')      return r.display_description
+    if (k === 'transaction_type') return r.transaction_type ?? ''
     return r.date
   }
 
@@ -150,13 +137,22 @@ export default function Inflows() {
     return sortRows(data, getValue, infState.sortKey, infState.sortDir, INF_SORT_FIELDS)
   }, [data, infState.sortKey, infState.sortDir, infState.advancedSort])
 
-  // Column-specific client filter (on top of server search)
+  // Client-side search across all fetched rows, then paginate the results
+  const allMatching = useMemo(
+    () => searchRows(sorted, INF_COLUMNS, debouncedSearch, infState.searchCol),
+    [sorted, debouncedSearch, infState.searchCol],
+  )
+
   const displayed = useMemo(() => {
-    const q = searchInput.trim().toLowerCase()
-    const col = infState.searchCol
-    if (!q || col === 'all') return sorted
-    return sorted.filter(r => infColVal(r, col).toLowerCase().includes(q))
-  }, [sorted, searchInput, infState.searchCol])
+    if (!isSearching) return sorted
+    const from = page * infState.pageSize
+    return allMatching.slice(from, from + infState.pageSize)
+  }, [allMatching, isSearching, page, infState.pageSize, sorted])
+
+  // Summary (current page)
+  const total   = useMemo(() => displayed.reduce((s, r) => s + Number(r.amount), 0), [displayed])
+  const largest = useMemo(() => displayed.length ? Math.max(...displayed.map(r => Number(r.amount))) : 0, [displayed])
+  const average = useMemo(() => displayed.length ? total / displayed.length : 0, [total, displayed.length])
 
   const [editRecord,        setEditRecord]        = useState<InflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
@@ -276,11 +272,11 @@ export default function Inflows() {
         </Card>
 
         {/* Summary strip */}
-        <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        <SummaryStrip total={total} count={isSearching ? allMatching.length : count} largest={largest} average={average} loading={loading} />
 
         {/* Data controls bar */}
         <DataControlsBar
-          sortFields={INF_SORT_FIELDS}
+          columns={INF_COLUMNS}
           sortKey={infState.sortKey}
           sortDir={infState.sortDir}
           onSort={infState.setSort}
@@ -290,8 +286,7 @@ export default function Inflows() {
           onViewChange={infState.setView}
           search={searchInput}
           onSearchChange={v => { setSearchInput(v) }}
-          searchPlaceholder="Search descriptions…"
-          searchColumns={INF_SEARCH_COLS}
+          searchPlaceholder="Search transactions…"
           searchCol={infState.searchCol}
           onSearchColChange={infState.setSearchCol}
           advancedSort={infState.advancedSort}
@@ -304,7 +299,7 @@ export default function Inflows() {
         <PaginationBar
           page={page}
           pageSize={infState.pageSize}
-          total={count}
+          total={isSearching ? allMatching.length : count}
           onPageChange={setPage}
           variant="compact"
         />
@@ -383,7 +378,7 @@ export default function Inflows() {
           <PaginationBar
             page={page}
             pageSize={infState.pageSize}
-            total={count}
+            total={isSearching ? allMatching.length : count}
             onPageChange={setPage}
             variant="full"
           />
@@ -551,7 +546,7 @@ export default function Inflows() {
           <PaginationBar
             page={page}
             pageSize={infState.pageSize}
-            total={count}
+            total={isSearching ? allMatching.length : count}
             onPageChange={setPage}
             variant="full"
           />
