@@ -50,7 +50,7 @@ const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
   { key: 'amount',           label: 'Amount',      sortType: 'numeric', primary: true, accessor: r => String(r.amount) },
   { key: 'bank_name',        label: 'Bank',        sortType: 'text',    accessor: r => r.bank_name ?? '' },
   { key: 'transaction_ref',  label: 'Txn Ref',                          accessor: r => r.transaction_ref ?? '' },
-  { key: 'transaction_type', label: 'Type',        sortType: 'text',    accessor: r => r.transaction_type ?? '' },
+  { key: 'transaction_type', label: 'Type',        sortType: 'text',    accessor: r => TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '' },
   { key: 'description',      label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
 ]
 
