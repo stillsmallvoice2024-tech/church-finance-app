@@ -1,4 +1,9 @@
 import type { IncomeType } from '../hooks/useIncomeTypes'
+import { getFinalConfig } from './configResolver'
+
+// Re-export the new resolver API for consumers that import from this module.
+export type { RowResolverState } from './configResolver'
+export { resolveDefaultIncomeType, resolveConfigForIncomeType, getFinalConfig } from './configResolver'
 
 export interface ResolveFinalRowConfigArgs {
   /** undefined = no decision yet; '' = explicit General; uuid = explicit special config */
@@ -10,16 +15,9 @@ export interface ResolveFinalRowConfigArgs {
 }
 
 /**
- * Single precedence resolver for import row allocation config.
+ * @deprecated Use getFinalConfig() with RowResolverState from configResolver instead.
  *
- * Precedence:
- *   1. Manual override (manualConfigId !== undefined)
- *      '' → explicit General (use generalConfigId)
- *      uuid → explicit special config
- *   2. Income type linked special config
- *   3. General date-based fallback
- *
- * Returns the config ID to write to allocation_config_id, or null if none.
+ * Kept for backward compatibility. Delegates to getFinalConfig() internally.
  */
 export function resolveFinalRowConfig({
   manualConfigId,
@@ -27,24 +25,15 @@ export function resolveFinalRowConfig({
   incomeTypes,
   generalConfigId,
 }: ResolveFinalRowConfigArgs): string | null {
-  if (manualConfigId !== undefined) {
-    return manualConfigId !== '' ? manualConfigId : generalConfigId
-  }
-  if (incomeTypeId) {
-    const linked = incomeTypes.find(t => t.id === incomeTypeId)?.special_config_id ?? null
-    if (linked) return linked
-  }
-  return generalConfigId
-}
-
-/**
- * Returns the special config ID linked to an income type, or '' for none.
- * Used to propagate config into rowConfigs when income type changes.
- */
-export function resolveConfigForIncomeType(
-  incomeTypeId: string | null | undefined,
-  incomeTypes: IncomeType[],
-): string {
-  if (!incomeTypeId) return ''
-  return incomeTypes.find(t => t.id === incomeTypeId)?.special_config_id ?? ''
+  const incomeType = incomeTypeId
+    ? (incomeTypes.find(t => t.id === incomeTypeId) ?? null)
+    : null
+  return getFinalConfig(
+    {
+      incomeType,
+      allocationConfigId: manualConfigId ?? '',
+      isManualOverride:   manualConfigId !== undefined,
+    },
+    generalConfigId,
+  )
 }
