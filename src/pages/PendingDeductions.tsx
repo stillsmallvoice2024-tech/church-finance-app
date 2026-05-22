@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useYearRange } from '../hooks/useYearRange'
-import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal } from 'lucide-react'
+import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal, X } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
 import { DataControlsBar }          from '../components/ui/DataControlsBar'
 import { SortableHeader }           from '../components/ui/SortableHeader'
@@ -44,9 +44,12 @@ export default function PendingDeductions() {
 
   const pdState = useDataViewState({ storageKey: 'pd', defaultSortKey: 'date', defaultSortDir: 'desc' })
 
-  const [editRecord, setEditRecord] = useState<OutflowTransaction | null>(null)
-  const [modalOpen, setModalOpen]   = useState(false)
-  const [resolvingId, setResolvingId] = useState<string | null>(null)
+  const [editRecord,    setEditRecord]    = useState<OutflowTransaction | null>(null)
+  const [modalOpen,     setModalOpen]     = useState(false)
+  const [resolvingId,   setResolvingId]   = useState<string | null>(null)
+  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
+  const [bulkResolving, setBulkResolving] = useState(false)
+  const headerCheckboxRef = useRef<HTMLInputElement>(null)
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
     pendingOnly: true,
@@ -64,8 +67,10 @@ export default function PendingDeductions() {
 
   usePageTitle('Pending Deductions')
 
-  // Reset page when search changes
-  useEffect(() => { pdState.setPage(0) }, [pdState.search, pdState.setPage])
+  // Reset page + selection when search changes
+  useEffect(() => { pdState.setPage(0); setSelectedIds(new Set()) }, [pdState.search, pdState.setPage])
+  // Clear selection on page change
+  useEffect(() => { setSelectedIds(new Set()) }, [pdState.page])
 
   // Sort
   const getPdValue = (r: OutflowTransaction, k: string) => {
@@ -85,6 +90,37 @@ export default function PendingDeductions() {
     if (!q || col === 'all') return sorted
     return sorted.filter(r => pdColVal(r, col).toLowerCase().includes(q))
   }, [sorted, pdState.search, pdState.searchCol])
+
+  // Keep header checkbox indeterminate state in sync
+  useEffect(() => {
+    if (!headerCheckboxRef.current) return
+    const all  = displayed.length > 0 && displayed.every(r => selectedIds.has(r.id))
+    const some = displayed.some(r => selectedIds.has(r.id))
+    headerCheckboxRef.current.checked       = all
+    headerCheckboxRef.current.indeterminate = some && !all
+  }, [selectedIds, displayed])
+
+  const handleBulkResolve = async () => {
+    const rows    = displayed.filter(r => selectedIds.has(r.id))
+    const valid   = rows.filter(r => r.stage_code_1?.trim() && r.stage_code_2?.trim())
+    const skipped = rows.length - valid.length
+    if (skipped > 0)
+      toast(`${skipped} row(s) skipped — fill in both stage codes first`, 'info')
+    if (valid.length === 0) return
+    setBulkResolving(true)
+    let resolved = 0; let failed = 0
+    for (const row of valid) {
+      try {
+        await updateMutation.mutate({ id: row.id, updates: { is_pending_deduction: false } })
+        resolved++
+      } catch { failed++ }
+    }
+    setBulkResolving(false)
+    if (failed   > 0) toast(`${failed} row(s) failed to resolve`, 'error')
+    if (resolved > 0) toast(`${resolved} transaction(s) marked as resolved`, 'success')
+    setSelectedIds(new Set())
+    refetch()
+  }
 
   const handleResolve = async (row: OutflowTransaction) => {
     if (!row.stage_code_1?.trim() || !row.stage_code_2?.trim()) {
@@ -209,10 +245,47 @@ export default function PendingDeductions() {
 
         {/* Table */}
         <Card padding={false}>
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 border-b border-primary/10">
+              <span className="text-sm text-primary font-medium">{selectedIds.size} selected</span>
+              <CanWrite>
+                <button
+                  onClick={handleBulkResolve}
+                  disabled={bulkResolving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {bulkResolving
+                    ? <span className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                    : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Resolve selected
+                </button>
+              </CanWrite>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X className="w-3 h-3" /> Clear
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
+                  {/* Header checkbox */}
+                  <th className="w-10 pl-4 pr-2 py-3">
+                    <input
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      aria-label="Select all on page"
+                      className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                      onChange={e => {
+                        if (e.target.checked) setSelectedIds(new Set(displayed.map(r => r.id)))
+                        else setSelectedIds(new Set())
+                      }}
+                    />
+                  </th>
                   <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
                   <SortableHeader field={PD_SORT_FIELDS[1]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
@@ -227,7 +300,7 @@ export default function PendingDeductions() {
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -236,7 +309,7 @@ export default function PendingDeductions() {
                   ))
                 ) : displayed.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-20 text-center">
+                    <td colSpan={9} className="py-20 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <CheckCircle2 className="w-10 h-10 text-green-300" />
                         <p className="text-sm font-medium text-gray-600">No pending deductions</p>
@@ -248,8 +321,24 @@ export default function PendingDeductions() {
                   displayed.map(row => {
                     const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
                     const isResolving = resolvingId === row.id
+                    const isSelected  = selectedIds.has(row.id)
                     return (
-                      <tr key={row.id} className="hover:bg-amber-50/30 transition-colors">
+                      <tr key={row.id} className={`transition-colors ${isSelected ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-amber-50/30'}`}>
+                        <td className="w-10 pl-4 pr-2 py-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            aria-label="Select row"
+                            className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                            onChange={e => {
+                              setSelectedIds(prev => {
+                                const next = new Set(prev)
+                                e.target.checked ? next.add(row.id) : next.delete(row.id)
+                                return next
+                              })
+                            }}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate" title={row.description ?? undefined}>
                           {row.description ?? '—'}
