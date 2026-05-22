@@ -135,7 +135,7 @@ export function useInflowTransactions(
     if (dateFrom) query = query.gte('date', dateFrom)
     if (dateTo)   query = query.lte('date', dateTo)
     if (stageCode) query = query.eq('stage_code_1', stageCode)
-    if (search)   query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_ref.ilike.%${search}%`)
+    if (search)   query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_ref.ilike.%${search}%,transaction_type.ilike.%${search}%`)
 
     const { data: rows, count: total, error: err } = await query
 
@@ -181,7 +181,7 @@ export function useOutflowTransactions(
     if (dateFrom)    query = query.gte('date', dateFrom)
     if (dateTo)      query = query.lte('date', dateTo)
     if (stageCode)   query = query.eq('stage_code_1', stageCode)
-    if (search)      query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_id.ilike.%${search}%,stage_code_1.ilike.%${search}%`)
+    if (search)      query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_id.ilike.%${search}%,stage_code_1.ilike.%${search}%,transaction_type.ilike.%${search}%`)
     if (pendingOnly) query = query.eq('is_pending_deduction', true)
 
     const { data: rows, count: total, error: err } = await query

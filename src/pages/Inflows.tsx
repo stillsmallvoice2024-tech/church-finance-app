@@ -42,25 +42,28 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
 const INF_SORT_FIELDS: SortField[] = [
-  { key: 'date',        label: 'Date',        type: 'date',    primary: true },
-  { key: 'amount',      label: 'Amount',      type: 'numeric', primary: true },
-  { key: 'bank_name',   label: 'Bank',        type: 'text' },
-  { key: 'description', label: 'Description', type: 'text' },
+  { key: 'date',             label: 'Date',        type: 'date',    primary: true },
+  { key: 'amount',           label: 'Amount',      type: 'numeric', primary: true },
+  { key: 'bank_name',        label: 'Bank',        type: 'text' },
+  { key: 'description',      label: 'Description', type: 'text' },
+  { key: 'transaction_type', label: 'Type',        type: 'text' },
 ]
 
 const INF_SEARCH_COLS = [
-  { key: 'all',             label: 'All Columns' },
-  { key: 'description',     label: 'Description' },
-  { key: 'bank_name',       label: 'Bank' },
-  { key: 'transaction_ref', label: 'Txn Ref' },
-  { key: 'amount',          label: 'Amount' },
+  { key: 'all',              label: 'All Columns' },
+  { key: 'description',      label: 'Description' },
+  { key: 'bank_name',        label: 'Bank' },
+  { key: 'transaction_ref',  label: 'Txn Ref' },
+  { key: 'transaction_type', label: 'Type' },
+  { key: 'amount',           label: 'Amount' },
 ]
 
 function infColVal(r: InflowTransaction, col: string): string {
-  if (col === 'description')     return r.description ?? ''
-  if (col === 'bank_name')       return r.bank_name ?? ''
-  if (col === 'transaction_ref') return r.transaction_ref ?? ''
-  if (col === 'amount')          return String(r.amount)
+  if (col === 'description')      return r.description ?? ''
+  if (col === 'bank_name')        return r.bank_name ?? ''
+  if (col === 'transaction_ref')  return r.transaction_ref ?? ''
+  if (col === 'transaction_type') return r.transaction_type ?? ''
+  if (col === 'amount')           return String(r.amount)
   return ''
 }
 
@@ -138,9 +141,10 @@ export default function Inflows() {
 
   // Client-side sort of current page
   const getValue = (r: InflowTransaction, k: string) => {
-    if (k === 'amount')      return Number(r.amount)
-    if (k === 'bank_name')   return r.bank_name ?? ''
-    if (k === 'description') return r.description ?? ''
+    if (k === 'amount')           return Number(r.amount)
+    if (k === 'bank_name')        return r.bank_name ?? ''
+    if (k === 'description')      return r.description ?? ''
+    if (k === 'transaction_type') return r.transaction_type ?? ''
     return r.date
   }
 

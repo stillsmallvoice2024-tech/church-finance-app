@@ -44,6 +44,7 @@ const OUT_SORT_FIELDS: SortField[] = [
   { key: 'amount_disbursed', label: 'Disbursed',   type: 'numeric', primary: true },
   { key: 'bank_name',        label: 'Bank',        type: 'text' },
   { key: 'description',      label: 'Description', type: 'text' },
+  { key: 'transaction_type', label: 'Type',        type: 'text' },
 ]
 
 const OUT_SEARCH_COLS = [
@@ -52,8 +53,9 @@ const OUT_SEARCH_COLS = [
   { key: 'bank_description', label: 'Bank Narration' },
   { key: 'bank_name',        label: 'Bank' },
   { key: 'transaction_id',   label: 'Txn ID' },
+  { key: 'transaction_type', label: 'Type' },
   { key: 'stage_code_1',     label: 'Stage Code' },
-  { key: 'amount_disbursed', label: 'Outflow' },
+  { key: 'amount_disbursed', label: 'Disbursed' },
   { key: 'net',              label: 'Net' },
 ]
 
@@ -62,6 +64,7 @@ function outColVal(r: OutflowTransaction, col: string): string {
   if (col === 'bank_description') return r.bank_description ?? ''
   if (col === 'bank_name')        return r.bank_name ?? ''
   if (col === 'transaction_id')   return r.transaction_id ?? ''
+  if (col === 'transaction_type') return r.transaction_type ?? ''
   if (col === 'stage_code_1')     return r.stage_code_1 ?? ''
   if (col === 'amount_disbursed') return String(r.amount_disbursed)
   if (col === 'net')              return String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge))
@@ -146,6 +149,7 @@ export default function Outflows() {
     if (k === 'amount_disbursed') return Number(r.amount_disbursed)
     if (k === 'bank_name')        return r.bank_name ?? ''
     if (k === 'description')      return r.display_description
+    if (k === 'transaction_type') return r.transaction_type ?? ''
     return r.date
   }
 
