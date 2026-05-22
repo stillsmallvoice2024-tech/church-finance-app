@@ -371,19 +371,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // In-wizard dup check
 
-  // Special configs (is_special = true) loaded when modal opens
-  const [specialConfigs,   setSpecialConfigs]   = useState<typeof allocConfigs>([])
+  // Derived from the already-loaded allocConfigs store — no separate query needed.
+  // This avoids the race condition where a linked config UUID is in displaySelId
+  // but not yet present in a separately-loaded specialConfigs list, causing the
+  // <select> to silently fall back to showing "General (date-based)".
+  const specialConfigs = useMemo(
+    () => allocConfigs.filter(c => c.is_special),
+    [allocConfigs],
+  )
   const [createConfigOpen, setCreateConfigOpen] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      supabase
-        .from('allocation_configs')
-        .select('*')
-        .eq('is_special', true)
-        .then(({ data }) => setSpecialConfigs((data ?? []) as typeof allocConfigs))
-    }
-  }, [open])
 
   // ── Reset on open/close ──────────────────────────────────────────────────
 
@@ -1619,6 +1615,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                       <option value="">General (date-based)</option>
                                       {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                      {/* Render linked config as an option even if not yet in specialConfigs */}
+                                      {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
+                                        const extra = allocConfigs.find(c => c.id === displaySelId)
+                                        return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
+                                      })()}
                                       <option value="__create__">＋ Create New Config…</option>
                                     </select>
                                     <div className="relative">
