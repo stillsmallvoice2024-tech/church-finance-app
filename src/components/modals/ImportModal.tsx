@@ -302,8 +302,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     if (bank) setInternalBank(bank)
   }, [bank])
 
-  // Batch defaults
-  const [batchPendingDeduction, setBatchPendingDeduction] = useState(false)
+  // Per-row pending deduction (by sheet row index ri)
+  const [rowPendingDeductions, setRowPendingDeductions] = useState<Set<number>>(new Set())
 
   // Date format (Phase A)
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
@@ -436,7 +436,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setResult(null)
     setImporting(false)
     setParsing(false)
-    setBatchPendingDeduction(false)
+    setRowPendingDeductions(new Set())
     setDateFormat('DD/MM/YYYY')
     setFxCurrency('')
     setRowConfigs({})
@@ -833,7 +833,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             if (sc.s1) row.stage_code_1 = sc.s1
             if (sc.s2) row.stage_code_2 = sc.s2
           }
-          if (batchPendingDeduction) row.is_pending_deduction = true
+          if (rowPendingDeductions.has(ri)) row.is_pending_deduction = true
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           row.recorded_at = importTimestamp
@@ -989,7 +989,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       setImporting(false)
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
-      dateFormat, fxCurrency, batchPendingDeduction,
+      dateFormat, fxCurrency, rowPendingDeductions,
       rowConfigs, rowManualOverrides, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
       internalBank,
       rowIncomeTypes, incomeTypes,
@@ -1411,17 +1411,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                   </button>
                 ))}
               </div>
-              {bsConfigTab === 'outflow' && (
-                <label className="flex items-center gap-2 pb-2 cursor-pointer select-none text-xs text-gray-700 pr-2">
-                  <input
-                    type="checkbox"
-                    checked={batchPendingDeduction}
-                    onChange={e => setBatchPendingDeduction(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30"
-                  />
-                  Mark all debit rows as Pending Deduction
-                </label>
-              )}
             </div>
 
             {(() => {
@@ -1828,6 +1817,31 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     >
                       Apply
                     </button>
+                    <div className="w-px self-stretch bg-gray-200 mx-1" />
+                    <button
+                      type="button"
+                      disabled={outflowTargetRis.length === 0}
+                      onClick={() => setRowPendingDeductions(prev => {
+                        const next = new Set(prev)
+                        for (const ri of outflowTargetRis) next.add(ri)
+                        return next
+                      })}
+                      className="px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      Mark Pending
+                    </button>
+                    <button
+                      type="button"
+                      disabled={outflowTargetRis.length === 0}
+                      onClick={() => setRowPendingDeductions(prev => {
+                        const next = new Set(prev)
+                        for (const ri of outflowTargetRis) next.delete(ri)
+                        return next
+                      })}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      Clear Pending
+                    </button>
                   </div>
                     )
                   })()}
@@ -1838,7 +1852,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     const someOutflowFilteredSelected = filtered.some(({ ri }) => selectedOutflowRis.has(ri))
                     return (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                       <input
                         type="checkbox"
                         checked={allOutflowFilteredSelected}
@@ -1853,7 +1867,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         }}
                         className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                       />
-                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span><span>Type</span>
+                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span><span>Pending</span><span>Type</span>
                     </div>
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                       {filtered.length === 0
@@ -1867,7 +1881,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             const isOutflowSelected = selectedOutflowRis.has(ri)
                             return (
                               <div key={ri} className={isOutflowSelected ? 'bg-primary/5' : undefined}>
-                                <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_90px] items-center px-3 py-2 gap-2 text-xs">
+                                <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] items-center px-3 py-2 gap-2 text-xs">
                                   <input
                                     type="checkbox"
                                     checked={isOutflowSelected}
@@ -1911,6 +1925,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <option value="Specific Seed">Specific Seed</option>
                                     <option value="Savings">Savings</option>
                                   </select>
+                                  <div className="flex justify-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={rowPendingDeductions.has(ri)}
+                                      onChange={e => setRowPendingDeductions(prev => {
+                                        const next = new Set(prev)
+                                        e.target.checked ? next.add(ri) : next.delete(ri)
+                                        return next
+                                      })}
+                                      title="Mark as Pending Deduction"
+                                      className="w-3.5 h-3.5 rounded border-gray-300 text-amber-500 focus:ring-amber-400/30 cursor-pointer"
+                                    />
+                                  </div>
                                   <select value={txnType}
                                     onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
@@ -2157,7 +2184,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       onClose={() => { setCreateConfigOpen(false); setCreateConfigPendingRow(null) }}
       onSaved={cfg => {
         if (!cfg) return
-        setSpecialConfigs(prev => [...prev, cfg])
+        reloadAllocConfigs()
         if (createConfigPendingRow === 'apply') {
           setApplyInflowConfig(cfg.id)
         } else if (typeof createConfigPendingRow === 'number') {
