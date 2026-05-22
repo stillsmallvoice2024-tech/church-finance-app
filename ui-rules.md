@@ -402,11 +402,39 @@ Returns: `view/setView`, `sortKey/sortDir/setSort`, `page/setPage`, `pageSize/se
 
 Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSort` persist to localStorage under `${storageKey}:*`. `search` is session-only.
 
+### `TableColumnDef<T>` — unified column definition (`src/utils/tableColumns.ts`)
+
+Every list page defines a single `*_COLUMNS` array typed as `TableColumnDef<RowType>[]`. This is the single source of truth for sorting, searching, and the search column dropdown — no separate `SortField[]` or `SearchColumn[]` arrays needed.
+
+```ts
+interface TableColumnDef<T = unknown> {
+  key:       string            // column identifier, used as sort key
+  label:     string            // display label in header + dropdown
+  accessor?: (row: T) => unknown  // custom value extractor; falls back to row[key]
+  sortType?: SortFieldType     // 'text' | 'numeric' | 'date' — omit to exclude from sort
+  primary?:  boolean           // true = shown in main sort list; false/absent = "More Fields"
+  noSearch?: boolean           // true = excluded from search dropdown; ONLY use on date/timestamp cols
+}
+```
+
+**`noSearch: true`** — reserved exclusively for date/timestamp columns (Date, Upload Date, Timestamp, etc.). All numeric columns (Amount, Balance, Deposited, Withdrawn, Percentage, etc.) are searchable and must NOT have `noSearch`.
+
+**Utilities exported from `src/utils/tableColumns.ts`:**
+
+```ts
+deriveSortFields<T>(cols)          // → SortField[]  (for sort utilities)
+deriveSearchCols<T>(cols)          // → SearchColumn[]  (prepends {key:'all',label:'All Columns'})
+searchRows<T>(data, cols, q, col)  // generic client-side search
+getColSearchVal<T>(row, col)       // safe string extraction (null→'', number→String())
+```
+
+`DataControlsBar` emits `console.log('[SEARCHABLE_COLUMNS]', derived)` each time it derives search columns from a `columns` prop — useful for confirming which columns are included.
+
 ### `DataControlsBar` props
 
 ```tsx
 <DataControlsBar
-  sortFields={FIELDS}           // SortField[] — primary:true = shown by default, no flag = "More Fields"
+  columns={PAGE_COLUMNS}        // TableColumnDef<any>[] — auto-derives sortFields + searchColumns
   sortKey={state.sortKey}
   sortDir={state.sortDir}
   onSort={state.setSort}
@@ -416,8 +444,7 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
   onViewChange={state.setView}
   search={state.search}
   onSearchChange={state.setSearch}
-  searchPlaceholder="Search…"
-  searchColumns={SEARCH_COLS}   // optional — Array<{key,label}>; first entry must be {key:'all',label:'All Columns'}
+  searchPlaceholder="Search…"   // used only when columns prop is absent
   searchCol={state.searchCol}
   onSearchColChange={state.setSearchCol}
   advancedSort={state.advancedSort}   // optional — enables Advanced Sort modal
@@ -426,6 +453,13 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
   onPageSizeChange={state.setPageSize}
   pageSizeOptions={[25, 50, 100]}     // optional — defaults to [25, 50, 100]
 />
+```
+
+Backward-compat: `sortFields?: SortField[]` and `searchColumns?: SearchColumn[]` props still accepted. When `columns` is provided it takes precedence and both legacy props are ignored.
+
+**Deriving sort fields on the page** (needed for `SortableHeader`):
+```ts
+const PAGE_SORT_FIELDS = deriveSortFields(PAGE_COLUMNS)   // module-level constant
 ```
 
 ### Sort field conventions
@@ -457,14 +491,14 @@ const BL_COLUMNS: TableColumnDef<LedgerRow>[] = [
 - Compact prefix selector left of search input; shows "All" when `searchCol === 'all'` (default)
 - Placeholder derives from column scope: `"Search all"` for all-columns, `"Search [column label]"` for specific column; `searchPlaceholder` prop used only when no `searchColumns` are configured
 - Selector button has `h-full` so its border fills the `items-stretch` flex container flush against the input; input uses `py-1` (not `py-1.5`) so both land at 28px despite differing text sizes
-- First entry of `searchColumns` **must** be `{ key: 'all', label: 'All Columns' }`
+- First entry of `searchColumns` **must** be `{ key: 'all', label: 'All Columns' }` (auto-prepended by `deriveSearchCols`)
 
 ### Search filter implementation rules
 
 **Inflows / Outflows — fetch-all pattern (global search):**
 When `debouncedSearch` is non-empty (`isSearching = true`), call hook with `fetchAll: true`:
 - Server returns all rows up to 10 000 matching active date/stageCode filters; no text filter applied
-- Client sorts then filters across every searchable column (all columns or column-specific)
+- Client sorts then filters via `searchRows(sorted, INF_COLUMNS, debouncedSearch, state.searchCol)`
 - Client re-paginates results; `PaginationBar` total + summary strip count use `allMatching.length`
 - When search is cleared, hook reverts to normal server-side paginated fetch (no `fetchAll`)
 
@@ -472,7 +506,7 @@ When `debouncedSearch` is non-empty (`isSearching = true`), call hook with `fetc
 const isSearching = debouncedSearch.trim() !== ''
 // hook call — never pass search param; fetchAll handles it
 { page: isSearching ? 0 : page, pageSize: isSearching ? undefined : state.pageSize, fetchAll: isSearching }
-// allMatching: sorted.filter(across all columns)
+// allMatching = searchRows(sorted, PAGE_COLUMNS, debouncedSearch, state.searchCol)
 // displayed: isSearching ? allMatching.slice(page*pageSize, ...) : sorted
 // PaginationBar total / SummaryStrip count: isSearching ? allMatching.length : count
 ```
@@ -480,28 +514,31 @@ const isSearching = debouncedSearch.trim() !== ''
 **`fetchAll` flag in `useInflowTransactions` / `useOutflowTransactions`:** skips `.range()`, applies `.limit(10000)`, ignores `search` param. Falls back to paginated `.range()` when `fetchAll` is false.
 
 **Client-side pages (all others):**
-- Filter `useMemo` must dispatch on `col` — never hardcode `description`
-- `col === 'all'` branch must search **all** searchable text fields for that page
-- `searchCol` **must** be included in the `useMemo` dependency array for all filter derivations
+- Use `searchRows(data, PAGE_COLUMNS, state.search, state.searchCol)` inside a `useMemo`
+- Include `state.search` and `state.searchCol` in the dependency array
+- **CategoryLedger B/F row exception**: the balance-brought-forward row (`id === 'bal-bf'`) must always be visible regardless of search — guard it explicitly: `r.id === 'bal-bf' || searchRows([r], LEDGER_COLUMNS, q, col).length > 0`
+- **IntraFlow `col='all'` exception**: server handles description ilike for `col='all'`; only fire client `searchRows` for specific-column selection
 
-**Per-page searchable columns:**
-| Page | `all` searches | Specific cols |
+**Per-page column definitions:**
+| Page | Key | Columns (key → label, noSearch cols) |
 |---|---|---|
-| Inflows | description, bank_name, transaction_ref, transaction_type | bank_name, transaction_ref, Type, Amount |
-| Outflows | description, bank_name, transaction_id, stage_code_1, transaction_type, display_description | bank_name, transaction_id, Type, Stage Code, Disbursed, Net |
-| BankLedger | description + inflow + outflow | description, inflow, outflow |
-| BankDeposits | description + transaction_ref + bank_name | description, bank_name, transaction_ref, amount |
-| ForeignCurrency | narration + transaction_ref | narration, transaction_ref |
-| Categories | name + group name | name, group |
-| CategoryLedger summary | category name | name |
-| CategoryLedger ledger | description | description |
-| PCA / SavingsPortions / SpecificGivings | category name | category |
-| Receipts | file_name | file_name |
-| IntraFlow | server description | description |
-| ChangeLog | field_name + old_value + new_value | field_name, table_name |
-| PendingDeductions | description + bank_name (client) | description, bank_name |
+| Inflows | `inf` | date†, description, bank_name, transaction_ref, transaction_type, amount |
+| Outflows | `out` | date†, description, bank_name, bank_description, transaction_id, transaction_type, stage_code_1, amount_disbursed, net |
+| BankLedger | `bl` | date†, description, inflow, outflow, balance |
+| BankDeposits | `bd` | date†, description, bank_name, transaction_ref, amount |
+| ForeignCurrency | `fx` | date†, amount, narration, transaction_ref |
+| Categories | `cat` | name, group |
+| CategoryLedger summary | `cl-sum` | name, percentage, percentageAllocated, specificSeed, savingsNet |
+| CategoryLedger ledger | `cl-led` | date†, description, inflow, outflow, balance |
+| PercentageAllocations | `pca` | category_name, percentage |
+| SavingsPortions | `svp` | category, deposited, balance |
+| SpecificGivings | `sg` | category, total |
+| Receipts | `rcp` | created_at†, file_name |
+| IntraFlow | `ifl` | date†, total_amount, account_from, account_to, description |
+| ChangeLog | `cl` | changed_at†, field_name, table_name, old_value, new_value |
+| PendingDeductions | `pd` | date†, amount_disbursed, description, bank_name |
 
-**Do not add** `balance` as a searchable column on BankLedger or CategoryLedger — running balance searches produce misleading partial matches.
+† `noSearch: true` — excluded from search dropdown
 
 ### Sort utilities (`src/utils/sortUtils.ts`)
 
@@ -523,7 +560,7 @@ Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), Forei
 
 **IntraFlow** — server search (description ilike) fires only for `col='all'`; domain filters (date, accountFrom, accountTo) stay in filter card above DataControlsBar; view toggle managed via DataControlsBar `view` prop.
 **ChangeLog** — client-side sort + search only (server supplies current page by table+date filter); defaultPageSize 50, pageSizeOptions `[25, 50, 100, 200]`.
-**PendingDeductions** — client-side sort + search only (server supplies pending outflows); search cols: description, bank_name.
+**PendingDeductions** — client-side sort + search only (server supplies pending outflows).
 
 ---
 
