@@ -2184,7 +2184,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       onClose={() => { setCreateConfigOpen(false); setCreateConfigPendingRow(null) }}
       onSaved={cfg => {
         if (!cfg) return
-        setSpecialConfigs(prev => [...prev, cfg])
+        reloadAllocConfigs()
         if (createConfigPendingRow === 'apply') {
           setApplyInflowConfig(cfg.id)
         } else if (typeof createConfigPendingRow === 'number') {
