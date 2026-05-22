@@ -334,6 +334,23 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [applyS2,           setApplyS2]           = useState('')
   const [applyIncomeType,   setApplyIncomeType]   = useState('')
 
+  // When the user picks an income type in the Apply bar, auto-derive its linked config
+  // so both fields stay in sync without requiring a separate manual selection.
+  useEffect(() => {
+    if (!applyIncomeType) return
+    const it = incomeTypes.find(t => t.id === applyIncomeType)
+    if (!it) return
+    if (it.rules.length === 0) {
+      setApplyInflowConfig('__general__')
+    } else if (it.special_config_id) {
+      setApplyInflowConfig(it.special_config_id)
+    } else if (it.special_config_group_id) {
+      const today = new Date().toISOString().slice(0, 10)
+      const v = getSpecialConfigVersionForDate(allocConfigs, it.special_config_group_id, today)
+      if (v) setApplyInflowConfig(v.id)
+    }
+  }, [applyIncomeType, incomeTypes, allocConfigs])
+
   // Per-row income type overrides (rowIndex → incomeTypeId)
   const [rowIncomeTypes,     setRowIncomeTypes]     = useState<Record<number, string>>({})
   // Per-row manual config override flag — true only when user explicitly changed the config dropdown
@@ -384,6 +401,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     () => allocConfigs.filter(c => c.is_special),
     [allocConfigs],
   )
+
+  // Apply bar config list: for versioned group configs, only show the currently
+  // active version (by today's date) — avoids multiple versions of the same group
+  // appearing as separate options in the dropdown.
+  const applyBarSpecialConfigs = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const seenGroups = new Set<string>()
+    const result: typeof allocConfigs = []
+    for (const c of specialConfigs) {
+      if (!c.config_group_id) {
+        result.push(c)
+      } else if (!seenGroups.has(c.config_group_id)) {
+        seenGroups.add(c.config_group_id)
+        const active = getSpecialConfigVersionForDate(allocConfigs, c.config_group_id, today)
+        if (active) result.push(active)
+      }
+    }
+    return result
+  }, [specialConfigs, allocConfigs])
   const [createConfigOpen, setCreateConfigOpen] = useState(false)
 
   // ── Reset on open/close ──────────────────────────────────────────────────
@@ -1472,7 +1508,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
                         <option value="">— Allocation Config —</option>
                         <option value="__general__">General (date-based)</option>
-                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {applyBarSpecialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         <option value="__create__">＋ Create New Config…</option>
                       </select>
                       {incomeTypes.length > 0 && (
