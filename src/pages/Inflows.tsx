@@ -125,21 +125,17 @@ export default function Inflows() {
   // Data controls state
   const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
-  // Data
+  // Data — fetch all rows when searching so client can filter across every column and re-paginate
+  const isSearching = debouncedSearch.trim() !== ''
   const { data, count, loading, error, refetch } = useInflowTransactions({
     dateFrom:  dateFrom  || undefined,
     dateTo:    dateTo    || undefined,
-    search:    (infState.searchCol === 'all' ? debouncedSearch : '') || undefined,
-    page,
-    pageSize:  infState.pageSize,
+    page:      isSearching ? 0 : page,
+    pageSize:  isSearching ? undefined : infState.pageSize,
+    fetchAll:  isSearching,
   })
 
-  // Summary
-  const total   = useMemo(() => data.reduce((s, r) => s + Number(r.amount), 0), [data])
-  const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount))) : 0, [data])
-  const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
-
-  // Client-side sort of current page
+  // Sort all fetched rows
   const getValue = (r: InflowTransaction, k: string) => {
     if (k === 'amount')           return Number(r.amount)
     if (k === 'bank_name')        return r.bank_name ?? ''
@@ -154,13 +150,32 @@ export default function Inflows() {
     return sortRows(data, getValue, infState.sortKey, infState.sortDir, INF_SORT_FIELDS)
   }, [data, infState.sortKey, infState.sortDir, infState.advancedSort])
 
-  // Column-specific client filter (on top of server search)
-  const displayed = useMemo(() => {
-    const q = searchInput.trim().toLowerCase()
+  // Client-side search across all fetched rows, then paginate the results
+  const allMatching = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return sorted
     const col = infState.searchCol
-    if (!q || col === 'all') return sorted
+    if (col === 'all') {
+      return sorted.filter(r =>
+        (r.description ?? '').toLowerCase().includes(q) ||
+        (r.bank_name ?? '').toLowerCase().includes(q) ||
+        (r.transaction_ref ?? '').toLowerCase().includes(q) ||
+        (r.transaction_type ?? '').toLowerCase().includes(q)
+      )
+    }
     return sorted.filter(r => infColVal(r, col).toLowerCase().includes(q))
-  }, [sorted, searchInput, infState.searchCol])
+  }, [sorted, debouncedSearch, infState.searchCol])
+
+  const displayed = useMemo(() => {
+    if (!isSearching) return sorted
+    const from = page * infState.pageSize
+    return allMatching.slice(from, from + infState.pageSize)
+  }, [allMatching, isSearching, page, infState.pageSize, sorted])
+
+  // Summary (current page)
+  const total   = useMemo(() => displayed.reduce((s, r) => s + Number(r.amount), 0), [displayed])
+  const largest = useMemo(() => displayed.length ? Math.max(...displayed.map(r => Number(r.amount))) : 0, [displayed])
+  const average = useMemo(() => displayed.length ? total / displayed.length : 0, [total, displayed.length])
 
   const [editRecord,        setEditRecord]        = useState<InflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
@@ -280,7 +295,7 @@ export default function Inflows() {
         </Card>
 
         {/* Summary strip */}
-        <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        <SummaryStrip total={total} count={isSearching ? allMatching.length : count} largest={largest} average={average} loading={loading} />
 
         {/* Data controls bar */}
         <DataControlsBar
@@ -308,7 +323,7 @@ export default function Inflows() {
         <PaginationBar
           page={page}
           pageSize={infState.pageSize}
-          total={count}
+          total={isSearching ? allMatching.length : count}
           onPageChange={setPage}
           variant="compact"
         />
@@ -387,7 +402,7 @@ export default function Inflows() {
           <PaginationBar
             page={page}
             pageSize={infState.pageSize}
-            total={count}
+            total={isSearching ? allMatching.length : count}
             onPageChange={setPage}
             variant="full"
           />
@@ -555,7 +570,7 @@ export default function Inflows() {
           <PaginationBar
             page={page}
             pageSize={infState.pageSize}
-            total={count}
+            total={isSearching ? allMatching.length : count}
             onPageChange={setPage}
             variant="full"
           />

@@ -79,11 +79,12 @@ export interface IntraFlowRow {
 export interface TransactionFilters {
   dateFrom?: string
   dateTo?: string
-  stageCode?: string   // filters on stage_code_1
-  search?: string      // ilike match across key text columns
+  stageCode?: string    // filters on stage_code_1
+  search?: string       // ilike match across key text columns; not used when fetchAll is true
   pendingOnly?: boolean // filter outflows by is_pending_deduction = true
-  page?: number        // 0-indexed
-  pageSize?: number
+  page?: number         // 0-indexed; not used when fetchAll is true
+  pageSize?: number     // not used when fetchAll is true
+  fetchAll?: boolean    // fetch all rows (up to 10 000) so the caller can filter/paginate client-side
 }
 
 export interface IntraFlowFilters {
@@ -112,7 +113,7 @@ export interface PaginatedResult<T> {
 export function useInflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<InflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, page = 0, pageSize = 50 } = filters
+  const { dateFrom, dateTo, stageCode, search, page = 0, pageSize = 50, fetchAll = false } = filters
 
   const [data, setData] = useState<InflowTransaction[]>([])
   const [count, setCount] = useState(0)
@@ -123,19 +124,21 @@ export function useInflowTransactions(
     setLoading(true)
     setError(null)
 
-    const from = page * pageSize
-    const to = from + pageSize - 1
-
     let query = supabase
       .from('inflow_transactions')
       .select('*', { count: 'exact' })
       .order('date', { ascending: false })
-      .range(from, to)
 
-    if (dateFrom) query = query.gte('date', dateFrom)
-    if (dateTo)   query = query.lte('date', dateTo)
-    if (stageCode) query = query.eq('stage_code_1', stageCode)
-    if (search)   query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_ref.ilike.%${search}%,transaction_type.ilike.%${search}%`)
+    if (fetchAll) {
+      query = query.limit(10000)
+    } else {
+      query = query.range(page * pageSize, page * pageSize + pageSize - 1)
+    }
+
+    if (dateFrom)             query = query.gte('date', dateFrom)
+    if (dateTo)               query = query.lte('date', dateTo)
+    if (stageCode)            query = query.eq('stage_code_1', stageCode)
+    if (search && !fetchAll)  query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_ref.ilike.%${search}%,transaction_type.ilike.%${search}%`)
 
     const { data: rows, count: total, error: err } = await query
 
@@ -146,7 +149,7 @@ export function useInflowTransactions(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, stageCode, search, page, pageSize])
+  }, [dateFrom, dateTo, stageCode, search, page, pageSize, fetchAll])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -158,7 +161,7 @@ export function useInflowTransactions(
 export function useOutflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<OutflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, pendingOnly, page = 0, pageSize = 50 } = filters
+  const { dateFrom, dateTo, stageCode, search, pendingOnly, page = 0, pageSize = 50, fetchAll = false } = filters
 
   const [data, setData] = useState<OutflowTransaction[]>([])
   const [count, setCount] = useState(0)
@@ -169,20 +172,22 @@ export function useOutflowTransactions(
     setLoading(true)
     setError(null)
 
-    const from = page * pageSize
-    const to = from + pageSize - 1
-
     let query = supabase
       .from('outflow_transactions')
       .select('*', { count: 'exact' })
       .order('date', { ascending: false })
-      .range(from, to)
 
-    if (dateFrom)    query = query.gte('date', dateFrom)
-    if (dateTo)      query = query.lte('date', dateTo)
-    if (stageCode)   query = query.eq('stage_code_1', stageCode)
-    if (search)      query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_id.ilike.%${search}%,stage_code_1.ilike.%${search}%,transaction_type.ilike.%${search}%`)
-    if (pendingOnly) query = query.eq('is_pending_deduction', true)
+    if (fetchAll) {
+      query = query.limit(10000)
+    } else {
+      query = query.range(page * pageSize, page * pageSize + pageSize - 1)
+    }
+
+    if (dateFrom)             query = query.gte('date', dateFrom)
+    if (dateTo)               query = query.lte('date', dateTo)
+    if (stageCode)            query = query.eq('stage_code_1', stageCode)
+    if (search && !fetchAll)  query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_id.ilike.%${search}%,stage_code_1.ilike.%${search}%,transaction_type.ilike.%${search}%`)
+    if (pendingOnly)          query = query.eq('is_pending_deduction', true)
 
     const { data: rows, count: total, error: err } = await query
 
@@ -201,7 +206,7 @@ export function useOutflowTransactions(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, stageCode, search, page, pageSize])
+  }, [dateFrom, dateTo, stageCode, search, page, pageSize, fetchAll])
 
   useEffect(() => { fetch() }, [fetch])
 
