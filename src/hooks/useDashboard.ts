@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { normalizeNarration } from '../utils/normalizeNarration'
 
 // ── Output types ───────────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ export interface RecentInflowRow {
   id: string
   date: string
   description: string | null
+  display_description: string  // computed client-side via normalizeNarration(); never stored to DB
   amount: number
   stage_code_1: string | null
 }
@@ -157,7 +159,12 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     setTotalInflow(totalIn)
     setTotalOutflow(totalOut)
     setFxBalances(fxBals)
-    setRecentTxns((recentRes.data ?? []) as RecentInflowRow[])
+    setRecentTxns(
+      ((recentRes.data ?? []) as Omit<RecentInflowRow, 'display_description'>[]).map(r => ({
+        ...r,
+        display_description: normalizeNarration(r.description),
+      })) as RecentInflowRow[]
+    )
     setLoading(false)
   }, [year])
 

@@ -74,8 +74,8 @@ export default function ForeignCurrency() {
   )
 
   const getFxValue = (t: FXTransaction, k: string) => {
-    if (k === 'amount')   return t.deposit > 0 ? t.deposit : t.withdrawal
-    if (k === 'narration') return t.narration ?? ''
+    if (k === 'amount')    return t.deposit > 0 ? t.deposit : t.withdrawal
+    if (k === 'narration') return t.display_narration
     return t.date
   }
 
@@ -339,7 +339,7 @@ export default function ForeignCurrency() {
                         {meta.symbol}{fmtFX(t.running_balance)}
                       </td>
                       <td className="px-4 py-3 text-gray-600 max-w-[200px]">
-                        <DescriptionCell id={t.id} text={t.narration} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={t.id} text={t.display_narration || t.narration} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
                       <td className="px-4 py-3 text-gray-400 font-mono text-xs">
                         {t.transaction_ref ?? '—'}

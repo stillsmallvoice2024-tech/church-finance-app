@@ -328,8 +328,8 @@ export default function PendingDeductions() {
                           />
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate" title={row.description ?? undefined}>
-                          {row.description ?? '—'}
+                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate" title={row.display_description || row.description || undefined}>
+                          {row.display_description || row.description || '—'}
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">

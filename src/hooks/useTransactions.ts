@@ -8,6 +8,7 @@ export interface InflowTransaction {
   id: string
   date: string
   description: string | null
+  display_description: string  // computed client-side via normalizeNarration(); never stored to DB
   amount: number
   stage_code_1: string | null
   stage_code_2: string | null
@@ -64,6 +65,7 @@ export interface IntraFlowRow {
   account_from: string | null
   account_to: string | null
   description: string | null
+  display_description: string  // computed client-side via normalizeNarration(); never stored to DB
   total_amount: number
   account_from_stage1: string | null
   account_from_stage2: string | null
@@ -145,7 +147,14 @@ export function useInflowTransactions(
     if (err) {
       setError(err.message)
     } else {
-      setData((rows ?? []) as InflowTransaction[])
+      setData(
+        (rows ?? []).map(r => ({
+          ...(r as Omit<InflowTransaction, 'display_description'>),
+          display_description: normalizeNarration(
+            (r as { description?: string | null }).description
+          ),
+        })) as InflowTransaction[]
+      )
       setCount(total ?? 0)
     }
     setLoading(false)
@@ -249,7 +258,14 @@ export function useIntraFlows(
     if (err) {
       setError(err.message)
     } else {
-      setData((rows ?? []) as IntraFlowRow[])
+      setData(
+        (rows ?? []).map(r => ({
+          ...(r as Omit<IntraFlowRow, 'display_description'>),
+          display_description: normalizeNarration(
+            (r as { description?: string | null }).description
+          ),
+        })) as IntraFlowRow[]
+      )
       setCount(total ?? 0)
     }
     setLoading(false)

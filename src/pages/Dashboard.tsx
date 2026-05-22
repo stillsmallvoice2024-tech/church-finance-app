@@ -285,7 +285,7 @@ export default function Dashboard() {
                     {formatDate(tx.date)}
                   </span>
                   <span className="text-sm text-gray-700 truncate flex-1">
-                    {tx.description ?? '—'}
+                    {tx.display_description || tx.description || '—'}
                   </span>
                   <span className="text-sm font-semibold text-success whitespace-nowrap shrink-0 font-mono">
                     +{formatCurrencyCompact(tx.amount)}
