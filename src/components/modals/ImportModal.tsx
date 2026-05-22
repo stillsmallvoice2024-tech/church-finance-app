@@ -724,6 +724,39 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               generalConfigId: cfg?.id ?? null,
             })
             if (resolvedId) row.allocation_config_id = resolvedId
+
+            // ── DIAGNOSTIC TRACE (remove after bug is confirmed fixed) ──────
+            const linkedSpecialConfigId = effIncomeTypeId
+              ? (incomeTypes.find(t => t.id === effIncomeTypeId)?.special_config_id ?? null)
+              : null
+            console.log('[ImportModal:runImport]', {
+              ri,
+              desc: (desc ?? '').slice(0, 50),
+              incomeTypesLoaded: incomeTypes.length,
+              rowIncomeTypesEntry: rowIncomeTypes[ri],
+              autoClassified: !rowIncomeTypes[ri] && !!effIncomeTypeId,
+              incomeTypeId:         effIncomeTypeId   ?? null,
+              linkedSpecialConfigId,
+              'rowConfigs[ri]':     manualConfigId,
+              riInRowConfigs:       ri in rowConfigs,
+              resolvedConfigId:     resolvedId,
+              finalAllocationConfigId: row.allocation_config_id ?? null,
+            })
+            // Invariant: if income type has a linked special config and no manual
+            // override exists, the resolved config MUST equal the linked config.
+            if (linkedSpecialConfigId && manualConfigId === undefined && resolvedId !== linkedSpecialConfigId) {
+              console.error('[INVARIANT VIOLATION]', {
+                ri,
+                desc: (desc ?? '').slice(0, 50),
+                incomeTypeId: effIncomeTypeId,
+                linkedSpecialConfigId,
+                resolvedConfigId: resolvedId,
+                generalConfigId: cfg?.id ?? null,
+                incomeTypesCount: incomeTypes.length,
+                rowConfigsKeys: Object.keys(rowConfigs),
+              })
+            }
+            // ── END DIAGNOSTIC TRACE ─────────────────────────────────────────
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {
@@ -788,6 +821,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         : outflowRows
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
+
+      // ── DIAGNOSTIC: log actual objects before DB insert ─────────────────────
+      console.log('[ImportModal:runImport] PRE-INSERT inflow rows:', inflowToInsert.map(r => ({
+        ri: '(row)',
+        income_type_id:       r.income_type_id   ?? null,
+        allocation_config_id: r.allocation_config_id ?? null,
+        desc: String(r.description ?? '').slice(0, 40),
+      })))
+      // ── END DIAGNOSTIC ───────────────────────────────────────────────────────
 
       const total = inflowToInsert.length + outflowToInsert.length
       const BATCH = 100
@@ -1528,6 +1570,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               // Precedence: manual rowConfigs override → income-type linked config → general ('')
                               const autoLinkedCfgId = resolveConfigForIncomeType(effIncomeTypeId || null, incomeTypes)
                               const displaySelId = ri in rowConfigs ? rowConfigs[ri] : autoLinkedCfgId
+                              // ── DIAGNOSTIC TRACE (Step 4 render) ──────────────────────────────
+                              if (autoLinkedCfgId) {
+                                console.log('[ImportModal:Step4 render]', {
+                                  ri,
+                                  desc: desc.slice(0, 50),
+                                  incomeTypesLoaded: incomeTypes.length,
+                                  'rowIncomeTypes[ri]': rowIncomeTypes[ri],
+                                  autoTypeId: autoType?.id ?? null,
+                                  effIncomeTypeId: effIncomeTypeId || null,
+                                  autoLinkedCfgId,
+                                  displaySelId,
+                                  'rowConfigs[ri]': rowConfigs[ri],
+                                  riInRowConfigs: ri in rowConfigs,
+                                  specialConfigsLoaded: specialConfigs.length,
+                                  linkedCfgInSpecialConfigs: specialConfigs.some(c => c.id === autoLinkedCfgId),
+                                })
+                              }
+                              // ── END DIAGNOSTIC TRACE ────────────────────────────────────────
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
                                 <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
@@ -1576,9 +1636,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         value={effIncomeTypeId}
                                         onChange={e => {
                                           const newId = e.target.value
+                                          const linkedCfg = resolveConfigForIncomeType(newId || null, incomeTypes)
+                                          // ── DIAGNOSTIC ──────────────────────────────────────────────────────
+                                          console.log('[ImportModal:incomeType onChange]', {
+                                            ri,
+                                            newIncomeTypeId: newId,
+                                            resolvedLinkedConfig: linkedCfg,
+                                            incomeTypesLoaded: incomeTypes.length,
+                                            incomeTypeFound: incomeTypes.find(t => t.id === newId),
+                                          })
+                                          // ── END DIAGNOSTIC ──────────────────────────────────────────────────
                                           setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
                                           // Propagate linked config from the newly selected income type
-                                          setRowConfigs(prev => ({ ...prev, [ri]: resolveConfigForIncomeType(newId || null, incomeTypes) }))
+                                          setRowConfigs(prev => ({ ...prev, [ri]: linkedCfg }))
                                         }}
                                         className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                                       >

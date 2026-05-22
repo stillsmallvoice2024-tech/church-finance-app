@@ -157,21 +157,27 @@ Pipeline stages (all before Step 4 opens):
 **Resolver:** `src/utils/resolveImportConfig.ts` — single source of truth.
 
 ```ts
-resolveConfigForIncomeType(incomeTypeId, incomeTypes) → string  // '' = general
+resolveFinalRowConfig({ manualConfigId, incomeTypeId, incomeTypes, generalConfigId }) → string | null
+resolveConfigForIncomeType(incomeTypeId, incomeTypes) → string  // UI onChange helper
 ```
 
+**`rowConfigs[ri]` semantics:**
+- `undefined` (key absent) — no explicit decision; fall through to income type logic
+- `''` (empty string) — user explicitly chose General
+- `uuid` — user or propagation chose a specific special config
+
 **Precedence (highest first):**
-1. Manual user override (stored in `rowConfigs[ri]`)
+1. Manual/propagated override (`ri in rowConfigs`) — `''` maps to general; uuid maps to that config
 2. Income type linked config (`incomeType.special_config_id`)
-3. General date-based config (empty string → `getConfigForDate`)
+3. General date-based fallback (`getConfigForDate`)
 
-**Per-row propagation:** Income type `onChange` calls `resolveConfigForIncomeType` and writes result into `rowConfigs[ri]` immediately — Allocation Config dropdown updates in real time. Next income type change overwrites any prior manual selection.
+**Critical:** `runImport` uses `ri in rowConfigs` (not truthiness) to detect any explicit decision. `''` must never be treated as "no decision" — it is an explicit choice of General. The old `if (overrideCfgId)` truthiness check caused `''` to fall through to the income type's linked config, overriding an explicit General selection.
 
-**Auto-classified rows:** `displaySelId` uses `ri in rowConfigs` guard (not `?? ''`) so rows with auto-detected income types show the linked config without polluting `rowConfigs` until the user explicitly interacts.
+**Per-row propagation:** Income type `onChange` calls `resolveConfigForIncomeType` and writes the linked config (or `''`) into `rowConfigs[ri]`. Next income type change overwrites. Manual config change overwrites too — and is preserved until next income type change.
 
-**Bulk Apply:** Applying an income type without an explicit config also propagates the linked config into `rowConfigs` for all target rows. Explicit config selection always wins over income-type propagation when both are set simultaneously.
+**Auto-classified rows:** `displaySelId` uses `ri in rowConfigs` guard so rows with auto-detected income types show the linked config in the UI without polluting `rowConfigs` (runImport handles them via the income type branch directly).
 
-**`runImport` safety net:** The linked-config branch in `runImport` (lines ~717–727) is preserved as a fallback for auto-classified rows that were never explicitly interacted with.
+**Bulk Apply:** Income type applied without an explicit config → propagates the linked config into `rowConfigs` for target rows. Explicit config always wins when both are set.
 
 ---
 
