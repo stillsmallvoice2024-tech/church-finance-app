@@ -155,30 +155,57 @@ Pipeline stages (all before Step 4 opens):
 
 ## Config Propagation Precedence (Import Modal)
 
-**Resolver:** `src/utils/resolveImportConfig.ts` — single source of truth.
+**Resolver:** `src/utils/configResolver.ts` — single source of truth for all config resolution.
 
 ```ts
-resolveFinalRowConfig({ manualConfigId, incomeTypeId, incomeTypes, generalConfigId }) → string | null
-resolveConfigForIncomeType(incomeTypeId, incomeTypes) → string  // UI onChange helper
+getFinalConfig(rowState: RowResolverState, generalConfigId, resolveGroupConfig?) → string | null
+resolveConfigForIncomeType(incomeType, generalConfigId, resolveGroupConfig?) → string | null
+resolveDefaultIncomeType(description, stageCode1, incomeTypes, userPrefs?) → IncomeType | null
 ```
 
-**`rowConfigs[ri]` semantics:**
-- `undefined` (key absent) — no explicit decision; fall through to income type logic
-- `''` (empty string) — user explicitly chose General
-- `uuid` — user or propagation chose a specific special config
+**`RowResolverState`:**
+```ts
+{ incomeType: IncomeType | null; allocationConfigId: string; isManualOverride: boolean }
+```
 
-**Precedence (highest first):**
-1. Manual/propagated override (`ri in rowConfigs`) — `''` maps to general; uuid maps to that config
-2. Income type linked config (`incomeType.special_config_id`)
-3. General date-based fallback (`getConfigForDate`)
+**`getFinalConfig` precedence (highest first):**
+1. `isManualOverride = true` → `allocationConfigId` (falls back to `generalConfigId` when blank)
+2. Income type is catch-all (zero rules) → always `generalConfigId` regardless of any linked config
+3. `incomeType.special_config_id` (direct linked config)
+4. `incomeType.special_config_group_id` → `resolveGroupConfig(groupId)` when provided
+5. `generalConfigId` (date-based general config)
 
-**Critical:** `runImport` uses `ri in rowConfigs` (not truthiness) to detect any explicit decision. `''` must never be treated as "no decision" — it is an explicit choice of General. The old `if (overrideCfgId)` truthiness check caused `''` to fall through to the income type's linked config, overriding an explicit General selection.
+**`isManualOverride` flag:**
+- Set to `true` only when the user explicitly changes the Allocation Config dropdown for a row
+- Cleared whenever Income Type changes → new type's linked config auto-applies
+- `rowManualOverrides: Record<number, boolean>` — stored separately from `rowConfigs`
 
-**Per-row propagation:** Income type `onChange` calls `resolveConfigForIncomeType` and writes the linked config (or `''`) into `rowConfigs[ri]`. Next income type change overwrites. Manual config change overwrites too — and is preserved until next income type change.
+**`resolveGroupConfig` callback:**
+- Required to handle income types linked via `special_config_group_id` (versioned config groups)
+- Step 4 display: `(groupId) => getSpecialConfigVersionForDate(allocConfigs, groupId, rowDate)?.id ?? null`
+- `runImport`: same pattern using the transaction's actual `date`
+- Both passed as third arg to `getFinalConfig`
 
-**Auto-classified rows:** `displaySelId` uses `ri in rowConfigs` guard so rows with auto-detected income types show the linked config in the UI without polluting `rowConfigs` (runImport handles them via the income type branch directly).
+**`resolveDefaultIncomeType` fallback chain:**
+1. Keyword / stage-code rule match via `classifyIncomeType`
+2. `userPrefs.defaultIncomeTypeId` if provided
+3. Catch-all: first income type with zero rules (no keyword/stage rules = General)
+4. `null`
 
-**Bulk Apply:** Income type applied without an explicit config → propagates the linked config into `rowConfigs` for target rows. Explicit config always wins when both are set.
+**Per-row state:**
+- `rowIncomeTypes[ri]` — explicit user override of income type; absent = auto-classified
+- `rowConfigs[ri]` — explicit config value when `isManualOverride=true`; otherwise ignored
+- `autoClassifiedTypes` — `useMemo` map of `ri → IncomeType | null` computed once from `processedRows` + `incomeTypes`
+
+**Allocation configs reload:** `useAllocationStore.reload()` called every time the modal opens to ensure group config versions are always fresh.
+
+**Bulk Apply bar:**
+- Income type selected → `applyInflowConfig` auto-derives from linked config (`special_config_id` → direct UUID; `special_config_group_id` → `getSpecialConfigVersionForDate` with today's date)
+- Config selected explicitly → marks all target rows as `isManualOverride = true`
+- Income type applied without explicit config → clears `isManualOverride` for target rows so per-row `getFinalConfig` derives the linked config automatically
+- `applyBarSpecialConfigs` memo: deduplicates versioned group configs — only the today-active version per group appears in the dropdown (prevents multiple "Config 2024 / Config 2025" entries)
+
+**`src/utils/resolveImportConfig.ts`:** Backward-compat shim; re-exports everything from `configResolver.ts`. `resolveFinalRowConfig` is deprecated — delegates to `getFinalConfig` internally.
 
 ---
 
