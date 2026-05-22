@@ -53,7 +53,7 @@ const INF_SEARCH_COLS = [
   { key: 'description',     label: 'Description' },
   { key: 'bank_name',       label: 'Bank' },
   { key: 'transaction_ref', label: 'Txn Ref' },
-  { key: 'amount',          label: 'Inflow' },
+  { key: 'amount',          label: 'Amount' },
 ]
 
 function infColVal(r: InflowTransaction, col: string): string {
