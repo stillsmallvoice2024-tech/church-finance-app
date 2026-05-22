@@ -42,13 +42,20 @@ export function resolveDefaultIncomeType(
 
 /**
  * Returns the allocation config ID for an income type.
- * Prefers the income type's linked special config; falls back to generalConfigId.
+ * Checks special_config_id first, then special_config_group_id via resolveGroupConfig,
+ * then falls back to generalConfigId.
  */
 export function resolveConfigForIncomeType(
   incomeType: IncomeType | null | undefined,
   generalConfigId: string | null,
+  resolveGroupConfig?: (groupId: string) => string | null,
 ): string | null {
-  return incomeType?.special_config_id ?? generalConfigId
+  if (incomeType?.special_config_id) return incomeType.special_config_id
+  if (incomeType?.special_config_group_id && resolveGroupConfig) {
+    const groupConfigId = resolveGroupConfig(incomeType.special_config_group_id)
+    if (groupConfigId) return groupConfigId
+  }
+  return generalConfigId
 }
 
 /**
@@ -56,14 +63,16 @@ export function resolveConfigForIncomeType(
  *
  * Strict precedence:
  *   1. isManualOverride=true  → allocationConfigId (falls back to generalConfigId when blank)
- *   2. incomeType.special_config_id (linked config)
+ *   2. incomeType.special_config_id (direct linked config)
  *      — skipped for the "General" catch-all type (zero rules), which always
  *        maps to generalConfigId regardless of any accidentally-set special_config_id
- *   3. generalConfigId (date-based general config)
+ *   3. incomeType.special_config_group_id → resolveGroupConfig(groupId) when provided
+ *   4. generalConfigId (date-based general config)
  */
 export function getFinalConfig(
   rowState: RowResolverState,
   generalConfigId: string | null,
+  resolveGroupConfig?: (groupId: string) => string | null,
 ): string | null {
   if (rowState.isManualOverride) {
     return rowState.allocationConfigId || generalConfigId
@@ -71,5 +80,12 @@ export function getFinalConfig(
   // The catch-all "General" type (no rules) always uses the general config
   const isCatchAll = rowState.incomeType !== null && rowState.incomeType.rules.length === 0
   if (isCatchAll) return generalConfigId
-  return rowState.incomeType?.special_config_id ?? generalConfigId
+  if (rowState.incomeType?.special_config_id) {
+    return rowState.incomeType.special_config_id
+  }
+  if (rowState.incomeType?.special_config_group_id && resolveGroupConfig) {
+    const groupConfigId = resolveGroupConfig(rowState.incomeType.special_config_group_id)
+    if (groupConfigId) return groupConfigId
+  }
+  return generalConfigId
 }

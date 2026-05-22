@@ -9,7 +9,7 @@ import { Modal } from '../ui/Modal'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
-import { useAllocationStore, getConfigForDate } from '../../store/allocationStore'
+import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
@@ -279,8 +279,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const preview = sheet?.rows.slice(0, 5) ?? []
 
   // Allocation configs — load once so Step 4 and runImport can use them
-  const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: allocLoaded } = useAllocationStore()
-  useEffect(() => { if (!allocLoaded) fetchAllocConfigs() }, [allocLoaded, fetchAllocConfigs])
+  const { configs: allocConfigs, fetch: fetchAllocConfigs, reload: reloadAllocConfigs, loaded: allocLoaded } = useAllocationStore()
+  // Refresh configs every time the modal opens; fall back to lazy-load if already loaded
+  useEffect(() => {
+    if (open) reloadAllocConfigs()
+    else if (!allocLoaded) fetchAllocConfigs()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // Categories for stage code dropdowns
   const { categories } = useCategories()
@@ -740,7 +745,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               allocationConfigId:  rowConfigs[ri] ?? '',
               isManualOverride:    rowManualOverrides[ri] ?? false,
             }
-            const resolvedId = getFinalConfig(rowState, cfg?.id ?? null)
+            const resolvedId = getFinalConfig(
+              rowState,
+              cfg?.id ?? null,
+              (groupId) => getSpecialConfigVersionForDate(latestConfigs, groupId, date)?.id ?? null,
+            )
             if (resolvedId) row.allocation_config_id = resolvedId
           }
           if (internalBank) row.bank_name = internalBank.name
@@ -1568,7 +1577,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 isManualOverride:   rowManualOverrides[ri] ?? false,
                               }
                               // '' = "General (date-based)" in display; real general config resolved at import time
-                              const displaySelId = getFinalConfig(rowState, '') ?? ''
+                              const displaySelId = getFinalConfig(
+                                rowState,
+                                '',
+                                (groupId) => getSpecialConfigVersionForDate(allocConfigs, groupId, date || new Date().toISOString().slice(0, 10))?.id ?? null,
+                              ) ?? ''
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
                                 <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
