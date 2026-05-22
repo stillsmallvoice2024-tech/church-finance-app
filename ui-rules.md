@@ -448,23 +448,34 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 
 ### Search filter implementation rules
 
-**Server-paginated pages (Inflows, Outflows):**
-- `search` passed to server only when `searchCol === 'all'` — server filters `description` via ilike
-- When `searchCol !== 'all'`: pass `search: undefined` to server; filter client-side on current page only
-- Pattern: `search: (state.searchCol === 'all' ? debouncedSearch : '') || undefined`
-- Client `displayed` filter: `if (!q || col === 'all') return sorted; return sorted.filter(r => colVal(r, col)…)`
+**Inflows / Outflows — fetch-all pattern (global search):**
+When `debouncedSearch` is non-empty (`isSearching = true`), call hook with `fetchAll: true`:
+- Server returns all rows up to 10 000 matching active date/stageCode filters; no text filter applied
+- Client sorts then filters across every searchable column (all columns or column-specific)
+- Client re-paginates results; `PaginationBar` total + summary strip count use `allMatching.length`
+- When search is cleared, hook reverts to normal server-side paginated fetch (no `fetchAll`)
+
+```ts
+const isSearching = debouncedSearch.trim() !== ''
+// hook call — never pass search param; fetchAll handles it
+{ page: isSearching ? 0 : page, pageSize: isSearching ? undefined : state.pageSize, fetchAll: isSearching }
+// allMatching: sorted.filter(across all columns)
+// displayed: isSearching ? allMatching.slice(page*pageSize, ...) : sorted
+// PaginationBar total / SummaryStrip count: isSearching ? allMatching.length : count
+```
+
+**`fetchAll` flag in `useInflowTransactions` / `useOutflowTransactions`:** skips `.range()`, applies `.limit(10000)`, ignores `search` param. Falls back to paginated `.range()` when `fetchAll` is false.
 
 **Client-side pages (all others):**
 - Filter `useMemo` must dispatch on `col` — never hardcode `description`
-- `col === 'all'` branch must search **all** searchable text fields for that page (e.g. BankDeposits: description + transaction_ref + bank_name)
+- `col === 'all'` branch must search **all** searchable text fields for that page
 - `searchCol` **must** be included in the `useMemo` dependency array for all filter derivations
-- Fallback (unknown col): default to `description` or the page's primary text field
 
 **Per-page searchable columns:**
 | Page | `all` searches | Specific cols |
 |---|---|---|
-| Inflows | server description | bank_name, transaction_ref, amount |
-| Outflows | server description | bank_name, transaction_id, stage_code_1, amount_disbursed |
+| Inflows | description, bank_name, transaction_ref, transaction_type | bank_name, transaction_ref, Type, Amount |
+| Outflows | description, bank_name, transaction_id, stage_code_1, transaction_type, display_description | bank_name, transaction_id, Type, Stage Code, Disbursed, Net |
 | BankLedger | description + inflow + outflow | description, inflow, outflow |
 | BankDeposits | description + transaction_ref + bank_name | description, bank_name, transaction_ref, amount |
 | ForeignCurrency | narration + transaction_ref | narration, transaction_ref |
