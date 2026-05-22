@@ -665,7 +665,10 @@ Row-level checkboxes in the Configure Rows step of `ImportModal.tsx`:
 - **Apply button disabled** when both no selection and no field values are chosen
 - **Row count display:** `{filtered.length} / {total} rows · X selected` (selected count only shown when > 0)
 - **Description cell — both tabs:** hover tooltip only (no click-expand, no ChevronDown); `onMouseEnter`/`onMouseLeave` on a plain `div` with `className="flex items-center"` — no `onClick`, no `cursor-pointer`, no `expandedRows`
-- Grid templates include a leading `24px` checkbox column: Credit `[24px_32px_1fr_72px_120px_120px_96px]`, Debit `[24px_36px_1fr_80px_110px_110px_90px]`
+- Grid templates include a leading `24px` checkbox column: Credit `[24px_32px_1fr_72px_120px_120px_96px]`, Debit `[24px_36px_1fr_80px_110px_110px_52px_90px]`
+- **Debit Pending column:** 7th column (52px) contains a per-row checkbox (`text-amber-500`); header label "Pending"; positioned between Stage Code 2 and Type
+- **Bulk pending actions:** "Mark Pending" (amber) and "Clear Pending" (gray) buttons in the outflow apply bar, separated from the Apply button by a vertical divider; operate on `outflowTargetRis` (selected or all filtered); always enabled when target rows exist — no field selection required
+- **`rowPendingDeductions: Set<number>`** — keyed by `ri`; reset in `reset()`; `runImport` reads `rowPendingDeductions.has(ri)` to set `is_pending_deduction = true` per row
 
 ## Schema Cache Error — Inline Display (Inflows / Outflows modals)
 

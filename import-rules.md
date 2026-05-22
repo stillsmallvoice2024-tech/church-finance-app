@@ -32,7 +32,8 @@ Also contains `ManualEntryForm` for single-transaction entry.
   - `stage_code_2` — budget portion dropdown (`Percentage Allocation` | `Specific Seed` | `Savings`)
 - Both passed to `doSaveOutflow` → `AddOutflowInput`; omitted if blank
 - Setting `stage_code_1` is what links a manually-entered outflow to **CategoryLedger**
-- Batch wizard outflow tab already has per-row stage code dropdowns (unchanged)
+- Batch wizard outflow tab has per-row stage code dropdowns and a per-row **Pending Deduction** checkbox (column 7 of the debit grid)
+- Pending deduction state: `rowPendingDeductions: Set<number>` (by `ri`); bulk "Mark Pending" / "Clear Pending" buttons in the apply bar target selected rows or all filtered rows; `runImport` writes `is_pending_deduction = true` only for rows in the set
 
 ---
 
