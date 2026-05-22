@@ -20,10 +20,10 @@ import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
 const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
   { key: 'name',                label: 'Category',      sortType: 'text',    primary: true, accessor: r => r.name },
-  { key: 'percentage',          label: '% Alloc',       sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0, noSearch: true },
-  { key: 'percentageAllocated', label: '₦ Allocated',   sortType: 'numeric', primary: true, noSearch: true },
-  { key: 'specificSeed',        label: 'Specific Seed', sortType: 'numeric', primary: true, noSearch: true },
-  { key: 'savingsNet',          label: 'Savings Net',   sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut, noSearch: true },
+  { key: 'percentage',          label: '% Alloc',       sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
+  { key: 'percentageAllocated', label: '₦ Allocated',   sortType: 'numeric', primary: true },
+  { key: 'specificSeed',        label: 'Specific Seed', sortType: 'numeric', primary: true },
+  { key: 'savingsNet',          label: 'Savings Net',   sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut },
 ]
 
 const LEDGER_COLUMNS: TableColumnDef<LedgerRow>[] = [
@@ -31,7 +31,7 @@ const LEDGER_COLUMNS: TableColumnDef<LedgerRow>[] = [
   { key: 'description', label: 'Description', sortType: 'text',    accessor: r => r.description },
   { key: 'inflow',      label: 'Inflow',      sortType: 'numeric', primary: true, accessor: r => r.inflow > 0 ? String(r.inflow) : '' },
   { key: 'outflow',     label: 'Outflow',     sortType: 'numeric', primary: true, accessor: r => r.outflow > 0 ? String(r.outflow) : '' },
-  { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true },
 ]
 
 const SUMMARY_SORT_FIELDS = deriveSortFields(SUMMARY_COLUMNS)

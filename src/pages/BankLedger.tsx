@@ -54,7 +54,7 @@ const BL_COLUMNS: TableColumnDef<LedgerRow>[] = [
   { key: 'description', label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
   { key: 'inflow',      label: 'Inflow',      sortType: 'numeric', primary: true, accessor: r => r.inflow > 0 ? String(r.inflow) : '' },
   { key: 'outflow',     label: 'Outflow',     sortType: 'numeric', primary: true, accessor: r => r.outflow > 0 ? String(r.outflow) : '' },
-  { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true },
 ]
 
 const BL_SORT_FIELDS = deriveSortFields(BL_COLUMNS)

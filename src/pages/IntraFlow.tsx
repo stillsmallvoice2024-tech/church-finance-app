@@ -30,7 +30,7 @@ import { filterInputCls } from '../components/ui/FormField'
 
 const IFL_COLUMNS: TableColumnDef<IntraFlowRow>[] = [
   { key: 'date',         label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
-  { key: 'total_amount', label: 'Amount',      sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'total_amount', label: 'Amount',      sortType: 'numeric', primary: true },
   { key: 'account_from', label: 'From',        sortType: 'text',    accessor: r => r.account_from ?? '' },
   { key: 'account_to',   label: 'To',          sortType: 'text',    accessor: r => r.account_to ?? '' },
   { key: 'description',  label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },

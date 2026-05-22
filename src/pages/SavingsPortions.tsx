@@ -20,8 +20,8 @@ interface SavingsRow {
 
 const SVP_COLUMNS: TableColumnDef<SavingsRow>[] = [
   { key: 'category', label: 'Category',   sortType: 'text',    primary: true, accessor: r => r.category },
-  { key: 'deposited', label: 'Total Saved', sortType: 'numeric', primary: true, noSearch: true },
-  { key: 'balance',   label: 'Net Balance', sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'deposited', label: 'Total Saved', sortType: 'numeric', primary: true },
+  { key: 'balance',   label: 'Net Balance', sortType: 'numeric', primary: true },
 ]
 
 const SVP_SORT_FIELDS = deriveSortFields(SVP_COLUMNS)

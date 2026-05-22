@@ -16,7 +16,7 @@ type PcaRow = { category_name: string; percentage?: number }
 
 const PCA_COLUMNS: TableColumnDef<PcaRow>[] = [
   { key: 'category_name', label: 'Category',   sortType: 'text',    primary: true, accessor: r => r.category_name },
-  { key: 'percentage',    label: 'Percentage', sortType: 'numeric', primary: true, accessor: r => String(r.percentage ?? 0), noSearch: true },
+  { key: 'percentage',    label: 'Percentage', sortType: 'numeric', primary: true, accessor: r => String(r.percentage ?? 0) },
 ]
 
 const PCA_SORT_FIELDS = deriveSortFields(PCA_COLUMNS)

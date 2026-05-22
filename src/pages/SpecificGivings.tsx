@@ -28,7 +28,7 @@ interface GroupedCategory {
 
 const SG_COLUMNS: TableColumnDef<GroupedCategory>[] = [
   { key: 'category', label: 'Category', sortType: 'text',    primary: true, accessor: g => g.category },
-  { key: 'total',    label: 'Total',    sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'total',    label: 'Total',    sortType: 'numeric', primary: true },
 ]
 
 const SG_SORT_FIELDS = deriveSortFields(SG_COLUMNS)

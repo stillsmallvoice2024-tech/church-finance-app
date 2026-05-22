@@ -21,7 +21,7 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 
 const PD_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
   { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
-  { key: 'amount_disbursed', label: 'Disbursed',   sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'amount_disbursed', label: 'Disbursed',   sortType: 'numeric', primary: true },
   { key: 'description',      label: 'Description',                      accessor: r => r.description ?? '' },
   { key: 'bank_name',        label: 'Bank',                             accessor: r => r.bank_name ?? '' },
 ]
