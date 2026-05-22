@@ -140,7 +140,7 @@ export default function Inflows() {
   const getValue = (r: InflowTransaction, k: string) => {
     if (k === 'amount')      return Number(r.amount)
     if (k === 'bank_name')   return r.bank_name ?? ''
-    if (k === 'description') return r.description ?? ''
+    if (k === 'description') return r.display_description
     return r.date
   }
 
@@ -347,7 +347,7 @@ export default function Inflows() {
                     </div>
                     {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
                     <div className="text-sm">
-                      <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      <DescriptionCell id={`card-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                     {row.remark && (
                       <div className="text-xs mt-1.5">
@@ -513,7 +513,7 @@ export default function Inflows() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[240px]" onClick={e => e.stopPropagation()}>
-                          <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
                         <AmountCell value={Number(row.amount)} mode="inflow" />
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>

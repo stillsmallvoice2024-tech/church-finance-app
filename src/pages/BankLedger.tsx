@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { BookOpen, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
+import { normalizeNarration } from '../utils/normalizeNarration'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
 import { usePageTitle }  from '../hooks/usePageTitle'
@@ -33,16 +34,17 @@ const TXN_TYPE_LABELS: Record<string, string> = {
 }
 
 interface LedgerRow {
-  id:               string
-  date:             string
-  description:      string | null
-  inflow:           number
-  outflow:          number
-  balance:          number   // running
-  transaction_type: string | null
-  entity_type:      'inflow' | 'outflow'
-  inflowData?:      InflowTransaction
-  outflowData?:     OutflowTransaction
+  id:                  string
+  date:                string
+  description:         string | null
+  display_description: string
+  inflow:              number
+  outflow:             number
+  balance:             number   // running
+  transaction_type:    string | null
+  entity_type:         'inflow' | 'outflow'
+  inflowData?:         InflowTransaction
+  outflowData?:        OutflowTransaction
 }
 
 // ── Sort fields ────────────────────────────────────────────────────────────────
@@ -105,11 +107,12 @@ export default function BankLedger() {
     }
 
     // Merge & sort chronologically (B/F DB rows excluded above)
-    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
+    type RawRow = { id: string; date: string; description: string | null; display_description: string; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
+        display_description: normalizeNarration(r.description as string | null),
         inflow: r.amount as number, outflow: 0,
         transaction_type: (r.transaction_type as string | null) ?? null,
         entity_type: 'inflow' as const,
@@ -118,6 +121,9 @@ export default function BankLedger() {
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
         description: r.description as string | null,
+        display_description: normalizeNarration(
+          (r.description as string | null) ?? (r.bank_description as string | null)
+        ),
         inflow: 0, outflow: r.amount_disbursed as number,
         transaction_type: (r.transaction_type as string | null) ?? null,
         entity_type: 'outflow' as const,
@@ -136,14 +142,15 @@ export default function BankLedger() {
     const rows: LedgerRow[] = openingBalance > 0
       ? [
           {
-            id:               '__bf__',
-            date:             '1900-01-01',
-            description:      BF_DESCRIPTION,
-            inflow:           openingBalance,
-            outflow:          0,
-            balance:          openingBalance,
-            transaction_type: BALANCE_BROUGHT_FORWARD_TYPE,
-            entity_type:      'inflow',
+            id:                  '__bf__',
+            date:                '1900-01-01',
+            description:         BF_DESCRIPTION,
+            display_description: BF_DESCRIPTION,
+            inflow:              openingBalance,
+            outflow:             0,
+            balance:             openingBalance,
+            transaction_type:    BALANCE_BROUGHT_FORWARD_TYPE,
+            entity_type:         'inflow',
           },
           ...withBalance,
         ]
@@ -182,7 +189,7 @@ export default function BankLedger() {
     if (k === 'inflow')      return r.inflow
     if (k === 'outflow')     return r.outflow
     if (k === 'balance')     return r.balance
-    if (k === 'description') return r.description ?? ''
+    if (k === 'description') return r.display_description
     return r.date
   }
 
@@ -372,9 +379,9 @@ export default function BankLedger() {
                     </div>
                     {isBF ? (
                       <p className="text-sm text-blue-700 font-medium">{row.description}</p>
-                    ) : row.description && (
+                    ) : (row.display_description || row.description) && (
                       <div className="text-sm">
-                        <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                        <DescriptionCell id={`card-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                       </div>
                     )}
                   </div>
@@ -441,7 +448,7 @@ export default function BankLedger() {
                           {isBF ? (
                             <span className="text-blue-700 font-medium">{row.description}</span>
                           ) : (
-                            <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                            <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           )}
                         </div>
                       </td>

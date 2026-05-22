@@ -23,21 +23,23 @@ import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { normalizeNarration } from '../utils/normalizeNarration'
 import { filterInputCls } from '../components/ui/FormField'
 import { EmptyState } from '../components/ui/EmptyState'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface DepositRow {
-  id:              string
-  date:            string
-  bank_id:         string | null
-  bank_name:       string | null
-  amount:          number
-  description:     string | null
-  transaction_ref: string | null
-  remarks:         string | null
-  source:          'bank_deposits' | 'inflow' | 'outflow'
+  id:                  string
+  date:                string
+  bank_id:             string | null
+  bank_name:           string | null
+  amount:              number
+  description:         string | null
+  display_description: string
+  transaction_ref:     string | null
+  remarks:             string | null
+  source:              'bank_deposits' | 'inflow' | 'outflow'
 }
 
 // ── Modal schema ───────────────────────────────────────────────────────────────
@@ -231,30 +233,36 @@ export default function BankDeposits() {
     ])
     if (depRes.error) { setError(depRes.error.message); setLoading(false); return }
 
-    const depositRows: DepositRow[] = (depRes.data ?? []).map(r => ({ ...r, source: 'bank_deposits' as const }))
+    const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
+      ...(r as Omit<DepositRow, 'display_description' | 'source'>),
+      display_description: normalizeNarration(r.description as string | null),
+      source: 'bank_deposits' as const,
+    }))
 
     const inflowRows: DepositRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-      id:              r.id as string,
-      date:            r.date as string,
-      bank_id:         null,
-      bank_name:       r.bank_name as string | null,
-      amount:          r.amount as number,
-      description:     r.description as string | null,
-      transaction_ref: r.transaction_ref as string | null,
-      remarks:         r.remark as string | null,
-      source:          'inflow' as const,
+      id:                  r.id as string,
+      date:                r.date as string,
+      bank_id:             null,
+      bank_name:           r.bank_name as string | null,
+      amount:              r.amount as number,
+      description:         r.description as string | null,
+      display_description: normalizeNarration(r.description as string | null),
+      transaction_ref:     r.transaction_ref as string | null,
+      remarks:             r.remark as string | null,
+      source:              'inflow' as const,
     }))
 
     const outflowRows: DepositRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-      id:              r.id as string,
-      date:            r.date as string,
-      bank_id:         null,
-      bank_name:       r.bank_name as string | null,
-      amount:          r.amount_disbursed as number,
-      description:     r.description as string | null,
-      transaction_ref: r.transaction_id as string | null,
-      remarks:         r.remarks as string | null,
-      source:          'outflow' as const,
+      id:                  r.id as string,
+      date:                r.date as string,
+      bank_id:             null,
+      bank_name:           r.bank_name as string | null,
+      amount:              r.amount_disbursed as number,
+      description:         r.description as string | null,
+      display_description: normalizeNarration(r.description as string | null),
+      transaction_ref:     r.transaction_id as string | null,
+      remarks:             r.remarks as string | null,
+      source:              'outflow' as const,
     }))
 
     const merged = [...depositRows, ...inflowRows, ...outflowRows]
@@ -518,9 +526,9 @@ export default function BankDeposits() {
                     <SourceBadge source={row.source} />
                   </div>
                   {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
-                  {row.description && (
+                  {(row.display_description || row.description) && (
                     <div className="text-sm mb-1">
-                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                   )}
                   {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono">Ref: {row.transaction_ref}</p>}
@@ -587,7 +595,7 @@ export default function BankDeposits() {
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
-                      <DescriptionCell id={`${row.source}-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <DescriptionCell id={`${row.source}-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { normalizeNarration } from '../utils/normalizeNarration'
 
 // ── DB row type ────────────────────────────────────────────────────────────────
 
@@ -9,6 +10,7 @@ export interface FXTransaction {
   currency: string
   transaction_ref: string | null
   narration: string | null
+  display_narration: string  // computed client-side via normalizeNarration(); never stored to DB
   deposit: number
   withdrawal: number
   running_balance: number
@@ -85,7 +87,10 @@ export function useFXTransactions(currency?: string): FXResult {
     if (err) {
       setError(err.message)
     } else {
-      const rows = (data ?? []) as FXTransaction[]
+      const rows = ((data ?? []) as Omit<FXTransaction, 'display_narration'>[]).map(r => ({
+        ...r,
+        display_narration: normalizeNarration(r.narration),
+      })) as FXTransaction[]
       setTransactions(rows)
       setSummaries(computeSummaries(rows))
     }
