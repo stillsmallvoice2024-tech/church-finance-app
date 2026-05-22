@@ -270,6 +270,12 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 - If either is blank/null → error toast + `openEdit(row)` — DB update is NOT called
 - Only proceeds to mark resolved when both stage codes are filled
 
+**Bulk resolve** (`handleBulkResolve`) applies the same guard at scale:
+- Rows missing either stage code are **skipped** (not errored) — info toast shows skipped count
+- Valid rows resolved sequentially via `updateMutation.mutate` loop
+- Toast order: skipped warning → failed count → resolved count
+- Selection cleared and `refetch()` called after loop completes
+
 ---
 
 ## Key Component Locations
@@ -467,6 +473,9 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 | CategoryLedger ledger | description | description |
 | PCA / SavingsPortions / SpecificGivings | category name | category |
 | Receipts | file_name | file_name |
+| IntraFlow | server description | description |
+| ChangeLog | field_name + old_value + new_value | field_name, table_name |
+| PendingDeductions | description + bank_name (client) | description, bank_name |
 
 **Do not add** `balance` as a searchable column on BankLedger or CategoryLedger — running balance searches produce misleading partial matches.
 
@@ -607,23 +616,30 @@ The **Optional Banking Details** section (`amount_refunded`, `transfer_charge`) 
 
 ---
 
-## Multi-Select Rows + Bulk Operations (Inflows / Outflows table view)
+## Multi-Select Rows + Bulk Operations
 
+Pages using multi-select: **Inflows**, **Outflows** (table view only), **PendingDeductions**.
+
+### Shared mechanics
 - `selectedIds: Set<string>` state; cleared on page change, filter change, and year reset
-- Checkbox column is first in table header and each row (`w-10 pl-4 pr-2`); header checkbox = select/deselect all on current page
+- Checkbox column is first (`w-10 pl-4 pr-2`); header checkbox = select/deselect all on current page; supports `indeterminate` via `useRef<HTMLInputElement>` synced in a `useEffect` on `[selectedIds, displayed]`
 - Selected rows get `bg-primary/5 hover:bg-primary/10` highlight
-- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0`:
-  - "Edit selected" (canWrite) → opens `BulkEditInflowModal` / `BulkEditOutflowModal`
-  - "Delete selected" (canDelete) → `DeleteDialog` with count-aware label → sequential `deleteRecord` loop → `refetch()`
-  - "Clear" → `setSelectedIds(new Set())`
-- **BulkEdit modal** (inline function component at bottom of page file):
-  - Inflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `income_type_id` (select, shown only when income types exist) + `stage_code_1` (category select) + `stage_code_2` (select: Percentage Allocation / Specific Seed / Savings); calls `useCategories()` + `useIncomeTypes()` internally
-  - Outflows: `bank_name` (select) + `recorded_at` (date) + `transaction_type` (select) + `stage_code_1` (category select, from `categories` prop) + `stage_code_2` (select)
-  - Blank fields skipped; only filled fields sent in `updates`; `useUpdateTransaction` called internally per ID; no way to bulk-clear `transaction_type` (individual edit only)
-  - **Strip-and-retry pattern**: `handleApply` builds a `const baseUpdates` snapshot before the loop. Each iteration derives `rowUpdates` by filtering out columns already in `strippedCols`. On schema error for a column: add to `strippedCols`, retry the current row with `retryUpdates` (base minus that column). **Never mutate `baseUpdates` or reassign an `updates` variable inside the loop** — doing so causes all subsequent rows to silently lose the stripped column. Per-column warning toast emitted once after loop. Toast order: column warnings → success/fail count.
-  - **Form reset on close (not on open)**: the reset `useEffect` uses `if (open) return` so it fires when the modal closes. State is clean before the next open — avoids previous-session values flashing on the first render of a new session. Also resets `saving` to `false` to prevent a stuck spinner if the modal is closed abnormally.
-- colSpan for loading/empty/expanded rows must equal total column count (10 for Inflows, 13 for Outflows)
+- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0` — count badge + action buttons + Clear
+
+### Inflows / Outflows
+- Actions: "Edit selected" (canWrite) → `BulkEditInflowModal` / `BulkEditOutflowModal`; "Delete selected" (canDelete) → `DeleteDialog` → sequential `deleteRecord` loop → `refetch()`
+- **BulkEdit modal** (inline component at bottom of page file):
+  - Inflows: `bank_name`, `recorded_at`, `transaction_type`, `income_type_id`, `stage_code_1`, `stage_code_2`
+  - Outflows: `bank_name`, `recorded_at`, `transaction_type`, `stage_code_1`, `stage_code_2`
+  - Blank fields skipped; `useUpdateTransaction` called per ID
+  - **Strip-and-retry pattern**: build `const baseUpdates` before loop; on schema error for a column → add to `strippedCols`, retry row without it; never mutate `baseUpdates` inside loop. Toast order: column warnings → success/fail count.
+  - **Form reset on close** (`if (open) return` guard so state is clean before next open)
+- colSpan: 10 (Inflows), 13 (Outflows)
 - Multi-select is **table view only** — cards view unchanged
+
+### PendingDeductions
+- Action: "Resolve selected" (canWrite) — see PendingDeductions Resolve Guard section for bulk behaviour
+- colSpan: 9 (Checkbox + Date + Description + Disbursed + Transfer Charge + Net + Stage Code + Remarks + Actions)
 
 ---
 
