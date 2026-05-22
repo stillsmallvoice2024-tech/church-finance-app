@@ -8,17 +8,18 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
-const PCA_SORT_FIELDS: SortField[] = [
-  { key: 'category_name', label: 'Category',   type: 'text',    primary: true },
-  { key: 'percentage',    label: 'Percentage', type: 'numeric', primary: true },
+type PcaRow = { category_name: string; percentage?: number }
+
+const PCA_COLUMNS: TableColumnDef<PcaRow>[] = [
+  { key: 'category_name', label: 'Category',   sortType: 'text',    primary: true, accessor: r => r.category_name },
+  { key: 'percentage',    label: 'Percentage', sortType: 'numeric', primary: true, accessor: r => String(r.percentage ?? 0), noSearch: true },
 ]
 
-const PCA_SEARCH_COLS = [
-  { key: 'all',           label: 'All Columns' },
-  { key: 'category_name', label: 'Category' },
-]
+const PCA_SORT_FIELDS = deriveSortFields(PCA_COLUMNS)
 
 export default function PercentageAllocations() {
   usePageTitle('Percentage Allocations')
@@ -39,11 +40,10 @@ export default function PercentageAllocations() {
   const total   = config?.rows.reduce((s, r) => s + Number(r.percentage), 0) ?? 0
   const balanced = Math.abs(100 - total) < 0.01
 
-  const filteredRows = useMemo(() => {
-    const q = pcaState.search.trim().toLowerCase()
-    const base = config?.rows ?? []
-    return q ? base.filter(r => r.category_name.toLowerCase().includes(q)) : base
-  }, [config?.rows, pcaState.search, pcaState.searchCol])
+  const filteredRows = useMemo(
+    () => searchRows(config?.rows ?? [], PCA_COLUMNS, pcaState.search, pcaState.searchCol),
+    [config?.rows, pcaState.search, pcaState.searchCol],
+  )
 
   const getPcaValue = (r: { category_name: string; percentage?: number }, k: string) => {
     if (k === 'percentage') return Number(r.percentage ?? 0)
@@ -152,7 +152,7 @@ export default function PercentageAllocations() {
           {config && config.rows.length > 0 && (
             <div className="space-y-1.5">
               <DataControlsBar
-                sortFields={PCA_SORT_FIELDS}
+                columns={PCA_COLUMNS}
                 sortKey={pcaState.sortKey}
                 sortDir={pcaState.sortDir}
                 onSort={pcaState.setSort}
@@ -161,7 +161,6 @@ export default function PercentageAllocations() {
                 search={pcaState.search}
                 onSearchChange={pcaState.setSearch}
                 searchPlaceholder="Search categories…"
-                searchColumns={PCA_SEARCH_COLS}
                 searchCol={pcaState.searchCol}
                 onSearchColChange={pcaState.setSearchCol}
                 advancedSort={pcaState.advancedSort}

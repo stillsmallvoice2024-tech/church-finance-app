@@ -7,7 +7,9 @@ import { formatDate, formatCurrency } from '../utils/formatters'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
 interface SpecificRow {
   id:                       string
@@ -24,15 +26,12 @@ interface GroupedCategory {
   total:       number
 }
 
-const SG_SORT_FIELDS: SortField[] = [
-  { key: 'category', label: 'Category', type: 'text',    primary: true },
-  { key: 'total',    label: 'Total',    type: 'numeric', primary: true },
+const SG_COLUMNS: TableColumnDef<GroupedCategory>[] = [
+  { key: 'category', label: 'Category', sortType: 'text',    primary: true, accessor: g => g.category },
+  { key: 'total',    label: 'Total',    sortType: 'numeric', primary: true, noSearch: true },
 ]
 
-const SG_SEARCH_COLS = [
-  { key: 'all',      label: 'All Columns' },
-  { key: 'category', label: 'Category' },
-]
+const SG_SORT_FIELDS = deriveSortFields(SG_COLUMNS)
 
 function groupRows(rows: SpecificRow[]): GroupedCategory[] {
   const byCategory = new Map<string, Map<string, { total: number; count: number; latest: string }>>()
@@ -128,10 +127,10 @@ export default function SpecificGivings() {
 
   const allGrouped = useMemo(() => groupRows(rows), [rows])
 
-  const filteredGrouped = useMemo(() => {
-    const q = sgState.search.trim().toLowerCase()
-    return q ? allGrouped.filter(g => g.category.toLowerCase().includes(q)) : allGrouped
-  }, [allGrouped, sgState.search, sgState.searchCol])
+  const filteredGrouped = useMemo(
+    () => searchRows(allGrouped, SG_COLUMNS, sgState.search, sgState.searchCol),
+    [allGrouped, sgState.search, sgState.searchCol],
+  )
 
   const getSgValue = (g: GroupedCategory, k: string) => {
     if (k === 'category') return g.category
@@ -201,7 +200,7 @@ export default function SpecificGivings() {
       {!loading && grouped.length > 0 && (
         <div className="space-y-1.5">
           <DataControlsBar
-            sortFields={SG_SORT_FIELDS}
+            columns={SG_COLUMNS}
             sortKey={sgState.sortKey}
             sortDir={sgState.sortDir}
             onSort={sgState.setSort}
@@ -210,7 +209,6 @@ export default function SpecificGivings() {
             search={sgState.search}
             onSearchChange={sgState.setSearch}
             searchPlaceholder="Search categories…"
-            searchColumns={SG_SEARCH_COLS}
             searchCol={sgState.searchCol}
             onSearchColChange={sgState.setSearchCol}
             advancedSort={sgState.advancedSort}

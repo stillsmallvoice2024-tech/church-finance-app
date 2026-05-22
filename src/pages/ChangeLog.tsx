@@ -7,11 +7,13 @@ import { SortableHeader }     from '../components/ui/SortableHeader'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { useFieldChanges }    from '../hooks/useFieldChanges'
+import type { FieldChangeEntry } from '../hooks/useFieldChanges'
 import { usePageTitle }       from '../hooks/usePageTitle'
 import { useDataViewState }   from '../hooks/useDataViewState'
 import { exportCSV }          from '../utils/csvExport'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
-import type { SortField }     from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { filterInputCls }     from '../components/ui/FormField'
 import { EmptyState }         from '../components/ui/EmptyState'
 
@@ -26,17 +28,15 @@ const TABLE_LABELS: Record<string, string> = {
   project_entries:      'Project Entries',
 }
 
-const CL_SORT_FIELDS: SortField[] = [
-  { key: 'changed_at',  label: 'Timestamp', type: 'date',  primary: true },
-  { key: 'field_name',  label: 'Field',     type: 'text',  primary: true },
-  { key: 'table_name',  label: 'Table',     type: 'text',  primary: true },
+const CL_COLUMNS: TableColumnDef<FieldChangeEntry>[] = [
+  { key: 'changed_at', label: 'Timestamp', sortType: 'date', primary: true, noSearch: true },
+  { key: 'field_name', label: 'Field',     sortType: 'text', primary: true, accessor: e => e.field_name },
+  { key: 'table_name', label: 'Table',     sortType: 'text', primary: true, accessor: e => TABLE_LABELS[e.table_name] ?? e.table_name },
+  { key: 'old_value',  label: 'Old Value',                   accessor: e => e.old_value ?? '' },
+  { key: 'new_value',  label: 'New Value',                   accessor: e => e.new_value ?? '' },
 ]
 
-const CL_SEARCH_COLS = [
-  { key: 'all',        label: 'All Columns' },
-  { key: 'field_name', label: 'Field' },
-  { key: 'table_name', label: 'Table' },
-]
+const CL_SORT_FIELDS = deriveSortFields(CL_COLUMNS)
 
 function fmtTs(ts: string) {
   return new Date(ts).toLocaleString('en-NG', {
@@ -131,19 +131,10 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
     return sortRows(entries, getClValue, clState.sortKey, clState.sortDir, CL_SORT_FIELDS)
   }, [entries, clState.sortKey, clState.sortDir, clState.advancedSort, getClValue])
 
-  const displayed = useMemo(() => {
-    const q = clState.search.trim().toLowerCase()
-    const col = clState.searchCol
-    if (!q) return sorted
-    if (col === 'all') return sorted.filter(e =>
-      e.field_name.toLowerCase().includes(q) ||
-      (e.old_value ?? '').toLowerCase().includes(q) ||
-      (e.new_value ?? '').toLowerCase().includes(q)
-    )
-    if (col === 'field_name') return sorted.filter(e => e.field_name.toLowerCase().includes(q))
-    if (col === 'table_name') return sorted.filter(e => (TABLE_LABELS[e.table_name] ?? e.table_name).toLowerCase().includes(q))
-    return sorted.filter(e => e.field_name.toLowerCase().includes(q))
-  }, [sorted, clState.search, clState.searchCol])
+  const displayed = useMemo(
+    () => searchRows(sorted, CL_COLUMNS, clState.search, clState.searchCol),
+    [sorted, clState.search, clState.searchCol],
+  )
 
   return (
     <div className="space-y-5">
@@ -196,7 +187,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
 
       {/* Sort / Search / Page-size controls */}
       <DataControlsBar
-        sortFields={CL_SORT_FIELDS}
+        columns={CL_COLUMNS}
         sortKey={clState.sortKey}
         sortDir={clState.sortDir}
         onSort={clState.setSort}
@@ -204,7 +195,6 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
         defaultSortDir="desc"
         search={clState.search}
         onSearchChange={v => { clState.setSearch(v); clState.setPage(0) }}
-        searchColumns={CL_SEARCH_COLS}
         searchCol={clState.searchCol}
         onSearchColChange={clState.setSearchCol}
         advancedSort={clState.advancedSort}

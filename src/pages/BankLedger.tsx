@@ -19,7 +19,9 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
-import { sortRows, multiSortRows, type SortField } from '../utils/sortUtils'
+import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeningBalance'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -47,20 +49,15 @@ interface LedgerRow {
 
 // ── Sort fields ────────────────────────────────────────────────────────────────
 
-const BL_SORT_FIELDS: SortField[] = [
-  { key: 'date',        label: 'Date',        type: 'date',    primary: true },
-  { key: 'inflow',      label: 'Inflow',      type: 'numeric', primary: true },
-  { key: 'outflow',     label: 'Outflow',     type: 'numeric', primary: true },
-  { key: 'balance',     label: 'Balance',     type: 'numeric', primary: true },
-  { key: 'description', label: 'Description', type: 'text' },
+const BL_COLUMNS: TableColumnDef<LedgerRow>[] = [
+  { key: 'date',        label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description', label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
+  { key: 'inflow',      label: 'Inflow',      sortType: 'numeric', primary: true, accessor: r => r.inflow > 0 ? String(r.inflow) : '' },
+  { key: 'outflow',     label: 'Outflow',     sortType: 'numeric', primary: true, accessor: r => r.outflow > 0 ? String(r.outflow) : '' },
+  { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true, noSearch: true },
 ]
 
-const BL_SEARCH_COLS = [
-  { key: 'all',         label: 'All Columns' },
-  { key: 'description', label: 'Description' },
-  { key: 'inflow',      label: 'Inflow' },
-  { key: 'outflow',     label: 'Outflow' },
-]
+const BL_SORT_FIELDS = deriveSortFields(BL_COLUMNS)
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
@@ -172,20 +169,10 @@ export default function BankLedger() {
   }), [ledgerRows, dateFrom, dateTo])
 
   // Search filter
-  const searchFiltered = useMemo(() => {
-    const q = blState.search.trim().toLowerCase()
-    const col = blState.searchCol
-    if (!q) return dateFiltered
-    if (col === 'all') return dateFiltered.filter(r =>
-      r.description?.toLowerCase().includes(q) ||
-      (r.inflow  > 0 && String(r.inflow).includes(q)) ||
-      (r.outflow > 0 && String(r.outflow).includes(q))
-    )
-    if (col === 'description') return dateFiltered.filter(r => (r.description ?? '').toLowerCase().includes(q))
-    if (col === 'inflow')  return dateFiltered.filter(r => r.inflow  > 0 && String(r.inflow).includes(q))
-    if (col === 'outflow') return dateFiltered.filter(r => r.outflow > 0 && String(r.outflow).includes(q))
-    return dateFiltered.filter(r => (r.description ?? '').toLowerCase().includes(q))
-  }, [dateFiltered, blState.search, blState.searchCol])
+  const searchFiltered = useMemo(
+    () => searchRows(dateFiltered, BL_COLUMNS, blState.search, blState.searchCol),
+    [dateFiltered, blState.search, blState.searchCol],
+  )
 
   const getBlValue = (r: LedgerRow, k: string) => {
     if (k === 'inflow')      return r.inflow
@@ -301,7 +288,7 @@ export default function BankLedger() {
       {/* DataControlsBar */}
       {selectedBank && !error && (
         <DataControlsBar
-          sortFields={BL_SORT_FIELDS}
+          columns={BL_COLUMNS}
           sortKey={blState.sortKey}
           sortDir={blState.sortDir}
           onSort={blState.setSort}
@@ -312,7 +299,6 @@ export default function BankLedger() {
           search={blState.search}
           onSearchChange={blState.setSearch}
           searchPlaceholder="Search descriptions…"
-          searchColumns={BL_SEARCH_COLS}
           searchCol={blState.searchCol}
           onSearchColChange={blState.setSearchCol}
           advancedSort={blState.advancedSort}

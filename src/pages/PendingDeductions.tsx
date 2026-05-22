@@ -7,7 +7,8 @@ import { SortableHeader }           from '../components/ui/SortableHeader'
 import { PaginationBar }            from '../components/ui/PaginationBar'
 import { useDataViewState }         from '../hooks/useDataViewState'
 import { sortRows, multiSortRows }  from '../utils/sortUtils'
-import type { SortField }           from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { AddOutflowModal }          from '../components/modals/AddOutflowModal'
 import { CanWrite }                 from '../components/auth/RoleGates'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
@@ -18,24 +19,14 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
-const PD_SORT_FIELDS: SortField[] = [
-  { key: 'date',             label: 'Date',      type: 'date',    primary: true },
-  { key: 'amount_disbursed', label: 'Disbursed', type: 'numeric', primary: true },
+const PD_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
+  { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'amount_disbursed', label: 'Disbursed',   sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'description',      label: 'Description',                      accessor: r => r.description ?? '' },
+  { key: 'bank_name',        label: 'Bank',                             accessor: r => r.bank_name ?? '' },
 ]
 
-const PD_SEARCH_COLS = [
-  { key: 'all',         label: 'All Columns' },
-  { key: 'description', label: 'Description' },
-  { key: 'bank_name',   label: 'Bank' },
-]
-
-// ── Column value helper ────────────────────────────────────────────────────────
-
-function pdColVal(r: OutflowTransaction, col: string): string {
-  if (col === 'description') return r.description ?? ''
-  if (col === 'bank_name')   return r.bank_name ?? ''
-  return ''
-}
+const PD_SORT_FIELDS = deriveSortFields(PD_COLUMNS)
 
 // ── Page component ─────────────────────────────────────────────────────────────
 
@@ -84,12 +75,10 @@ export default function PendingDeductions() {
   }, [data, pdState.sortKey, pdState.sortDir, pdState.advancedSort])
 
   // Search filter (client-side — pending list is small)
-  const displayed = useMemo(() => {
-    const q = pdState.search.trim().toLowerCase()
-    const col = pdState.searchCol
-    if (!q || col === 'all') return sorted
-    return sorted.filter(r => pdColVal(r, col).toLowerCase().includes(q))
-  }, [sorted, pdState.search, pdState.searchCol])
+  const displayed = useMemo(
+    () => searchRows(sorted, PD_COLUMNS, pdState.search, pdState.searchCol),
+    [sorted, pdState.search, pdState.searchCol],
+  )
 
   // Keep header checkbox indeterminate state in sync
   useEffect(() => {
@@ -226,7 +215,7 @@ export default function PendingDeductions() {
 
         {/* Controls */}
         <DataControlsBar
-          sortFields={PD_SORT_FIELDS}
+          columns={PD_COLUMNS}
           sortKey={pdState.sortKey}
           sortDir={pdState.sortDir}
           onSort={pdState.setSort}
@@ -234,7 +223,6 @@ export default function PendingDeductions() {
           defaultSortDir="desc"
           search={pdState.search}
           onSearchChange={pdState.setSearch}
-          searchColumns={PD_SEARCH_COLS}
           searchCol={pdState.searchCol}
           onSearchColChange={pdState.setSearchCol}
           advancedSort={pdState.advancedSort}

@@ -16,7 +16,8 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { useDataViewState }        from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
-import type { SortField }          from '../utils/sortUtils'
+import type { TableColumnDef } from '../utils/tableColumns'
+import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { useCategories }  from '../hooks/useCategories'
@@ -27,18 +28,15 @@ import { filterInputCls } from '../components/ui/FormField'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
-const IFL_SORT_FIELDS: SortField[] = [
-  { key: 'date',         label: 'Date',        type: 'date',    primary: true },
-  { key: 'total_amount', label: 'Amount',      type: 'numeric', primary: true },
-  { key: 'account_from', label: 'From',        type: 'text' },
-  { key: 'account_to',   label: 'To',          type: 'text' },
-  { key: 'description',  label: 'Description', type: 'text' },
+const IFL_COLUMNS: TableColumnDef<IntraFlowRow>[] = [
+  { key: 'date',         label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'total_amount', label: 'Amount',      sortType: 'numeric', primary: true, noSearch: true },
+  { key: 'account_from', label: 'From',        sortType: 'text',    accessor: r => r.account_from ?? '' },
+  { key: 'account_to',   label: 'To',          sortType: 'text',    accessor: r => r.account_to ?? '' },
+  { key: 'description',  label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
 ]
 
-const IFL_SEARCH_COLS = [
-  { key: 'all',         label: 'All Columns' },
-  { key: 'description', label: 'Description' },
-]
+const IFL_SORT_FIELDS = deriveSortFields(IFL_COLUMNS)
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -119,13 +117,10 @@ export default function IntraFlow() {
     return sortRows(data, getIflValue, iflState.sortKey, iflState.sortDir, IFL_SORT_FIELDS)
   }, [data, iflState.sortKey, iflState.sortDir, iflState.advancedSort]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const displayed = useMemo(() => {
-    const q = iflState.search.trim().toLowerCase()
-    const col = iflState.searchCol
-    if (!q || col === 'all') return sorted
-    if (col === 'description') return sorted.filter(r => (r.description ?? '').toLowerCase().includes(q))
-    return sorted
-  }, [sorted, iflState.search, iflState.searchCol])
+  const displayed = useMemo(
+    () => iflState.searchCol === 'all' ? sorted : searchRows(sorted, IFL_COLUMNS, iflState.search, iflState.searchCol),
+    [sorted, iflState.search, iflState.searchCol],
+  )
 
   // Summary
   const total   = useMemo(() => data.reduce((s, r) => s + Number(r.total_amount), 0), [data])
@@ -258,7 +253,7 @@ export default function IntraFlow() {
 
         {/* Data controls bar */}
         <DataControlsBar
-          sortFields={IFL_SORT_FIELDS}
+          columns={IFL_COLUMNS}
           sortKey={iflState.sortKey}
           sortDir={iflState.sortDir}
           onSort={iflState.setSort}
@@ -268,7 +263,6 @@ export default function IntraFlow() {
           onViewChange={iflState.setView}
           search={iflState.search}
           onSearchChange={v => { iflState.setSearch(v) }}
-          searchColumns={IFL_SEARCH_COLS}
           searchCol={iflState.searchCol}
           onSearchColChange={iflState.setSearchCol}
           advancedSort={iflState.advancedSort}
