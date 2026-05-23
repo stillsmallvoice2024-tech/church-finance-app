@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useYearRange } from '../hooks/useYearRange'
-import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal, X } from 'lucide-react'
+import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal, X, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
 import { DataControlsBar }          from '../components/ui/DataControlsBar'
 import { SortableHeader }           from '../components/ui/SortableHeader'
