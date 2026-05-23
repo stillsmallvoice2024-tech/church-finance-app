@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
+import { useState, useEffect, Fragment } from 'react'
+import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }            from '../components/ui/Card'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
@@ -12,6 +12,7 @@ import { AddOutflowModal } from '../components/modals/AddOutflowModal'
 import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 import { useRole } from '../hooks/useRole'
 import { filterInputCls } from '../components/ui/FormField'
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 
 interface TxnRow {
   id:                      string
@@ -41,6 +42,15 @@ export default function RefundTransactions() {
   const [dateTo,      setDateTo]      = useState('')
   const [editInflow,  setEditInflow]  = useState<InflowTransaction | null>(null)
   const [editOutflow, setEditOutflow] = useState<OutflowTransaction | null>(null)
+  const [expandedId,  setExpandedId]  = useState<string | null>(null)
+
+  const refundDetailItems = (row: TxnRow): DetailItem[] => [
+    { label: 'Original Txn ID', value: row.original_transaction_id, mono: true, breakAll: true },
+    { label: 'Bank',            value: row.bank_name },
+    { label: 'Remarks',         value: row.remarks,                 breakAll: true },
+    { label: 'Raw Description', value: row.description,             breakAll: true },
+    { label: 'Direction',       value: row.direction === 'in' ? 'Inflow' : 'Outflow' },
+  ]
 
   const load = async () => {
     setLoading(true)
@@ -244,6 +254,7 @@ export default function RefundTransactions() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th className="w-8" />
                   {['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -264,8 +275,22 @@ export default function RefundTransactions() {
                       <p className="text-sm">No refund transactions found.</p>
                     </div>
                   </td></tr>
-                ) : filtered.map(row => (
-                  <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                ) : filtered.map(row => {
+                  const isExpanded = expandedId === row.id
+                  return (
+                  <Fragment key={row.id}>
+                  <tr className="hover:bg-gray-50 transition-colors">
+                    <td className="w-8 px-1 py-3">
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                        className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                        title={isExpanded ? 'Collapse' : 'Expand details'}
+                      >
+                        {isExpanded
+                          ? <ChevronDown className="w-3.5 h-3.5" />
+                          : <ChevronRight className="w-3.5 h-3.5" />}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -289,7 +314,10 @@ export default function RefundTransactions() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  {isExpanded && <RowDetailPanel items={refundDetailItems(row)} colSpan={8 + (canWrite() ? 1 : 0)} />}
+                  </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

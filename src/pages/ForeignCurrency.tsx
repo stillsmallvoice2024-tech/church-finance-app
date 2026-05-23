@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Plus, Download, TrendingUp, TrendingDown, Pencil } from 'lucide-react'
+import { Plus, Download, TrendingUp, TrendingDown, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
@@ -14,6 +14,8 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+import { formatDate } from '../utils/formatters'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
 
@@ -44,6 +46,7 @@ export default function ForeignCurrency() {
   const [addOpen, setAddOpen]           = useState(false)
   const [editRecord, setEditRecord]     = useState<FXTransaction | null>(null)
   const [filterCcy, setFilterCcy]       = useState<FXCurrency | ''>('')
+  const [expandedId, setExpandedId]     = useState<string | null>(null)
   const fxState = useDataViewState({ storageKey: 'fx', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [rates, setRates]               = useState<Record<FXCurrency, number>>({
@@ -91,6 +94,12 @@ export default function ForeignCurrency() {
     () => fxSorted.slice(fxState.page * fxState.pageSize, (fxState.page + 1) * fxState.pageSize),
     [fxSorted, fxState.page, fxState.pageSize],
   )
+
+  const fxDetailItems = (t: FXTransaction): DetailItem[] => [
+    { label: 'Ref',          value: t.transaction_ref, mono: true, breakAll: true },
+    { label: 'Raw Narration', value: t.narration,      breakAll: true },
+    { label: 'Created',      value: t.created_at ? formatDate(t.created_at.slice(0, 10)) : null },
+  ]
 
   const handleExport = () => {
     exportCSV(
@@ -292,6 +301,7 @@ export default function ForeignCurrency() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <th className="w-8" />
                   <SortableHeader field={FX_SORT_FIELDS[0]} activeSortKey={fxState.sortKey} activeSortDir={fxState.sortDir} onSort={fxState.setSort} className="px-4 py-3" />
                   <th className="px-4 py-3 text-left font-medium">Currency</th>
                   <th className="px-4 py-3 text-left font-medium">Type</th>
@@ -303,11 +313,23 @@ export default function ForeignCurrency() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {fxPage.map(t => {
-                  const isDeposit = t.deposit > 0
-                  const meta      = FX_META.find(m => m.code === t.currency)!
-                  return (
+                {fxPage.flatMap(t => {
+                  const isDeposit  = t.deposit > 0
+                  const meta       = FX_META.find(m => m.code === t.currency)!
+                  const isExpanded = expandedId === t.id
+                  return [
                     <tr key={t.id} className="hover:bg-gray-50">
+                      <td className="w-8 px-1 py-3">
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : t.id)}
+                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                          title={isExpanded ? 'Collapse' : 'Expand details'}
+                        >
+                          {isExpanded
+                            ? <ChevronDown className="w-3.5 h-3.5" />
+                            : <ChevronRight className="w-3.5 h-3.5" />}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{t.date}</td>
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs font-semibold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
@@ -355,9 +377,10 @@ export default function ForeignCurrency() {
                           </button>
                         </td>
                       )}
-                    </tr>
-                  )
-                })}
+                    </tr>,
+                    isExpanded && <RowDetailPanel key={`${t.id}-detail`} items={fxDetailItems(t)} colSpan={8 + (canWrite() ? 1 : 0)} />,
+                  ]
+                }).filter(Boolean)}
               </tbody>
             </table>
             <PaginationBar
