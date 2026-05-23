@@ -132,6 +132,10 @@ export interface AddIntraFlowInput {
   description?: string
   transaction_ref?: string
   remark?: string
+  // Optional: caller may pre-supply resolved IDs; hook resolves them from DB if absent
+  from_category_id?: string | null
+  to_category_id?: string | null
+  reversal_of_id?: string | null
 }
 
 export interface UpdateTransactionInput {
@@ -252,9 +256,30 @@ export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {
     setError(null)
 
     try {
+      // Resolve category IDs from name snapshots (authoritative FK; name stays as readability snapshot)
+      let fromId = input.from_category_id ?? null
+      let toId   = input.to_category_id   ?? null
+
+      if (!fromId || !toId) {
+        const namesToResolve = [...new Set([input.account_from, input.account_to])]
+        const { data: catRows } = await supabase
+          .from('categories')
+          .select('id, name')
+          .in('name', namesToResolve)
+        const catMap = new Map((catRows ?? []).map(c => [c.name as string, c.id as string]))
+        if (!fromId) fromId = catMap.get(input.account_from) ?? null
+        if (!toId)   toId   = catMap.get(input.account_to)   ?? null
+      }
+
       const { data, error: err } = await supabase
         .from('intra_flows')
-        .insert({ ...input, created_by: user.id })
+        .insert({
+          ...input,
+          from_category_id: fromId,
+          to_category_id:   toId,
+          status:           'active',
+          created_by:       user.id,
+        })
         .select('id')
         .single()
 
@@ -266,7 +291,7 @@ export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {
         action:    'INSERT',
         tableName: 'intra_flows',
         recordId:  data.id,
-        newData:   input as unknown as Record<string, unknown>,
+        newData:   { ...input, from_category_id: fromId, to_category_id: toId } as unknown as Record<string, unknown>,
       })
 
       return data.id
