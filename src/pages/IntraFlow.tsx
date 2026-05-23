@@ -318,9 +318,9 @@ export default function IntraFlow() {
                         <ArrowLeftRight className="w-3 h-3 text-gray-400 shrink-0" />
                         <span className="font-medium truncate">{row.account_to ?? '—'}</span>
                       </div>
-                      {(row.display_description || row.description) && (
+                      {row.description && (
                         <div className="text-sm mt-1.5">
-                          <DescriptionCell id={`card-desc-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
+                          <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
                         </div>
                       )}
                       {row.remark && (

@@ -5,7 +5,6 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { usePageTitle }    from '../hooks/usePageTitle'
 import { supabase }        from '../lib/supabase'
-import { normalizeNarration } from '../utils/normalizeNarration'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
@@ -16,7 +15,6 @@ interface TxnRow {
   direction:               'in' | 'out'
   amount:                  number
   description:             string | null
-  display_description:     string
   original_transaction_id: string | null
   bank_name:               string | null
   remarks:                 string | null
@@ -70,7 +68,6 @@ export default function ReversalTransactions() {
         id: r.id as string, date: r.date as string, direction: 'in' as const,
         amount: r.amount as number,
         description: r.description as string | null,
-        display_description: normalizeNarration(r.description as string | null),
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remark as string | null,
@@ -79,9 +76,6 @@ export default function ReversalTransactions() {
         id: r.id as string, date: r.date as string, direction: 'out' as const,
         amount: r.amount_disbursed as number,
         description: r.description as string | null,
-        display_description: normalizeNarration(
-          (r.description as string | null) ?? (r.bank_description as string | null)
-        ),
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remarks as string | null,
@@ -199,9 +193,9 @@ export default function ReversalTransactions() {
                     </span>
                   </div>
                   {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
-                  {(row.display_description || row.description) && (
+                  {row.description && (
                     <div className="text-sm mb-1">
-                      <DescriptionCell id={`card-desc-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                   )}
                   {row.original_transaction_id && (
@@ -272,7 +266,7 @@ export default function ReversalTransactions() {
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]">
-                          <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                         <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>

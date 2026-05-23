@@ -5,7 +5,6 @@ import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useCategories, useCategoryGroups } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency, formatDate } from '../utils/formatters'
-import { normalizeNarration } from '../utils/normalizeNarration'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
@@ -29,10 +28,10 @@ const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
 
 const LEDGER_COLUMNS: TableColumnDef<LedgerRow>[] = [
   { key: 'date',        label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
-  { key: 'description', label: 'Description', sortType: 'text',    accessor: r => r.description },
   { key: 'inflow',      label: 'Inflow',      sortType: 'numeric', primary: true, accessor: r => r.inflow > 0 ? String(r.inflow) : '' },
   { key: 'outflow',     label: 'Outflow',     sortType: 'numeric', primary: true, accessor: r => r.outflow > 0 ? String(r.outflow) : '' },
   { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true },
+  { key: 'description', label: 'Description',                      accessor: r => r.description },
 ]
 
 const SUMMARY_SORT_FIELDS = deriveSortFields(SUMMARY_COLUMNS)
@@ -50,13 +49,12 @@ interface CategoryRow {
 }
 
 interface LedgerRow {
-  id:                  string
-  date:                string
-  description:         string
-  display_description: string
-  inflow:              number
-  outflow:             number
-  balance:             number
+  id:          string
+  date:        string
+  description: string
+  inflow:      number
+  outflow:     number
+  balance:     number
 }
 
 type ViewMode      = 'summary' | 'ledger'
@@ -249,13 +247,12 @@ export default function CategoryLedger() {
           const allocated = Number(r.amount) * (catRow.percentage / 100)
           if (allocated <= 0) continue
           inRows.push({
-            id:                  r.id as string,
-            date:                r.date as string,
-            description:         (r.description as string | null) || '—',
-            display_description: normalizeNarration(r.description as string | null),
-            inflow:              allocated,
-            outflow:             0,
-            balance:             0,
+            id:          r.id as string,
+            date:        r.date as string,
+            description: (r.description as string | null) || '—',
+            inflow:      allocated,
+            outflow:     0,
+            balance:     0,
           })
         }
 
@@ -264,13 +261,12 @@ export default function CategoryLedger() {
           const amt = Number(r.actual_amount || r.amount_disbursed || 0)
           if (amt <= 0) continue
           outRows.push({
-            id:                  r.id as string,
-            date:                r.date as string,
-            description:         (r.description as string | null) || '—',
-            display_description: normalizeNarration(r.description as string | null),
-            inflow:              0,
-            outflow:             amt,
-            balance:             0,
+            id:          r.id as string,
+            date:        r.date as string,
+            description: (r.description as string | null) || '—',
+            inflow:      0,
+            outflow:     amt,
+            balance:     0,
           })
         }
       } else {
@@ -292,25 +288,23 @@ export default function CategoryLedger() {
 
         for (const r of inflowRes.data ?? []) {
           inRows.push({
-            id:                  r.id as string,
-            date:                r.date as string,
-            description:         (r.description as string | null) || '—',
-            display_description: normalizeNarration(r.description as string | null),
-            inflow:              Number(r.amount),
-            outflow:             0,
-            balance:             0,
+            id:          r.id as string,
+            date:        r.date as string,
+            description: (r.description as string | null) || '—',
+            inflow:      Number(r.amount),
+            outflow:     0,
+            balance:     0,
           })
         }
         for (const r of outflowRes.data ?? []) {
           const amt = Number(r.actual_amount || r.amount_disbursed || 0)
           outRows.push({
-            id:                  r.id as string,
-            date:                r.date as string,
-            description:         (r.description as string | null) || '—',
-            display_description: normalizeNarration(r.description as string | null),
-            inflow:              0,
-            outflow:             amt,
-            balance:             0,
+            id:          r.id as string,
+            date:        r.date as string,
+            description: (r.description as string | null) || '—',
+            inflow:      0,
+            outflow:     amt,
+            balance:     0,
           })
         }
       }
@@ -332,13 +326,12 @@ export default function CategoryLedger() {
         const bfAmt = cobLedger?.amount ? Number(cobLedger.amount) : 0
         if (bfAmt !== 0) {
           bfRow.push({
-            id:                  'bal-bf',
-            date:                '0000-01-01',
-            description:         'Balance Brought Forward',
-            display_description: 'Balance Brought Forward',
-            inflow:              bfAmt,
-            outflow:             0,
-            balance:             0,
+            id:          'bal-bf',
+            date:        '0000-01-01',
+            description: 'Balance Brought Forward',
+            inflow:      bfAmt,
+            outflow:     0,
+            balance:     0,
           })
         }
       }
@@ -454,7 +447,7 @@ export default function CategoryLedger() {
     if (key === 'inflow')      return row.inflow
     if (key === 'outflow')     return row.outflow
     if (key === 'balance')     return row.balance
-    if (key === 'description') return row.display_description
+    if (key === 'description') return row.description
     return null
   }
 
@@ -985,7 +978,7 @@ export default function CategoryLedger() {
                             <tr key={row.id} className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : 'hover:bg-gray-50'}`}>
                               <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
                               <td className="px-4 py-3 text-gray-700 max-w-xs">
-                                <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                                <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                               </td>
                               <td className="px-4 py-3 text-right font-mono text-success">
                                 {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
@@ -1047,7 +1040,7 @@ export default function CategoryLedger() {
                               <div className="text-sm">
                                 <DescriptionCell
                                   id={`card-${row.id}`}
-                                  text={row.display_description || row.description}
+                                  text={row.description}
                                   tooltip={descTooltip}
                                   setTooltip={setDescTooltip}
                                   textCls="text-gray-800"
