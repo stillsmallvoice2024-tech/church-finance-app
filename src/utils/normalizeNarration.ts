@@ -20,7 +20,7 @@ function toTitleCase(s: string): string {
 // "APP PAYMENT/DSTV Subscription/REF88281"  → "DSTV Subscription"
 // "School Fees/May Session"                 → unchanged (no channel prefix)
 
-const SLASH_CHANNEL_PREFIX_RE = /^(?:TRF|USSD|APP|WEB|MOB(?:ILE)?|NIP|FIP)\b/i
+const SLASH_CHANNEL_PREFIX_RE = /^(?:TRF|USSD|APP|WEB|MOB(?:ILE)?|NIP|IP|FIP)\b/i
 
 function extractSlashSegments(s: string): string {
   if (!s.includes('/')) return s
@@ -125,7 +125,7 @@ function stripTrailingNoise(s: string): string {
 // Iteratively removes standalone channel/routing words from the start.
 // Applied ONLY after pattern matching fails (transfer/POS patterns run first).
 
-const LEADING_KEYWORD_RE = /^(?:NIP|MOB(?:ILE)?|USSD|APP|WEB|TRF|TRANSFER|BANK|ALERT|NOTIFY|CHANNEL|TXN|TRANSACTION)\s+/i
+const LEADING_KEYWORD_RE = /^(?:NIP|MOB(?:ILE)?|USSD|APP|WEB|TRF|TRANSFER|BANK|ALERT|NOTIFY|CHANNEL|TXN|TRANSACTION|IP)\s+/i
 
 function stripLeadingKeywords(s: string): string {
   let prev = ''
