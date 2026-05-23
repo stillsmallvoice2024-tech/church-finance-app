@@ -5,7 +5,7 @@ import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
-import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { deriveSortFields } from '../utils/tableColumns'
 import {
   useCategories, useCategoryGroups, useCategoryOpeningBalances,
   fetchCategoryOpeningBalances, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance,
@@ -19,8 +19,6 @@ import {
   useAddCategoryGroup,
   useDeleteCategoryGroup,
   useUpdateCategoryGroup,
-  type AddCategoryInput,
-  type UpdateCategoryInput,
 } from '../hooks/useMutations'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useToast } from '../store/toastStore'

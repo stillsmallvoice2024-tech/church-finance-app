@@ -12,6 +12,7 @@ import { usePageTitle }       from '../hooks/usePageTitle'
 import { useDataViewState }   from '../hooks/useDataViewState'
 import { exportCSV }          from '../utils/csvExport'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
+import type { SortField } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { filterInputCls }     from '../components/ui/FormField'
@@ -211,34 +212,31 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <SortableHeader
-                  label="Timestamp"
-                  sortKey="changed_at"
-                  currentSortKey={clState.sortKey}
-                  sortDir={clState.sortDir}
+                  field={{ key: 'changed_at', label: 'Timestamp', type: 'date' } satisfies SortField}
+                  activeSortKey={clState.sortKey}
+                  activeSortDir={clState.sortDir}
                   onSort={clState.setSort}
-                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                  className="text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                 />
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   User
                 </th>
                 <SortableHeader
-                  label="Table"
-                  sortKey="table_name"
-                  currentSortKey={clState.sortKey}
-                  sortDir={clState.sortDir}
+                  field={{ key: 'table_name', label: 'Table', type: 'text' } satisfies SortField}
+                  activeSortKey={clState.sortKey}
+                  activeSortDir={clState.sortDir}
                   onSort={clState.setSort}
-                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                  className="text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                 />
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Record ID
                 </th>
                 <SortableHeader
-                  label="Field"
-                  sortKey="field_name"
-                  currentSortKey={clState.sortKey}
-                  sortDir={clState.sortDir}
+                  field={{ key: 'field_name', label: 'Field', type: 'text' } satisfies SortField}
+                  activeSortKey={clState.sortKey}
+                  activeSortDir={clState.sortDir}
                   onSort={clState.setSort}
-                  className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                  className="text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                 />
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Old Value
@@ -298,6 +296,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
           </table>
         </div>
         <PaginationBar
+          variant="full"
           page={clState.page}
           pageSize={clState.pageSize}
           total={count}
