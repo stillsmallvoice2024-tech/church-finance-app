@@ -180,6 +180,10 @@ create table public.intra_flows (
   account_to_stage1   text,
   account_to_stage2   text,
   remark              text,
+  from_category_id    uuid references public.categories(id) on delete set null,
+  to_category_id      uuid references public.categories(id) on delete set null,
+  status              text not null default 'active' check (status in ('active', 'reversed', 'void')),
+  reversal_of_id      uuid references public.intra_flows(id) on delete set null,
   created_by          uuid references public.profiles(id),
   created_at          timestamptz default now()
 );

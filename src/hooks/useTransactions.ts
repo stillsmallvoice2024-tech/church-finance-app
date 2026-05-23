@@ -70,6 +70,10 @@ export interface IntraFlowRow {
   account_to_stage1: string | null
   account_to_stage2: string | null
   remark: string | null
+  from_category_id: string | null
+  to_category_id: string | null
+  status: string
+  reversal_of_id: string | null
   created_by: string | null
   created_at: string
 }
