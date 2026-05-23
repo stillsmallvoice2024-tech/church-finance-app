@@ -25,7 +25,6 @@ import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
-import { normalizeNarration } from '../utils/normalizeNarration'
 import { filterInputCls } from '../components/ui/FormField'
 import { EmptyState } from '../components/ui/EmptyState'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
@@ -39,7 +38,6 @@ interface DepositRow {
   bank_name:           string | null
   amount:              number
   description:         string | null
-  display_description: string
   transaction_ref:     string | null
   remarks:             string | null
   source:              'bank_deposits' | 'inflow' | 'outflow'
@@ -61,10 +59,10 @@ type FormValues = z.infer<typeof schema>
 
 const BD_COLUMNS: TableColumnDef<DepositRow>[] = [
   { key: 'date',            label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
-  { key: 'description',     label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
+  { key: 'amount',          label: 'Amount',      sortType: 'numeric', primary: true, accessor: r => String(r.amount) },
   { key: 'bank_name',       label: 'Bank',        sortType: 'text',    primary: true, accessor: r => r.bank_name ?? '' },
+  { key: 'description',     label: 'Description',                      accessor: r => r.description ?? '' },
   { key: 'transaction_ref', label: 'Reference',   sortType: 'text',    accessor: r => r.transaction_ref ?? '' },
-  { key: 'amount',          label: 'Amount',      sortType: 'numeric', accessor: r => String(r.amount) },
 ]
 
 const BD_SORT_FIELDS = deriveSortFields(BD_COLUMNS)
@@ -232,35 +230,32 @@ export default function BankDeposits() {
     if (depRes.error) { setError(depRes.error.message); setLoading(false); return }
 
     const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
-      ...(r as Omit<DepositRow, 'display_description' | 'source'>),
-      display_description: normalizeNarration(r.description as string | null),
+      ...(r as Omit<DepositRow, 'source'>),
       source: 'bank_deposits' as const,
     }))
 
     const inflowRows: DepositRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-      id:                  r.id as string,
-      date:                r.date as string,
-      bank_id:             null,
-      bank_name:           r.bank_name as string | null,
-      amount:              r.amount as number,
-      description:         r.description as string | null,
-      display_description: normalizeNarration(r.description as string | null),
-      transaction_ref:     r.transaction_ref as string | null,
-      remarks:             r.remark as string | null,
-      source:              'inflow' as const,
+      id:              r.id as string,
+      date:            r.date as string,
+      bank_id:         null,
+      bank_name:       r.bank_name as string | null,
+      amount:          r.amount as number,
+      description:     r.description as string | null,
+      transaction_ref: r.transaction_ref as string | null,
+      remarks:         r.remark as string | null,
+      source:          'inflow' as const,
     }))
 
     const outflowRows: DepositRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-      id:                  r.id as string,
-      date:                r.date as string,
-      bank_id:             null,
-      bank_name:           r.bank_name as string | null,
-      amount:              r.amount_disbursed as number,
-      description:         r.description as string | null,
-      display_description: normalizeNarration(r.description as string | null),
-      transaction_ref:     r.transaction_id as string | null,
-      remarks:             r.remarks as string | null,
-      source:              'outflow' as const,
+      id:              r.id as string,
+      date:            r.date as string,
+      bank_id:         null,
+      bank_name:       r.bank_name as string | null,
+      amount:          r.amount_disbursed as number,
+      description:     r.description as string | null,
+      transaction_ref: r.transaction_id as string | null,
+      remarks:         r.remarks as string | null,
+      source:          'outflow' as const,
     }))
 
     const merged = [...depositRows, ...inflowRows, ...outflowRows]
@@ -520,9 +515,9 @@ export default function BankDeposits() {
                     <SourceBadge source={row.source} />
                   </div>
                   {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
-                  {(row.display_description || row.description) && (
+                  {(row.description) && (
                     <div className="text-sm mb-1">
-                      <DescriptionCell id={`card-desc-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                   )}
                   {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono">Ref: {row.transaction_ref}</p>}
@@ -603,7 +598,7 @@ export default function BankDeposits() {
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
-                      <DescriptionCell id={`${row.source}-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <DescriptionCell id={`${row.source}-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">

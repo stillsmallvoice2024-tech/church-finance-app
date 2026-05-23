@@ -47,11 +47,11 @@ const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
 const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
   { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
-  { key: 'description',      label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
+  { key: 'amount',           label: 'Amount',      sortType: 'numeric', primary: true, accessor: r => String(r.amount) },
   { key: 'bank_name',        label: 'Bank',        sortType: 'text',    accessor: r => r.bank_name ?? '' },
   { key: 'transaction_ref',  label: 'Txn Ref',                          accessor: r => r.transaction_ref ?? '' },
   { key: 'transaction_type', label: 'Type',        sortType: 'text',    accessor: r => r.transaction_type ?? '' },
-  { key: 'amount',           label: 'Amount',      sortType: 'numeric', accessor: r => String(r.amount) },
+  { key: 'description',      label: 'Description', sortType: 'text',    accessor: r => r.description ?? '' },
 ]
 
 const INF_SORT_FIELDS = deriveSortFields(INF_COLUMNS)
@@ -128,7 +128,7 @@ export default function Inflows() {
   const getValue = (r: InflowTransaction, k: string) => {
     if (k === 'amount')           return Number(r.amount)
     if (k === 'bank_name')        return r.bank_name ?? ''
-    if (k === 'description')      return r.display_description
+    if (k === 'description')      return r.description ?? ''
     if (k === 'transaction_type') return r.transaction_type ?? ''
     return r.date
   }
@@ -344,7 +344,7 @@ export default function Inflows() {
                     </div>
                     {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
                     <div className="text-sm">
-                      <DescriptionCell id={`card-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
+                      <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                     {row.remark && (
                       <div className="text-xs mt-1.5">
@@ -513,7 +513,7 @@ export default function Inflows() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[240px]" onClick={e => e.stopPropagation()}>
-                          <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                          <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
                         <AmountCell value={Number(row.amount)} mode="inflow" />
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>

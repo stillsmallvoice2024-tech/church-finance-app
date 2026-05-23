@@ -13,7 +13,6 @@ import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
-import { normalizeNarration } from '../utils/normalizeNarration'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useBanks }     from '../hooks/useBanks'
 import { useRole }      from '../hooks/useRole'
@@ -26,17 +25,16 @@ import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface TransferRow {
-  id:                  string
-  date:                string
-  from_bank_id:        string | null
-  from_bank_name:      string | null
-  to_bank_id:          string | null
-  to_bank_name:        string | null
-  amount:              number
-  description:         string | null
-  display_description: string
-  transaction_ref:     string | null
-  remarks:             string | null
+  id:              string
+  date:            string
+  from_bank_id:    string | null
+  from_bank_name:  string | null
+  to_bank_id:      string | null
+  to_bank_name:    string | null
+  amount:          number
+  description:     string | null
+  transaction_ref: string | null
+  remarks:         string | null
 }
 
 // ── Modal schema ───────────────────────────────────────────────────────────────
@@ -216,12 +214,7 @@ export default function IntraBankTransfers() {
     if (err) {
       setError(err.message)
     } else {
-      setRows(
-        ((data ?? []) as Omit<TransferRow, 'display_description'>[]).map(r => ({
-          ...r,
-          display_description: normalizeNarration(r.description),
-        })) as TransferRow[]
-      )
+      setRows((data ?? []) as TransferRow[])
     }
     setLoading(false)
   }, [])
@@ -362,9 +355,9 @@ export default function IntraBankTransfers() {
                       <ArrowRightLeft className="w-3 h-3 text-gray-400 shrink-0" />
                       <span className="font-medium truncate">{row.to_bank_name ?? '—'}</span>
                     </div>
-                    {(row.display_description || row.description) && (
+                    {row.description && (
                       <div className="text-sm mt-1.5">
-                        <DescriptionCell id={`card-desc-${row.id}`} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
+                        <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
                       </div>
                     )}
                     {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono mt-1">{row.transaction_ref}</p>}
@@ -428,7 +421,7 @@ export default function IntraBankTransfers() {
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.to_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(row.amount)}</td>
                       <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
-                        <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
                       <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px]">
