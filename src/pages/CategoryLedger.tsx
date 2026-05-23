@@ -112,12 +112,13 @@ export default function CategoryLedger() {
     setLoading(true)
     setError(null)
 
-    const [seedRes, savInRes, savOutRes, allInflowRes, cobRes] = await Promise.all([
+    const [seedRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes] = await Promise.all([
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed'),
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings'),
       supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Savings'),
       supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type'),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
+      supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount'),
     ])
 
     if (seedRes.error || savInRes.error || savOutRes.error || allInflowRes.error) {
@@ -186,6 +187,25 @@ export default function CategoryLedger() {
       const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
       if (!catName) continue
       allocMap.set(catName, (allocMap.get(catName) ?? 0) + Number(ob.amount))
+    }
+
+    // Intraflow adjustments: internal transfers shift balances between categories.
+    // FROM = debit, TO = credit. Net across all categories is always zero.
+    for (const r of intraFlowRes.error ? [] : (intraFlowRes.data ?? [])) {
+      const amount = Number(r.total_amount)
+      if (amount <= 0) continue
+      const fromCat   = (r.account_from       as string | null) || ''
+      const fromStage = (r.account_from_stage2 as string | null) || ''
+      const toCat     = (r.account_to         as string | null) || ''
+      const toStage   = (r.account_to_stage2   as string | null) || ''
+      if (fromCat) {
+        if (fromStage === 'Percentage Allocation') allocMap.set(fromCat, (allocMap.get(fromCat) ?? 0) - amount)
+        else { const row = ensure(fromCat); if (fromStage === 'Specific Seed') row.specificSeed -= amount; else if (fromStage === 'Savings') row.savingsIn -= amount }
+      }
+      if (toCat) {
+        if (toStage === 'Percentage Allocation') allocMap.set(toCat, (allocMap.get(toCat) ?? 0) + amount)
+        else { const row = ensure(toCat); if (toStage === 'Specific Seed') row.specificSeed += amount; else if (toStage === 'Savings') row.savingsIn += amount }
+      }
     }
 
     const allNames = new Set<string>([
@@ -315,25 +335,67 @@ export default function CategoryLedger() {
         'Specific Seed': 'Specific Seed',
         'Savings':       'Savings',
       }
+      const portionStage2 = portionMap[ledgerPortion]
+
+      const [cobLedger, intraFromRes, intraToRes] = await Promise.all([
+        catRecord
+          ? supabase.from('category_opening_balances')
+              .select('amount')
+              .eq('category_id', catRecord.id)
+              .eq('budget_portion', portionStage2)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        supabase.from('intra_flows')
+          .select('id, date, description, total_amount, account_to, account_to_stage2')
+          .eq('account_from', activeCategory)
+          .eq('account_from_stage2', portionStage2)
+          .order('date'),
+        supabase.from('intra_flows')
+          .select('id, date, description, total_amount, account_from, account_from_stage2')
+          .eq('account_to', activeCategory)
+          .eq('account_to_stage2', portionStage2)
+          .order('date'),
+      ])
+      if (intraFromRes.error) throw intraFromRes.error
+      if (intraToRes.error) throw intraToRes.error
+
       const bfRow: LedgerRow[] = []
-      if (catRecord) {
-        const { data: cobLedger } = await supabase
-          .from('category_opening_balances')
-          .select('amount')
-          .eq('category_id', catRecord.id)
-          .eq('budget_portion', portionMap[ledgerPortion])
-          .maybeSingle()
-        const bfAmt = cobLedger?.amount ? Number(cobLedger.amount) : 0
-        if (bfAmt !== 0) {
-          bfRow.push({
-            id:          'bal-bf',
-            date:        '0000-01-01',
-            description: 'Balance Brought Forward',
-            inflow:      bfAmt,
-            outflow:     0,
-            balance:     0,
-          })
-        }
+      const bfAmt = cobLedger?.data?.amount ? Number(cobLedger.data.amount) : 0
+      if (bfAmt !== 0) {
+        bfRow.push({
+          id:          'bal-bf',
+          date:        '0000-01-01',
+          description: 'Balance Brought Forward',
+          inflow:      bfAmt,
+          outflow:     0,
+          balance:     0,
+        })
+      }
+
+      // FROM this category = debit (outflow); TO this category = credit (inflow)
+      for (const r of intraFromRes.data ?? []) {
+        const amount = Number(r.total_amount)
+        if (amount <= 0) continue
+        outRows.push({
+          id:          `if-out-${r.id}`,
+          date:        r.date as string,
+          description: `Transfer → ${r.account_to}${r.account_to_stage2 ? ' (' + r.account_to_stage2 + ')' : ''}${r.description ? ': ' + r.description : ''}`,
+          inflow:      0,
+          outflow:     amount,
+          balance:     0,
+        })
+      }
+      for (const r of intraToRes.data ?? []) {
+        const amount = Number(r.total_amount)
+        if (amount <= 0) continue
+        inRows.push({
+          id:          `if-in-${r.id}`,
+          date:        r.date as string,
+          description: `Transfer ← ${r.account_from}${r.account_from_stage2 ? ' (' + r.account_from_stage2 + ')' : ''}${r.description ? ': ' + r.description : ''}`,
+          inflow:      amount,
+          outflow:     0,
+          balance:     0,
+        })
       }
 
       const combined = [...bfRow, ...inRows, ...outRows].sort((a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1))
