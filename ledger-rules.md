@@ -143,18 +143,54 @@ No DB transaction — step 1 commits even if step 2 fails. Accepted trade-off.
 
 ## Category Ledger Auto-Sync
 
-`src/store/transactionSyncStore.ts` holds an `outflowVersion` counter.
+`src/store/transactionSyncStore.ts` holds two version counters.
 
-Bumped after every outflow write:
+**`outflowVersion`** — bumped after every outflow write:
 - `useAddOutflow` — after successful insert
 - `useUpdateTransaction` — when `table === 'outflow_transactions'`
 - `ImportModal` — after outflow batch loop if `outflowToInsert.length > 0`
 
-`CategoryLedger` subscribes via `useTransactionSyncStore(s => s.outflowVersion)` and adds it to **both** useEffect dep arrays:
-- `useEffect([loadSummary, outflowVersion])` — re-runs summary cards
-- `useEffect([viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion])` — re-runs per-category ledger view
+**`intraflowVersion`** — bumped after every intraflow write or delete:
+- `useAddIntraFlow` — after successful insert
+- `useUpdateTransaction` — when `table === 'intra_flows'`
+- `useDeleteTransaction` — when `table === 'intra_flows'`
 
-Both effects must include `outflowVersion`; omitting it from either causes the corresponding view to go stale after outflow writes.
+`CategoryLedger` subscribes to **both** and adds them to **both** useEffect dep arrays:
+- `useEffect([loadSummary, outflowVersion, intraflowVersion])`
+- `useEffect([viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion, intraflowVersion])`
+
+Omitting either version from either effect causes that view to go stale after writes.
+
+---
+
+## Intraflow Propagation (CategoryLedger)
+
+`intra_flows` is the **authoritative source** for internal fund movements. CategoryLedger reads it directly — no synthetic inflow/outflow transactions are created.
+
+**`loadSummary`** fetches all `intra_flows WHERE status='active'` in the same `Promise.all` as the other queries. For each row:
+- FROM category: debit — subtract `total_amount` from its `percentageAllocated`, `specificSeed`, or `savingsIn` based on `account_from_stage2`
+- TO category: credit — add `total_amount` to the corresponding field
+- Skip if `fromCat === toCat && fromStage === toStage` (circular, net-zero)
+- Global totals (summary cards) remain unchanged — transfers net to zero across all categories
+
+**`loadLedger`** fetches intraflows for the active category+portion (two scoped queries in parallel with the COB query):
+```
+WHERE account_from = activeCategory AND account_from_stage2 = portionStage2 AND status = 'active'
+WHERE account_to   = activeCategory AND account_to_stage2   = portionStage2 AND status = 'active'
+```
+- FROM match → outflow row (debit); ID prefixed `if-out-{id}`
+- TO match → inflow row (credit); ID prefixed `if-in-{id}`
+- Both included in combined sort + running balance
+
+**Portion label mapping** (intraflow `account_*_stage2` ↔ ledger `LedgerPortion`):
+- `'Percentage Allocation'` ↔ `'Percentage'`
+- `'Specific Seed'` ↔ `'Specific Seed'`
+- `'Savings'` ↔ `'Savings'`
+
+**Edge cases handled:**
+- `status = 'reversed'` or `'void'` → excluded from both summary and ledger (query filter)
+- Circular allocation (same category+portion both sides) → skipped in summary
+- Deleted categories → `account_from`/`account_to` text snapshot remains readable even after FK goes NULL
 
 ---
 

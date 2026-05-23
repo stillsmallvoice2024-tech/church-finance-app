@@ -22,7 +22,7 @@
 | `income_type_rules` | Keyword/stage-code rules per income type |
 | `inflow_transactions` | Money received; `bank_name` text, FX fields, `income_type_id`, `allocation_config_id` |
 | `outflow_transactions` | Money paid out; `bank_name` text, FX fields, `is_pending_deduction` |
-| `intra_flows` | Internal fund movements |
+| `intra_flows` | Internal fund movements between categories; `account_from`/`account_to` text (name snapshot), `account_from_stage2`/`account_to_stage2` text (portion label), `total_amount`, `from_category_id`/`to_category_id` UUID FK → `categories(id) ON DELETE SET NULL` (authoritative ID), `status text DEFAULT 'active' CHECK (status IN ('active','reversed','void'))`, `reversal_of_id` UUID FK → `intra_flows(id)` |
 | `bank_deposits` | Physical cash deposits; `currency`, `fx_amount`, `fx_rate` |
 | `intrabank_transfers` | Bank-to-bank transfers |
 | `fx_transactions` | FX ledger; running balance per currency |
@@ -59,6 +59,7 @@
 | `UNIQUE INDEX idx_inflow_bf_unique_bank (bank_name) WHERE transaction_type = 'balance_brought_forward'` + `idx_inflow_bank_name` + `idx_outflow_bank_name` | `inflow_transactions`, `outflow_transactions` | B/F dedup constraint + query perf; dedup cleanup step in `MIGRATION_SQL` runs first to clear existing duplicates |
 | `config_group_id uuid`, `effective_from date`, `effective_to date`, `version_number int` | `allocation_configs` | Special config versioning — see Special Config Versioning section |
 | `special_config_group_id uuid` | `income_types` | Links income type to a config group (replaces per-version `special_config_id` link) |
+| `from_category_id uuid`, `to_category_id uuid`, `status text`, `reversal_of_id uuid` | `intra_flows` | Intraflow traceability — run `supabase/add_intraflow_traceability.sql`; backfills IDs from name text for existing rows; `status DEFAULT 'active'` |
 
 `recorded_at` migration is already in `MIGRATION_SQL` in `Setup.tsx` and backfills from `created_at` for existing rows. If adding manually:
 ```sql

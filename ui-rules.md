@@ -73,6 +73,63 @@ Pages using DescriptionCell: Inflows, Outflows, BankLedger, CategoryLedger, Intr
 
 ---
 
+## RowDetailPanel Expandable Row Pattern
+
+Used to surface metadata inline below a table row without adding permanent columns. Pattern: `Fragment` key wrapper + collapsible `RowDetailPanel` TR + inline trigger badge.
+
+**Component:** `src/components/ui/RowDetailPanel.tsx`
+```tsx
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+// Renders a <tr> with a responsive label-value grid. Pass colSpan to match the table.
+<RowDetailPanel items={detailItems} colSpan={5} />
+```
+
+**`DetailItem` shape:**
+```typescript
+{ label: string; value: React.ReactNode; mono?: boolean; breakAll?: boolean; badge?: string }
+// badge = Tailwind bg+text classes — renders value as a pill (e.g. 'bg-green-100 text-green-700')
+// Items with null/undefined/empty value are filtered out automatically
+```
+
+**Table usage pattern** (CategoryLedger, IntraFlow):
+```tsx
+// 1. State
+const [expandedId, setExpandedId] = useState<string | null>(null)
+
+// 2. Row render — wrap in Fragment
+{rows.map(row => {
+  const isExpanded = expandedId === row.id
+  return (
+    <Fragment key={row.id}>
+      <tr>
+        <td>
+          {/* inline trigger badge */}
+          <button onClick={() => setExpandedId(isExpanded ? null : row.id)}
+            className="inline-flex items-center gap-1 text-[10px] font-semibold ...">
+            <Icon /> Label
+            {isExpanded ? <ChevronDown /> : <ChevronRight />}
+          </button>
+        </td>
+      </tr>
+      {isExpanded && <RowDetailPanel items={buildDetailItems(row)} colSpan={N} />}
+    </Fragment>
+  )
+})}
+```
+
+**Card view pattern:** render an inline `<div>` grid below the description (no `RowDetailPanel` — it emits a `<tr>`). Use the same `expandedId` state.
+
+**Reset expansion** when filters/category/portion change:
+```tsx
+useEffect(() => { setExpandedId(null) }, [activeCategory, portion])
+```
+
+**Intraflow rows in CategoryLedger** use this pattern with indigo tint (`bg-indigo-50/30`) and `↔ Transfer` badge (lucide `ArrowLeftRight` icon). `buildIntraflowDetailItems(meta, row)` returns amount ±, direction, FROM/TO category+portion, note, status badge.
+
+Pages using RowDetailPanel: IntraFlow, CategoryLedger.
+
+---
+
 ## Mobile Horizontal Scrolling
 
 Tables must be inside an `overflow-x-auto` container. Two patterns:
