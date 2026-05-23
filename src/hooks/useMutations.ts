@@ -294,6 +294,8 @@ export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {
         newData:   { ...input, from_category_id: fromId, to_category_id: toId } as unknown as Record<string, unknown>,
       })
 
+      useTransactionSyncStore.getState().bumpIntraflow()
+
       return data.id
     } catch (err) {
       const msg = extractMessage(err)
@@ -370,9 +372,8 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         logFieldChanges(user.id, table, id, oldData as Record<string, unknown>, updates)
       }
 
-      if (table === 'outflow_transactions') {
-        useTransactionSyncStore.getState().bumpOutflow()
-      }
+      if (table === 'outflow_transactions') useTransactionSyncStore.getState().bumpOutflow()
+      if (table === 'intra_flows')          useTransactionSyncStore.getState().bumpIntraflow()
     } catch (err) {
       const msg = extractMessage(err)
       setError(msg)
@@ -425,6 +426,8 @@ export function useDeleteTransaction(table: DeletableTable): MutationHook<string
         oldData:   (oldData ?? null) as Record<string, unknown> | null,
         newData:   null,
       })
+
+      if (table === 'intra_flows') useTransactionSyncStore.getState().bumpIntraflow()
     } catch (err) {
       const msg = extractMessage(err)
       setError(msg)

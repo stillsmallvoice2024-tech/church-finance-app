@@ -84,7 +84,8 @@ export default function CategoryLedger() {
   const { categories }                           = useCategories()
   const { groups }                               = useCategoryGroups()
   const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
-  const outflowVersion                           = useTransactionSyncStore(s => s.outflowVersion)
+  const outflowVersion   = useTransactionSyncStore(s => s.outflowVersion)
+  const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   // Summary state
@@ -131,7 +132,7 @@ export default function CategoryLedger() {
       supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Savings'),
       supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type'),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
-      supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount'),
+      supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active'),
     ])
 
     if (seedRes.error || savInRes.error || savOutRes.error || allInflowRes.error) {
@@ -211,6 +212,8 @@ export default function CategoryLedger() {
       const fromStage = (r.account_from_stage2 as string | null) || ''
       const toCat     = (r.account_to         as string | null) || ''
       const toStage   = (r.account_to_stage2   as string | null) || ''
+      // Circular reallocation: same category+portion on both sides — net zero, skip
+      if (fromCat === toCat && fromStage === toStage) continue
       if (fromCat) {
         if (fromStage === 'Percentage Allocation') allocMap.set(fromCat, (allocMap.get(fromCat) ?? 0) - amount)
         else { const row = ensure(fromCat); if (fromStage === 'Specific Seed') row.specificSeed -= amount; else if (fromStage === 'Savings') row.savingsIn -= amount }
@@ -242,7 +245,7 @@ export default function CategoryLedger() {
     setLoading(false)
   }, [categories, configs])
 
-  useEffect(() => { loadSummary() }, [loadSummary, outflowVersion])
+  useEffect(() => { loadSummary() }, [loadSummary, outflowVersion, intraflowVersion])
 
   // ── Ledger load ───────────────────────────────────────────────────────────────
 
@@ -362,11 +365,13 @@ export default function CategoryLedger() {
           .select('id, date, description, total_amount, account_to, account_to_stage2, status')
           .eq('account_from', activeCategory)
           .eq('account_from_stage2', portionStage2)
+          .eq('status', 'active')
           .order('date'),
         supabase.from('intra_flows')
           .select('id, date, description, total_amount, account_from, account_from_stage2, status')
           .eq('account_to', activeCategory)
           .eq('account_to_stage2', portionStage2)
+          .eq('status', 'active')
           .order('date'),
       ])
       if (intraFromRes.error) throw intraFromRes.error
@@ -445,7 +450,7 @@ export default function CategoryLedger() {
 
   useEffect(() => {
     if (viewMode === 'ledger' && activeCategory) loadLedger()
-  }, [viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion])
+  }, [viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion, intraflowVersion])
 
   // Reset ledger page + expansion when category or portion changes
   const { setPage: setLedgerPage } = ledgerViewState
