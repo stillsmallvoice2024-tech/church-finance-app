@@ -139,7 +139,7 @@ export function useReportEngine(
     // ── Percentage-allocated inflows ────────────────────────────────────────
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
-      if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
       if (r.transaction_type) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId

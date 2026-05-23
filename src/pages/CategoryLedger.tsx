@@ -182,7 +182,7 @@ export default function CategoryLedger() {
 
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
-      if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
       if (r.transaction_type) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
@@ -272,7 +272,7 @@ export default function CategoryLedger() {
         if (outflowRes.error) throw outflowRes.error
 
         for (const r of inflowRes.data ?? []) {
-          if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+          if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
           if (r.transaction_type) continue
           const configId = r.allocation_config_id as string | null
           const cfg = configId
@@ -293,7 +293,7 @@ export default function CategoryLedger() {
         }
 
         for (const r of outflowRes.data ?? []) {
-          if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+          if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
           const amt = Number(r.actual_amount || r.amount_disbursed || 0)
           if (amt <= 0) continue
           outRows.push({

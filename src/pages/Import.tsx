@@ -484,6 +484,7 @@ function ManualEntryForm() {
 
   // Outflow-specific state
   const [isPending,      setIsPending]      = useState(false)
+  const [inflowS2,       setInflowS2]       = useState('')
   const [outflowS1,      setOutflowS1]      = useState('')
   const [outflowS2,      setOutflowS2]      = useState('')
 
@@ -577,6 +578,7 @@ function ManualEntryForm() {
         allocation_config_id:       effectiveConfigId,
         bank_name:                  selectedBank?.name             || undefined,
         transaction_ref:            v('transaction_ref') || await generateFallbackTransactionId(v('date'), v('amount'), v('description') ?? '', selectedBank?.name ?? ''),
+        stage_code_2:               inflowS2                       || undefined,
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
         income_type_id:             incomeTypeId                   || undefined,
@@ -605,6 +607,7 @@ function ManualEntryForm() {
       setIncomeTypeId('')
       setIncomeTypeAutoSet(false)
       setConfigOverride('')
+      setInflowS2('')
       setTxnType('')
       setErrors({})
     } catch (e: unknown) {
@@ -870,6 +873,16 @@ function ManualEntryForm() {
               <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
             </Field>
           )}
+
+          {/* Budget Portion */}
+          <Field label="Budget Portion (Stage Code 2)">
+            <select value={inflowS2} onChange={e => setInflowS2(e.target.value)} className={iCls}>
+              <option value="">— None —</option>
+              <option value="Percentage Allocation">Percentage Allocation</option>
+              <option value="Specific Seed">Specific Seed</option>
+              <option value="Savings">Savings</option>
+            </select>
+          </Field>
 
           {/* Specific Seed Description */}
           <Field label="Specific Seed Description">
