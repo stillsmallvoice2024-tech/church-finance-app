@@ -212,7 +212,7 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('outflow_transactions')
-        .insert({ ...input, created_by: user.id })
+        .insert({ ...input, is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id })
         .select('id')
         .single()
 

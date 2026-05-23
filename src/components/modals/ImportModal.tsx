@@ -833,7 +833,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             if (sc.s1) row.stage_code_1 = sc.s1
             if (sc.s2) row.stage_code_2 = sc.s2
           }
-          if (rowPendingDeductions.has(ri)) row.is_pending_deduction = true
+          row.is_pending_deduction = rowPendingDeductions.has(ri)
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           row.recorded_at = importTimestamp
