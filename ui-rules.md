@@ -434,6 +434,19 @@ Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSor
 - no `primary` — shown under "More Fields" expandable (text fields: Description, Bank, etc.)
 - If no field has `primary: true` (backward compat), all fields show in the main list
 
+**Column ordering rule — `*_COLUMNS` array:** `deriveSortFields()` includes only columns with `sortType` defined, preserving their array index order. Text-only columns (e.g. `description`, `bank_name`) that appear before numeric columns in the array will shift all subsequent numeric sort-field indices, breaking `SortableHeader` hardcoded index references. **Always place `description` (and any other text-only columns without `sortType`) AFTER all numeric columns in every `*_COLUMNS` definition.**
+
+```ts
+// Correct — Description last, no sortType, numeric fields at expected indices
+const BL_COLUMNS: TableColumnDef<LedgerRow>[] = [
+  { key: 'date',        label: 'Date',        sortType: 'date',    primary: true },  // SORT_FIELDS[0]
+  { key: 'inflow',      label: 'Inflow',      sortType: 'numeric', primary: true },  // SORT_FIELDS[1]
+  { key: 'outflow',     label: 'Outflow',     sortType: 'numeric', primary: true },  // SORT_FIELDS[2]
+  { key: 'balance',     label: 'Balance',     sortType: 'numeric', primary: true },  // SORT_FIELDS[3]
+  { key: 'description', label: 'Description',                      accessor: r => r.description ?? '' }, // not in SORT_FIELDS
+]
+```
+
 ### Sort behaviours
 
 - **Clear Sort**: appears inside dropdown when `sortKey !== defaultSortKey || sortDir !== defaultSortDir || advancedSort.length > 0`; click restores defaults and clears advanced sort
@@ -511,6 +524,65 @@ Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), Forei
 **IntraFlow** — server search (description ilike) fires only for `col='all'`; domain filters (date, accountFrom, accountTo) stay in filter card above DataControlsBar; view toggle managed via DataControlsBar `view` prop.
 **ChangeLog** — client-side sort + search only (server supplies current page by table+date filter); defaultPageSize 50, pageSizeOptions `[25, 50, 100, 200]`.
 **PendingDeductions** — client-side sort + search only (server supplies pending outflows); search cols: description, bank_name.
+
+---
+
+## RowDetailPanel — Expandable Row Details
+
+`src/components/ui/RowDetailPanel.tsx` renders an expandable detail row below a table row. Used on: BankLedger, BankDeposits, ForeignCurrency, IntraBankTransfers, RefundTransactions, ReversalTransactions, IntraFlow, Inflows, Outflows, PendingDeductions.
+
+```tsx
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+
+// Define detail items for a row:
+const detailItems = (row: MyRow): DetailItem[] => [
+  { label: 'Transaction Ref', value: row.transaction_ref, mono: true, breakAll: true },
+  { label: 'Bank',            value: row.bank_name },
+  { label: 'Remarks',         value: row.remarks, breakAll: true },
+  { label: 'Raw Description', value: row.description, breakAll: true },
+]
+
+// In flatMap or Fragment pattern:
+const isExpanded = expandedId === row.id
+return [
+  <tr key={row.id}>
+    <td className="w-8 px-1 py-3">
+      <button onClick={() => setExpandedId(isExpanded ? null : row.id)}>
+        {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+      </button>
+    </td>
+    {/* … other cells … */}
+  </tr>,
+  isExpanded && <RowDetailPanel key={`${row.id}-detail`} items={detailItems(row)} colSpan={N} />,
+]
+```
+
+**`DetailItem` interface:**
+```ts
+interface DetailItem {
+  label:    string
+  value:    string | null | undefined
+  mono?:    boolean   // monospace font (refs, IDs)
+  breakAll?: boolean  // break-all wrapping (long strings, refs)
+}
+```
+
+- `colSpan` must match total column count of the parent table (including action/checkbox cols)
+- `null` / `undefined` values render as `—` (item still shown with greyed value)
+- Use `Fragment` import for the `key` pattern, or `flatMap` returning an array (both work)
+- One `expandedId` state per page (string | null) — clicking same row collapses; clicking another switches
+- Shared detail item builders in `src/utils/rowDetailItems.ts`: `inflowDetailItems(row)`, `outflowDetailItems(row)`
+
+---
+
+## Narration Normalisation Scope
+
+`normalizeNarration` (`src/utils/normalizeNarration.ts`) and the `display_description` / `display_narration` computed fields are **scoped exclusively to `Outflows.tsx`** and its underlying `OutflowTransaction` type.
+
+- **Only** `OutflowTransaction` (in `useTransactions.ts`) carries `display_description: string`; no other type or hook should add this field
+- **Only** `Outflows.tsx` imports and applies `normalizeNarration`; all other pages use raw `row.description` / `t.narration` directly
+- `DescriptionCell` calls must pass `row.description` (not `row.display_description || row.description`) on all pages except Outflows
+- Conditional rendering checks must use `row.description &&` (not `(row.display_description || row.description) &&`)
 
 ---
 
