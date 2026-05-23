@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
-import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers } from 'lucide-react'
+import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useCategories, useCategoryGroups } from '../hooks/useCategories'
@@ -7,6 +7,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
@@ -48,13 +49,24 @@ interface CategoryRow {
   savingsOut:          number
 }
 
+interface IntraflowMeta {
+  intraflowId:  string
+  fromCategory: string
+  fromPortion:  string
+  toCategory:   string
+  toPortion:    string
+  note:         string | null
+  status:       string | null
+}
+
 interface LedgerRow {
-  id:          string
-  date:        string
-  description: string
-  inflow:      number
-  outflow:     number
-  balance:     number
+  id:             string
+  date:           string
+  description:    string
+  inflow:         number
+  outflow:        number
+  balance:        number
+  intraflowMeta?: IntraflowMeta
 }
 
 type ViewMode      = 'summary' | 'ledger'
@@ -81,9 +93,10 @@ export default function CategoryLedger() {
   const [error,   setError]   = useState<string | null>(null)
 
   // Ledger state
-  const [ledgerRows,    setLedgerRows]    = useState<LedgerRow[]>([])
-  const [ledgerLoading, setLedgerLoading] = useState(false)
-  const [ledgerError,   setLedgerError]   = useState<string | null>(null)
+  const [ledgerRows,       setLedgerRows]       = useState<LedgerRow[]>([])
+  const [ledgerLoading,    setLedgerLoading]    = useState(false)
+  const [ledgerError,      setLedgerError]      = useState<string | null>(null)
+  const [expandedLedgerId, setExpandedLedgerId] = useState<string | null>(null)
 
   // UI state
   const [viewMode,       setViewMode]       = useState<ViewMode>('summary')
@@ -346,12 +359,12 @@ export default function CategoryLedger() {
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
         supabase.from('intra_flows')
-          .select('id, date, description, total_amount, account_to, account_to_stage2')
+          .select('id, date, description, total_amount, account_to, account_to_stage2, status')
           .eq('account_from', activeCategory)
           .eq('account_from_stage2', portionStage2)
           .order('date'),
         supabase.from('intra_flows')
-          .select('id, date, description, total_amount, account_from, account_from_stage2')
+          .select('id, date, description, total_amount, account_from, account_from_stage2, status')
           .eq('account_to', activeCategory)
           .eq('account_to_stage2', portionStage2)
           .order('date'),
@@ -383,6 +396,15 @@ export default function CategoryLedger() {
           inflow:      0,
           outflow:     amount,
           balance:     0,
+          intraflowMeta: {
+            intraflowId:  r.id as string,
+            fromCategory: activeCategory,
+            fromPortion:  portionStage2,
+            toCategory:   (r.account_to   as string) ?? '',
+            toPortion:    (r.account_to_stage2 as string) ?? '',
+            note:         (r.description  as string | null) ?? null,
+            status:       (r.status       as string | null) ?? null,
+          },
         })
       }
       for (const r of intraToRes.data ?? []) {
@@ -395,6 +417,15 @@ export default function CategoryLedger() {
           inflow:      amount,
           outflow:     0,
           balance:     0,
+          intraflowMeta: {
+            intraflowId:  r.id as string,
+            fromCategory: (r.account_from       as string) ?? '',
+            fromPortion:  (r.account_from_stage2 as string) ?? '',
+            toCategory:   activeCategory,
+            toPortion:    portionStage2,
+            note:         (r.description  as string | null) ?? null,
+            status:       (r.status       as string | null) ?? null,
+          },
         })
       }
 
@@ -416,10 +447,11 @@ export default function CategoryLedger() {
     if (viewMode === 'ledger' && activeCategory) loadLedger()
   }, [viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion])
 
-  // Reset ledger page when category or portion changes
+  // Reset ledger page + expansion when category or portion changes
   const { setPage: setLedgerPage } = ledgerViewState
   useEffect(() => {
     setLedgerPage(0)
+    setExpandedLedgerId(null)
   }, [activeCategory, ledgerPortion, setLedgerPage])
 
   // ── Derived — Summary ─────────────────────────────────────────────────────────
@@ -1036,23 +1068,46 @@ export default function CategoryLedger() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                          {ledgerPagedRows.map(row => (
-                            <tr key={row.id} className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : 'hover:bg-gray-50'}`}>
-                              <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
-                              <td className="px-4 py-3 text-gray-700 max-w-xs">
-                                <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                              </td>
-                              <td className="px-4 py-3 text-right font-mono text-success">
-                                {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
-                              </td>
-                              <td className="px-4 py-3 text-right font-mono text-danger">
-                                {row.outflow > 0 ? formatCurrency(row.outflow) : <span className="text-gray-300 text-xs">—</span>}
-                              </td>
-                              <td className={`px-5 py-3 text-right font-mono font-semibold ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                                {formatCurrency(row.balance)}
-                              </td>
-                            </tr>
-                          ))}
+                          {ledgerPagedRows.map(row => {
+                            const isExpanded = expandedLedgerId === row.id
+                            const meta = row.intraflowMeta
+                            return (
+                              <Fragment key={row.id}>
+                                <tr className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : meta ? 'bg-indigo-50/30 hover:bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
+                                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
+                                  <td className="px-4 py-3 text-gray-700 max-w-xs">
+                                    <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                                    {meta && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedLedgerId(isExpanded ? null : row.id)}
+                                        className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 transition-colors"
+                                      >
+                                        <ArrowLeftRight className="w-3 h-3" />
+                                        Transfer
+                                        {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                      </button>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-mono text-success">
+                                    {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-mono text-danger">
+                                    {row.outflow > 0 ? formatCurrency(row.outflow) : <span className="text-gray-300 text-xs">—</span>}
+                                  </td>
+                                  <td className={`px-5 py-3 text-right font-mono font-semibold ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
+                                    {formatCurrency(row.balance)}
+                                  </td>
+                                </tr>
+                                {meta && isExpanded && (
+                                  <RowDetailPanel
+                                    colSpan={5}
+                                    items={buildIntraflowDetailItems(meta, row)}
+                                  />
+                                )}
+                              </Fragment>
+                            )
+                          })}
                         </tbody>
                         <tfoot>
                           <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
@@ -1079,66 +1134,102 @@ export default function CategoryLedger() {
                           Sorted by {activeLedgerField.label} · {directionLabel(activeLedgerField.type, ledgerViewState.sortDir)}
                         </p>
                       )}
-                      {ledgerPagedRows.map(row => (
-                        <div
-                          key={row.id}
-                          className={`rounded-xl border overflow-hidden shadow-sm ${
-                            row.id === 'bal-bf'
-                              ? 'bg-blue-50/60 border-blue-200'
-                              : 'bg-white border-gray-200'
-                          }`}
-                        >
-                          <div className="px-4 pt-3.5 pb-3">
-                            <p className={`text-[11px] font-semibold mb-1.5 ${
+                      {ledgerPagedRows.map(row => {
+                        const isExpanded = expandedLedgerId === row.id
+                        const meta = row.intraflowMeta
+                        return (
+                          <div
+                            key={row.id}
+                            className={`rounded-xl border overflow-hidden shadow-sm ${
                               row.id === 'bal-bf'
-                                ? 'text-blue-500 uppercase tracking-wide'
-                                : 'text-gray-400'
-                            }`}>
-                              {row.id === 'bal-bf' ? 'Balance B/F' : formatDate(row.date)}
-                            </p>
-                            {row.id === 'bal-bf' ? (
-                              <p className="text-sm font-semibold text-blue-800">{row.description}</p>
-                            ) : (
-                              <div className="text-sm">
-                                <DescriptionCell
-                                  id={`card-${row.id}`}
-                                  text={row.description}
-                                  tooltip={descTooltip}
-                                  setTooltip={setDescTooltip}
-                                  textCls="text-gray-800"
-                                />
+                                ? 'bg-blue-50/60 border-blue-200'
+                                : meta
+                                ? 'bg-indigo-50/30 border-indigo-200'
+                                : 'bg-white border-gray-200'
+                            }`}
+                          >
+                            <div className="px-4 pt-3.5 pb-3">
+                              <p className={`text-[11px] font-semibold mb-1.5 ${
+                                row.id === 'bal-bf'
+                                  ? 'text-blue-500 uppercase tracking-wide'
+                                  : 'text-gray-400'
+                              }`}>
+                                {row.id === 'bal-bf' ? 'Balance B/F' : formatDate(row.date)}
+                              </p>
+                              {row.id === 'bal-bf' ? (
+                                <p className="text-sm font-semibold text-blue-800">{row.description}</p>
+                              ) : (
+                                <div className="text-sm">
+                                  <DescriptionCell
+                                    id={`card-${row.id}`}
+                                    text={row.description}
+                                    tooltip={descTooltip}
+                                    setTooltip={setDescTooltip}
+                                    textCls="text-gray-800"
+                                  />
+                                  {meta && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedLedgerId(isExpanded ? null : row.id)}
+                                      className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 transition-colors"
+                                    >
+                                      <ArrowLeftRight className="w-3 h-3" />
+                                      Transfer details
+                                      {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {meta && isExpanded && (
+                              <div className="px-4 pb-3 border-t border-indigo-100 bg-indigo-50/20">
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-2 pt-3">
+                                  {buildIntraflowDetailItems(meta, row).filter(i => i.value !== null && i.value !== undefined && i.value !== '').map((item, idx) => (
+                                    <div key={idx} className="min-w-0">
+                                      <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">{item.label}</p>
+                                      {item.badge ? (
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${item.badge}`}>{item.value}</span>
+                                      ) : (
+                                        <p className="text-xs text-gray-700 break-words">{item.value}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             )}
-                          </div>
 
-                          <div className={`grid grid-cols-2 border-t px-4 py-3 ${
-                            row.id === 'bal-bf'
-                              ? 'border-blue-200/60 bg-blue-50/30'
-                              : 'border-gray-100 bg-gray-50/40'
-                          }`}>
-                            <div className="min-w-0">
-                              <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${
-                                row.inflow > 0 ? 'text-green-600/70' : 'text-red-600/70'
-                              }`}>
-                                {row.id === 'bal-bf' ? 'B/F Amount' : (row.inflow > 0 ? 'Inflow' : 'Outflow')}
-                              </p>
-                              <p className={`text-sm font-mono font-bold tabular-nums ${
-                                row.inflow > 0 ? 'text-success' : 'text-danger'
-                              }`}>
-                                {row.inflow > 0 ? formatCurrency(row.inflow) : formatCurrency(row.outflow)}
-                              </p>
-                            </div>
-                            <div className="border-l border-gray-200/80 pl-4 min-w-0">
-                              <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Balance</p>
-                              <p className={`text-sm font-mono font-bold tabular-nums ${
-                                row.balance >= 0 ? 'text-gray-900' : 'text-danger'
-                              }`}>
-                                {formatCurrency(row.balance)}
-                              </p>
+                            <div className={`grid grid-cols-2 border-t px-4 py-3 ${
+                              row.id === 'bal-bf'
+                                ? 'border-blue-200/60 bg-blue-50/30'
+                                : meta
+                                ? 'border-indigo-100 bg-indigo-50/20'
+                                : 'border-gray-100 bg-gray-50/40'
+                            }`}>
+                              <div className="min-w-0">
+                                <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${
+                                  row.inflow > 0 ? 'text-green-600/70' : 'text-red-600/70'
+                                }`}>
+                                  {row.id === 'bal-bf' ? 'B/F Amount' : (row.inflow > 0 ? 'Inflow' : 'Outflow')}
+                                </p>
+                                <p className={`text-sm font-mono font-bold tabular-nums ${
+                                  row.inflow > 0 ? 'text-success' : 'text-danger'
+                                }`}>
+                                  {row.inflow > 0 ? formatCurrency(row.inflow) : formatCurrency(row.outflow)}
+                                </p>
+                              </div>
+                              <div className="border-l border-gray-200/80 pl-4 min-w-0">
+                                <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Balance</p>
+                                <p className={`text-sm font-mono font-bold tabular-nums ${
+                                  row.balance >= 0 ? 'text-gray-900' : 'text-danger'
+                                }`}>
+                                  {formatCurrency(row.balance)}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
 
@@ -1160,4 +1251,22 @@ export default function CategoryLedger() {
       <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function buildIntraflowDetailItems(meta: IntraflowMeta, row: LedgerRow): DetailItem[] {
+  const direction = row.outflow > 0 ? 'Debit (sent out)' : 'Credit (received)'
+  const statusBadge =
+    !meta.status || meta.status === 'active' ? 'bg-green-100 text-green-700' :
+    meta.status === 'reversed'               ? 'bg-red-100 text-red-700'     :
+                                               'bg-gray-100 text-gray-600'
+  return [
+    { label: 'Amount',    value: row.outflow > 0 ? `−${row.outflow.toLocaleString()}` : `+${row.inflow.toLocaleString()}`, mono: true },
+    { label: 'Direction', value: direction },
+    { label: 'From',      value: `${meta.fromCategory} › ${meta.fromPortion}` },
+    { label: 'To',        value: `${meta.toCategory} › ${meta.toPortion}` },
+    { label: 'Note',      value: meta.note, breakAll: true },
+    { label: 'Status',    value: meta.status ?? 'active', badge: statusBadge },
+  ]
 }
