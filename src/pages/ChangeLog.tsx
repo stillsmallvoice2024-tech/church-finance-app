@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ClipboardList, Download, AlertCircle, RefreshCw } from 'lucide-react'
+import { ClipboardList, AlertCircle, RefreshCw } from 'lucide-react'
 import { Card }               from '../components/ui/Card'
 import { PaginationBar }      from '../components/ui/PaginationBar'
 import { DataControlsBar }    from '../components/ui/DataControlsBar'
@@ -11,6 +11,8 @@ import type { FieldChangeEntry } from '../hooks/useFieldChanges'
 import { usePageTitle }       from '../hooks/usePageTitle'
 import { useDataViewState }   from '../hooks/useDataViewState'
 import { exportCSV }          from '../utils/csvExport'
+import { supabase }           from '../lib/supabase'
+import { ExportDropdown }     from '../components/ui/ExportDropdown'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { SortField } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
@@ -103,22 +105,6 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
     </div>
   )
 
-  const handleExport = () => {
-    exportCSV(
-      `change-log-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Timestamp', 'User', 'Table', 'Record ID', 'Field', 'Old Value', 'New Value'],
-      entries.map(e => [
-        fmtTs(e.changed_at),
-        e.profiles?.full_name ?? e.profiles?.email ?? e.user_id ?? '—',
-        TABLE_LABELS[e.table_name] ?? e.table_name,
-        e.record_id,
-        e.field_name,
-        e.old_value ?? '',
-        e.new_value ?? '',
-      ]),
-    )
-  }
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const getClValue = (e: (typeof entries)[number], k: string) => {
     if (k === 'field_name') return e.field_name
@@ -137,6 +123,39 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
     [sorted, clState.search, clState.searchCol],
   )
 
+  const CL_CSV_HEADERS = ['Timestamp', 'User', 'Table', 'Record ID', 'Field', 'Old Value', 'New Value']
+  const clCsvRow = (e: FieldChangeEntry) => [
+    fmtTs(e.changed_at),
+    e.profiles?.full_name ?? e.profiles?.email ?? e.user_id ?? '—',
+    TABLE_LABELS[e.table_name] ?? e.table_name,
+    e.record_id, e.field_name, e.old_value ?? '', e.new_value ?? '',
+  ]
+  const CL_CSV_FILE = `change-log-${new Date().toISOString().slice(0, 10)}.csv`
+
+  const handleExportView = () => {
+    exportCSV(CL_CSV_FILE, CL_CSV_HEADERS, displayed.map(clCsvRow))
+  }
+
+  const handleExportAll = async () => {
+    let query = supabase
+      .from('field_changes')
+      .select(`id, user_id, table_name, record_id, field_name, old_value, new_value, changed_at, profiles:user_id ( full_name, email )`)
+      .order('changed_at', { ascending: false })
+      .limit(10000)
+    if (tableFilter) query = query.eq('table_name', tableFilter)
+    if (dateFrom)    query = query.gte('changed_at', dateFrom)
+    if (dateTo)      query = query.lte('changed_at', dateTo + 'T23:59:59')
+    const { data: rows } = await query
+    if (!rows) return
+    const allEntries = rows as unknown as FieldChangeEntry[]
+    const adv = clState.advancedSort
+    const allSorted = adv.length > 0
+      ? multiSortRows(allEntries, getClValue, adv, CL_SORT_FIELDS)
+      : sortRows(allEntries, getClValue, clState.sortKey, clState.sortDir, CL_SORT_FIELDS)
+    const allFiltered = searchRows(allSorted, CL_COLUMNS, clState.search, clState.searchCol)
+    exportCSV(CL_CSV_FILE, CL_CSV_HEADERS, allFiltered.map(clCsvRow))
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -146,13 +165,11 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Per-field record of every edit made</p>
         </div>
-        <button
-          onClick={handleExport}
+        <ExportDropdown
+          onExportView={handleExportView}
+          onExportAll={handleExportAll}
           disabled={entries.length === 0}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
-        >
-          <Download className="w-4 h-4" /> Export CSV
-        </button>
+        />
       </div>
 
       {/* Filters */}

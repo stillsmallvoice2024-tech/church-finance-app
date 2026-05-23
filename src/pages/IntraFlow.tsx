@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import {
-  ArrowLeftRight, Plus, Download, Pencil, Trash2,
+  ArrowLeftRight, Plus, Pencil, Trash2,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
@@ -20,6 +20,8 @@ import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
+import { supabase }                from '../lib/supabase'
+import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useCategories }  from '../hooks/useCategories'
 import { useYearRange }   from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -172,20 +174,42 @@ export default function IntraFlow() {
     }
   }
 
-  const handleExport = () => {
-    exportCSV(
-      `intra-flows-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark'],
-      data.map(r => [
-        r.date,
-        r.account_from ?? '',
-        r.account_to   ?? '',
-        r.total_amount,
-        r.account_from_stage1, r.account_from_stage2,
-        r.account_to_stage1,   r.account_to_stage2,
-        r.description, r.remark,
-      ]),
-    )
+  const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
+  const iflCsvRow = (r: IntraFlowRow) => [
+    r.date, r.account_from ?? '', r.account_to ?? '', r.total_amount,
+    r.account_from_stage1, r.account_from_stage2,
+    r.account_to_stage1, r.account_to_stage2,
+    r.description, r.remark,
+  ]
+  const IFL_CSV_FILE = `intra-flows-${new Date().toISOString().slice(0, 10)}.csv`
+
+  const handleExportView = () => {
+    exportCSV(IFL_CSV_FILE, IFL_CSV_HEADERS, displayed.map(iflCsvRow))
+  }
+
+  const handleExportAll = async () => {
+    let query = supabase
+      .from('intra_flows')
+      .select('*')
+      .order('date', { ascending: false })
+      .limit(10000)
+    if (dateFrom)    query = query.gte('date', dateFrom)
+    if (dateTo)      query = query.lte('date', dateTo)
+    if (accountFrom) query = query.ilike('account_from', `%${accountFrom}%`)
+    if (accountTo)   query = query.ilike('account_to', `%${accountTo}%`)
+    if (iflState.searchCol === 'all' && debouncedSearch)
+      query = query.ilike('description', `%${debouncedSearch}%`)
+    const { data: rows } = await query
+    if (!rows) return
+    const allRows = rows as IntraFlowRow[]
+    const adv = iflState.advancedSort
+    const allSorted = adv.length > 0
+      ? multiSortRows(allRows, getIflValue, adv, IFL_SORT_FIELDS)
+      : sortRows(allRows, getIflValue, iflState.sortKey, iflState.sortDir, IFL_SORT_FIELDS)
+    const allFiltered = iflState.searchCol === 'all'
+      ? allSorted
+      : searchRows(allSorted, IFL_COLUMNS, iflState.search, iflState.searchCol)
+    exportCSV(IFL_CSV_FILE, IFL_CSV_HEADERS, allFiltered.map(iflCsvRow))
   }
 
   if (error) return (
@@ -212,12 +236,11 @@ export default function IntraFlow() {
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleExport} disabled={data.length === 0}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
-            >
-              <Download className="w-4 h-4" /> Export CSV
-            </button>
+            <ExportDropdown
+              onExportView={handleExportView}
+              onExportAll={handleExportAll}
+              disabled={data.length === 0}
+            />
             <button
               onClick={openAdd}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  TrendingDown, Download, Pencil, Trash2,
+  TrendingDown, Pencil, Trash2,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
@@ -23,6 +23,9 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
+import { supabase }                from '../lib/supabase'
+import { normalizeNarration }      from '../utils/normalizeNarration'
+import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useCategories }           from '../hooks/useCategories'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -211,17 +214,43 @@ export default function Outflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const handleExport = () => {
-    exportCSV(
-      `outflows-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Remarks'],
-      data.map(r => [
-        r.date, r.transaction_id, r.display_description, r.bank_description,
-        r.amount_disbursed, r.amount_refunded, r.transfer_charge,
-        Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge),
-        r.stage_code_1, r.remarks,
-      ]),
-    )
+  const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Remarks']
+  const outflowCsvRow = (r: OutflowTransaction) => [
+    r.date, r.transaction_id, r.display_description, r.bank_description,
+    r.amount_disbursed, r.amount_refunded, r.transfer_charge,
+    Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge),
+    r.stage_code_1, r.remarks,
+  ]
+  const OUT_CSV_FILE = `outflows-${new Date().toISOString().slice(0, 10)}.csv`
+
+  const handleExportView = () => {
+    exportCSV(OUT_CSV_FILE, OUT_CSV_HEADERS, displayed.map(outflowCsvRow))
+  }
+
+  const handleExportAll = async () => {
+    if (isSearching) {
+      exportCSV(OUT_CSV_FILE, OUT_CSV_HEADERS, allMatching.map(outflowCsvRow))
+      return
+    }
+    let query = supabase
+      .from('outflow_transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .limit(10000)
+    if (dateFrom)   query = query.gte('date', dateFrom)
+    if (dateTo)     query = query.lte('date', dateTo)
+    if (stageCode)  query = query.eq('stage_code_1', stageCode)
+    const { data: rows } = await query
+    if (!rows) return
+    const allRows = (rows as Omit<OutflowTransaction, 'display_description'>[]).map(r => ({
+      ...r,
+      display_description: normalizeNarration(r.description ?? r.bank_description),
+    })) as OutflowTransaction[]
+    const adv = outState.advancedSort
+    const allSorted = adv.length > 0
+      ? multiSortRows(allRows, getOutValue, adv, OUT_SORT_FIELDS)
+      : sortRows(allRows, getOutValue, outState.sortKey, outState.sortDir, OUT_SORT_FIELDS)
+    exportCSV(OUT_CSV_FILE, OUT_CSV_HEADERS, allSorted.map(outflowCsvRow))
   }
 
   if (error) return (
@@ -248,12 +277,11 @@ export default function Outflows() {
             <p className="text-sm text-gray-500 mt-0.5">All disbursements and payments</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleExport} disabled={data.length === 0}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
-            >
-              <Download className="w-4 h-4" /> Export CSV
-            </button>
+            <ExportDropdown
+              onExportView={handleExportView}
+              onExportAll={handleExportAll}
+              disabled={data.length === 0}
+            />
           </div>
         </div>
 
