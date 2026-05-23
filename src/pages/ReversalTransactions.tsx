@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Undo2, LayoutGrid, LayoutList, AlertCircle, RefreshCw } from 'lucide-react'
+import { useState, useEffect, Fragment } from 'react'
+import { Undo2, LayoutGrid, LayoutList, AlertCircle, RefreshCw, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }            from '../components/ui/Card'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
@@ -8,6 +8,7 @@ import { supabase }        from '../lib/supabase'
 import { normalizeNarration } from '../utils/normalizeNarration'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 
 interface TxnRow {
   id:                      string
@@ -31,6 +32,17 @@ export default function ReversalTransactions() {
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  function reversalDetailItems(row: TxnRow): DetailItem[] {
+    return [
+      { label: 'Original Txn ID', value: row.original_transaction_id, mono: true, breakAll: true },
+      { label: 'Bank',            value: row.bank_name },
+      { label: 'Remarks',         value: row.remarks, breakAll: true },
+      { label: 'Raw Description', value: row.description, breakAll: true },
+      { label: 'Direction',       value: row.direction === 'in' ? 'Inflow' : 'Outflow' },
+    ]
+  }
 
   const load = async () => {
     setLoading(true)
@@ -218,6 +230,7 @@ export default function ReversalTransactions() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th className="w-8" />
                   {['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -226,36 +239,51 @@ export default function ReversalTransactions() {
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={i}>{Array.from({ length: 7 }).map((_, j) => (
+                    <tr key={i}>{Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>
                     ))}</tr>
                   ))
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={7} className="py-16 text-center">
+                  <tr><td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-400">
                       <Undo2 className="w-10 h-10 text-gray-200" />
                       <p className="text-sm">No reversal transactions found.</p>
                     </div>
                   </td></tr>
-                ) : filtered.map(row => (
-                  <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {row.direction === 'in' ? 'Inflow' : 'Outflow'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]">
-                      <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
-                      <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                    </td>
-                  </tr>
-                ))}
+                ) : filtered.map(row => {
+                  const isExpanded = expandedId === row.id
+                  return (
+                    <Fragment key={row.id}>
+                      <tr className="hover:bg-gray-50 transition-colors">
+                        <td className="w-8 pl-2">
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                            className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                          >
+                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {row.direction === 'in' ? 'Inflow' : 'Outflow'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]">
+                          <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
+                          <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                        </td>
+                      </tr>
+                      {isExpanded && <RowDetailPanel items={reversalDetailItems(row)} colSpan={8} />}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

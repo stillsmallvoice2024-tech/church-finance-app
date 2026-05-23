@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Landmark, Plus, Pencil, Trash2, ChevronDown, ChevronUp,
-  AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw, ChevronRight,
 } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
@@ -28,6 +28,7 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { normalizeNarration } from '../utils/normalizeNarration'
 import { filterInputCls } from '../components/ui/FormField'
 import { EmptyState } from '../components/ui/EmptyState'
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -207,6 +208,7 @@ export default function BankDeposits() {
   const [showRecon,    setShowRecon]    = useState(false)
   const [reconData,    setReconData]    = useState<{ inflowTaggedTotal: number; outflowTaggedTotal: number } | null>(null)
   const [reconLoading, setReconLoading] = useState(false)
+  const [expandedId,   setExpandedId]   = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -350,7 +352,14 @@ export default function BankDeposits() {
   const openAdd  = () => { setEditRecord(null); setShowModal(true) }
   const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
 
-  const colCount = admin ? 8 : 7
+  const colCount = admin ? 9 : 8
+
+  const depositDetailItems = (row: DepositRow): DetailItem[] => [
+    { label: 'Transaction Ref',  value: row.transaction_ref, mono: true, breakAll: true },
+    { label: 'Remarks',          value: row.remarks,         breakAll: true },
+    { label: 'Source',           value: row.source === 'bank_deposits' ? 'Bank Deposit Record' : row.source === 'inflow' ? 'Inflow Transaction' : 'Outflow Transaction' },
+    { label: 'Raw Description',  value: row.description,     breakAll: true },
+  ]
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -550,6 +559,7 @@ export default function BankDeposits() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th className="w-8" />
                   <SortableHeader field={BD_SORT_FIELDS[0]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={BD_SORT_FIELDS[2]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={BD_SORT_FIELDS[1]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
@@ -574,8 +584,21 @@ export default function BankDeposits() {
                       <p className="text-sm">No bank deposits found.</p>
                     </div>
                   </td></tr>
-                ) : pagedRows.map(row => (
+                ) : pagedRows.flatMap(row => {
+                  const isExpanded = expandedId === `${row.source}-${row.id}`
+                  return [
                   <tr key={`${row.source}-${row.id}`} className="hover:bg-gray-50 transition-colors">
+                    <td className="w-8 px-1 py-3">
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : `${row.source}-${row.id}`)}
+                        className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                        title={isExpanded ? 'Collapse' : 'Expand details'}
+                      >
+                        {isExpanded
+                          ? <ChevronDown className="w-3.5 h-3.5" />
+                          : <ChevronRight className="w-3.5 h-3.5" />}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
@@ -603,8 +626,10 @@ export default function BankDeposits() {
                         )}
                       </td>
                     )}
-                  </tr>
-                ))}
+                  </tr>,
+                  isExpanded && <RowDetailPanel key={`${row.source}-${row.id}-detail`} items={depositDetailItems(row)} colSpan={colCount} />,
+                  ]
+                }).filter(Boolean)}
               </tbody>
             </table>
           </div>

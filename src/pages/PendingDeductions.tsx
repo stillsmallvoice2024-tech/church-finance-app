@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useYearRange } from '../hooks/useYearRange'
 import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal, X } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
@@ -16,6 +16,8 @@ import { useUpdateTransaction }     from '../hooks/useMutations'
 import { useToastStore }            from '../store/toastStore'
 import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
+import { RowDetailPanel } from '../components/ui/RowDetailPanel'
+import { outflowDetailItems } from '../utils/rowDetailItems'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -131,6 +133,8 @@ export default function PendingDeductions() {
       setResolvingId(null)
     }
   }
+
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const openEdit = (r: OutflowTransaction) => { setEditRecord(r); setModalOpen(true) }
 
@@ -261,6 +265,8 @@ export default function PendingDeductions() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
+                  {/* Expand */}
+                  <th className="w-8" />
                   {/* Header checkbox */}
                   <th className="w-10 pl-4 pr-2 py-3">
                     <input
@@ -288,7 +294,7 @@ export default function PendingDeductions() {
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 10 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -297,7 +303,7 @@ export default function PendingDeductions() {
                   ))
                 ) : displayed.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-20 text-center">
+                    <td colSpan={10} className="py-20 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <CheckCircle2 className="w-10 h-10 text-green-300" />
                         <p className="text-sm font-medium text-gray-600">No pending deductions</p>
@@ -310,59 +316,72 @@ export default function PendingDeductions() {
                     const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
                     const isResolving = resolvingId === row.id
                     const isSelected  = selectedIds.has(row.id)
+                    const isExpanded  = expandedId === row.id
                     return (
-                      <tr key={row.id} className={`transition-colors ${isSelected ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-amber-50/30'}`}>
-                        <td className="w-10 pl-4 pr-2 py-3">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            aria-label="Select row"
-                            className="rounded border-gray-300 text-primary focus:ring-primary/30"
-                            onChange={e => {
-                              setSelectedIds(prev => {
-                                const next = new Set(prev)
-                                e.target.checked ? next.add(row.id) : next.delete(row.id)
-                                return next
-                              })
-                            }}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate" title={row.display_description || row.description || undefined}>
-                          {row.display_description || row.description || '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                          {Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <CanWrite>
-                              <button
-                                onClick={() => openEdit(row)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                                title="Edit"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleResolve(row)}
-                                disabled={isResolving}
-                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
-                                title="Mark as resolved"
-                              >
-                                {isResolving
-                                  ? <span className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
-                                  : <CheckCircle2 className="w-3.5 h-3.5" />}
-                                Resolve
-                              </button>
-                            </CanWrite>
-                          </div>
-                        </td>
-                      </tr>
+                      <Fragment key={row.id}>
+                        <tr className={`transition-colors ${isSelected ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-amber-50/30'}`}>
+                          <td className="w-8 pl-2">
+                            <button
+                              onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                              className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                            >
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                          </td>
+                          <td className="w-10 pl-4 pr-2 py-3">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              aria-label="Select row"
+                              className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                              onChange={e => {
+                                setSelectedIds(prev => {
+                                  const next = new Set(prev)
+                                  e.target.checked ? next.add(row.id) : next.delete(row.id)
+                                  return next
+                                })
+                              }}
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px] truncate" title={row.display_description || row.description || undefined}>
+                            {row.display_description || row.description || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                            {Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <CanWrite>
+                                <button
+                                  onClick={() => openEdit(row)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                  title="Edit"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleResolve(row)}
+                                  disabled={isResolving}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+                                  title="Mark as resolved"
+                                >
+                                  {isResolving
+                                    ? <span className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                                    : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                  Resolve
+                                </button>
+                              </CanWrite>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && <RowDetailPanel items={outflowDetailItems(row)} colSpan={10} />}
+                      </Fragment>
                     )
                   })
                 )}

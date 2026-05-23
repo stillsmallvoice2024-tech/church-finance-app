@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { BookOpen, AlertCircle, RefreshCw, Pencil } from 'lucide-react'
+import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { normalizeNarration } from '../utils/normalizeNarration'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
@@ -16,6 +16,8 @@ import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
+import { RowDetailPanel } from '../components/ui/RowDetailPanel'
+import { inflowDetailItems, outflowDetailItems } from '../utils/rowDetailItems'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
@@ -78,6 +80,7 @@ export default function BankLedger() {
   const [dateTo,       setDateTo]       = useState('')
   const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
   const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
+  const [expandedId,   setExpandedId]   = useState<string | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   const load = useCallback(async (bankName: string, openingBalance: number = 0) => {
@@ -408,6 +411,7 @@ export default function BankLedger() {
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="w-8" />
                     <SortableHeader field={BL_SORT_FIELDS[0]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                     <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">Description</th>
                     <SortableHeader field={BL_SORT_FIELDS[1]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
@@ -425,13 +429,32 @@ export default function BankLedger() {
                       ))}</tr>
                     ))
                   ) : sortedRows.length === 0 ? (
-                    <tr><td colSpan={6}>
+                    <tr><td colSpan={7 + (canWrite() ? 1 : 0)}>
                       <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
                     </td></tr>
-                  ) : pagedRows.map(row => {
+                  ) : pagedRows.flatMap(row => {
                     const isBF = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
-                    return (
+                    const isExpanded = expandedId === row.id
+                    const detailItems = !isBF
+                      ? (row.inflowData  ? inflowDetailItems(row.inflowData)
+                        : row.outflowData ? outflowDetailItems(row.outflowData)
+                        : [])
+                      : []
+                    return [
                     <tr key={row.id} className={`transition-colors ${isBF ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
+                      <td className="w-8 px-1 py-3">
+                        {!isBF && (
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                            className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                            title={isExpanded ? 'Collapse' : 'Expand details'}
+                          >
+                            {isExpanded
+                              ? <ChevronDown className="w-3.5 h-3.5" />
+                              : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{isBF ? '—' : formatDate(row.date)}</td>
                       <td className="px-4 py-3 text-sm max-w-[280px]">
                         <div className="flex items-start gap-1.5 min-w-0">
@@ -468,8 +491,10 @@ export default function BankLedger() {
                           )}
                         </td>
                       )}
-                    </tr>
-                  )})}
+                    </tr>,
+                    isExpanded && <RowDetailPanel key={`${row.id}-detail`} items={detailItems} colSpan={7 + (canWrite() ? 1 : 0)} />,
+                    ]
+                  }).filter(Boolean)}
 
                 </tbody>
               </table>

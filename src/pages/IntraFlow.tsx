@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   ArrowLeftRight, Plus, Download, Pencil, Trash2,
-  AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { DataControlsBar }         from '../components/ui/DataControlsBar'
@@ -25,6 +25,7 @@ import { useYearRange }   from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls } from '../components/ui/FormField'
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -132,6 +133,17 @@ export default function IntraFlow() {
   const [modalOpen,    setModalOpen]    = useState(false)
   const [deleteId,     setDeleteId]     = useState<string | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  function intraFlowDetailItems(row: IntraFlowRow): DetailItem[] {
+    return [
+      { label: 'Transaction Ref',  value: row.transaction_ref, mono: true, breakAll: true },
+      { label: 'Description',      value: row.description, breakAll: true },
+      { label: 'Remark',           value: row.remark, breakAll: true },
+      { label: 'From Stage 2',     value: row.account_from_stage2 },
+      { label: 'To Stage 2',       value: row.account_to_stage2 },
+    ]
+  }
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
@@ -345,6 +357,7 @@ export default function IntraFlow() {
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
+                    <th className="w-8" />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[0]}
                       activeSortKey={iflState.sortKey}
@@ -385,7 +398,7 @@ export default function IntraFlow() {
                   {loading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>
-                        {Array.from({ length: 8 }).map((_, j) => (
+                        {Array.from({ length: 9 }).map((_, j) => (
                           <td key={j} className="px-4 py-3">
                             <div className="h-4 bg-gray-200 rounded animate-pulse" />
                           </td>
@@ -394,7 +407,7 @@ export default function IntraFlow() {
                     ))
                   ) : displayed.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center">
+                      <td colSpan={9} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-gray-400">
                           <ArrowLeftRight className="w-10 h-10 text-gray-200" />
                           <p className="text-sm">No internal transfers match your filters.</p>
@@ -402,33 +415,48 @@ export default function IntraFlow() {
                       </td>
                     </tr>
                   ) : (
-                    displayed.map(row => (
-                      <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap text-right">{formatCurrency(Number(row.total_amount))}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
-                          <DescriptionCell id={`rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            {canWrite() && (
-                              <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                                <Pencil className="w-4 h-4" />
+                    displayed.map(row => {
+                      const isExpanded = expandedId === row.id
+                      return (
+                        <Fragment key={row.id}>
+                          <tr className="hover:bg-gray-50 transition-colors">
+                            <td className="w-8 pl-2">
+                              <button
+                                onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                                className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                              >
+                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                               </button>
-                            )}
-                            {canDelete() && (
-                              <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap text-right">{formatCurrency(Number(row.total_amount))}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_from_stage1 ?? '—'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.account_to_stage1 ?? '—'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
+                              <DescriptionCell id={`rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1">
+                                {canWrite() && (
+                                  <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {canDelete() && (
+                                  <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                          {isExpanded && <RowDetailPanel items={intraFlowDetailItems(row)} colSpan={9} />}
+                        </Fragment>
+                      )
+                    })
                   )}
                 </tbody>
               </table>

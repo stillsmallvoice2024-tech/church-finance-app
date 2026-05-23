@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   ArrowRightLeft, Plus, Pencil, Trash2,
   LayoutGrid, LayoutList, AlertCircle, RefreshCw, X,
+  ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -11,6 +12,7 @@ import { Modal }        from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
+import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { normalizeNarration } from '../utils/normalizeNarration'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useBanks }     from '../hooks/useBanks'
@@ -194,6 +196,15 @@ export default function IntraBankTransfers() {
   const [editRecord,  setEditRecord]  = useState<TransferRow | null>(null)
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
   const [deleting,    setDeleting]    = useState(false)
+  const [expandedId,  setExpandedId]  = useState<string | null>(null)
+
+  const transferDetailItems = (row: TransferRow): DetailItem[] => [
+    { label: 'Transaction Ref',  value: row.transaction_ref, mono: true, breakAll: true },
+    { label: 'Remarks',          value: row.remarks,         breakAll: true },
+    { label: 'From Bank',        value: row.from_bank_name },
+    { label: 'To Bank',          value: row.to_bank_name },
+    { label: 'Raw Description',  value: row.description,     breakAll: true },
+  ]
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -377,6 +388,7 @@ export default function IntraBankTransfers() {
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
+                    <th className="w-8" />
                     {['Date', 'From Bank', 'To Bank', 'Amount (₦)', 'Description', 'Ref', 'Remarks', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
@@ -396,8 +408,21 @@ export default function IntraBankTransfers() {
                         <p className="text-sm">No intrabank transfers found.</p>
                       </div>
                     </td></tr>
-                  ) : filtered.map(row => (
+                  ) : filtered.flatMap(row => {
+                    const isExpanded = expandedId === row.id
+                    return [
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="w-8 px-1 py-3">
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                          title={isExpanded ? 'Collapse' : 'Expand details'}
+                        >
+                          {isExpanded
+                            ? <ChevronDown className="w-3.5 h-3.5" />
+                            : <ChevronRight className="w-3.5 h-3.5" />}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.from_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.to_bank_name ?? '—'}</td>
@@ -415,8 +440,10 @@ export default function IntraBankTransfers() {
                           {canDelete() && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>}
                         </div>
                       </td>
-                    </tr>
-                  ))}
+                    </tr>,
+                    isExpanded && <RowDetailPanel key={`${row.id}-detail`} items={transferDetailItems(row)} colSpan={9} />,
+                    ]
+                  }).filter(Boolean)}
                 </tbody>
               </table>
             </div>

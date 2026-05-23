@@ -30,6 +30,8 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
+import { RowDetailPanel } from '../components/ui/RowDetailPanel'
+import { inflowDetailItems } from '../utils/rowDetailItems'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -456,10 +458,9 @@ export default function Inflows() {
                     const rows = [
                       <tr
                         key={row.id}
-                        className={`hover:bg-gray-50 transition-colors cursor-pointer${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
-                        onClick={() => row.remark && setExpandedId(expanded ? null : row.id)}
+                        className={`hover:bg-gray-50 transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
                       >
-                        <td className="pl-4 pr-2 py-3 w-10" onClick={e => e.stopPropagation()}>
+                        <td className="pl-4 pr-2 py-3 w-10">
                           <input
                             type="checkbox"
                             className="w-4 h-4 rounded border-gray-300"
@@ -472,12 +473,16 @@ export default function Inflows() {
                             }}
                           />
                         </td>
-                        <td className="pl-3 pr-0 py-3 text-gray-400 w-8">
-                          {row.remark
-                            ? (expanded
-                              ? <ChevronDown className="w-4 h-4" />
-                              : <ChevronRight className="w-4 h-4" />)
-                            : null}
+                        <td className="w-8 px-1 py-3">
+                          <button
+                            onClick={() => setExpandedId(expanded ? null : row.id)}
+                            className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                            title={expanded ? 'Collapse' : 'Expand details'}
+                          >
+                            {expanded
+                              ? <ChevronDown className="w-3.5 h-3.5" />
+                              : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
@@ -527,14 +532,9 @@ export default function Inflows() {
                         </td>
                       </tr>,
                     ]
-                    if (expanded && row.remark) {
+                    if (expanded) {
                       rows.push(
-                        <tr key={`${row.id}-exp`} className="bg-blue-50/40">
-                          <td colSpan={10} className="px-8 py-3">
-                            <p className="text-xs font-semibold text-gray-500 mb-0.5">Remark</p>
-                            <p className="text-sm text-gray-700">{row.remark}</p>
-                          </td>
-                        </tr>,
+                        <RowDetailPanel key={`${row.id}-detail`} items={inflowDetailItems(row)} colSpan={10} />,
                       )
                     }
                     return rows
