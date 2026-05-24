@@ -298,10 +298,13 @@ function MetricBlockEditor({
   onChange: (cfg: Record<string, unknown>) => void
   categoryNames: string[]
 }) {
-  const cfg = block.config_json as Record<string, string>
-  const isNet = cfg.fn === 'NET'
+  const cfg       = block.config_json as Record<string, string>
+  const isNet     = cfg.fn === 'NET'
+  const isInflows = cfg.fn === 'INFLOWS'
+
   return (
     <div className="grid grid-cols-2 gap-3">
+      {/* Row 1: Metric + Category/Income Type */}
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Metric</label>
         <select
@@ -317,7 +320,7 @@ function MetricBlockEditor({
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">
-          Category{isNet ? ' (not needed)' : ' *'}
+          {isInflows ? 'Income Type *' : isNet ? 'Category (not needed)' : 'Category *'}
         </label>
         <select
           value={cfg.category ?? ''}
@@ -325,13 +328,15 @@ function MetricBlockEditor({
           disabled={isNet}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-50 disabled:text-gray-400"
         >
-          <option value="">— select category —</option>
+          <option value="">— select {isInflows ? 'income type' : 'category'} —</option>
           {categoryNames.map(n => (
             <option key={n} value={n}>{n}</option>
           ))}
         </select>
       </div>
-      {!isNet && (
+
+      {/* Budget Portion: Balance + Outflows only */}
+      {!isNet && !isInflows && (
         <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1">Budget Portion</label>
           <select
@@ -345,24 +350,46 @@ function MetricBlockEditor({
           </select>
         </div>
       )}
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
-        <input
-          type="date"
-          value={cfg.dateFrom ?? ''}
-          onChange={e => onChange({ ...cfg, dateFrom: e.target.value })}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
-        <input
-          type="date"
-          value={cfg.dateTo ?? ''}
-          onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
+
+      {/* Inflows: single Recorded Date */}
+      {isInflows && (
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Recorded Date (optional)</label>
+          <input
+            type="date"
+            value={cfg.dateFrom ?? ''}
+            onChange={e => onChange({ ...cfg, dateFrom: e.target.value, dateTo: e.target.value })}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[10px] text-gray-400 mt-1">Filter to a specific recording date — leave blank for all dates</p>
+        </div>
+      )}
+
+      {/* Date range: Balance, Outflows, Net */}
+      {!isInflows && (
+        <>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
+            <input
+              type="date"
+              value={cfg.dateFrom ?? ''}
+              onChange={e => onChange({ ...cfg, dateFrom: e.target.value })}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
+            <input
+              type="date"
+              value={cfg.dateTo ?? ''}
+              onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+        </>
+      )}
+
+      {/* Display Currency */}
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
         <select
@@ -373,6 +400,7 @@ function MetricBlockEditor({
           {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
+
       <div className="col-span-2">
         <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
         <input
@@ -731,17 +759,32 @@ function BlockCard({
   onMoveUp: () => void
   onMoveDown: () => void
 }) {
-  const meta = BLOCK_META[block.block_type]
-  const Icon = meta.icon
+  const meta    = BLOCK_META[block.block_type]
+  const Icon    = meta.icon
+  const [open, setOpen] = useState(true)
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (open && bodyRef.current) {
+      setTimeout(() => {
+        bodyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 60)
+    }
+  }, [open])
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+      {/* Header — click anywhere to collapse/expand */}
+      <div
+        role="button"
+        onClick={() => setOpen(p => !p)}
+        className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 cursor-pointer select-none"
+      >
         <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
           <Icon className="w-3.5 h-3.5" />{meta.label}
         </div>
         <span className="text-[10px] text-gray-300 font-mono">#{index + 1}</span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={onMoveUp} disabled={index === 0}
             className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
@@ -752,13 +795,16 @@ function BlockCard({
             className="p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
             title="Delete block"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </div>
-      <div className="p-4">
-        {block.block_type === 'text'    && <TextBlockEditor    block={block} onChange={onChange} categoryNames={categoryNames} />}
-        {block.block_type === 'metric'  && <MetricBlockEditor  block={block} onChange={onChange} categoryNames={categoryNames} />}
-        {block.block_type === 'table'   && <TableBlockEditor   block={block} onChange={onChange} categoryNames={categoryNames} />}
-        {block.block_type === 'formula' && <FormulaBlockEditor block={block} onChange={onChange} categoryNames={categoryNames} />}
-      </div>
+      {open && (
+        <div className="p-4" ref={bodyRef}>
+          {block.block_type === 'text'    && <TextBlockEditor    block={block} onChange={onChange} categoryNames={categoryNames} />}
+          {block.block_type === 'metric'  && <MetricBlockEditor  block={block} onChange={onChange} categoryNames={categoryNames} />}
+          {block.block_type === 'table'   && <TableBlockEditor   block={block} onChange={onChange} categoryNames={categoryNames} />}
+          {block.block_type === 'formula' && <FormulaBlockEditor block={block} onChange={onChange} categoryNames={categoryNames} />}
+        </div>
+      )}
     </div>
   )
 }
