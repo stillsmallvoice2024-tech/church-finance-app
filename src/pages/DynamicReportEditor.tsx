@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Save, Trash2, ChevronUp, ChevronDown,
   Type, BarChart2, Table2, AlertCircle, Check,
-  Eye, Pencil, Plus, X, RefreshCw,
+  Eye, Pencil, Plus, X, RefreshCw, Sigma,
 } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import {
@@ -28,7 +28,7 @@ import {
   type TableRow,
   type QueryResult,
 } from '../utils/reportQueryEngine'
-import type { DynamicReport, DynamicReportBlockType, TextBlockConfig, MetricBlockConfig, TableBlockConfig } from '../types'
+import type { DynamicReport, DynamicReportBlockType, TextBlockConfig, MetricBlockConfig, TableBlockConfig, FormulaBlockConfig, FormulaTerm } from '../types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -506,12 +506,170 @@ function TableBlockEditor({
   )
 }
 
+// ── Formula block editor ───────────────────────────────────────────────────────
+
+function FormulaBlockEditor({
+  block,
+  onChange,
+  categoryNames,
+}: {
+  block: EditorBlock
+  onChange: (cfg: Record<string, unknown>) => void
+  categoryNames: string[]
+}) {
+  const cfg = block.config_json as Partial<FormulaBlockConfig> & Record<string, unknown>
+  const terms: FormulaTerm[] = Array.isArray(cfg.terms) ? cfg.terms : []
+
+  const updateTerm = (idx: number, patch: Partial<FormulaTerm>) => {
+    const next = terms.map((t, i) => (i === idx ? { ...t, ...patch } : t))
+    onChange({ ...cfg, terms: next })
+  }
+
+  const addTerm = () => {
+    const newTerm: FormulaTerm = {
+      sign:     '+',
+      fn:       'BALANCE',
+      category: categoryNames[0] ?? '',
+      portion:  'all',
+    }
+    onChange({ ...cfg, terms: [...terms, newTerm] })
+  }
+
+  const removeTerm = (idx: number) => {
+    onChange({ ...cfg, terms: terms.filter((_, i) => i !== idx) })
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Terms list */}
+      <div className="space-y-2">
+        {terms.length === 0 && (
+          <p className="text-xs text-gray-400 italic py-2 text-center">
+            No terms yet — add at least two to compute a result.
+          </p>
+        )}
+        {terms.map((term, idx) => (
+          <div key={idx} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+            {/* Sign toggle */}
+            <button
+              type="button"
+              onClick={() => updateTerm(idx, { sign: term.sign === '+' ? '-' : '+' })}
+              className={`w-7 h-7 rounded-lg text-sm font-bold shrink-0 flex items-center justify-center transition-colors border ${
+                term.sign === '+'
+                  ? 'bg-success/10 text-success border-success/30 hover:bg-success/20'
+                  : 'bg-danger/10 text-danger border-danger/30 hover:bg-danger/20'
+              }`}
+              title="Click to toggle +/−"
+            >
+              {term.sign}
+            </button>
+
+            {/* Metric fn */}
+            <select
+              value={term.fn}
+              onChange={e => updateTerm(idx, { fn: e.target.value as FormulaTerm['fn'], category: term.fn === 'NET' ? (categoryNames[0] ?? '') : term.category })}
+              className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 w-28"
+            >
+              <option value="BALANCE">Balance</option>
+              <option value="INFLOWS">Inflows</option>
+              <option value="OUTFLOWS">Outflows</option>
+              <option value="NET">Net Movement</option>
+            </select>
+
+            {/* Category */}
+            {term.fn !== 'NET' && (
+              <select
+                value={term.category ?? ''}
+                onChange={e => updateTerm(idx, { category: e.target.value })}
+                className="flex-1 min-w-0 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">— category —</option>
+                {categoryNames.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            )}
+            {term.fn === 'NET' && (
+              <span className="flex-1 text-xs text-gray-400 italic px-2">all categories</span>
+            )}
+
+            {/* Portion */}
+            {term.fn !== 'NET' && (
+              <select
+                value={term.portion ?? 'all'}
+                onChange={e => updateTerm(idx, { portion: e.target.value })}
+                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 w-36"
+              >
+                {PORTION_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Remove */}
+            <button
+              type="button"
+              onClick={() => removeTerm(idx)}
+              className="p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors shrink-0"
+              title="Remove term"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={addTerm}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+      >
+        <Plus className="w-3 h-3" />
+        Add term
+      </button>
+
+      {/* Date range + label */}
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Date From (all terms)</label>
+          <input
+            type="date"
+            value={(cfg.dateFrom as string) ?? ''}
+            onChange={e => onChange({ ...cfg, dateFrom: e.target.value })}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Date To (all terms)</label>
+          <input
+            type="date"
+            value={(cfg.dateTo as string) ?? ''}
+            onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
+          <input
+            type="text"
+            value={(cfg.label as string) ?? ''}
+            onChange={e => onChange({ ...cfg, label: e.target.value })}
+            placeholder="e.g. Net Tithes + Offering"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Edit mode block card ───────────────────────────────────────────────────────
 
 const BLOCK_META: Record<DynamicReportBlockType, { icon: React.ElementType; label: string }> = {
-  text:   { icon: Type,      label: 'Text'   },
-  metric: { icon: BarChart2, label: 'Metric' },
-  table:  { icon: Table2,    label: 'Table'  },
+  text:    { icon: Type,      label: 'Text'    },
+  metric:  { icon: BarChart2, label: 'Metric'  },
+  table:   { icon: Table2,    label: 'Table'   },
+  formula: { icon: Sigma,     label: 'Formula' },
 }
 
 function BlockCard({
@@ -549,9 +707,10 @@ function BlockCard({
         </div>
       </div>
       <div className="p-4">
-        {block.block_type === 'text'   && <TextBlockEditor   block={block} onChange={onChange} categoryNames={categoryNames} />}
-        {block.block_type === 'metric' && <MetricBlockEditor block={block} onChange={onChange} categoryNames={categoryNames} />}
-        {block.block_type === 'table'  && <TableBlockEditor  block={block} onChange={onChange} categoryNames={categoryNames} />}
+        {block.block_type === 'text'    && <TextBlockEditor    block={block} onChange={onChange} categoryNames={categoryNames} />}
+        {block.block_type === 'metric'  && <MetricBlockEditor  block={block} onChange={onChange} categoryNames={categoryNames} />}
+        {block.block_type === 'table'   && <TableBlockEditor   block={block} onChange={onChange} categoryNames={categoryNames} />}
+        {block.block_type === 'formula' && <FormulaBlockEditor block={block} onChange={onChange} categoryNames={categoryNames} />}
       </div>
     </div>
   )
@@ -781,6 +940,112 @@ function TableBlockPreview({
   )
 }
 
+// ── Formula block preview ──────────────────────────────────────────────────────
+
+function FormulaBlockPreview({
+  block,
+  resolved,
+  resolving,
+}: {
+  block: EditorBlock
+  resolved: Map<string, QueryResult>
+  resolving: boolean
+}) {
+  const cfg      = block.config_json as Partial<FormulaBlockConfig>
+  const terms    = cfg.terms ?? []
+  const dateFrom = cfg.dateFrom
+  const dateTo   = cfg.dateTo
+  const label    = cfg.label || 'Formula Result'
+  const dateLabel = dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : null
+
+  if (terms.length === 0) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
+        <p className="text-sm text-gray-400 mt-2 italic">No terms configured — edit this block to add metrics.</p>
+      </div>
+    )
+  }
+
+  // Compute total from resolved values
+  let total = 0
+  let hasError = false
+
+  const termRows = terms.map(term => {
+    const portionArg = term.portion && term.portion !== 'all'
+      ? term.portion as BudgetPortion
+      : undefined
+    const key    = buildTokenString(term.fn as TokenFn, term.category ?? '', portionArg, dateFrom, dateTo)
+    const result = resolved.get(key)
+    if (result && !result.error) {
+      total += term.sign === '-' ? -result.value : result.value
+    }
+    if (result?.error) hasError = true
+
+    // Build a readable description for this term
+    const fnLabel  = FN_LABELS[term.fn as TokenFn] ?? term.fn
+    const catPart  = term.fn !== 'NET' && term.category ? ` · ${term.category}` : ''
+    const portPart = portionArg ? (PORTION_SHORT[portionArg] ?? '') : ''
+    const desc     = `${fnLabel}${catPart}${portPart}`
+
+    return { term, key, result, desc }
+  })
+
+  const amtCls = (v: number) =>
+    v < 0 ? 'text-danger font-mono font-semibold' : 'text-success font-mono font-semibold'
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
+          {dateLabel && <p className="text-[10px] text-gray-400 mt-0.5 font-mono">{dateLabel}</p>}
+        </div>
+        <Sigma className="w-4 h-4 text-gray-300 shrink-0 mt-0.5" />
+      </div>
+
+      <div className="px-5 py-3 space-y-1.5">
+        {/* Term breakdown */}
+        {termRows.map((row, i) => (
+          <div key={i} className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`text-xs font-bold w-4 shrink-0 ${row.term.sign === '+' ? 'text-success' : 'text-danger'}`}>
+                {row.term.sign}
+              </span>
+              <span className="text-gray-600 truncate text-xs">{row.desc}</span>
+            </div>
+            {resolving ? (
+              <span className="inline-block h-4 w-24 bg-gray-100 rounded animate-pulse shrink-0" />
+            ) : row.result?.error ? (
+              <span className="text-danger text-xs font-medium bg-red-50 px-1.5 py-0.5 rounded border border-red-200 shrink-0" title={row.result.error}>
+                [error]
+              </span>
+            ) : (
+              <span className={`shrink-0 text-sm ${amtCls(row.result?.value ?? 0)}`}>
+                {fmtAmount(row.result?.value ?? 0)}
+              </span>
+            )}
+          </div>
+        ))}
+
+        {/* Divider + total */}
+        <div className="border-t border-gray-200 pt-2 mt-1 flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</span>
+          {resolving ? (
+            <span className="inline-block h-5 w-28 bg-gray-100 rounded animate-pulse" />
+          ) : hasError ? (
+            <span className="text-danger text-xs font-medium">Partial result</span>
+          ) : (
+            <span className={`text-xl font-bold tabular-nums ${amtCls(total)}`}>
+              {fmtAmount(total)}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Token collection helpers ───────────────────────────────────────────────────
 
 function collectTokensFromBlocks(blocks: EditorBlock[]): ParsedToken[] {
@@ -808,6 +1073,28 @@ function collectTokensFromBlocks(blocks: EditorBlock[]): ParsedToken[] {
         dateFrom: cfg.dateFrom || undefined,
         dateTo:   cfg.dateTo   || undefined,
       })
+    } else if (b.block_type === 'formula') {
+      const cfg = b.config_json as Partial<FormulaBlockConfig>
+      for (const term of cfg.terms ?? []) {
+        if (term.fn !== 'NET' && !term.category) continue
+        const portionArg = term.portion && term.portion !== 'all'
+          ? term.portion as BudgetPortion
+          : undefined
+        tokens.push({
+          raw:      buildTokenString(
+            term.fn as TokenFn,
+            term.category ?? '',
+            portionArg,
+            cfg.dateFrom || undefined,
+            cfg.dateTo   || undefined,
+          ),
+          fn:       term.fn as TokenFn,
+          category: term.category ?? '',
+          portion:  portionArg,
+          dateFrom: cfg.dateFrom || undefined,
+          dateTo:   cfg.dateTo   || undefined,
+        })
+      }
     }
   }
   return tokens
@@ -892,9 +1179,10 @@ export default function DynamicReportEditor() {
 
   const addBlock = useCallback((type: DynamicReportBlockType) => {
     const defaults: Record<DynamicReportBlockType, Record<string, unknown>> = {
-      text:   { text: '' },
-      metric: { fn: 'BALANCE', category: '', dateFrom: '', dateTo: '', label: '' },
-      table:  { categories: [], dateFrom: '', dateTo: '', label: '' },
+      text:    { text: '' },
+      metric:  { fn: 'BALANCE', category: '', portion: 'all', dateFrom: '', dateTo: '', label: '' },
+      table:   { categories: [], portion: 'all', dateFrom: '', dateTo: '', label: '' },
+      formula: { terms: [], dateFrom: '', dateTo: '', label: '' },
     }
     setBlocks(prev => [...prev, { key: makeKey(), block_type: type, config_json: defaults[type] }])
     setIsDirty(true)
@@ -1058,6 +1346,10 @@ export default function DynamicReportEditor() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               <Table2 className="w-3.5 h-3.5" />Table
             </button>
+            <button onClick={() => addBlock('formula')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <Sigma className="w-3.5 h-3.5" />Formula
+            </button>
             {isDirty && <span className="text-xs text-gray-400 ml-auto">Unsaved changes</span>}
           </div>
 
@@ -1113,6 +1405,9 @@ export default function DynamicReportEditor() {
                   rows={tableData.get(block.key)}
                   resolving={resolving}
                 />
+              )}
+              {block.block_type === 'formula' && (
+                <FormulaBlockPreview block={block} resolved={resolved} resolving={resolving} />
               )}
             </div>
           ))}

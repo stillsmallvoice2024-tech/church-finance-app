@@ -153,7 +153,7 @@ export type OperationalBalanceMap = Map<string, number>
 
 // ── Dynamic Reports ────────────────────────────────────────────────────────────
 
-export type DynamicReportBlockType = 'text' | 'metric' | 'table'
+export type DynamicReportBlockType = 'text' | 'metric' | 'table' | 'formula'
 
 export interface DynamicReport {
   id: string
@@ -189,6 +189,20 @@ export interface TableBlockConfig {
   categories: string[]
   columns: Array<'inflows' | 'outflows' | 'balance'>
   portion?: string
+  dateFrom?: string
+  dateTo?: string
+  label?: string
+}
+
+export interface FormulaTerm {
+  sign: '+' | '-'
+  fn: 'BALANCE' | 'INFLOWS' | 'OUTFLOWS' | 'NET'
+  category?: string
+  portion?: string
+}
+
+export interface FormulaBlockConfig {
+  terms: FormulaTerm[]
   dateFrom?: string
   dateTo?: string
   label?: string
