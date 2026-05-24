@@ -355,10 +355,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [rowIncomeTypes,     setRowIncomeTypes]     = useState<Record<number, string>>({})
   // Per-row manual config override flag — true only when user explicitly changed the config dropdown
   const [rowManualOverrides, setRowManualOverrides] = useState<Record<number, boolean>>({})
-  // Per-row budget portion for inflow rows (rowIndex → stage_code_2 value)
-  const [rowInflowPortions,  setRowInflowPortions]  = useState<Record<number, string>>({})
-  // Apply bar: budget portion for inflows
-  const [applyInflowPortion, setApplyInflowPortion] = useState('')
   const [tooltipState,   setTooltipState]   = useState<{ text: string; x: number; y: number } | null>(null)
 
   // Row selection (by sheet row index) — stable across filter/sort changes
@@ -790,7 +786,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               cfg?.id ?? null,
               (groupId) => getSpecialConfigVersionForDate(latestConfigs, groupId, date)?.id ?? null,
             )
-            if (resolvedId) row.allocation_config_id = resolvedId
+            if (resolvedId) {
+              row.allocation_config_id = resolvedId
+              const resolvedCfg = latestConfigs.find(c => c.id === resolvedId)
+              if (resolvedCfg?.rows.length) {
+                const portions = [...new Set(resolvedCfg.rows.map(r => r.budget_portion).filter(Boolean))]
+                if (portions.length === 1)
+                  row.stage_code_2 = portions[0] === 'Percentage' ? 'Percentage Allocation' : portions[0]
+              }
+            }
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {
@@ -808,7 +812,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
             )
           }
-          if (rowInflowPortions[ri]) row.stage_code_2 = rowInflowPortions[ri]
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           row.recorded_at = importTimestamp
@@ -997,7 +1000,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       dateFormat, fxCurrency, rowPendingDeductions,
       rowConfigs, rowManualOverrides, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
       internalBank,
-      rowIncomeTypes, incomeTypes, rowInflowPortions,
+      rowIncomeTypes, incomeTypes,
       duplicateRis, precomputedInflowIds, precomputedOutflowIds])
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1512,13 +1515,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
                       )}
-                      <select value={applyInflowPortion} onChange={e => setApplyInflowPortion(e.target.value)}
-                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[110px]">
-                        <option value="">— Budget Portion —</option>
-                        <option value="Percentage Allocation">Percentage Allocation</option>
-                        <option value="Specific Seed">Specific Seed</option>
-                        <option value="Savings">Savings</option>
-                      </select>
                       <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
                         className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                         <option value="">— Type —</option>
@@ -1526,7 +1522,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       </select>
                       <button
                         type="button"
-                        disabled={(!applyInflowConfig && !applyIncomeType && !applyInflowPortion && !batchTxnType) || inflowTargetRis.length === 0}
+                        disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType) || inflowTargetRis.length === 0}
                         onClick={() => {
                           if (applyInflowConfig) {
                             // Explicit config selection → mark affected rows as manual overrides
@@ -1557,13 +1553,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               })
                             }
                           }
-                          if (applyInflowPortion) {
-                            setRowInflowPortions(prev => {
-                              const next = { ...prev }
-                              for (const ri of inflowTargetRis) next[ri] = applyInflowPortion
-                              return next
-                            })
-                          }
                           if (batchTxnType !== '') {
                             setRowTxnTypes(prev => {
                               const next = { ...prev }
@@ -1586,7 +1575,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       const someInflowFilteredSelected = filtered.some(({ ri }) => selectedInflowRis.has(ri))
                       return (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="grid grid-cols-[24px_32px_1fr_72px_100px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                      <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                         <input
                           type="checkbox"
                           checked={allInflowFilteredSelected}
@@ -1601,7 +1590,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           }}
                           className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                         />
-                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Budget Portion</span><span>Allocation Config</span><span>Income Type</span><span>Type</span>
+                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Income Type</span><span>Type</span>
                       </div>
                       <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                         {filtered.length === 0
@@ -1629,7 +1618,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
                                 <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
-                                  <div className="grid grid-cols-[24px_32px_1fr_72px_100px_120px_120px_96px] items-center px-3 py-2 gap-2 text-xs">
+                                  <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] items-center px-3 py-2 gap-2 text-xs">
                                     <input
                                       type="checkbox"
                                       checked={isInflowSelected}
@@ -1659,14 +1648,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       <div className="text-gray-400">{date}</div>
                                     </div>
                                     <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
-                                    <select value={rowInflowPortions[ri] ?? ''}
-                                      onChange={e => setRowInflowPortions(prev => ({ ...prev, [ri]: e.target.value }))}
-                                      className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                      <option value="">— None —</option>
-                                      <option value="Percentage Allocation">Percentage Allocation</option>
-                                      <option value="Specific Seed">Specific Seed</option>
-                                      <option value="Savings">Savings</option>
-                                    </select>
                                     <select value={displaySelId}
                                       onChange={e => {
                                         if (e.target.value === '__create__') {
