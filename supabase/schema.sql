@@ -726,3 +726,29 @@ create unique index if not exists idx_inflow_bf_unique_bank
 
 create index if not exists idx_inflow_bank_name  on inflow_transactions(bank_name);
 create index if not exists idx_outflow_bank_name on outflow_transactions(bank_name);
+
+-- Dynamic Reports
+create table if not exists public.dynamic_reports (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null default 'Untitled Report',
+  created_by uuid references profiles(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table public.dynamic_reports enable row level security;
+create policy "dr_select" on public.dynamic_reports for select using (auth.uid() is not null);
+create policy "dr_all"    on public.dynamic_reports for all    using (auth.uid() is not null) with check (auth.uid() is not null);
+
+-- Dynamic Report Blocks
+create table if not exists public.dynamic_report_blocks (
+  id          uuid primary key default gen_random_uuid(),
+  report_id   uuid not null references dynamic_reports(id) on delete cascade,
+  block_type  text not null check (block_type in ('text', 'metric', 'table')),
+  position    integer not null default 0,
+  config_json jsonb not null default '{}',
+  created_at  timestamptz default now()
+);
+alter table public.dynamic_report_blocks enable row level security;
+create policy "drb_select" on public.dynamic_report_blocks for select using (auth.uid() is not null);
+create policy "drb_all"    on public.dynamic_report_blocks for all    using (auth.uid() is not null) with check (auth.uid() is not null);
+create index if not exists idx_drb_report_position on public.dynamic_report_blocks(report_id, position);

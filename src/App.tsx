@@ -16,6 +16,8 @@ import ForeignCurrency from './pages/ForeignCurrency'
 import IntraFlow from './pages/IntraFlow'
 import Reports from './pages/Reports'
 import FinancialReport from './pages/FinancialReport'
+import DynamicReports from './pages/DynamicReports'
+import DynamicReportEditor from './pages/DynamicReportEditor'
 import Settings from './pages/Settings'
 import UserManagement from './pages/UserManagement'
 import Import from './pages/Import'
@@ -81,6 +83,8 @@ export default function App() {
             <Route path="intra-flow" element={<ErrorBoundary><IntraFlow /></ErrorBoundary>} />
             <Route path="reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
             <Route path="financial-report" element={<ErrorBoundary><FinancialReport /></ErrorBoundary>} />
+            <Route path="dynamic-reports" element={<ErrorBoundary><DynamicReports /></ErrorBoundary>} />
+            <Route path="dynamic-reports/:id" element={<ErrorBoundary><DynamicReportEditor /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
             <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
             <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
