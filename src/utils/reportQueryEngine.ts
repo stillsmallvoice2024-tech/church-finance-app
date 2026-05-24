@@ -81,3 +81,34 @@ export async function getNetMovement(dateRange?: DateRange): Promise<QueryResult
   )
   return { value: totalIn - totalOut, error: null }
 }
+
+export interface TableRow {
+  category:     string
+  inflows:      number
+  outflows:     number
+  balance:      number
+  inflowError:  string | null
+  outflowError: string | null
+}
+
+export async function resolveTableBlock(
+  categories: string[],
+  dateRange?: DateRange,
+): Promise<TableRow[]> {
+  return Promise.all(
+    categories.filter(c => c.trim()).map(async category => {
+      const [inf, out] = await Promise.all([
+        getCategoryInflows(category, dateRange),
+        getCategoryOutflows(category, dateRange),
+      ])
+      return {
+        category,
+        inflows:      inf.value,
+        outflows:     out.value,
+        balance:      inf.value - out.value,
+        inflowError:  inf.error,
+        outflowError: out.error,
+      }
+    }),
+  )
+}

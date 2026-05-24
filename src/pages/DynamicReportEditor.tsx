@@ -21,8 +21,12 @@ import {
   type ParsedToken,
   type TokenFn,
 } from '../utils/reportTokenParser'
-import type { DynamicReport, DynamicReportBlockType, TextBlockConfig, MetricBlockConfig } from '../types'
-import type { QueryResult } from '../utils/reportQueryEngine'
+import {
+  resolveTableBlock,
+  type TableRow,
+  type QueryResult,
+} from '../utils/reportQueryEngine'
+import type { DynamicReport, DynamicReportBlockType, TextBlockConfig, MetricBlockConfig, TableBlockConfig } from '../types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -284,7 +288,13 @@ function MetricBlockEditor({
   )
 }
 
-// ── Table block editor (Phase 3 placeholder) ───────────────────────────────────
+// ── Table block editor ─────────────────────────────────────────────────────────
+
+const ALL_COLUMNS: Array<{ key: TableBlockConfig['columns'][number]; label: string }> = [
+  { key: 'inflows',  label: 'Inflows'  },
+  { key: 'outflows', label: 'Outflows' },
+  { key: 'balance',  label: 'Balance'  },
+]
 
 function TableBlockEditor({
   block,
@@ -293,60 +303,81 @@ function TableBlockEditor({
   block: EditorBlock
   onChange: (cfg: Record<string, unknown>) => void
 }) {
-  const cfg = block.config_json as Record<string, unknown>
-  const categories: string[] = Array.isArray(cfg.categories) ? (cfg.categories as string[]) : []
+  const cfg = block.config_json as Partial<TableBlockConfig> & Record<string, unknown>
+  const categories: string[] = Array.isArray(cfg.categories) ? cfg.categories : []
+  const columns: string[] = Array.isArray(cfg.columns) && cfg.columns.length > 0
+    ? cfg.columns
+    : ['inflows', 'outflows', 'balance']
+
+  const toggleColumn = (col: string) => {
+    const next = columns.includes(col)
+      ? columns.filter(c => c !== col)
+      : [...columns, col]
+    if (next.length === 0) return // always keep at least one column
+    onChange({ ...cfg, columns: next })
+  }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
-        <Table2 className="w-3.5 h-3.5 shrink-0" />
-        Dynamic table rendering is implemented in Phase 3. Configure now — it will render automatically.
+    <div className="grid grid-cols-2 gap-3">
+      <div className="col-span-2">
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          Categories (comma-separated)
+        </label>
+        <input
+          type="text"
+          value={categories.join(', ')}
+          onChange={e =>
+            onChange({
+              ...cfg,
+              categories: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+            })
+          }
+          placeholder="e.g. Tithes, Offering, Welfare"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Categories (comma-separated)
-          </label>
-          <input
-            type="text"
-            value={categories.join(', ')}
-            onChange={e =>
-              onChange({
-                ...cfg,
-                categories: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
-              })
-            }
-            placeholder="e.g. Tithes, Offering, Welfare"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
-          <input
-            type="date"
-            value={(cfg.dateFrom as string) ?? ''}
-            onChange={e => onChange({ ...cfg, dateFrom: e.target.value })}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
-          <input
-            type="date"
-            value={(cfg.dateTo as string) ?? ''}
-            onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
-          <input
-            type="text"
-            value={(cfg.label as string) ?? ''}
-            onChange={e => onChange({ ...cfg, label: e.target.value })}
-            placeholder="e.g. Category Summary"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
+        <input
+          type="date"
+          value={(cfg.dateFrom as string) ?? ''}
+          onChange={e => onChange({ ...cfg, dateFrom: e.target.value })}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
+        <input
+          type="date"
+          value={(cfg.dateTo as string) ?? ''}
+          onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+      <div className="col-span-2">
+        <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
+        <input
+          type="text"
+          value={(cfg.label as string) ?? ''}
+          onChange={e => onChange({ ...cfg, label: e.target.value })}
+          placeholder="e.g. Category Summary"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+      <div className="col-span-2">
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">Columns to show</label>
+        <div className="flex items-center gap-4">
+          {ALL_COLUMNS.map(c => (
+            <label key={c.key} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={columns.includes(c.key)}
+                onChange={() => toggleColumn(c.key)}
+                className="rounded border-gray-300 text-primary focus:ring-primary/30"
+              />
+              {c.label}
+            </label>
+          ))}
         </div>
       </div>
     </div>
@@ -491,18 +522,135 @@ function MetricBlockPreview({
   )
 }
 
-function TableBlockPreview({ block }: { block: EditorBlock }) {
-  const cfg = block.config_json as Record<string, unknown>
-  const label = (cfg.label as string) || 'Table'
+function TableBlockPreview({
+  block,
+  rows,
+  resolving,
+}: {
+  block: EditorBlock
+  rows: TableRow[] | undefined
+  resolving: boolean
+}) {
+  const cfg     = block.config_json as Partial<TableBlockConfig>
+  const label   = cfg.label || 'Financial Summary'
+  const cats    = Array.isArray(cfg.categories) ? cfg.categories : []
+  const colKeys: Array<'inflows' | 'outflows' | 'balance'> =
+    Array.isArray(cfg.columns) && cfg.columns.length > 0
+      ? cfg.columns
+      : ['inflows', 'outflows', 'balance']
+  const colLabels: Record<string, string> = {
+    inflows: 'Inflows', outflows: 'Outflows', balance: 'Balance',
+  }
+
+  if (cats.length === 0) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+        <div className="px-5 py-3 border-b border-gray-100">
+          <p className="text-sm font-semibold text-gray-700">{label}</p>
+        </div>
+        <p className="px-5 py-8 text-center text-sm text-gray-400">
+          No categories configured — edit this block to add categories.
+        </p>
+      </div>
+    )
+  }
+
+  // Compute totals
+  const totals = { inflows: 0, outflows: 0, balance: 0 }
+  for (const r of rows ?? []) {
+    totals.inflows  += r.inflows
+    totals.outflows += r.outflows
+    totals.balance  += r.balance
+  }
+
+  const amtCls = (v: number) =>
+    v < 0 ? 'text-danger font-mono font-semibold' : 'text-gray-900 font-mono font-semibold'
+
   return (
-    <div className="rounded-xl border border-blue-200 bg-blue-50/40 px-5 py-4 text-sm text-blue-600 flex items-center gap-3">
-      <Table2 className="w-4 h-4 shrink-0 text-blue-400" />
-      <span>
-        <strong>{label}</strong> — dynamic table rendering arrives in Phase 3.
-        {Array.isArray(cfg.categories) && (cfg.categories as string[]).length > 0 && (
-          <span className="text-blue-500"> Categories: {(cfg.categories as string[]).join(', ')}</span>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+      {/* Table header */}
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-700">{label}</p>
+        {cfg.dateFrom && cfg.dateTo && (
+          <p className="text-[10px] text-gray-400 font-mono">{cfg.dateFrom} → {cfg.dateTo}</p>
         )}
-      </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Category
+              </th>
+              {colKeys.map(col => (
+                <th key={col} className="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  {colLabels[col]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {/* Loading skeleton */}
+            {resolving && cats.map(cat => (
+              <tr key={cat}>
+                <td className="px-5 py-3 text-gray-700 font-medium">{cat}</td>
+                {colKeys.map(col => (
+                  <td key={col} className="px-5 py-3 text-right">
+                    <span className="inline-block h-4 w-20 bg-gray-100 rounded animate-pulse" />
+                  </td>
+                ))}
+              </tr>
+            ))}
+
+            {/* Data rows */}
+            {!resolving && (rows ?? []).map(row => (
+              <tr key={row.category} className="hover:bg-gray-50 transition-colors">
+                <td className="px-5 py-3 text-gray-800 font-medium">{row.category}</td>
+                {colKeys.map(col => {
+                  const err = col === 'outflows' ? row.outflowError : (col === 'inflows' ? row.inflowError : (row.inflowError || row.outflowError))
+                  if (err) {
+                    return (
+                      <td key={col} className="px-5 py-3 text-right text-danger text-xs" title={err}>
+                        [error]
+                      </td>
+                    )
+                  }
+                  const val = row[col as keyof Pick<TableRow, 'inflows' | 'outflows' | 'balance'>]
+                  return (
+                    <td key={col} className={`px-5 py-3 text-right ${amtCls(val)}`}>
+                      {fmtAmount(val)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+
+            {/* Empty — categories set but no rows resolved yet */}
+            {!resolving && (!rows || rows.length === 0) && (
+              <tr>
+                <td colSpan={1 + colKeys.length} className="px-5 py-8 text-center text-sm text-gray-400">
+                  No data found for the configured categories.
+                </td>
+              </tr>
+            )}
+          </tbody>
+
+          {/* Totals row */}
+          {!resolving && rows && rows.length > 0 && (
+            <tfoot>
+              <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold">
+                <td className="px-5 py-3 text-gray-700">Total</td>
+                {colKeys.map(col => (
+                  <td key={col} className={`px-5 py-3 text-right ${amtCls(totals[col as keyof typeof totals])}`}>
+                    {fmtAmount(totals[col as keyof typeof totals])}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
     </div>
   )
 }
@@ -558,6 +706,7 @@ export default function DynamicReportEditor() {
 
   // Token resolution state
   const [resolved,   setResolved]   = useState<Map<string, QueryResult>>(new Map())
+  const [tableData,  setTableData]  = useState<Map<string, TableRow[]>>(new Map())
   const [resolving,  setResolving]  = useState(false)
 
   usePageTitle(title || 'Report Editor')
@@ -576,11 +725,31 @@ export default function DynamicReportEditor() {
 
   // Resolve tokens whenever we enter preview mode or blocks change in preview
   const resolveAll = useCallback(async (currentBlocks: EditorBlock[]) => {
-    const tokens = collectTokensFromBlocks(currentBlocks)
-    if (tokens.length === 0) { setResolved(new Map()); return }
     setResolving(true)
-    const map = await resolveTokens(tokens)
-    setResolved(map)
+
+    // Resolve text + metric tokens
+    const tokens = collectTokensFromBlocks(currentBlocks)
+    const tokenMap = tokens.length > 0 ? await resolveTokens(tokens) : new Map<string, QueryResult>()
+    setResolved(tokenMap)
+
+    // Resolve table blocks in parallel
+    const tableBlocks = currentBlocks.filter(b => b.block_type === 'table')
+    const tableResults = await Promise.all(
+      tableBlocks.map(async b => {
+        const cfg  = b.config_json as Partial<TableBlockConfig>
+        const cats = Array.isArray(cfg.categories) ? cfg.categories.filter(Boolean) : []
+        if (cats.length === 0) return { key: b.key, rows: [] as TableRow[] }
+        const dr = cfg.dateFrom && cfg.dateTo
+          ? { from: cfg.dateFrom, to: cfg.dateTo }
+          : undefined
+        const rows = await resolveTableBlock(cats, dr).catch(() => [] as TableRow[])
+        return { key: b.key, rows }
+      }),
+    )
+    const tMap = new Map<string, TableRow[]>()
+    for (const r of tableResults) tMap.set(r.key, r.rows)
+    setTableData(tMap)
+
     setResolving(false)
   }, [])
 
@@ -805,7 +974,11 @@ export default function DynamicReportEditor() {
                 <MetricBlockPreview block={block} resolved={resolved} />
               )}
               {block.block_type === 'table' && (
-                <TableBlockPreview block={block} />
+                <TableBlockPreview
+                  block={block}
+                  rows={tableData.get(block.key)}
+                  resolving={resolving}
+                />
               )}
             </div>
           ))}
