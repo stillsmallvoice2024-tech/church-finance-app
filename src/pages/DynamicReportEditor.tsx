@@ -12,6 +12,7 @@ import {
   useSaveDynamicReportBlocks,
   useDynamicReports,
 } from '../hooks/useDynamicReports'
+import { useCategories } from '../hooks/useCategories'
 import { useToastStore } from '../store/toastStore'
 import {
   parseTokens,
@@ -23,6 +24,7 @@ import {
 } from '../utils/reportTokenParser'
 import {
   resolveTableBlock,
+  type BudgetPortion,
   type TableRow,
   type QueryResult,
 } from '../utils/reportQueryEngine'
@@ -35,6 +37,19 @@ const FN_LABELS: Record<TokenFn, string> = {
   INFLOWS:  'Inflows',
   OUTFLOWS: 'Outflows',
   NET:      'Net Movement',
+}
+
+const PORTION_OPTIONS: Array<{ value: BudgetPortion; label: string }> = [
+  { value: 'all',        label: 'All Funds'            },
+  { value: 'seed',       label: 'Specific Seed'        },
+  { value: 'savings',    label: 'Savings'              },
+  { value: 'percentage', label: 'Percentage Allocation' },
+]
+
+const PORTION_SHORT: Record<string, string> = {
+  seed:       ' · Seed',
+  savings:    ' · Savings',
+  percentage: ' · % Alloc',
 }
 
 function fmtNGN(n: number): string {
@@ -61,25 +76,41 @@ function makeKey() {
 // ── Token insertion popover ────────────────────────────────────────────────────
 
 interface TokenPopoverProps {
+  categoryNames: string[]
   onInsert: (token: string) => void
   onClose: () => void
 }
 
-function TokenPopover({ onInsert, onClose }: TokenPopoverProps) {
+function TokenPopover({ categoryNames, onInsert, onClose }: TokenPopoverProps) {
   const [fn,       setFn]       = useState<TokenFn>('BALANCE')
-  const [category, setCategory] = useState('')
+  const [category, setCategory] = useState(categoryNames[0] ?? '')
+  const [portion,  setPortion]  = useState<BudgetPortion>('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo,   setDateTo]   = useState('')
 
   const handleInsert = () => {
     if (fn !== 'NET' && !category.trim()) return
-    const token = buildTokenString(fn, category.trim(), dateFrom || undefined, dateTo || undefined)
+    const token = buildTokenString(
+      fn,
+      category.trim(),
+      portion !== 'all' ? portion : undefined,
+      dateFrom || undefined,
+      dateTo   || undefined,
+    )
     onInsert(token)
     onClose()
   }
 
+  const previewToken = buildTokenString(
+    fn,
+    category.trim(),
+    portion !== 'all' ? portion : undefined,
+    dateFrom || undefined,
+    dateTo   || undefined,
+  )
+
   return (
-    <div className="absolute z-20 top-full left-0 mt-1 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-4 space-y-3">
+    <div className="absolute z-20 top-full left-0 mt-1 w-80 bg-white rounded-xl border border-gray-200 shadow-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-gray-700">Insert Metric Token</span>
         <button onClick={onClose} className="p-0.5 rounded text-gray-400 hover:text-gray-700">
@@ -101,17 +132,35 @@ function TokenPopover({ onInsert, onClose }: TokenPopoverProps) {
       </div>
 
       {fn !== 'NET' && (
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Category *</label>
-          <input
-            type="text"
-            value={category}
-            onChange={e => setCategory(e.target.value)}
-            placeholder="e.g. Tithes"
-            className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-            autoFocus
-          />
-        </div>
+        <>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Category *</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {categoryNames.length === 0 && (
+                <option value="">No categories found</option>
+              )}
+              {categoryNames.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Budget Portion</label>
+            <select
+              value={portion}
+              onChange={e => setPortion(e.target.value as BudgetPortion)}
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {PORTION_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+        </>
       )}
 
       <div className="grid grid-cols-2 gap-2">
@@ -137,7 +186,7 @@ function TokenPopover({ onInsert, onClose }: TokenPopoverProps) {
 
       {/* Preview of generated token */}
       <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5 font-mono text-[11px] text-gray-500 break-all">
-        {buildTokenString(fn, category.trim(), dateFrom || undefined, dateTo || undefined)}
+        {previewToken}
       </div>
 
       <button
@@ -156,9 +205,11 @@ function TokenPopover({ onInsert, onClose }: TokenPopoverProps) {
 function TextBlockEditor({
   block,
   onChange,
+  categoryNames,
 }: {
   block: EditorBlock
   onChange: (cfg: Record<string, unknown>) => void
+  categoryNames: string[]
 }) {
   const cfg = block.config_json as Partial<TextBlockConfig>
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -200,6 +251,7 @@ function TextBlockEditor({
         </span>
         {showPopover && (
           <TokenPopover
+            categoryNames={categoryNames}
             onInsert={handleInsertToken}
             onClose={() => setShowPopover(false)}
           />
@@ -223,11 +275,14 @@ function TextBlockEditor({
 function MetricBlockEditor({
   block,
   onChange,
+  categoryNames,
 }: {
   block: EditorBlock
   onChange: (cfg: Record<string, unknown>) => void
+  categoryNames: string[]
 }) {
   const cfg = block.config_json as Record<string, string>
+  const isNet = cfg.fn === 'NET'
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
@@ -245,17 +300,34 @@ function MetricBlockEditor({
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">
-          Category{cfg.fn === 'NET' ? ' (not needed)' : ' *'}
+          Category{isNet ? ' (not needed)' : ' *'}
         </label>
-        <input
-          type="text"
+        <select
           value={cfg.category ?? ''}
           onChange={e => onChange({ ...cfg, category: e.target.value })}
-          placeholder="e.g. Tithes"
-          disabled={cfg.fn === 'NET'}
+          disabled={isNet}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-50 disabled:text-gray-400"
-        />
+        >
+          <option value="">— select category —</option>
+          {categoryNames.map(n => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
       </div>
+      {!isNet && (
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Budget Portion</label>
+          <select
+            value={cfg.portion ?? 'all'}
+            onChange={e => onChange({ ...cfg, portion: e.target.value })}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            {PORTION_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
         <input
@@ -299,9 +371,11 @@ const ALL_COLUMNS: Array<{ key: TableBlockConfig['columns'][number]; label: stri
 function TableBlockEditor({
   block,
   onChange,
+  categoryNames,
 }: {
   block: EditorBlock
   onChange: (cfg: Record<string, unknown>) => void
+  categoryNames: string[]
 }) {
   const cfg = block.config_json as Partial<TableBlockConfig> & Record<string, unknown>
   const categories: string[] = Array.isArray(cfg.categories) ? cfg.categories : []
@@ -313,29 +387,77 @@ function TableBlockEditor({
     const next = columns.includes(col)
       ? columns.filter(c => c !== col)
       : [...columns, col]
-    if (next.length === 0) return // always keep at least one column
+    if (next.length === 0) return
     onChange({ ...cfg, columns: next })
   }
 
+  const addCategory = (name: string) => {
+    if (!name || categories.includes(name)) return
+    onChange({ ...cfg, categories: [...categories, name] })
+  }
+
+  const removeCategory = (name: string) => {
+    onChange({ ...cfg, categories: categories.filter(c => c !== name) })
+  }
+
+  const available = categoryNames.filter(n => !categories.includes(n))
+
   return (
     <div className="grid grid-cols-2 gap-3">
+      {/* Category chips + dropdown */}
       <div className="col-span-2">
-        <label className="block text-xs font-medium text-gray-600 mb-1">
-          Categories (comma-separated)
-        </label>
-        <input
-          type="text"
-          value={categories.join(', ')}
-          onChange={e =>
-            onChange({
-              ...cfg,
-              categories: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
-            })
-          }
-          placeholder="e.g. Tithes, Offering, Welfare"
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">Categories</label>
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {categories.map(cat => (
+              <span
+                key={cat}
+                className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full"
+              >
+                {cat}
+                <button
+                  type="button"
+                  onClick={() => removeCategory(cat)}
+                  className="rounded-full hover:bg-primary/20 p-0.5 transition-colors"
+                  aria-label={`Remove ${cat}`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <select
+          value=""
+          onChange={e => { addCategory(e.target.value); e.target.value = '' }}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-gray-500"
+          disabled={available.length === 0}
+        >
+          <option value="">
+            {available.length === 0
+              ? categories.length === 0 ? 'No categories found' : 'All categories added'
+              : '+ Add a category…'}
+          </option>
+          {available.map(n => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
       </div>
+
+      {/* Budget Portion */}
+      <div className="col-span-2">
+        <label className="block text-xs font-medium text-gray-600 mb-1">Budget Portion</label>
+        <select
+          value={(cfg.portion as string) ?? 'all'}
+          onChange={e => onChange({ ...cfg, portion: e.target.value })}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          {PORTION_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
         <input
@@ -393,11 +515,12 @@ const BLOCK_META: Record<DynamicReportBlockType, { icon: React.ElementType; labe
 }
 
 function BlockCard({
-  block, index, total, onChange, onDelete, onMoveUp, onMoveDown,
+  block, index, total, categoryNames, onChange, onDelete, onMoveUp, onMoveDown,
 }: {
   block: EditorBlock
   index: number
   total: number
+  categoryNames: string[]
   onChange: (cfg: Record<string, unknown>) => void
   onDelete: () => void
   onMoveUp: () => void
@@ -426,9 +549,9 @@ function BlockCard({
         </div>
       </div>
       <div className="p-4">
-        {block.block_type === 'text'   && <TextBlockEditor   block={block} onChange={onChange} />}
-        {block.block_type === 'metric' && <MetricBlockEditor block={block} onChange={onChange} />}
-        {block.block_type === 'table'  && <TableBlockEditor  block={block} onChange={onChange} />}
+        {block.block_type === 'text'   && <TextBlockEditor   block={block} onChange={onChange} categoryNames={categoryNames} />}
+        {block.block_type === 'metric' && <MetricBlockEditor block={block} onChange={onChange} categoryNames={categoryNames} />}
+        {block.block_type === 'table'  && <TableBlockEditor  block={block} onChange={onChange} categoryNames={categoryNames} />}
       </div>
     </div>
   )
@@ -490,20 +613,23 @@ function MetricBlockPreview({
   const cfg = block.config_json as Partial<MetricBlockConfig>
   const fn       = cfg.fn ?? 'BALANCE'
   const category = cfg.category ?? ''
+  const portion  = (cfg.portion as BudgetPortion | undefined) ?? 'all'
   const dateFrom = cfg.dateFrom
   const dateTo   = cfg.dateTo
 
   const tokenKey = buildTokenString(
     fn as TokenFn,
     category,
+    portion !== 'all' ? portion : undefined,
     dateFrom || undefined,
     dateTo   || undefined,
   )
   const result = resolved.get(tokenKey)
 
+  const portionSuffix = portion && portion !== 'all' ? (PORTION_SHORT[portion] ?? '') : ''
   const label = cfg.label || (fn === 'NET'
     ? 'Net Movement'
-    : `${FN_LABELS[fn as TokenFn] ?? fn}${category ? ` — ${category}` : ''}`)
+    : `${FN_LABELS[fn as TokenFn] ?? fn}${category ? ` — ${category}` : ''}${portionSuffix}`)
 
   const dateLabel = dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : null
 
@@ -666,16 +792,19 @@ function collectTokensFromBlocks(blocks: EditorBlock[]): ParsedToken[] {
     } else if (b.block_type === 'metric') {
       const cfg = b.config_json as Partial<MetricBlockConfig>
       if (!cfg.fn) continue
-      // Represent the metric block as a virtual token for resolution
+      const portion = (cfg.portion as BudgetPortion | undefined) ?? 'all'
+      const portionArg = portion !== 'all' ? portion : undefined
       tokens.push({
         raw:      buildTokenString(
           cfg.fn as TokenFn,
           cfg.category ?? '',
+          portionArg,
           cfg.dateFrom || undefined,
           cfg.dateTo   || undefined,
         ),
         fn:       cfg.fn as TokenFn,
         category: cfg.category ?? '',
+        portion:  portionArg,
         dateFrom: cfg.dateFrom || undefined,
         dateTo:   cfg.dateTo   || undefined,
       })
@@ -693,6 +822,8 @@ export default function DynamicReportEditor() {
 
   const { reports, loading: reportsLoading } = useDynamicReports()
   const report: DynamicReport | undefined = reports.find(r => r.id === id)
+  const { categories } = useCategories()
+  const categoryNames = categories.map(c => c.name)
 
   const { blocks: savedBlocks, loading: blocksLoading } = useDynamicReportBlocks(id ?? null)
   const { mutate: updateTitle }  = useUpdateDynamicReport()
@@ -736,13 +867,15 @@ export default function DynamicReportEditor() {
     const tableBlocks = currentBlocks.filter(b => b.block_type === 'table')
     const tableResults = await Promise.all(
       tableBlocks.map(async b => {
-        const cfg  = b.config_json as Partial<TableBlockConfig>
-        const cats = Array.isArray(cfg.categories) ? cfg.categories.filter(Boolean) : []
+        const cfg     = b.config_json as Partial<TableBlockConfig>
+        const cats    = Array.isArray(cfg.categories) ? cfg.categories.filter(Boolean) : []
         if (cats.length === 0) return { key: b.key, rows: [] as TableRow[] }
-        const dr = cfg.dateFrom && cfg.dateTo
+        const dr      = cfg.dateFrom && cfg.dateTo
           ? { from: cfg.dateFrom, to: cfg.dateTo }
           : undefined
-        const rows = await resolveTableBlock(cats, dr).catch(() => [] as TableRow[])
+        const portion = (cfg.portion as BudgetPortion | undefined) ?? 'all'
+        const rows    = await resolveTableBlock(cats, dr, portion !== 'all' ? portion : undefined)
+          .catch(() => [] as TableRow[])
         return { key: b.key, rows }
       }),
     )
@@ -897,6 +1030,7 @@ export default function DynamicReportEditor() {
                 block={block}
                 index={index}
                 total={blocks.length}
+                categoryNames={categoryNames}
                 onChange={cfg => updateBlock(block.key, cfg)}
                 onDelete={() => deleteBlock(block.key)}
                 onMoveUp={() => moveBlock(block.key, -1)}
