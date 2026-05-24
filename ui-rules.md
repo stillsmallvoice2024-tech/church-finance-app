@@ -335,6 +335,32 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 
 ---
 
+## CSV Export — ExportDropdown Pattern
+
+All table pages use `ExportDropdown` (`src/components/ui/ExportDropdown.tsx`) for two-mode CSV export.
+
+```tsx
+<ExportDropdown
+  onExportView={handleExportView}   // sync: exports current page rows only
+  onExportAll={handleExportAll}     // sync or async: exports full filtered dataset
+  disabled={sortedRows.length === 0}
+/>
+```
+
+**Placement:** page header right side, inside `flex items-center gap-2` alongside other action buttons.
+
+**Export All strategies:**
+- **Server-paginated** (Inflows, Outflows, IntraFlow, ChangeLog, PendingDeductions): async Supabase query (`.limit(10000)`) with active filters; then client sort+search
+- **Client-side paginated** (BankLedger, BankDeposits, Categories, CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions, Receipts): use `sortedRows` / `sorted*` directly — no extra fetch
+- **Non-paginated** (IntraBankTransfers, RefundTransactions, ReversalTransactions, UserManagement): both modes use the same in-memory array
+- **Inflows/Outflows shortcut:** when `isSearching = true`, use `allMatching` directly instead of a new Supabase fetch
+
+**CategoryLedger:** context-sensitive — summary → `summarySorted`; ledger → `ledgerSorted` excluding B/F row (`r.id !== 'bal-bf'`).
+
+**Pages with ExportDropdown (18 total):** Inflows, Outflows, IntraFlow, ForeignCurrency, ChangeLog, BankLedger, BankDeposits, IntraBankTransfers, PendingDeductions, RefundTransactions, ReversalTransactions, Categories, CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions, UserManagement, Receipts.
+
+---
+
 ## Key Component Locations
 
 | Component | Location |
@@ -345,6 +371,7 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 | Receipt attachment (smart above/below) | `src/components/ui/ReceiptBadge.tsx` |
 | All add/edit form modals | `src/components/modals/` |
 | Right-aligned monetary `<td>` | `src/components/ui/AmountCell.tsx` |
+| Two-mode CSV export button | `src/components/ui/ExportDropdown.tsx` |
 
 ---
 
