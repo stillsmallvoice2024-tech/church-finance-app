@@ -8,6 +8,8 @@ import { useRole }       from '../hooks/useRole'
 import { supabase }      from '../lib/supabase'
 import { ReceiptBadge }  from '../components/ui/ReceiptBadge'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { exportCSV }     from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { AddInflowModal }  from '../components/modals/AddInflowModal'
 import { AddOutflowModal } from '../components/modals/AddOutflowModal'
 import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
@@ -206,6 +208,16 @@ export default function BankLedger() {
   const selectedBankObj  = banks.find(b => b.id === selectedBank)
   const selectedBankName = selectedBankObj?.name ?? ''
 
+  const BL_CSV_HEADERS = ['Date', 'Description', 'Type', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
+  const blCsvRow = (r: LedgerRow) => [
+    r.date, r.display_description,
+    TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '',
+    r.inflow || '', r.outflow || '', r.balance,
+  ]
+  const BL_CSV_FILE = `bank-ledger-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(BL_CSV_FILE, BL_CSV_HEADERS, pagedRows.map(blCsvRow))
+  const handleExportAll  = () => exportCSV(BL_CSV_FILE, BL_CSV_HEADERS, sortedRows.map(blCsvRow))
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -214,6 +226,11 @@ export default function BankLedger() {
           <h1 className="text-2xl font-bold text-gray-900">Bank Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">Per-bank transaction history with running balance</p>
         </div>
+        <ExportDropdown
+          onExportView={handleExportView}
+          onExportAll={handleExportAll}
+          disabled={sortedRows.length === 0}
+        />
       </div>
 
       {/* Bank selector + date filters */}

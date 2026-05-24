@@ -28,6 +28,8 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { filterInputCls } from '../components/ui/FormField'
 import { EmptyState } from '../components/ui/EmptyState'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+import { exportCSV }   from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -347,14 +349,24 @@ export default function BankDeposits() {
   const openAdd  = () => { setEditRecord(null); setShowModal(true) }
   const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
 
-  const colCount = admin ? 9 : 8
-
   const depositDetailItems = (row: DepositRow): DetailItem[] => [
     { label: 'Transaction Ref',  value: row.transaction_ref, mono: true, breakAll: true },
     { label: 'Remarks',          value: row.remarks,         breakAll: true },
     { label: 'Source',           value: row.source === 'bank_deposits' ? 'Bank Deposit Record' : row.source === 'inflow' ? 'Inflow Transaction' : 'Outflow Transaction' },
     { label: 'Raw Description',  value: row.description,     breakAll: true },
   ]
+
+  const BD_SOURCE_LABELS: Record<string, string> = { bank_deposits: 'Deposit', inflow: 'Inflow', outflow: 'Outflow' }
+  const BD_CSV_HEADERS = ['Date', 'Bank', 'Description', 'Amount (₦)', 'Ref', 'Remarks', 'Source']
+  const bdCsvRow = (r: DepositRow) => [
+    r.date, r.bank_name ?? '', r.description ?? '', r.amount,
+    r.transaction_ref ?? '', r.remarks ?? '', BD_SOURCE_LABELS[r.source] ?? r.source,
+  ]
+  const BD_CSV_FILE = `bank-deposits-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(BD_CSV_FILE, BD_CSV_HEADERS, pagedRows.map(bdCsvRow))
+  const handleExportAll  = () => exportCSV(BD_CSV_FILE, BD_CSV_HEADERS, sortedRows.map(bdCsvRow))
+
+  const colCount = admin ? 9 : 8
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -376,6 +388,11 @@ export default function BankDeposits() {
           <p className="text-sm text-gray-500 mt-0.5">Physical cash deposited into bank accounts</p>
         </div>
         <div className="flex items-center gap-2">
+          <ExportDropdown
+            onExportView={handleExportView}
+            onExportAll={handleExportAll}
+            disabled={sortedRows.length === 0}
+          />
           {admin && (
             <button onClick={openAdd}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">

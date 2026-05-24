@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
+import { exportCSV } from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency } from '../utils/formatters'
@@ -121,6 +123,12 @@ export default function SavingsPortions() {
     [sortedRows, svpState.page, svpState.pageSize],
   )
 
+  const SVP_CSV_HEADERS = ['Category', 'Deposited (₦)', 'Withdrawn (₦)', 'Balance (₦)']
+  const svpCsvRow = (r: SavingsRow) => [r.category, r.deposited, r.withdrawn, r.balance]
+  const SVP_CSV_FILE = `savings-portions-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(SVP_CSV_FILE, SVP_CSV_HEADERS, svpPage.map(svpCsvRow))
+  const handleExportAll  = () => exportCSV(SVP_CSV_FILE, SVP_CSV_HEADERS, sortedRows.map(svpCsvRow))
+
   // Totals reflect visible (filtered) data
   const totalDeposited = visibleRows.reduce((s, r) => s + r.deposited, 0)
   const totalWithdrawn = visibleRows.reduce((s, r) => s + r.withdrawn, 0)
@@ -137,13 +145,16 @@ export default function SavingsPortions() {
             Accumulated savings balances per category — all time
           </p>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={sortedRows.length === 0} />
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (

@@ -25,6 +25,8 @@ import { useToast } from '../store/toastStore'
 import { Modal } from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { supabase } from '../lib/supabase'
+import { exportCSV } from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 
@@ -469,6 +471,12 @@ export default function Categories() {
 
   const catPage = visibleSorted.slice(catState.page * catState.pageSize, (catState.page + 1) * catState.pageSize)
 
+  const CAT_CSV_HEADERS = ['Name', 'Group', 'Description']
+  const catCsvRow = (c: Category) => [c.name, groups.find(g => g.id === c.group_id)?.name ?? '', c.description ?? '']
+  const CAT_CSV_FILE = `categories-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(CAT_CSV_FILE, CAT_CSV_HEADERS, catPage.map(catCsvRow))
+  const handleExportAll  = () => exportCSV(CAT_CSV_FILE, CAT_CSV_HEADERS, visibleSorted.map(catCsvRow))
+
   // Bucket categories by group
   const groupMap = new Map<string | null, Category[]>()
   for (const cat of catPage) {
@@ -490,6 +498,7 @@ export default function Categories() {
           <p className="text-sm text-gray-500 mt-0.5">Manage income and allocation categories</p>
         </div>
         <div className="flex items-center gap-2">
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={visibleSorted.length === 0} />
           {hiddenCt > 0 && (
             <button onClick={() => setShowHidden(v => !v)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">

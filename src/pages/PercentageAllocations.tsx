@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Percent, AlertCircle, ExternalLink } from 'lucide-react'
+import { exportCSV } from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useAllocationStore } from '../store/allocationStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate } from '../utils/formatters'
@@ -61,6 +63,12 @@ export default function PercentageAllocations() {
     [sortedConfigRows, pcaState.page, pcaState.pageSize],
   )
 
+  const PCA_CSV_HEADERS = ['Category', 'Percentage (%)']
+  const pcaCsvRow = (r: PcaRow) => [r.category_name, r.percentage ?? 0]
+  const PCA_CSV_FILE = `percentage-allocations-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(PCA_CSV_FILE, PCA_CSV_HEADERS, pcaPage.map(pcaCsvRow))
+  const handleExportAll  = () => exportCSV(PCA_CSV_FILE, PCA_CSV_HEADERS, sortedConfigRows.map(pcaCsvRow))
+
   return (
     <div className="space-y-5">
 
@@ -72,13 +80,16 @@ export default function PercentageAllocations() {
             How inflows are split across categories by percentage
           </p>
         </div>
-        <Link
-          to="/setup"
-          className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          Manage configs in Setup
-        </Link>
+        <div className="flex items-center gap-2">
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={sortedConfigRows.length === 0} />
+          <Link
+            to="/setup"
+            className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Manage configs in Setup
+          </Link>
+        </div>
       </div>
 
       {error && (

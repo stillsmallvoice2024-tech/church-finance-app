@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Paperclip, Download, Trash2, Loader2, FolderOpen, FileText, Image, AlertTriangle, Terminal } from 'lucide-react'
+import { exportCSV } from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAllReceipts, type ReceiptEntityType, type Receipt } from '../hooks/useReceipts'
@@ -121,6 +123,12 @@ export default function Receipts() {
   const countFor = (key: Folder) =>
     key === 'all' ? receipts.length : receipts.filter(r => r.entity_type === key).length
 
+  const RCP_CSV_HEADERS = ['Created At', 'File Name', 'Type', 'Size (bytes)']
+  const rcpCsvRow = (r: Receipt) => [r.created_at ? new Date(r.created_at).toLocaleString() : '', r.file_name, r.entity_type, r.file_size ?? '']
+  const RCP_CSV_FILE = `receipts-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(RCP_CSV_FILE, RCP_CSV_HEADERS, rcpPage.map(rcpCsvRow))
+  const handleExportAll  = () => exportCSV(RCP_CSV_FILE, RCP_CSV_HEADERS, sortedReceipts.map(rcpCsvRow))
+
   const handleDownload = async (r: Receipt) => {
     const url = await getDownloadUrl(r.file_path)
     if (!url) return
@@ -131,9 +139,12 @@ export default function Receipts() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Receipts</h1>
-        <p className="text-sm text-gray-500 mt-0.5">All uploaded receipt files</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Receipts</h1>
+          <p className="text-sm text-gray-500 mt-0.5">All uploaded receipt files</p>
+        </div>
+        <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={sortedReceipts.length === 0} />
       </div>
 
       {/* Migration error */}

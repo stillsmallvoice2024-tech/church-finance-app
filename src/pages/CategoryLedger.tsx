@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
 import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown } from 'lucide-react'
+import { exportCSV } from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useCategories, useCategoryGroups } from '../hooks/useCategories'
@@ -574,6 +576,21 @@ export default function CategoryLedger() {
 
   const activeLedgerField = LEDGER_SORT_FIELDS.find(f => f.key === ledgerViewState.sortKey)
 
+  const CL_CSV_FILE = `category-ledger-${new Date().toISOString().slice(0, 10)}.csv`
+  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', '₦ Allocated', 'Specific Seed', 'Savings Net']
+  const summaryCsvRow = (r: CategoryRow) => [r.name, r.percentage ?? '', r.percentageAllocated, r.specificSeed, r.savingsIn - r.savingsOut]
+  const LEDGER_CSV_HEADERS = ['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
+  const ledgerCsvRow = (r: LedgerRow) => [r.date, r.display_description, r.inflow || '', r.outflow || '', r.balance]
+  const handleExportView = () => {
+    if (viewMode === 'summary') exportCSV(CL_CSV_FILE, SUMMARY_CSV_HEADERS, summaryPage.map(summaryCsvRow))
+    else exportCSV(CL_CSV_FILE, LEDGER_CSV_HEADERS, ledgerPagedRows.filter(r => r.id !== 'bal-bf').map(ledgerCsvRow))
+  }
+  const handleExportAll = () => {
+    if (viewMode === 'summary') exportCSV(CL_CSV_FILE, SUMMARY_CSV_HEADERS, summarySorted.map(summaryCsvRow))
+    else exportCSV(CL_CSV_FILE, LEDGER_CSV_HEADERS, ledgerSorted.filter(r => r.id !== 'bal-bf').map(ledgerCsvRow))
+  }
+  const exportDisabled = viewMode === 'summary' ? summarySorted.length === 0 : ledgerSorted.length === 0
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -606,6 +623,7 @@ export default function CategoryLedger() {
               <Layers className="w-3.5 h-3.5" /> Ledger
             </button>
           </div>
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={exportDisabled} />
           <button
             onClick={() => viewMode === 'summary' ? loadSummary() : loadLedger()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"

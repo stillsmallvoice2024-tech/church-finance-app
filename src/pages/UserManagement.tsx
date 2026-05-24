@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { Modal }        from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
+import { exportCSV }    from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useAuth }      from '../hooks/useAuth'
 import { useToastStore } from '../store/toastStore'
 import { usePageTitle }  from '../hooks/usePageTitle'
@@ -506,6 +508,12 @@ export default function UserManagement() {
 
   const revokeTarget = users.find(u => u.id === revokeId)
 
+  const UM_CSV_HEADERS = ['Email', 'Full Name', 'Role', 'Joined']
+  const umCsvRow = (u: UserProfile) => [u.email ?? '', u.full_name ?? '', u.role, u.created_at ? new Date(u.created_at).toLocaleDateString() : '']
+  const UM_CSV_FILE = `users-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(UM_CSV_FILE, UM_CSV_HEADERS, users.map(umCsvRow))
+  const handleExportAll  = () => exportCSV(UM_CSV_FILE, UM_CSV_HEADERS, users.map(umCsvRow))
+
   const totalCount      = users.length
   const adminCount      = users.filter(u => u.role === 'admin').length
   const accountantCount = users.filter(u => u.role === 'accountant').length
@@ -518,12 +526,15 @@ export default function UserManagement() {
           <h1 className="text-xl font-bold text-gray-900">User Management</h1>
           <p className="text-sm text-gray-500 mt-0.5">Control who can access the finance system</p>
         </div>
-        <button
-          onClick={() => setInviteOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light"
-        >
-          <UserPlus className="w-4 h-4" /> Invite User
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={users.length === 0} />
+          <button
+            onClick={() => setInviteOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light"
+          >
+            <UserPlus className="w-4 h-4" /> Invite User
+          </button>
+        </div>
       </div>
 
       {/* ── Current user card ─────────────────────────────────────────────── */}
