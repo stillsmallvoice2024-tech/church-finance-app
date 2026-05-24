@@ -192,7 +192,13 @@ export default function CategoryLedger() {
       for (const catRow of cfg.rows) {
         if (!catRow.percentage) continue
         const allocated = Number(r.amount) * (catRow.percentage / 100)
-        allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
+        if (catRow.budget_portion === 'Specific Seed') {
+          ensure(catRow.category_name).specificSeed += allocated
+        } else if (catRow.budget_portion === 'Savings') {
+          ensure(catRow.category_name).savingsIn += allocated
+        } else {
+          allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
+        }
       }
     }
 
@@ -278,7 +284,7 @@ export default function CategoryLedger() {
           const cfg = configId
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
             : getConfigForDate(configs, r.date as string)
-          const catRow = cfg?.rows.find(c => c.category_name === activeCategory)
+          const catRow = cfg?.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || !c.budget_portion))
           if (!catRow?.percentage) continue
           const allocated = Number(r.amount) * (catRow.percentage / 100)
           if (allocated <= 0) continue
@@ -307,7 +313,7 @@ export default function CategoryLedger() {
         }
       } else {
         const sc2 = ledgerPortion
-        const [inflowRes, outflowRes] = await Promise.all([
+        const [inflowRes, outflowRes, cfgInflowRes] = await Promise.all([
           supabase.from('inflow_transactions')
             .select('id, date, description, amount')
             .eq('stage_code_2', sc2)
@@ -317,6 +323,12 @@ export default function CategoryLedger() {
             .select('id, date, description, actual_amount, amount_disbursed')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
+            .order('date'),
+          // Config-split inflows where this category's row has matching budget_portion
+          supabase.from('inflow_transactions')
+            .select('id, date, description, amount, allocation_config_id')
+            .not('allocation_config_id', 'is', null)
+            .is('stage_code_2', null)
             .order('date'),
         ])
         if (inflowRes.error) throw inflowRes.error
@@ -340,6 +352,22 @@ export default function CategoryLedger() {
             description: (r.description as string | null) || '—',
             inflow:      0,
             outflow:     amt,
+            balance:     0,
+          })
+        }
+        // Config-split: allocations routed to this category+portion via config rows
+        for (const r of cfgInflowRes.error ? [] : (cfgInflowRes.data ?? [])) {
+          const cfg = configs.find(c => c.id === (r.allocation_config_id as string))
+          const catRow = cfg?.rows.find(c => c.category_name === activeCategory && c.budget_portion === sc2)
+          if (!catRow?.percentage) continue
+          const allocated = Number(r.amount) * (catRow.percentage / 100)
+          if (allocated <= 0) continue
+          inRows.push({
+            id:          r.id as string,
+            date:        r.date as string,
+            description: (r.description as string | null) || '—',
+            inflow:      allocated,
+            outflow:     0,
             balance:     0,
           })
         }

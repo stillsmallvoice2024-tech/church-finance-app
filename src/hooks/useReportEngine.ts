@@ -149,7 +149,13 @@ export function useReportEngine(
       for (const catRow of cfg.rows) {
         if (!catRow.percentage) continue
         const allocated = Number(r.amount) * (catRow.percentage / 100)
-        allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
+        if (catRow.budget_portion === 'Specific Seed') {
+          ensure(catRow.category_name).specificSeed += allocated
+        } else if (catRow.budget_portion === 'Savings') {
+          ensure(catRow.category_name).savingsIn += allocated
+        } else {
+          allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
+        }
       }
     }
 

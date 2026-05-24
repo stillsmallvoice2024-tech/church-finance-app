@@ -577,14 +577,6 @@ function ManualEntryForm() {
         allocation_config_id:       effectiveConfigId,
         bank_name:                  selectedBank?.name             || undefined,
         transaction_ref:            v('transaction_ref') || await generateFallbackTransactionId(v('date'), v('amount'), v('description') ?? '', selectedBank?.name ?? ''),
-        stage_code_2:               (() => {
-          if (!effectiveConfigId) return undefined
-          const cfg = configs.find(c => c.id === effectiveConfigId)
-          if (!cfg?.rows.length) return undefined
-          const portions = [...new Set(cfg.rows.map(r => r.budget_portion).filter(Boolean))]
-          if (portions.length !== 1) return undefined
-          return portions[0] === 'Percentage' ? 'Percentage Allocation' : portions[0]
-        })(),
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
         income_type_id:             incomeTypeId                   || undefined,

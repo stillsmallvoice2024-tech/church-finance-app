@@ -786,15 +786,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               cfg?.id ?? null,
               (groupId) => getSpecialConfigVersionForDate(latestConfigs, groupId, date)?.id ?? null,
             )
-            if (resolvedId) {
-              row.allocation_config_id = resolvedId
-              const resolvedCfg = latestConfigs.find(c => c.id === resolvedId)
-              if (resolvedCfg?.rows.length) {
-                const portions = [...new Set(resolvedCfg.rows.map(r => r.budget_portion).filter(Boolean))]
-                if (portions.length === 1)
-                  row.stage_code_2 = portions[0] === 'Percentage' ? 'Percentage Allocation' : portions[0]
-              }
-            }
+            if (resolvedId) row.allocation_config_id = resolvedId
           }
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_ref) {
