@@ -4,6 +4,7 @@ import {
   ArrowLeft, Save, Trash2, ChevronUp, ChevronDown,
   Type, BarChart2, Table2, AlertCircle, Check,
   Eye, Pencil, Plus, X, RefreshCw, Sigma,
+  Link2, Printer, Camera, History, ChevronDown as ChevronDownIcon,
 } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import {
@@ -11,6 +12,9 @@ import {
   useUpdateDynamicReport,
   useSaveDynamicReportBlocks,
   useDynamicReports,
+  useReportSnapshots,
+  useSaveSnapshot,
+  useDeleteSnapshot,
 } from '../hooks/useDynamicReports'
 import { useCategories } from '../hooks/useCategories'
 import { useToastStore } from '../store/toastStore'
@@ -28,7 +32,11 @@ import {
   type TableRow,
   type QueryResult,
 } from '../utils/reportQueryEngine'
-import type { DynamicReport, DynamicReportBlockType, TextBlockConfig, MetricBlockConfig, TableBlockConfig, FormulaBlockConfig, FormulaTerm } from '../types'
+import type {
+  DynamicReport, DynamicReportBlockType,
+  TextBlockConfig, MetricBlockConfig, TableBlockConfig, FormulaBlockConfig, FormulaTerm,
+  DynamicReportSnapshot, SnapshotData,
+} from '../types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -52,13 +60,22 @@ const PORTION_SHORT: Record<string, string> = {
   percentage: ' · % Alloc',
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  NGN: '₦', USD: '$', GBP: '£', EUR: '€', CNY: '¥',
+}
+
+const CURRENCY_OPTIONS = Object.entries(CURRENCY_SYMBOLS).map(([value, sym]) => ({
+  value, label: `${sym} ${value}`,
+}))
+
 function fmtNGN(n: number): string {
   return n.toLocaleString('en-NG', { minimumFractionDigits: 2 })
 }
 
-function fmtAmount(n: number): string {
+function fmtAmount(n: number, currency = 'NGN'): string {
   const abs = Math.abs(n)
-  return (n < 0 ? '-' : '') + '₦' + fmtNGN(abs)
+  const sym = CURRENCY_SYMBOLS[currency] ?? '₦'
+  return (n < 0 ? '-' : '') + sym + fmtNGN(abs)
 }
 
 // ── Local block shape ──────────────────────────────────────────────────────────
@@ -346,6 +363,16 @@ function MetricBlockEditor({
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
+        <select
+          value={cfg.displayCurrency ?? 'NGN'}
+          onChange={e => onChange({ ...cfg, displayCurrency: e.target.value })}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
       <div className="col-span-2">
         <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
         <input
@@ -475,6 +502,16 @@ function TableBlockEditor({
           onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
+        <select
+          value={(cfg.displayCurrency as string) ?? 'NGN'}
+          onChange={e => onChange({ ...cfg, displayCurrency: e.target.value })}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
       <div className="col-span-2">
         <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
@@ -648,6 +685,16 @@ function FormulaBlockEditor({
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
+          <select
+            value={(cfg.displayCurrency as string) ?? 'NGN'}
+            onChange={e => onChange({ ...cfg, displayCurrency: e.target.value })}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
         <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
           <input
@@ -718,7 +765,7 @@ function BlockCard({
 
 // ── Preview renderers ──────────────────────────────────────────────────────────
 
-function ResolvedValue({ result }: { result: QueryResult | undefined }) {
+function ResolvedValue({ result, currency = 'NGN' }: { result: QueryResult | undefined; currency?: string }) {
   if (!result) {
     return <span className="text-gray-300 text-xs font-mono animate-pulse">…</span>
   }
@@ -734,7 +781,7 @@ function ResolvedValue({ result }: { result: QueryResult | undefined }) {
   }
   return (
     <span className={`font-mono font-semibold ${result.value < 0 ? 'text-danger' : 'text-success'}`}>
-      {fmtAmount(result.value)}
+      {fmtAmount(result.value, currency)}
     </span>
   )
 }
@@ -769,10 +816,11 @@ function MetricBlockPreview({
   block: EditorBlock
   resolved: Map<string, QueryResult>
 }) {
-  const cfg = block.config_json as Partial<MetricBlockConfig>
+  const cfg      = block.config_json as Partial<MetricBlockConfig>
   const fn       = cfg.fn ?? 'BALANCE'
   const category = cfg.category ?? ''
   const portion  = (cfg.portion as BudgetPortion | undefined) ?? 'all'
+  const currency = cfg.displayCurrency ?? 'NGN'
   const dateFrom = cfg.dateFrom
   const dateTo   = cfg.dateTo
 
@@ -801,7 +849,7 @@ function MetricBlockPreview({
         )}
       </div>
       <div className="text-2xl font-bold tabular-nums shrink-0">
-        <ResolvedValue result={result} />
+        <ResolvedValue result={result} currency={currency} />
       </div>
     </div>
   )
@@ -816,8 +864,9 @@ function TableBlockPreview({
   rows: TableRow[] | undefined
   resolving: boolean
 }) {
-  const cfg     = block.config_json as Partial<TableBlockConfig>
-  const label   = cfg.label || 'Financial Summary'
+  const cfg      = block.config_json as Partial<TableBlockConfig>
+  const currency = cfg.displayCurrency ?? 'NGN'
+  const label    = cfg.label || 'Financial Summary'
   const cats    = Array.isArray(cfg.categories) ? cfg.categories : []
   const colKeys: Array<'inflows' | 'outflows' | 'balance'> =
     Array.isArray(cfg.columns) && cfg.columns.length > 0
@@ -904,7 +953,7 @@ function TableBlockPreview({
                   const val = row[col as keyof Pick<TableRow, 'inflows' | 'outflows' | 'balance'>]
                   return (
                     <td key={col} className={`px-5 py-3 text-right ${amtCls(val)}`}>
-                      {fmtAmount(val)}
+                      {fmtAmount(val, currency)}
                     </td>
                   )
                 })}
@@ -928,7 +977,7 @@ function TableBlockPreview({
                 <td className="px-5 py-3 text-gray-700">Total</td>
                 {colKeys.map(col => (
                   <td key={col} className={`px-5 py-3 text-right ${amtCls(totals[col as keyof typeof totals])}`}>
-                    {fmtAmount(totals[col as keyof typeof totals])}
+                    {fmtAmount(totals[col as keyof typeof totals], currency)}
                   </td>
                 ))}
               </tr>
@@ -953,6 +1002,7 @@ function FormulaBlockPreview({
 }) {
   const cfg      = block.config_json as Partial<FormulaBlockConfig>
   const terms    = cfg.terms ?? []
+  const currency = cfg.displayCurrency ?? 'NGN'
   const dateFrom = cfg.dateFrom
   const dateTo   = cfg.dateTo
   const label    = cfg.label || 'Formula Result'
@@ -1022,7 +1072,7 @@ function FormulaBlockPreview({
               </span>
             ) : (
               <span className={`shrink-0 text-sm ${amtCls(row.result?.value ?? 0)}`}>
-                {fmtAmount(row.result?.value ?? 0)}
+                {fmtAmount(row.result?.value ?? 0, currency)}
               </span>
             )}
           </div>
@@ -1037,7 +1087,7 @@ function FormulaBlockPreview({
             <span className="text-danger text-xs font-medium">Partial result</span>
           ) : (
             <span className={`text-xl font-bold tabular-nums ${amtCls(total)}`}>
-              {fmtAmount(total)}
+              {fmtAmount(total, currency)}
             </span>
           )}
         </div>
@@ -1115,6 +1165,9 @@ export default function DynamicReportEditor() {
   const { blocks: savedBlocks, loading: blocksLoading } = useDynamicReportBlocks(id ?? null)
   const { mutate: updateTitle }  = useUpdateDynamicReport()
   const { mutate: saveBlocks, loading: saving } = useSaveDynamicReportBlocks()
+  const { snapshots, refetch: refetchSnapshots } = useReportSnapshots(id ?? null)
+  const { mutate: saveSnapshot, loading: savingSnapshot } = useSaveSnapshot()
+  const { mutate: deleteSnapshot } = useDeleteSnapshot()
 
   const [mode,    setMode]    = useState<'edit' | 'preview'>('edit')
   const [title,   setTitle]   = useState('')
@@ -1126,6 +1179,12 @@ export default function DynamicReportEditor() {
   const [resolved,   setResolved]   = useState<Map<string, QueryResult>>(new Map())
   const [tableData,  setTableData]  = useState<Map<string, TableRow[]>>(new Map())
   const [resolving,  setResolving]  = useState(false)
+
+  // Phase 5: share, snapshot, viewing
+  const [linkCopied,       setLinkCopied]       = useState(false)
+  const [snapshotLabel,    setSnapshotLabel]    = useState('')
+  const [showSnapshotPanel, setShowSnapshotPanel] = useState(false)
+  const [viewingSnapshot,  setViewingSnapshot]  = useState<DynamicReportSnapshot | null>(null)
 
   usePageTitle(title || 'Report Editor')
 
@@ -1210,6 +1269,53 @@ export default function DynamicReportEditor() {
     setIsDirty(true)
   }, [])
 
+  // Compute display maps: snapshot overrides live when viewing a snapshot
+  const displayResolved: Map<string, QueryResult> = viewingSnapshot
+    ? new Map(
+        Object.entries(viewingSnapshot.data.resolved).map(([k, v]) => [k, { value: v, error: null }]),
+      )
+    : resolved
+
+  const displayTableData: Map<string, TableRow[]> = viewingSnapshot
+    ? new Map(Object.entries(viewingSnapshot.data.tableData) as [string, TableRow[]][])
+    : tableData
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href).catch(() => {})
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2000)
+  }
+
+  const handleSaveSnapshot = useCallback(async () => {
+    if (!id) return
+    const label = snapshotLabel.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const data: SnapshotData = {
+      resolvedAt: new Date().toISOString(),
+      resolved:   Object.fromEntries(
+        Array.from(resolved.entries())
+          .filter(([, v]) => !v.error)
+          .map(([k, v]) => [k, v.value]),
+      ),
+      tableData: Object.fromEntries(Array.from(tableData.entries())),
+    }
+    const ok = await saveSnapshot(id, label, data)
+    if (ok) {
+      setSnapshotLabel('')
+      refetchSnapshots()
+      pushToast('Snapshot saved', 'success')
+    } else {
+      pushToast('Failed to save snapshot', 'error')
+    }
+  }, [id, snapshotLabel, resolved, tableData, saveSnapshot, refetchSnapshots, pushToast])
+
+  const handleDeleteSnapshot = useCallback(async (snapshotId: string) => {
+    const ok = await deleteSnapshot(snapshotId)
+    if (ok) {
+      if (viewingSnapshot?.id === snapshotId) setViewingSnapshot(null)
+      refetchSnapshots()
+    }
+  }, [deleteSnapshot, viewingSnapshot, refetchSnapshots])
+
   const handleSave = useCallback(async () => {
     if (!id) return
     const trimmedTitle = title.trim() || 'Untitled Report'
@@ -1274,7 +1380,27 @@ export default function DynamicReportEditor() {
             placeholder="Untitled Report"
           />
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 no-print">
+          {/* Share + Print (preview only) */}
+          {mode === 'preview' && (
+            <>
+              <button
+                onClick={handleCopyLink}
+                title="Copy shareable link"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                {linkCopied ? <Check className="w-3.5 h-3.5 text-success" /> : <Link2 className="w-3.5 h-3.5" />}
+                {linkCopied ? 'Copied!' : 'Share'}
+              </button>
+              <button
+                onClick={() => window.print()}
+                title="Print report"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5" />Print
+              </button>
+            </>
+          )}
           {/* Edit / Preview toggle */}
           <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-1">
             <button
@@ -1370,19 +1496,35 @@ export default function DynamicReportEditor() {
       {/* ── Preview mode ── */}
       {mode === 'preview' && (
         <div className="space-y-4">
-          {/* Refresh bar */}
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">
-              {resolving ? 'Fetching live data…' : 'Live data — values from your finance records'}
-            </p>
-            <button
-              onClick={() => resolveAll(blocks)}
-              disabled={resolving}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3 h-3 ${resolving ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+          {/* Status bar — snapshot vs live */}
+          <div className="flex items-center justify-between no-print">
+            {viewingSnapshot ? (
+              <p className="text-xs text-amber-600 font-medium flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5" />
+                Snapshot: {viewingSnapshot.label} &middot; {new Date(viewingSnapshot.snapshot_at).toLocaleString()}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400">
+                {resolving ? 'Fetching live data…' : 'Live data — values from your finance records'}
+              </p>
+            )}
+            {viewingSnapshot ? (
+              <button
+                onClick={() => setViewingSnapshot(null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />Return to live
+              </button>
+            ) : (
+              <button
+                onClick={() => resolveAll(blocks)}
+                disabled={resolving}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${resolving ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            )}
           </div>
 
           {blocks.length === 0 && (
@@ -1391,26 +1533,108 @@ export default function DynamicReportEditor() {
             </div>
           )}
 
+          {/* Blocks rendered with displayResolved / displayTableData */}
           {blocks.map(block => (
             <div key={block.key}>
               {block.block_type === 'text' && (
-                <TextBlockPreview block={block} resolved={resolved} />
+                <TextBlockPreview block={block} resolved={displayResolved} />
               )}
               {block.block_type === 'metric' && (
-                <MetricBlockPreview block={block} resolved={resolved} />
+                <MetricBlockPreview block={block} resolved={displayResolved} />
               )}
               {block.block_type === 'table' && (
                 <TableBlockPreview
                   block={block}
-                  rows={tableData.get(block.key)}
-                  resolving={resolving}
+                  rows={displayTableData.get(block.key)}
+                  resolving={resolving && !viewingSnapshot}
                 />
               )}
               {block.block_type === 'formula' && (
-                <FormulaBlockPreview block={block} resolved={resolved} resolving={resolving} />
+                <FormulaBlockPreview
+                  block={block}
+                  resolved={displayResolved}
+                  resolving={resolving && !viewingSnapshot}
+                />
               )}
             </div>
           ))}
+
+          {/* ── Snapshots panel ── */}
+          <div className="mt-6 border-t border-gray-100 pt-4 no-print">
+            <button
+              onClick={() => setShowSnapshotPanel(p => !p)}
+              className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors w-full"
+            >
+              <History className="w-3.5 h-3.5" />
+              Snapshots ({snapshots.length})
+              <ChevronDownIcon className={`w-3.5 h-3.5 ml-auto transition-transform ${showSnapshotPanel ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showSnapshotPanel && (
+              <div className="mt-3 space-y-3">
+                {/* Save current state */}
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                  <Camera className="w-4 h-4 text-gray-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={snapshotLabel}
+                    onChange={e => setSnapshotLabel(e.target.value)}
+                    placeholder="Snapshot label (e.g. May 2026)"
+                    className="flex-1 min-w-0 text-xs border-none bg-transparent outline-none text-gray-700 placeholder-gray-400"
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveSnapshot() }}
+                  />
+                  <button
+                    onClick={handleSaveSnapshot}
+                    disabled={savingSnapshot || resolving}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-40 transition-colors shrink-0"
+                  >
+                    <Camera className="w-3 h-3" />
+                    {savingSnapshot ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+
+                {/* Snapshot list */}
+                {snapshots.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-3">No snapshots yet — save the current live state above.</p>
+                ) : (
+                  <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+                    {snapshots.map(snap => (
+                      <div
+                        key={snap.id}
+                        className={`flex items-center gap-3 px-4 py-2.5 text-xs transition-colors ${
+                          viewingSnapshot?.id === snap.id ? 'bg-amber-50' : 'bg-white hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-800 truncate">{snap.label}</p>
+                          <p className="text-gray-400 mt-0.5">
+                            {new Date(snap.snapshot_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setViewingSnapshot(viewingSnapshot?.id === snap.id ? null : snap)}
+                          className={`shrink-0 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            viewingSnapshot?.id === snap.id
+                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {viewingSnapshot?.id === snap.id ? 'Live' : 'View'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSnapshot(snap.id)}
+                          className="shrink-0 p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                          title="Delete snapshot"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

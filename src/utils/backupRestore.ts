@@ -196,6 +196,13 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: ['dynamic_reports'],
   },
+  {
+    key: 'dynamic_report_snapshots', label: 'Report Snapshots', module: 'Reports',
+    restorePriority: 24, backupEnabled: true, restoreMode: 'merge',
+    conflictColumn: 'id',
+    requiresMigration: true, sensitive: false, optional: true,
+    dependencies: ['dynamic_reports'],
+  },
 ]
 
 /** Backward compat alias */

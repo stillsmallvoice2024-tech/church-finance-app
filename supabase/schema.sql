@@ -754,3 +754,17 @@ alter table public.dynamic_report_blocks enable row level security;
 create policy "drb_select" on public.dynamic_report_blocks for select using (auth.uid() is not null);
 create policy "drb_all"    on public.dynamic_report_blocks for all    using (auth.uid() is not null) with check (auth.uid() is not null);
 create index if not exists idx_drb_report_position on public.dynamic_report_blocks(report_id, position);
+
+-- ── Dynamic Report Snapshots ──────────────────────────────────────────────────
+create table if not exists public.dynamic_report_snapshots (
+  id          uuid primary key default gen_random_uuid(),
+  report_id   uuid not null references dynamic_reports(id) on delete cascade,
+  label       text not null,
+  snapshot_at timestamptz not null default now(),
+  data        jsonb not null default '{}',
+  created_at  timestamptz default now()
+);
+alter table public.dynamic_report_snapshots enable row level security;
+create policy "drs_select" on public.dynamic_report_snapshots for select using (auth.uid() is not null);
+create policy "drs_all"    on public.dynamic_report_snapshots for all    using (auth.uid() is not null) with check (auth.uid() is not null);
+create index if not exists idx_drs_report_at on public.dynamic_report_snapshots(report_id, snapshot_at desc);
