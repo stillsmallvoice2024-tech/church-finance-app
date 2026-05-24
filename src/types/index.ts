@@ -179,6 +179,7 @@ export interface TextBlockConfig {
 export interface MetricBlockConfig {
   fn: 'BALANCE' | 'INFLOWS' | 'OUTFLOWS' | 'NET'
   category?: string
+  portion?: string
   dateFrom?: string
   dateTo?: string
   label?: string
@@ -187,6 +188,7 @@ export interface MetricBlockConfig {
 export interface TableBlockConfig {
   categories: string[]
   columns: Array<'inflows' | 'outflows' | 'balance'>
+  portion?: string
   dateFrom?: string
   dateTo?: string
   label?: string
