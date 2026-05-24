@@ -1,5 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { Undo2, LayoutGrid, LayoutList, AlertCircle, RefreshCw, ChevronRight, ChevronDown } from 'lucide-react'
+import { exportCSV }       from '../utils/csvExport'
+import { ExportDropdown }  from '../components/ui/ExportDropdown'
 import { Card }            from '../components/ui/Card'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
@@ -94,6 +96,12 @@ export default function ReversalTransactions() {
     return true
   })
 
+  const RV_CSV_HEADERS = ['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks']
+  const rvCsvRow = (r: TxnRow) => [r.date, r.direction === 'in' ? 'Inflow' : 'Outflow', r.amount, r.display_description || r.description || '', r.bank_name ?? '', r.original_transaction_id ?? '', r.remarks ?? '']
+  const RV_CSV_FILE = `reversal-transactions-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(RV_CSV_FILE, RV_CSV_HEADERS, filtered.map(rvCsvRow))
+  const handleExportAll  = () => exportCSV(RV_CSV_FILE, RV_CSV_HEADERS, filtered.map(rvCsvRow))
+
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
       <AlertCircle className="w-10 h-10 text-danger" />
@@ -113,15 +121,18 @@ export default function ReversalTransactions() {
           <h1 className="text-2xl font-bold text-gray-900">Reversal Transactions</h1>
           <p className="text-sm text-gray-500 mt-0.5">Inflow and outflow rows tagged as reversals</p>
         </div>
-        <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-          <button onClick={() => setDisplayMode('table')} title="Table view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-            <LayoutList className="w-4 h-4" />
-          </button>
-          <button onClick={() => setDisplayMode('cards')} title="Card view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
-            <LayoutGrid className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-2">
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={filtered.length === 0} />
+          <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
+            <button onClick={() => setDisplayMode('table')} title="Table view"
+              className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button onClick={() => setDisplayMode('cards')} title="Card view"
+              className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 

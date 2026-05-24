@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Gift, AlertCircle, RefreshCw } from 'lucide-react'
+import { exportCSV } from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -150,6 +152,12 @@ export default function SpecificGivings() {
 
   const grandTotal = rows.reduce((s, r) => s + Number(r.amount), 0)
 
+  const SG_CSV_HEADERS = ['Category', 'Total (₦)']
+  const sgCsvRow = (g: GroupedCategory) => [g.category, g.total]
+  const SG_CSV_FILE = `specific-givings-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(SG_CSV_FILE, SG_CSV_HEADERS, sgPage.map(sgCsvRow))
+  const handleExportAll  = () => exportCSV(SG_CSV_FILE, SG_CSV_HEADERS, grouped.map(sgCsvRow))
+
   return (
     <div className="space-y-5">
 
@@ -161,13 +169,16 @@ export default function SpecificGivings() {
             Designated and specific-seed inflows for {year}
           </p>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={grouped.length === 0} />
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (

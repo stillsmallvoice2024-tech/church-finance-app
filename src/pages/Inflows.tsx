@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  TrendingUp, Download, Pencil, Trash2,
+  TrendingUp, Pencil, Trash2,
   ChevronDown, ChevronRight, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
@@ -22,6 +22,8 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
+import { supabase }                from '../lib/supabase'
+import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 import { useCategories }           from '../hooks/useCategories'
@@ -209,15 +211,37 @@ export default function Inflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const handleExport = () => {
-    exportCSV(
-      `inflows-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Date', 'Description', 'Amount (₦)', 'Stage Code 2', 'Specific Seed', 'Txn Ref', 'Remark'],
-      data.map(r => [
-        r.date, r.description, r.amount,
-        r.stage_code_2, r.specific_seed_description, r.transaction_ref, r.remark,
-      ]),
-    )
+  const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (₦)', 'Stage Code 2', 'Specific Seed', 'Txn Ref', 'Remark']
+  const inflowCsvRow = (r: InflowTransaction) => [
+    r.date, r.description, r.amount,
+    r.stage_code_2, r.specific_seed_description, r.transaction_ref, r.remark,
+  ]
+  const INF_CSV_FILE = `inflows-${new Date().toISOString().slice(0, 10)}.csv`
+
+  const handleExportView = () => {
+    exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, displayed.map(inflowCsvRow))
+  }
+
+  const handleExportAll = async () => {
+    if (isSearching) {
+      exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, allMatching.map(inflowCsvRow))
+      return
+    }
+    let query = supabase
+      .from('inflow_transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .limit(10000)
+    if (dateFrom) query = query.gte('date', dateFrom)
+    if (dateTo)   query = query.lte('date', dateTo)
+    const { data: rows } = await query
+    if (!rows) return
+    const allRows = rows as InflowTransaction[]
+    const adv = infState.advancedSort
+    const allSorted = adv.length > 0
+      ? multiSortRows(allRows, getValue, adv, INF_SORT_FIELDS)
+      : sortRows(allRows, getValue, infState.sortKey, infState.sortDir, INF_SORT_FIELDS)
+    exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, allSorted.map(inflowCsvRow))
   }
 
   if (error) return (
@@ -244,12 +268,11 @@ export default function Inflows() {
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleExport} disabled={data.length === 0}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
-            >
-              <Download className="w-4 h-4" /> Export CSV
-            </button>
+            <ExportDropdown
+              onExportView={handleExportView}
+              onExportAll={handleExportAll}
+              disabled={data.length === 0}
+            />
           </div>
         </div>
 

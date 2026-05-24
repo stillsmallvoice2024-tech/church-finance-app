@@ -21,6 +21,8 @@ import { useAuthStore }  from '../store/authStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
+import { exportCSV }   from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -231,6 +233,15 @@ export default function IntraBankTransfers() {
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: TransferRow) => { setEditRecord(r); setModalOpen(true) }
 
+  const IBT_CSV_HEADERS = ['Date', 'From Bank', 'To Bank', 'Amount (₦)', 'Description', 'Ref', 'Remarks']
+  const ibtCsvRow = (r: TransferRow) => [
+    r.date, r.from_bank_name ?? '', r.to_bank_name ?? '', r.amount,
+    r.display_description, r.transaction_ref ?? '', r.remarks ?? '',
+  ]
+  const IBT_CSV_FILE = `intrabank-transfers-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(IBT_CSV_FILE, IBT_CSV_HEADERS, filtered.map(ibtCsvRow))
+  const handleExportAll  = () => exportCSV(IBT_CSV_FILE, IBT_CSV_HEADERS, filtered.map(ibtCsvRow))
+
   const handleDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
@@ -263,6 +274,11 @@ export default function IntraBankTransfers() {
             <p className="text-sm text-gray-500 mt-0.5">Bank-to-bank fund movements</p>
           </div>
           <div className="flex items-center gap-2">
+            <ExportDropdown
+              onExportView={handleExportView}
+              onExportAll={handleExportAll}
+              disabled={filtered.length === 0}
+            />
             <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
               <button onClick={() => setDisplayMode('table')} title="Table view"
                 className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>

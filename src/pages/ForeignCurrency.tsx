@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Plus, Download, TrendingUp, TrendingDown, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
 import { AddFXModal } from '../components/modals/AddFXModal'
 import { exportCSV } from '../utils/csvExport'
+import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
@@ -101,20 +102,21 @@ export default function ForeignCurrency() {
     { label: 'Created',      value: t.created_at ? formatDate(t.created_at.slice(0, 10)) : null },
   ]
 
-  const handleExport = () => {
-    exportCSV(
-      'fx_transactions',
-      ['Date', 'Currency', 'Type', 'Amount', 'Running Balance', 'Narration', 'Ref'],
-      transactions.map(t => [
-        t.date,
-        t.currency,
-        t.deposit > 0 ? 'Deposit' : 'Withdrawal',
-        t.deposit > 0 ? t.deposit : t.withdrawal,
-        t.running_balance,
-        t.narration ?? '',
-        t.transaction_ref ?? '',
-      ]),
-    )
+  const FX_CSV_HEADERS = ['Date', 'Currency', 'Type', 'Amount', 'Running Balance', 'Narration', 'Ref']
+  const fxCsvRow = (t: FXTransaction) => [
+    t.date, t.currency,
+    t.deposit > 0 ? 'Deposit' : 'Withdrawal',
+    t.deposit > 0 ? t.deposit : t.withdrawal,
+    t.running_balance, t.narration ?? '', t.transaction_ref ?? '',
+  ]
+  const FX_CSV_FILE = `fx-transactions-${new Date().toISOString().slice(0, 10)}.csv`
+
+  const handleExportView = () => {
+    exportCSV(FX_CSV_FILE, FX_CSV_HEADERS, fxPage.map(fxCsvRow))
+  }
+
+  const handleExportAll = () => {
+    exportCSV(FX_CSV_FILE, FX_CSV_HEADERS, fxSorted.map(fxCsvRow))
   }
 
   const totalNairaEquivalent = FX_META.reduce((sum, m) => {
@@ -257,12 +259,11 @@ export default function ForeignCurrency() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
-            >
-              <Download className="w-3 h-3" /> CSV
-            </button>
+            <ExportDropdown
+              onExportView={handleExportView}
+              onExportAll={handleExportAll}
+              disabled={transactions.length === 0}
+            />
           </div>
         </div>
 

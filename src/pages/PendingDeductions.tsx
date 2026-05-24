@@ -18,6 +18,9 @@ import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { outflowDetailItems } from '../utils/rowDetailItems'
+import { supabase }                 from '../lib/supabase'
+import { exportCSV }               from '../utils/csvExport'
+import { ExportDropdown }          from '../components/ui/ExportDropdown'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -90,6 +93,35 @@ export default function PendingDeductions() {
     headerCheckboxRef.current.checked       = all
     headerCheckboxRef.current.indeterminate = some && !all
   }, [selectedIds, displayed])
+
+  const PD_CSV_HEADERS = ['Date', 'Description', 'Bank', 'Disbursed (₦)', 'Transfer Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Stage Code 2', 'Remarks']
+  const pdCsvRow = (r: OutflowTransaction) => [
+    r.date, r.description ?? '', r.bank_name ?? '',
+    r.amount_disbursed, r.transfer_charge,
+    Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge),
+    r.stage_code_1 ?? '', r.stage_code_2 ?? '', r.remarks ?? '',
+  ]
+  const PD_CSV_FILE = `pending-deductions-${new Date().toISOString().slice(0, 10)}.csv`
+
+  const handleExportView = () => exportCSV(PD_CSV_FILE, PD_CSV_HEADERS, displayed.map(pdCsvRow))
+
+  const handleExportAll = async () => {
+    let query = supabase
+      .from('outflow_transactions')
+      .select('*')
+      .eq('is_pending_deduction', true)
+      .order('date', { ascending: false })
+      .limit(10000)
+    if (dateFrom) query = query.gte('date', dateFrom)
+    if (dateTo)   query = query.lte('date', dateTo)
+    const { data: rows } = await query
+    if (!rows) return
+    const adv = pdState.advancedSort
+    const allSorted = adv.length > 0
+      ? multiSortRows(rows as OutflowTransaction[], getPdValue, adv, PD_SORT_FIELDS)
+      : sortRows(rows as OutflowTransaction[], getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
+    exportCSV(PD_CSV_FILE, PD_CSV_HEADERS, allSorted.map(pdCsvRow))
+  }
 
   const handleBulkResolve = async () => {
     const rows    = displayed.filter(r => selectedIds.has(r.id))
@@ -191,14 +223,21 @@ export default function PendingDeductions() {
       <div className="space-y-5">
 
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Clock className="w-6 h-6 text-amber-500" />
-            Pending Deductions
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Outflow transactions awaiting deduction from the account — {count} pending
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Clock className="w-6 h-6 text-amber-500" />
+              Pending Deductions
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Outflow transactions awaiting deduction from the account — {count} pending
+            </p>
+          </div>
+          <ExportDropdown
+            onExportView={handleExportView}
+            onExportAll={handleExportAll}
+            disabled={data.length === 0}
+          />
         </div>
 
         {/* Summary strip */}
