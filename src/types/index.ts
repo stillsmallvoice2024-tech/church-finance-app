@@ -181,6 +181,7 @@ export interface MetricBlockConfig {
   category?: string
   portion?: string
   displayCurrency?: string
+  dateField?: string
   dateFrom?: string
   dateTo?: string
   label?: string
@@ -191,6 +192,7 @@ export interface TableBlockConfig {
   columns: Array<'inflows' | 'outflows' | 'balance'>
   portion?: string
   displayCurrency?: string
+  dateField?: string
   dateFrom?: string
   dateTo?: string
   label?: string
@@ -206,6 +208,7 @@ export interface FormulaTerm {
 export interface FormulaBlockConfig {
   terms: FormulaTerm[]
   displayCurrency?: string
+  dateField?: string
   dateFrom?: string
   dateTo?: string
   label?: string

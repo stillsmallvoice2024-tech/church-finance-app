@@ -351,43 +351,47 @@ function MetricBlockEditor({
         </div>
       )}
 
-      {/* Inflows: single Recorded Date */}
+      {/* Inflows: convenience single-date shortcut (sets both from + to) */}
       {isInflows && (
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Recorded Date (optional)</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            Recorded Date <span className="font-normal text-gray-400">(shortcut — sets both dates)</span>
+          </label>
           <input
             type="date"
-            value={cfg.dateFrom ?? ''}
+            value={cfg.dateFrom === cfg.dateTo ? cfg.dateFrom ?? '' : ''}
             onChange={e => onChange({ ...cfg, dateFrom: e.target.value, dateTo: e.target.value })}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <p className="text-[10px] text-gray-400 mt-1">Filter to a specific recording date — leave blank for all dates</p>
+          <p className="text-[10px] text-gray-400 mt-1">Sets a single day — or use Date From / Date To below for a range</p>
         </div>
       )}
 
-      {/* Date range: Balance, Outflows, Net */}
-      {!isInflows && (
-        <>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
-            <input
-              type="date"
-              value={cfg.dateFrom ?? ''}
-              onChange={e => onChange({ ...cfg, dateFrom: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
-            <input
-              type="date"
-              value={cfg.dateTo ?? ''}
-              onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-        </>
-      )}
+      {/* Date range: all metric types */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
+        <input
+          type="date"
+          value={cfg.dateFrom ?? ''}
+          onChange={e => onChange({ ...cfg, dateFrom: e.target.value })}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
+        <input
+          type="date"
+          value={cfg.dateTo ?? ''}
+          onChange={e => onChange({ ...cfg, dateTo: e.target.value })}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+
+      {/* Date column selector — all metric types */}
+      <DateFieldToggle
+        value={cfg.dateField ?? 'date'}
+        onChange={v => onChange({ ...cfg, dateField: v })}
+      />
 
       {/* Display Currency */}
       <div>
@@ -531,6 +535,10 @@ function TableBlockEditor({
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
+      <DateFieldToggle
+        value={(cfg.dateField as string) ?? 'date'}
+        onChange={v => onChange({ ...cfg, dateField: v })}
+      />
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
         <select
@@ -713,6 +721,10 @@ function FormulaBlockEditor({
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
+        <DateFieldToggle
+          value={(cfg.dateField as string) ?? 'date'}
+          onChange={v => onChange({ ...cfg, dateField: v })}
+        />
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
           <select
@@ -734,6 +746,48 @@ function FormulaBlockEditor({
           />
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Shared date-field toggle ───────────────────────────────────────────────────
+
+function DateFieldToggle({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  const isRecorded = value === 'created_at'
+  return (
+    <div className="col-span-2">
+      <label className="block text-xs font-medium text-gray-600 mb-1.5">Filter Date Column</label>
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+        <button
+          type="button"
+          onClick={() => onChange('date')}
+          className={`flex-1 px-3 py-2 transition-colors ${
+            !isRecorded ? 'bg-primary text-white font-medium' : 'bg-white text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Transaction Date
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange('created_at')}
+          className={`flex-1 px-3 py-2 border-l border-gray-200 transition-colors ${
+            isRecorded ? 'bg-primary text-white font-medium' : 'bg-white text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Recorded At
+        </button>
+      </div>
+      <p className="text-[10px] text-gray-400 mt-1">
+        {isRecorded
+          ? 'Filters by when the transaction was entered into the system'
+          : 'Filters by the transaction value date'}
+      </p>
     </div>
   )
 }
@@ -1153,42 +1207,48 @@ function collectTokensFromBlocks(blocks: EditorBlock[]): ParsedToken[] {
     } else if (b.block_type === 'metric') {
       const cfg = b.config_json as Partial<MetricBlockConfig>
       if (!cfg.fn) continue
-      const portion = (cfg.portion as BudgetPortion | undefined) ?? 'all'
+      const portion    = (cfg.portion as BudgetPortion | undefined) ?? 'all'
       const portionArg = portion !== 'all' ? portion : undefined
+      const df         = cfg.dateField || undefined
       tokens.push({
-        raw:      buildTokenString(
+        raw:       buildTokenString(
           cfg.fn as TokenFn,
           cfg.category ?? '',
           portionArg,
           cfg.dateFrom || undefined,
           cfg.dateTo   || undefined,
+          df,
         ),
-        fn:       cfg.fn as TokenFn,
-        category: cfg.category ?? '',
-        portion:  portionArg,
-        dateFrom: cfg.dateFrom || undefined,
-        dateTo:   cfg.dateTo   || undefined,
+        fn:        cfg.fn as TokenFn,
+        category:  cfg.category ?? '',
+        portion:   portionArg,
+        dateFrom:  cfg.dateFrom || undefined,
+        dateTo:    cfg.dateTo   || undefined,
+        dateField: df,
       })
     } else if (b.block_type === 'formula') {
       const cfg = b.config_json as Partial<FormulaBlockConfig>
+      const df  = cfg.dateField || undefined
       for (const term of cfg.terms ?? []) {
         if (term.fn !== 'NET' && !term.category) continue
         const portionArg = term.portion && term.portion !== 'all'
           ? term.portion as BudgetPortion
           : undefined
         tokens.push({
-          raw:      buildTokenString(
+          raw:       buildTokenString(
             term.fn as TokenFn,
             term.category ?? '',
             portionArg,
             cfg.dateFrom || undefined,
             cfg.dateTo   || undefined,
+            df,
           ),
-          fn:       term.fn as TokenFn,
-          category: term.category ?? '',
-          portion:  portionArg,
-          dateFrom: cfg.dateFrom || undefined,
-          dateTo:   cfg.dateTo   || undefined,
+          fn:        term.fn as TokenFn,
+          category:  term.category ?? '',
+          portion:   portionArg,
+          dateFrom:  cfg.dateFrom || undefined,
+          dateTo:    cfg.dateTo   || undefined,
+          dateField: df,
         })
       }
     }
@@ -1266,7 +1326,8 @@ export default function DynamicReportEditor() {
           ? { from: cfg.dateFrom, to: cfg.dateTo }
           : undefined
         const portion = (cfg.portion as BudgetPortion | undefined) ?? 'all'
-        const rows    = await resolveTableBlock(cats, dr, portion !== 'all' ? portion : undefined)
+        const df      = (cfg.dateField as string | undefined) || undefined
+        const rows    = await resolveTableBlock(cats, dr, portion !== 'all' ? portion : undefined, df)
           .catch(() => [] as TableRow[])
         return { key: b.key, rows }
       }),
