@@ -743,7 +743,7 @@ create policy "dr_all"    on public.dynamic_reports for all    using (auth.uid()
 create table if not exists public.dynamic_report_blocks (
   id          uuid primary key default gen_random_uuid(),
   report_id   uuid not null references dynamic_reports(id) on delete cascade,
-  block_type  text not null check (block_type in ('text', 'metric', 'table')),
+  block_type  text not null check (block_type in ('text', 'metric', 'table', 'formula')),
   position    integer not null default 0,
   config_json jsonb not null default '{}',
   created_at  timestamptz default now()

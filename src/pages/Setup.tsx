@@ -1021,6 +1021,12 @@ DO $\$ BEGIN
   CREATE POLICY "drb_all" ON public.dynamic_report_blocks FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
 EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
 CREATE INDEX IF NOT EXISTS idx_drb_report_position ON public.dynamic_report_blocks(report_id, position);
+
+-- Phase 4: Extend block_type to support formula blocks
+ALTER TABLE public.dynamic_report_blocks DROP CONSTRAINT IF EXISTS dynamic_report_blocks_block_type_check;
+ALTER TABLE public.dynamic_report_blocks ADD CONSTRAINT dynamic_report_blocks_block_type_check
+  CHECK (block_type IN ('text', 'metric', 'table', 'formula'));
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
