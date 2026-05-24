@@ -759,7 +759,7 @@ function DateFieldToggle({
   value: string
   onChange: (v: string) => void
 }) {
-  const isRecorded = value === 'created_at'
+  const isRecorded = value === 'recorded_at'
   return (
     <div className="col-span-2">
       <label className="block text-xs font-medium text-gray-600 mb-1.5">Filter Date Column</label>
@@ -775,7 +775,7 @@ function DateFieldToggle({
         </button>
         <button
           type="button"
-          onClick={() => onChange('created_at')}
+          onClick={() => onChange('recorded_at')}
           className={`flex-1 px-3 py-2 border-l border-gray-200 transition-colors ${
             isRecorded ? 'bg-primary text-white font-medium' : 'bg-white text-gray-600 hover:bg-gray-50'
           }`}

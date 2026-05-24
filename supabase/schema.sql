@@ -132,7 +132,8 @@ create table public.inflow_transactions (
   created_by               uuid references public.profiles(id),
   recorded_at              timestamptz,
   created_at               timestamptz default now(),
-  updated_at               timestamptz default now()
+  updated_at               timestamptz default now(),
+  recorded_at              timestamptz default now()
 );
 
 -- ============================================================
@@ -163,7 +164,8 @@ create table public.outflow_transactions (
   created_by               uuid references public.profiles(id),
   recorded_at              timestamptz,
   created_at               timestamptz default now(),
-  updated_at               timestamptz default now()
+  updated_at               timestamptz default now(),
+  recorded_at              timestamptz default now()
 );
 
 -- ============================================================

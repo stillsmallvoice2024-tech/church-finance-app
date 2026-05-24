@@ -12,7 +12,7 @@ import {
 //   {{BALANCE:category}}
 //   {{BALANCE:category:portion}}                              portion = seed|savings|percentage|all
 //   {{BALANCE:category:portion:dateFrom:dateTo}}
-//   {{BALANCE:category:portion:dateFrom:dateTo:dateField}}    dateField = date|created_at
+//   {{BALANCE:category:portion:dateFrom:dateTo:dateField}}    dateField = date|recorded_at
 //   {{BALANCE:category:dateFrom:dateTo}}                      backward-compat (no portion segment)
 //   {{INFLOWS:category}} / {{OUTFLOWS:category}}
 //   {{NET}} / {{NET:dateFrom:dateTo}}
@@ -35,7 +35,7 @@ const TOKEN_RE =
 
 const DATE_RE       = /^\d{4}-\d{2}-\d{2}$/
 const PORTION_KEYS  = new Set(['all', 'seed', 'savings', 'percentage'])
-const DATE_FIELD_KEYS = new Set(['date', 'created_at'])
+const DATE_FIELD_KEYS = new Set(['date', 'recorded_at'])
 
 function parseParts(
   g2: string | undefined,
