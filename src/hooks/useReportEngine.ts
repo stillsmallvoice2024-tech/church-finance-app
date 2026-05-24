@@ -139,7 +139,7 @@ export function useReportEngine(
     // ── Percentage-allocated inflows ────────────────────────────────────────
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
-      if (r.stage_code_2 === 'Specific Seed' || r.stage_code_2 === 'Savings') continue
+      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
       if (r.transaction_type) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
@@ -149,7 +149,13 @@ export function useReportEngine(
       for (const catRow of cfg.rows) {
         if (!catRow.percentage) continue
         const allocated = Number(r.amount) * (catRow.percentage / 100)
-        allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
+        if (catRow.budget_portion === 'Specific Seed') {
+          ensure(catRow.category_name).specificSeed += allocated
+        } else if (catRow.budget_portion === 'Savings') {
+          ensure(catRow.category_name).savingsIn += allocated
+        } else {
+          allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
+        }
       }
     }
 
