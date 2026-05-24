@@ -58,12 +58,32 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 
 Per-inflow allocation config resolution (used in both `loadSummary` and `loadLedger`):
 1. **If `transaction_type` is set → skip entirely** (refund, reversal, bank_deposit, intrabank_transfer are never allocated)
-2. If inflow has `allocation_config_id` set → use that specific config
-3. Otherwise → `getConfigForDate(configs, inflow.date)`
+2. **Guard:** `if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue` — skips any inflow with an explicit non-percentage portion (avoids double-counting with `seedRes`/`savInRes` queries); `null` stage_code_2 passes through
+3. If inflow has `allocation_config_id` set → use that specific config
+4. Otherwise → `getConfigForDate(configs, inflow.date)`
 
 This ensures special-config inflows (e.g. Easter offering) use the correct percentages rather than the date-based general config.
 
 > `transaction_type` must be included in the SELECT for both `loadSummary` and `loadLedger` queries — the guard uses `(r as Record<string, unknown>).transaction_type`.
+
+### Budget Portion Routing from Config Rows
+
+Each `AllocationRow` carries `budget_portion: 'Percentage' | 'Specific Seed' | 'Savings'`. When processing a config's rows, the allocated amount (`inflow.amount × row.percentage / 100`) is routed to the **correct bucket per row**, not universally to percentage:
+
+| `row.budget_portion` | Routed to |
+|---|---|
+| `'Specific Seed'` | `specificSeed` bucket (same as direct Specific Seed transactions) |
+| `'Savings'` | `savingsIn` bucket |
+| `'Percentage'` or unset | `allocMap` (percentage allocation bucket) |
+
+**Example:** Crusades config — `10% Tithe / Percentage` + `90% God-Encounters / Specific Seed`:
+- 5,000 inflow → 500 → `allocMap['Tithe']`, 4,500 → `specificSeed['God-Encounters']`
+
+**Critical:** `allocation_config_id` presence NEVER forces an inflow into the percentage bucket. Only the config row's own `budget_portion` determines placement. Config-based inflows intentionally have `stage_code_2 = null`; routing is read-time from config rows, not stored on the transaction.
+
+**CategoryLedger Percentage ledger**: catRow match restricted to `budget_portion === 'Percentage'` or unset — prevents config rows tagged for other portions from bleeding into the Percentage ledger tab.
+
+**CategoryLedger Specific Seed / Savings ledger**: fetches a third query for config-split inflows (`allocation_config_id NOT NULL`, `stage_code_2 IS NULL`) and includes the allocated amount for `activeCategory` where the matching config row's `budget_portion` equals the active portion tab.
 
 ---
 
