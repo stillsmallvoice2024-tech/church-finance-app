@@ -986,6 +986,41 @@ CREATE INDEX IF NOT EXISTS idx_inflow_bank_name  ON inflow_transactions(bank_nam
 CREATE INDEX IF NOT EXISTS idx_outflow_bank_name ON outflow_transactions(bank_name);
 
 -- Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
+
+-- Dynamic Reports: document-based finance reports with live-updating blocks
+CREATE TABLE IF NOT EXISTS public.dynamic_reports (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title      text NOT NULL DEFAULT 'Untitled Report',
+  created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.dynamic_reports ENABLE ROW LEVEL SECURITY;
+DO $\$ BEGIN
+  CREATE POLICY "dr_select" ON public.dynamic_reports FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
+  CREATE POLICY "dr_all" ON public.dynamic_reports FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+
+-- Dynamic Report Blocks: structured content blocks (text, metric, table)
+CREATE TABLE IF NOT EXISTS public.dynamic_report_blocks (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id   uuid NOT NULL REFERENCES dynamic_reports(id) ON DELETE CASCADE,
+  block_type  text NOT NULL CHECK (block_type IN ('text', 'metric', 'table')),
+  position    integer NOT NULL DEFAULT 0,
+  config_json jsonb NOT NULL DEFAULT '{}',
+  created_at  timestamptz DEFAULT now()
+);
+ALTER TABLE public.dynamic_report_blocks ENABLE ROW LEVEL SECURITY;
+DO $\$ BEGIN
+  CREATE POLICY "drb_select" ON public.dynamic_report_blocks FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN
+  CREATE POLICY "drb_all" ON public.dynamic_report_blocks FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+CREATE INDEX IF NOT EXISTS idx_drb_report_position ON public.dynamic_report_blocks(report_id, position);
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────

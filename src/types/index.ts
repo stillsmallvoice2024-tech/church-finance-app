@@ -150,3 +150,44 @@ export interface ReportCategoryBalance {
 
 /** Operational inflow balance keyed by incomeTypeId or transactionTypeKey */
 export type OperationalBalanceMap = Map<string, number>
+
+// ── Dynamic Reports ────────────────────────────────────────────────────────────
+
+export type DynamicReportBlockType = 'text' | 'metric' | 'table'
+
+export interface DynamicReport {
+  id: string
+  title: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DynamicReportBlock {
+  id: string
+  report_id: string
+  block_type: DynamicReportBlockType
+  position: number
+  config_json: Record<string, unknown>
+  created_at: string
+}
+
+export interface TextBlockConfig {
+  text: string
+}
+
+export interface MetricBlockConfig {
+  fn: 'BALANCE' | 'INFLOWS' | 'OUTFLOWS' | 'NET'
+  category?: string
+  dateFrom?: string
+  dateTo?: string
+  label?: string
+}
+
+export interface TableBlockConfig {
+  categories: string[]
+  columns: Array<'inflows' | 'outflows' | 'balance'>
+  dateFrom?: string
+  dateTo?: string
+  label?: string
+}

@@ -5,7 +5,7 @@ import {
   BookOpen, Landmark, ArrowRightLeft, Repeat2, Globe,
   Hourglass, RotateCcw, Undo2,
   Layers, LayoutList, Percent, HandCoins, PiggyBank,
-  BarChart3, FileText,
+  BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
   ChevronDown, X,
 } from 'lucide-react'
@@ -78,8 +78,9 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Reports',
     defaultOpen: false,
     items: [
-      { label: 'Reports',          path: '/reports',          icon: BarChart3 },
-      { label: 'Financial Report', path: '/financial-report', icon: FileText  },
+      { label: 'Reports',          path: '/reports',          icon: BarChart3    },
+      { label: 'Financial Report', path: '/financial-report', icon: FileText     },
+      { label: 'Dynamic Reports',  path: '/dynamic-reports',  icon: NotebookPen  },
     ],
   },
   {
