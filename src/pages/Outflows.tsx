@@ -116,7 +116,7 @@ export default function Outflows() {
   useEffect(() => { setSelectedIds(new Set()) }, [page])
 
   // Data controls state
-  const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
+  const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE, persistSort: false })
 
   // Reset local page when sort/search controls change
   useEffect(() => {
@@ -132,8 +132,8 @@ export default function Outflows() {
     searchCol:    outState.searchCol,
     page,
     pageSize:     outState.pageSize,
-    sortColumn:   outState.advancedSort.length === 0 ? outState.sortKey : undefined,
-    sortAscending: outState.advancedSort.length === 0 ? (outState.sortDir === 'asc') : undefined,
+    sortColumn:   outState.advancedSort.length === 0 && outState.sortKey !== 'recorded_at' ? outState.sortKey : undefined,
+    sortAscending: outState.advancedSort.length === 0 && outState.sortKey !== 'recorded_at' ? (outState.sortDir === 'asc') : undefined,
     advancedSort: outState.advancedSort.length > 0 ? outState.advancedSort : undefined,
   })
 
@@ -297,7 +297,7 @@ export default function Outflows() {
             </FilterGroup>
             {(dateFrom || dateTo || stageCode) && (
               <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setStageCode(''); setSearchInput('') }}
+                onClick={() => { setDateFrom(''); setDateTo(''); setStageCode(''); setSearchInput(''); outState.setSort('recorded_at', 'desc'); outState.setAdvancedSort([]) }}
                 className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Clear
@@ -472,7 +472,7 @@ export default function Outflows() {
                   <SortableHeader field={OUT_SORT_FIELDS[0]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={OUT_SORT_FIELDS[2]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
-                  <SortableHeader field={OUT_SORT_FIELDS[1]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
+                  <SortableHeader field={OUT_SORT_FIELDS[4]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">📎</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
                 </tr>
