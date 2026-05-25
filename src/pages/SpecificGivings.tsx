@@ -80,30 +80,37 @@ export default function SpecificGivings() {
     const start = `${year}-01-01`
     const end   = `${year}-12-31`
 
-    const result = await supabase
-      .from('inflow_transactions')
-      .select('id, date, stage_code_1, specific_seed_description, description, amount')
-      .eq('stage_code_2', 'Specific Seed')
-      .gte('date', start)
-      .lte('date', end)
-      .order('date', { ascending: false })
+    const [directRes, configSplitRes, cobRes] = await Promise.all([
+      supabase
+        .from('inflow_transactions')
+        .select('id, date, stage_code_1, specific_seed_description, description, amount')
+        .eq('stage_code_2', 'Specific Seed')
+        .gte('date', start)
+        .lte('date', end)
+        .order('date', { ascending: false }),
+      supabase
+        .from('inflow_transactions')
+        .select('id, date, amount, description, allocation_config_id')
+        .not('allocation_config_id', 'is', null)
+        .is('stage_code_2', null)
+        .is('transaction_type', null)
+        .gte('date', start)
+        .lte('date', end),
+      supabase
+        .from('category_opening_balances')
+        .select('amount, category_id, categories(name, id)')
+        .eq('budget_portion', 'Specific Seed'),
+    ])
 
-    if (result.error) {
-      setError(result.error.message)
+    if (directRes.error) {
+      setError(directRes.error.message)
       setLoading(false)
       return
     }
 
-    const txRows = (result.data ?? []) as SpecificRow[]
-
-    // Opening balances from new table
-    const cobRes = await supabase
-      .from('category_opening_balances')
-      .select('amount, category_id, categories(name, id)')
-      .eq('budget_portion', 'Specific Seed')
+    const txRows = (directRes.data ?? []) as SpecificRow[]
 
     const cobData = cobRes.error ? [] : (cobRes.data ?? [])
-
     const cobOpeningRows: SpecificRow[] = cobData
       .map((r): SpecificRow | null => {
         const cats    = r.categories as unknown as { name: string; id: string } | null
@@ -121,7 +128,44 @@ export default function SpecificGivings() {
       })
       .filter((r): r is SpecificRow => r !== null)
 
-    setRows([...cobOpeningRows, ...txRows])
+    const configSplitData = (configSplitRes.data ?? []) as Array<{
+      id: string; date: string; amount: number; description: string | null; allocation_config_id: string
+    }>
+    const configSpecificRows: SpecificRow[] = []
+
+    if (configSplitData.length > 0) {
+      const configIds = [...new Set(configSplitData.map(r => r.allocation_config_id))]
+      const configsRes = await supabase
+        .from('allocation_configs')
+        .select('id, rows')
+        .in('id', configIds)
+
+      type ConfigRowShape = { category_name: string; budget_portion?: string; percentage?: number }
+      const configMap = new Map<string, ConfigRowShape[]>(
+        (configsRes.data ?? []).map(c => [c.id as string, c.rows as ConfigRowShape[]])
+      )
+
+      for (const inflow of configSplitData) {
+        const cfgRows = configMap.get(inflow.allocation_config_id) ?? []
+        for (const row of cfgRows) {
+          if (row.budget_portion !== 'Specific Seed') continue
+          const pct = Number(row.percentage ?? 0)
+          if (pct <= 0) continue
+          const allocAmount = Math.round(Number(inflow.amount) * pct / 100 * 100) / 100
+          if (allocAmount <= 0) continue
+          configSpecificRows.push({
+            id:                        `cs-${inflow.id}-${row.category_name}`,
+            date:                      inflow.date,
+            stage_code_1:              row.category_name,
+            specific_seed_description: inflow.description || null,
+            description:               null,
+            amount:                    allocAmount,
+          })
+        }
+      }
+    }
+
+    setRows([...cobOpeningRows, ...txRows, ...configSpecificRows])
     setLoading(false)
   }, [year])
 

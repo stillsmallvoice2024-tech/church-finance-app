@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
+import { PieChart, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
@@ -13,29 +13,31 @@ import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 
-interface SavingsRow {
-  category:     string
-  deposited:    number
-  withdrawn:    number
-  balance:      number
+interface PctRow {
+  category:  string
+  deposited: number
+  withdrawn: number
+  balance:   number
 }
 
-const SVP_COLUMNS: TableColumnDef<SavingsRow>[] = [
-  { key: 'category', label: 'Category',   sortType: 'text',    primary: true, accessor: r => r.category },
-  { key: 'deposited', label: 'Total Saved', sortType: 'numeric', primary: true },
-  { key: 'balance',   label: 'Net Balance', sortType: 'numeric', primary: true },
+const PA_COLUMNS: TableColumnDef<PctRow>[] = [
+  { key: 'category',  label: 'Category',       sortType: 'text',    primary: true, accessor: r => r.category },
+  { key: 'deposited', label: 'Total Allocated', sortType: 'numeric', primary: true },
+  { key: 'balance',   label: 'Net Balance',     sortType: 'numeric', primary: true },
 ]
 
-const SVP_SORT_FIELDS = deriveSortFields(SVP_COLUMNS)
+const PA_SORT_FIELDS = deriveSortFields(PA_COLUMNS)
 
-export default function SavingsPortions() {
-  usePageTitle('Savings Portions')
+type ConfigRowShape = { category_name: string; budget_portion?: string; percentage?: number }
 
-  const [rows,    setRows]    = useState<SavingsRow[]>([])
+export default function PercentageAllocation() {
+  usePageTitle('Percentage Allocation')
+
+  const [rows,    setRows]    = useState<PctRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
-  const svpState = useDataViewState({ storageKey: 'svp', defaultSortKey: 'balance', defaultSortDir: 'desc' })
+  const state = useDataViewState({ storageKey: 'pa', defaultSortKey: 'balance', defaultSortDir: 'desc' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -45,15 +47,15 @@ export default function SavingsPortions() {
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
-        .eq('stage_code_2', 'Savings'),
+        .eq('stage_code_2', 'Percentage Allocation'),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, actual_amount, amount_disbursed')
-        .eq('stage_code_2', 'Savings'),
+        .eq('stage_code_2', 'Percentage Allocation'),
       supabase
         .from('category_opening_balances')
         .select('amount, categories(name)')
-        .eq('budget_portion', 'Savings'),
+        .eq('budget_portion', 'Percentage Allocation'),
       supabase
         .from('inflow_transactions')
         .select('amount, allocation_config_id')
@@ -70,7 +72,6 @@ export default function SavingsPortions() {
 
     const cobData = cobRes.error ? [] : (cobRes.data ?? [])
 
-    // Accumulate per category
     const map = new Map<string, { deposited: number; withdrawn: number }>()
     const ensure = (cat: string) => {
       if (!map.has(cat)) map.set(cat, { deposited: 0, withdrawn: 0 })
@@ -85,7 +86,6 @@ export default function SavingsPortions() {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
       ensure(cat).withdrawn += Number(r.actual_amount || r.amount_disbursed || 0)
     }
-
     for (const ob of cobData) {
       const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
       if (!catName) continue
@@ -93,6 +93,7 @@ export default function SavingsPortions() {
     }
 
     // Config-split inflows: allocation_config_id set, stage_code_2 null
+    // Config rows with budget_portion = 'Percentage' (or unset) contribute here
     const configSplitData = (configSplitRes.data ?? []) as Array<{
       amount: number; allocation_config_id: string
     }>
@@ -103,7 +104,6 @@ export default function SavingsPortions() {
         .select('id, rows')
         .in('id', configIds)
 
-      type ConfigRowShape = { category_name: string; budget_portion?: string; percentage?: number }
       const configMap = new Map<string, ConfigRowShape[]>(
         (configsRes.data ?? []).map(c => [c.id as string, c.rows as ConfigRowShape[]])
       )
@@ -111,7 +111,8 @@ export default function SavingsPortions() {
       for (const inflow of configSplitData) {
         const cfgRows = configMap.get(inflow.allocation_config_id) ?? []
         for (const row of cfgRows) {
-          if (row.budget_portion !== 'Savings') continue
+          // Unset budget_portion defaults to Percentage; skip Specific Seed / Savings rows
+          if (row.budget_portion && row.budget_portion !== 'Percentage') continue
           const pct = Number(row.percentage ?? 0)
           if (pct <= 0) continue
           const allocAmount = Math.round(Number(inflow.amount) * pct / 100 * 100) / 100
@@ -122,7 +123,7 @@ export default function SavingsPortions() {
       }
     }
 
-    const result: SavingsRow[] = [...map.entries()].map(([category, v]) => ({
+    const result: PctRow[] = [...map.entries()].map(([category, v]) => ({
       category,
       deposited: v.deposited,
       withdrawn: v.withdrawn,
@@ -135,37 +136,34 @@ export default function SavingsPortions() {
 
   useEffect(() => { load() }, [load])
 
-  // Filter by search
   const visibleRows = useMemo(
-    () => searchRows(rows, SVP_COLUMNS, svpState.search, svpState.searchCol),
-    [rows, svpState.search, svpState.searchCol],
+    () => searchRows(rows, PA_COLUMNS, state.search, state.searchCol),
+    [rows, state.search, state.searchCol],
   )
 
-  const getSvpValue = (r: SavingsRow, k: string) => {
+  const getPaValue = (r: PctRow, k: string) => {
     if (k === 'category') return r.category
     if (k === 'deposited') return r.deposited
     return r.balance
   }
 
-  // Sort
   const sortedRows = useMemo(() => {
-    const adv = svpState.advancedSort
-    if (adv.length > 0) return multiSortRows(visibleRows, getSvpValue, adv, SVP_SORT_FIELDS)
-    return sortRows(visibleRows, getSvpValue, svpState.sortKey, svpState.sortDir, SVP_SORT_FIELDS)
-  }, [visibleRows, svpState.sortKey, svpState.sortDir, svpState.advancedSort])
+    const adv = state.advancedSort
+    if (adv.length > 0) return multiSortRows(visibleRows, getPaValue, adv, PA_SORT_FIELDS)
+    return sortRows(visibleRows, getPaValue, state.sortKey, state.sortDir, PA_SORT_FIELDS)
+  }, [visibleRows, state.sortKey, state.sortDir, state.advancedSort])
 
-  const svpPage = useMemo(
-    () => sortedRows.slice(svpState.page * svpState.pageSize, (svpState.page + 1) * svpState.pageSize),
-    [sortedRows, svpState.page, svpState.pageSize],
+  const paPage = useMemo(
+    () => sortedRows.slice(state.page * state.pageSize, (state.page + 1) * state.pageSize),
+    [sortedRows, state.page, state.pageSize],
   )
 
-  const SVP_CSV_HEADERS = ['Category', 'Deposited (₦)', 'Withdrawn (₦)', 'Balance (₦)']
-  const svpCsvRow = (r: SavingsRow) => [r.category, r.deposited, r.withdrawn, r.balance]
-  const SVP_CSV_FILE = `savings-portions-${new Date().toISOString().slice(0, 10)}.csv`
-  const handleExportView = () => exportCSV(SVP_CSV_FILE, SVP_CSV_HEADERS, svpPage.map(svpCsvRow))
-  const handleExportAll  = () => exportCSV(SVP_CSV_FILE, SVP_CSV_HEADERS, sortedRows.map(svpCsvRow))
+  const PA_CSV_HEADERS = ['Category', 'Allocated (₦)', 'Withdrawn (₦)', 'Balance (₦)']
+  const paCsvRow = (r: PctRow) => [r.category, r.deposited, r.withdrawn, r.balance]
+  const PA_CSV_FILE = `percentage-allocation-${new Date().toISOString().slice(0, 10)}.csv`
+  const handleExportView = () => exportCSV(PA_CSV_FILE, PA_CSV_HEADERS, paPage.map(paCsvRow))
+  const handleExportAll  = () => exportCSV(PA_CSV_FILE, PA_CSV_HEADERS, sortedRows.map(paCsvRow))
 
-  // Totals reflect visible (filtered) data
   const totalDeposited = visibleRows.reduce((s, r) => s + r.deposited, 0)
   const totalWithdrawn = visibleRows.reduce((s, r) => s + r.withdrawn, 0)
   const totalBalance   = visibleRows.reduce((s, r) => s + r.balance, 0)
@@ -176,9 +174,9 @@ export default function SavingsPortions() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Savings Portions</h1>
+          <h1 className="text-xl font-bold text-gray-900">Percentage Allocation</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Accumulated savings balances per category — all time
+            Accumulated percentage-allocation balances per category — all time
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -209,12 +207,12 @@ export default function SavingsPortions() {
       {!loading && !error && rows.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <Archive className="w-8 h-8 text-primary" />
+            <PieChart className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No savings recorded yet</p>
+            <p className="font-semibold text-gray-800">No percentage allocations recorded yet</p>
             <p className="text-sm text-gray-500 mt-1">
-              Tag transactions with Stage Code 2 = "Savings" to track them here.
+              Tag transactions with Stage Code 2 = "Percentage Allocation" or use allocation configs to track them here.
             </p>
           </div>
         </div>
@@ -227,7 +225,7 @@ export default function SavingsPortions() {
             <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
               <div className="flex items-center justify-center gap-1.5 text-success mb-1">
                 <TrendingUp className="w-4 h-4" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Total Saved</span>
+                <span className="text-xs font-semibold uppercase tracking-wide">Total Allocated</span>
               </div>
               <p className="font-mono font-bold text-success text-base">{formatCurrency(totalDeposited)}</p>
             </div>
@@ -240,7 +238,7 @@ export default function SavingsPortions() {
             </div>
             <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 text-center">
               <div className="flex items-center justify-center gap-1.5 text-primary mb-1">
-                <Archive className="w-4 h-4" />
+                <PieChart className="w-4 h-4" />
                 <span className="text-xs font-semibold uppercase tracking-wide">Net Balance</span>
               </div>
               <p className={`font-mono font-bold text-base ${totalBalance >= 0 ? 'text-primary' : 'text-danger'}`}>
@@ -252,69 +250,69 @@ export default function SavingsPortions() {
           {/* Per-category table */}
           <div className="space-y-1.5">
             <DataControlsBar
-              columns={SVP_COLUMNS}
-              sortKey={svpState.sortKey}
-              sortDir={svpState.sortDir}
-              onSort={svpState.setSort}
+              columns={PA_COLUMNS}
+              sortKey={state.sortKey}
+              sortDir={state.sortDir}
+              onSort={state.setSort}
               defaultSortKey="balance"
               defaultSortDir="desc"
-              search={svpState.search}
-              onSearchChange={svpState.setSearch}
+              search={state.search}
+              onSearchChange={state.setSearch}
               searchPlaceholder="Search categories…"
-              searchCol={svpState.searchCol}
-              onSearchColChange={svpState.setSearchCol}
-              advancedSort={svpState.advancedSort}
-              onAdvancedSort={svpState.setAdvancedSort}
-              pageSize={svpState.pageSize}
-              onPageSizeChange={svpState.setPageSize}
+              searchCol={state.searchCol}
+              onSearchColChange={state.setSearchCol}
+              advancedSort={state.advancedSort}
+              onAdvancedSort={state.setAdvancedSort}
+              pageSize={state.pageSize}
+              onPageSizeChange={state.setPageSize}
             />
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                  <SortableHeader field={SVP_SORT_FIELDS[0]} activeSortKey={svpState.sortKey} activeSortDir={svpState.sortDir} onSort={svpState.setSort} className="px-5 py-3" />
-                  <SortableHeader field={SVP_SORT_FIELDS[1]} activeSortKey={svpState.sortKey} activeSortDir={svpState.sortDir} onSort={svpState.setSort} rightAlign className="px-5 py-3" inactiveCls="text-success/80 hover:text-success" />
-                  <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Withdrawn</th>
-                  <SortableHeader field={SVP_SORT_FIELDS[2]} activeSortKey={svpState.sortKey} activeSortDir={svpState.sortDir} onSort={svpState.setSort} rightAlign className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {svpPage.map(row => (
-                  <tr key={row.category} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
-                    <td className="px-5 py-3 text-right text-success font-mono">
-                      {formatCurrency(row.deposited)}
-                    </td>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                    <SortableHeader field={PA_SORT_FIELDS[0]} activeSortKey={state.sortKey} activeSortDir={state.sortDir} onSort={state.setSort} className="px-5 py-3" />
+                    <SortableHeader field={PA_SORT_FIELDS[1]} activeSortKey={state.sortKey} activeSortDir={state.sortDir} onSort={state.setSort} rightAlign className="px-5 py-3" inactiveCls="text-success/80 hover:text-success" />
+                    <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Withdrawn</th>
+                    <SortableHeader field={PA_SORT_FIELDS[2]} activeSortKey={state.sortKey} activeSortDir={state.sortDir} onSort={state.setSort} rightAlign className="px-5 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {paPage.map(row => (
+                    <tr key={row.category} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
+                      <td className="px-5 py-3 text-right text-success font-mono">
+                        {formatCurrency(row.deposited)}
+                      </td>
+                      <td className="px-5 py-3 text-right text-danger font-mono hidden sm:table-cell">
+                        {row.withdrawn > 0 ? formatCurrency(row.withdrawn) : '—'}
+                      </td>
+                      <td className={`px-5 py-3 text-right font-bold font-mono ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
+                        {formatCurrency(row.balance)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold">
+                    <td className="px-5 py-3 text-gray-700">Total</td>
+                    <td className="px-5 py-3 text-right text-success font-mono">{formatCurrency(totalDeposited)}</td>
                     <td className="px-5 py-3 text-right text-danger font-mono hidden sm:table-cell">
-                      {row.withdrawn > 0 ? formatCurrency(row.withdrawn) : '—'}
+                      {totalWithdrawn > 0 ? formatCurrency(totalWithdrawn) : '—'}
                     </td>
-                    <td className={`px-5 py-3 text-right font-bold font-mono ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                      {formatCurrency(row.balance)}
+                    <td className={`px-5 py-3 text-right font-mono ${totalBalance >= 0 ? 'text-primary' : 'text-danger'}`}>
+                      {formatCurrency(totalBalance)}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold">
-                  <td className="px-5 py-3 text-gray-700">Total</td>
-                  <td className="px-5 py-3 text-right text-success font-mono">{formatCurrency(totalDeposited)}</td>
-                  <td className="px-5 py-3 text-right text-danger font-mono hidden sm:table-cell">
-                    {totalWithdrawn > 0 ? formatCurrency(totalWithdrawn) : '—'}
-                  </td>
-                  <td className={`px-5 py-3 text-right font-mono ${totalBalance >= 0 ? 'text-primary' : 'text-danger'}`}>
-                    {formatCurrency(totalBalance)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          <PaginationBar
-            page={svpState.page}
-            pageSize={svpState.pageSize}
-            total={sortedRows.length}
-            onPageChange={svpState.setPage}
-            variant="full"
-          />
+                </tfoot>
+              </table>
+            </div>
+            <PaginationBar
+              page={state.page}
+              pageSize={state.pageSize}
+              total={sortedRows.length}
+              onPageChange={state.setPage}
+              variant="full"
+            />
           </div>
         </>
       )}
