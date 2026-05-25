@@ -230,6 +230,7 @@ export default function Inflows() {
     let query = supabase
       .from('inflow_transactions')
       .select('*')
+      .order('created_at', { ascending: false })
       .order('date', { ascending: false })
       .limit(10000)
     if (dateFrom) query = query.gte('date', dateFrom)
