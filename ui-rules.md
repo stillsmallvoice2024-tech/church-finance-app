@@ -808,6 +808,15 @@ Checkbox, Expand-chevron, Date, Recorded, **Bank**, **Txn Ref**, Type, Descripti
 
 ---
 
+## IntraFlow Table — Column Order
+
+Expand-chevron, Date, From, To, Amount (₦), Description, Remark, Actions (8 total). colSpan = 8.
+
+- `account_from_stage1` / `account_to_stage1` ("From Stage" / "To Stage") — **removed from table**; still present in CSV export and RowDetailPanel (`account_from_stage2` / `account_to_stage2` also in RowDetailPanel)
+- Description uses `DescriptionCell id={`desc-${row.id}`}` with `max-w-[200px]`
+
+---
+
 ## Outflows Table — Column Order
 
 Checkbox, Date, Recorded, **Bank**, Txn ID, Description, Disbursed (₦), Refunded (₦), Net (₦), Stage Code 1, Remarks, 📎, Actions (13 total).
