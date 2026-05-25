@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import {
   TrendingUp, Pencil, Trash2,
   ChevronDown, ChevronRight, AlertCircle, RefreshCw,
@@ -11,9 +11,8 @@ import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
-import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { deriveSortFields } from '../utils/tableColumns'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
 import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
 import { useBanks }                from '../hooks/useBanks'
@@ -57,6 +56,9 @@ const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
 ]
 
 const INF_SORT_FIELDS = deriveSortFields(INF_COLUMNS)
+
+const INFLOW_SORT_COLS = new Set(['date', 'amount', 'bank_name', 'description', 'transaction_type', 'recorded_at'])
+const INFLOW_SEARCH_COLS = new Set(['description', 'bank_name', 'transaction_ref', 'transaction_type', 'stage_code_1'])
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -116,47 +118,30 @@ export default function Inflows() {
   // Data controls state
   const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
-  // Data — fetch all rows when searching so client can filter across every column and re-paginate
-  const isSearching = debouncedSearch.trim() !== ''
+  // Reset local page when sort/search controls change
+  useEffect(() => {
+    setPage(0)
+    setSelectedIds(new Set())
+  }, [infState.sortKey, infState.sortDir, infState.searchCol, infState.advancedSort, infState.pageSize])
+
   const { data, count, loading, error, refetch } = useInflowTransactions({
-    dateFrom:  dateFrom  || undefined,
-    dateTo:    dateTo    || undefined,
-    page:      isSearching ? 0 : page,
-    pageSize:  isSearching ? undefined : infState.pageSize,
-    fetchAll:  isSearching,
+    dateFrom:     dateFrom  || undefined,
+    dateTo:       dateTo    || undefined,
+    search:       debouncedSearch || undefined,
+    searchCol:    infState.searchCol,
+    page,
+    pageSize:     infState.pageSize,
+    sortColumn:   infState.advancedSort.length === 0 ? infState.sortKey : undefined,
+    sortAscending: infState.advancedSort.length === 0 ? (infState.sortDir === 'asc') : undefined,
+    advancedSort: infState.advancedSort.length > 0 ? infState.advancedSort : undefined,
   })
 
-  // Sort all fetched rows
-  const getValue = (r: InflowTransaction, k: string) => {
-    if (k === 'amount')           return Number(r.amount)
-    if (k === 'bank_name')        return r.bank_name ?? ''
-    if (k === 'description')      return r.description ?? ''
-    if (k === 'transaction_type') return r.transaction_type ?? ''
-    return r.date
-  }
-
-  const sorted = useMemo(() => {
-    const adv = infState.advancedSort
-    if (adv.length > 0) return multiSortRows(data, getValue, adv, INF_SORT_FIELDS)
-    return sortRows(data, getValue, infState.sortKey, infState.sortDir, INF_SORT_FIELDS)
-  }, [data, infState.sortKey, infState.sortDir, infState.advancedSort])
-
-  // Client-side search across all fetched rows, then paginate the results
-  const allMatching = useMemo(
-    () => searchRows(sorted, INF_COLUMNS, debouncedSearch, infState.searchCol),
-    [sorted, debouncedSearch, infState.searchCol],
-  )
-
-  const displayed = useMemo(() => {
-    if (!isSearching) return sorted
-    const from = page * infState.pageSize
-    return allMatching.slice(from, from + infState.pageSize)
-  }, [allMatching, isSearching, page, infState.pageSize, sorted])
+  const displayed = data
 
   // Summary (current page)
-  const total   = useMemo(() => displayed.reduce((s, r) => s + Number(r.amount), 0), [displayed])
-  const largest = useMemo(() => displayed.length ? Math.max(...displayed.map(r => Number(r.amount))) : 0, [displayed])
-  const average = useMemo(() => displayed.length ? total / displayed.length : 0, [total, displayed.length])
+  const total   = displayed.reduce((s, r) => s + Number(r.amount), 0)
+  const largest = displayed.length ? Math.max(...displayed.map(r => Number(r.amount))) : 0
+  const average = displayed.length ? total / displayed.length : 0
 
   const [editRecord,        setEditRecord]        = useState<InflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
@@ -223,26 +208,30 @@ export default function Inflows() {
   }
 
   const handleExportAll = async () => {
-    if (isSearching) {
-      exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, allMatching.map(inflowCsvRow))
-      return
+    let query = supabase.from('inflow_transactions').select('*').limit(10000)
+    const adv = infState.advancedSort
+    if (adv.length > 0) {
+      for (const l of adv) {
+        if (INFLOW_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
+      }
+    } else if (INFLOW_SORT_COLS.has(infState.sortKey)) {
+      query = query.order(infState.sortKey, { ascending: infState.sortDir === 'asc' })
+      if (infState.sortKey !== 'recorded_at') query = query.order('recorded_at', { ascending: false })
+    } else {
+      query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
     }
-    let query = supabase
-      .from('inflow_transactions')
-      .select('*')
-      .order('recorded_at', { ascending: false })
-      .order('date', { ascending: false })
-      .limit(10000)
     if (dateFrom) query = query.gte('date', dateFrom)
     if (dateTo)   query = query.lte('date', dateTo)
+    if (debouncedSearch) {
+      if (!infState.searchCol || infState.searchCol === 'all') {
+        query = query.or(`description.ilike.%${debouncedSearch}%,bank_name.ilike.%${debouncedSearch}%,transaction_ref.ilike.%${debouncedSearch}%,transaction_type.ilike.%${debouncedSearch}%`)
+      } else if (INFLOW_SEARCH_COLS.has(infState.searchCol)) {
+        query = query.ilike(infState.searchCol, `%${debouncedSearch}%`)
+      }
+    }
     const { data: rows } = await query
     if (!rows) return
-    const allRows = rows as InflowTransaction[]
-    const adv = infState.advancedSort
-    const allSorted = adv.length > 0
-      ? multiSortRows(allRows, getValue, adv, INF_SORT_FIELDS)
-      : sortRows(allRows, getValue, infState.sortKey, infState.sortDir, INF_SORT_FIELDS)
-    exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, allSorted.map(inflowCsvRow))
+    exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, (rows as InflowTransaction[]).map(inflowCsvRow))
   }
 
   if (error) return (
@@ -298,7 +287,7 @@ export default function Inflows() {
         </Card>
 
         {/* Summary strip */}
-        <SummaryStrip total={total} count={isSearching ? allMatching.length : count} largest={largest} average={average} loading={loading} />
+        <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
         {/* Data controls bar */}
         <DataControlsBar
@@ -325,7 +314,7 @@ export default function Inflows() {
         <PaginationBar
           page={page}
           pageSize={infState.pageSize}
-          total={isSearching ? allMatching.length : count}
+          total={count}
           onPageChange={setPage}
           variant="compact"
         />
@@ -404,7 +393,7 @@ export default function Inflows() {
           <PaginationBar
             page={page}
             pageSize={infState.pageSize}
-            total={isSearching ? allMatching.length : count}
+            total={count}
             onPageChange={setPage}
             variant="full"
           />
@@ -570,7 +559,7 @@ export default function Inflows() {
           <PaginationBar
             page={page}
             pageSize={infState.pageSize}
-            total={isSearching ? allMatching.length : count}
+            total={count}
             onPageChange={setPage}
             variant="full"
           />
