@@ -1038,6 +1038,18 @@ Metric/formula blocks embed `{{FN:category:portion:dateFrom:dateTo:dateField}}` 
   - Amber "Snapshot: label · date" status bar + "Return to live" button when viewing snapshot
   - Snapshot panel: label input + save button; list with View/Delete per entry
 
+### Text Block — Insert Modal (`InsertBlockModal`)
+"Insert" button opens a `Modal` (portal-rendered — not a clipped absolute popover). Three tabs:
+- **Metric**: inserts `{{FN:category:portion:dateFrom:dateTo:dateField}}` token at cursor — inline number in preview
+- **Formula**: multi-term builder (sign + fn + category + portion per term) + date range + currency; inserts `{{EMBED:id}}` — renders as a single resolved inline number
+- **Table**: categories/columns/portion/date range/currency picker; inserts `{{EMBED:id}}` — renders as a full `TableBlockPreview` within the text block
+
+Embed configs stored in `config_json.embeds: TextBlockEmbed[]` (`{id, type, config}`). Token syntax in text: `{{EMBED:id}}`.
+
+**Resolution**: `collectTokensFromBlocks` collects formula embed terms as metric tokens; `resolveAll` runs `resolveTableBlock` for table embeds and stores results in `tableData` under `embed.id`. `TextBlockPreview` accepts `tableData` prop and renders embed segments accordingly.
+
+**Do not** use an `absolute`-positioned dropdown for the token insert UI — it will be clipped by the `overflow-hidden` BlockCard wrapper. Always use `Modal`.
+
 ### Hook locations
 - `useReportSnapshots(reportId)` — fetches from `dynamic_report_snapshots`, ordered desc; graceful if table missing
 - `useSaveSnapshot()` — inserts row

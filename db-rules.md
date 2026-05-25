@@ -14,7 +14,7 @@
 | `category_opening_balances` | Multi-portion opening balances; **sole source of truth** for category opening balances |
 | `banks` | Bank accounts; `currency` (default NGN); starting balance cols: `starting_balance`, `starting_balance_category`, `starting_balance_budget_portion`, `starting_balance_alloc_type`, `starting_balance_allocations jsonb`; opening balance propagated to `inflow_transactions` as `transaction_type = 'balance_brought_forward'` via `src/utils/bankOpeningBalance.ts` |
 | `currencies` | User-managed currency list; code PK, name, symbol, flag emoji |
-| `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type`; versioning cols: `config_group_id` → `special_config_groups(id)`, `effective_from date`, `effective_to date`, `version_number int` |
+| `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type`; versioning cols: `config_group_id` → `special_config_groups(id)`, `effective_from date`, `effective_to date`, `version_number int`; **no `start_date`/`end_date`** — only `effective_from`/`effective_to` exist |
 | `income_types` | Inflow labels; `color`, `special_config_id` (legacy), `special_config_group_id` → `special_config_groups(id)` |
 | `special_config_groups` | Groups multiple versions of the same special config; `name`, `created_at`; income types link here via `special_config_group_id` |
 | `transaction_allocation_snapshots` | Per-transaction snapshot of resolved special config at calculation time; `transaction_id` UNIQUE, `config_version_id`, `config_group_id`, `resolved_rows jsonb`, `allocation_type`, `is_recalculated bool`, `recalculated_at` |
