@@ -223,8 +223,9 @@ export default function Inflows() {
     if (dateFrom) query = query.gte('date', dateFrom)
     if (dateTo)   query = query.lte('date', dateTo)
     if (debouncedSearch) {
+      const safeSearch = debouncedSearch.replace(/[(),]/g, '')
       if (!infState.searchCol || infState.searchCol === 'all') {
-        query = query.or(`description.ilike.%${debouncedSearch}%,bank_name.ilike.%${debouncedSearch}%,transaction_ref.ilike.%${debouncedSearch}%,transaction_type.ilike.%${debouncedSearch}%`)
+        query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_ref.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
       } else if (INFLOW_SEARCH_COLS.has(infState.searchCol)) {
         query = query.ilike(infState.searchCol, `%${debouncedSearch}%`)
       }
