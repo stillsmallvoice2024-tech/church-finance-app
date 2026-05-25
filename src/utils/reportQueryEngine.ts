@@ -55,17 +55,26 @@ async function getCategoryPercentageInflows(
     .select('amount, allocation_config_id, date, transaction_type, stage_code_2')
     .is('transaction_type', null) // exclude reversals, refunds, bank deposits
 
+  let intraQ = supabase
+    .from('intra_flows')
+    .select('total_amount')
+    .eq('account_to', category)
+    .eq('account_to_stage2', 'Percentage Allocation')
+    .eq('status', 'active')
+
   if (dateRange) {
     inflowQ = inflowQ.gte('date', dateRange.from).lte('date', dateRange.to)
+    intraQ  = intraQ.gte('date', dateRange.from).lte('date', dateRange.to)
   }
 
-  const [inflowRes, configRes] = await Promise.all([
+  const [inflowRes, configRes, intraRes] = await Promise.all([
     inflowQ,
     supabase
       .from('allocation_configs')
       .select('id, rows, start_date, end_date, effective_from, effective_to')
       .eq('status', 'locked')
       .eq('is_special', false),
+    intraQ,
   ])
 
   if (inflowRes.error)  return { value: 0, error: inflowRes.error.message }
@@ -93,6 +102,13 @@ async function getCategoryPercentageInflows(
     total += Number(inflow.amount) * (Number(catRow.percentage) / 100)
   }
 
+  // Direct intra-flow credits to this category's percentage portion
+  if (!intraRes.error) {
+    for (const r of intraRes.data ?? []) {
+      total += Number(r.total_amount)
+    }
+  }
+
   return { value: total, error: null }
 }
 
@@ -110,19 +126,26 @@ export async function getCategoryInflows(
     .select('amount')
     .eq('stage_code_1', category)
 
+  let intraQ = supabase
+    .from('intra_flows')
+    .select('total_amount')
+    .eq('account_to', category)
+    .eq('status', 'active')
+
   if (dateRange) {
-    q = q.gte('date', dateRange.from).lte('date', dateRange.to)
+    q      = q.gte('date', dateRange.from).lte('date', dateRange.to)
+    intraQ = intraQ.gte('date', dateRange.from).lte('date', dateRange.to)
   }
   if (portion && portion !== 'all') {
-    q = q.eq('stage_code_2', STAGE_CODE_MAP[portion])
+    q      = q.eq('stage_code_2', STAGE_CODE_MAP[portion])
+    intraQ = intraQ.eq('account_to_stage2', STAGE_CODE_MAP[portion])
   }
 
-  const { data, error } = await q
+  const [{ data, error }, intraRes] = await Promise.all([q, intraQ])
   if (error) return { value: 0, error: error.message }
-  return {
-    value: (data ?? []).reduce((sum, r) => sum + Number(r.amount), 0),
-    error: null,
-  }
+  const baseTotal   = (data ?? []).reduce((sum, r) => sum + Number(r.amount), 0)
+  const intraCredit = intraRes.error ? 0 : (intraRes.data ?? []).reduce((sum, r) => sum + Number(r.total_amount), 0)
+  return { value: baseTotal + intraCredit, error: null }
 }
 
 export async function getCategoryOutflows(
@@ -135,31 +158,40 @@ export async function getCategoryOutflows(
     .select('actual_amount, amount_disbursed')
     .eq('stage_code_1', category)
 
+  let intraQ = supabase
+    .from('intra_flows')
+    .select('total_amount')
+    .eq('account_from', category)
+    .eq('status', 'active')
+
   if (dateRange) {
-    q = q.gte('date', dateRange.from).lte('date', dateRange.to)
+    q      = q.gte('date', dateRange.from).lte('date', dateRange.to)
+    intraQ = intraQ.gte('date', dateRange.from).lte('date', dateRange.to)
   }
 
   if (portion === 'seed') {
-    q = q.eq('stage_code_2', 'Specific Seed')
+    q      = q.eq('stage_code_2', 'Specific Seed')
+    intraQ = intraQ.eq('account_from_stage2', 'Specific Seed')
   } else if (portion === 'savings') {
-    q = q.eq('stage_code_2', 'Savings')
+    q      = q.eq('stage_code_2', 'Savings')
+    intraQ = intraQ.eq('account_from_stage2', 'Savings')
   } else if (portion === 'percentage') {
     // Percentage-allocated outflows: not seed, not savings
     q = q
       .not('stage_code_2', 'eq', 'Specific Seed')
       .not('stage_code_2', 'eq', 'Savings')
+    intraQ = intraQ.eq('account_from_stage2', 'Percentage Allocation')
   }
-  // 'all' = no extra filter
+  // 'all' = no stage2 filter on either query
 
-  const { data, error } = await q
+  const [{ data, error }, intraRes] = await Promise.all([q, intraQ])
   if (error) return { value: 0, error: error.message }
-  return {
-    value: (data ?? []).reduce(
-      (sum, r) => sum + Number(r.actual_amount || r.amount_disbursed || 0),
-      0,
-    ),
-    error: null,
-  }
+  const baseTotal  = (data ?? []).reduce(
+    (sum, r) => sum + Number(r.actual_amount || r.amount_disbursed || 0),
+    0,
+  )
+  const intraDebit = intraRes.error ? 0 : (intraRes.data ?? []).reduce((sum, r) => sum + Number(r.total_amount), 0)
+  return { value: baseTotal + intraDebit, error: null }
 }
 
 export async function getCategoryBalance(

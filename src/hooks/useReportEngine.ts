@@ -46,7 +46,7 @@ export function useReportEngine(
     const dayStart = `${reportDate}T00:00:00.000Z`
 
     const [seedRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
-           opInflowTypeRes, opTxnTypeRes, opNormalRes] = await Promise.all([
+           opInflowTypeRes, opTxnTypeRes, opNormalRes, intraFlowRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
@@ -96,6 +96,12 @@ export function useReportEngine(
         .gte('recorded_at', dayStart)
         .lte('recorded_at', endOfDay)
         .is('transaction_type', null),
+      // Intra-account transfers: cumulative up to reportDate (no recorded_at column)
+      supabase
+        .from('intra_flows')
+        .select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
+        .eq('status', 'active')
+        .lte('date', reportDate),
     ])
 
     const firstErr =
@@ -171,6 +177,36 @@ export function useReportEngine(
     for (const r of pctOutRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
       pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.actual_amount || r.amount_disbursed || 0))
+    }
+
+    // ── Intra-flow adjustments (FROM = debit, TO = credit) ─────────────────
+    // Mirrors CategoryLedger logic. Reversed/void rows excluded by status='active'.
+    for (const r of intraFlowRes.error ? [] : (intraFlowRes.data ?? [])) {
+      const amount = Number(r.total_amount)
+      if (amount <= 0) continue
+      const fromCat   = (r.account_from        as string | null) || ''
+      const fromStage = (r.account_from_stage2 as string | null) || ''
+      const toCat     = (r.account_to          as string | null) || ''
+      const toStage   = (r.account_to_stage2   as string | null) || ''
+      if (fromCat === toCat && fromStage === toStage) continue
+      if (fromCat) {
+        if (fromStage === 'Percentage Allocation') {
+          allocMap.set(fromCat, (allocMap.get(fromCat) ?? 0) - amount)
+        } else {
+          const row = ensure(fromCat)
+          if (fromStage === 'Specific Seed') row.specificSeed -= amount
+          else if (fromStage === 'Savings')  row.savingsIn   -= amount
+        }
+      }
+      if (toCat) {
+        if (toStage === 'Percentage Allocation') {
+          allocMap.set(toCat, (allocMap.get(toCat) ?? 0) + amount)
+        } else {
+          const row = ensure(toCat)
+          if (toStage === 'Specific Seed') row.specificSeed += amount
+          else if (toStage === 'Savings')  row.savingsIn   += amount
+        }
+      }
     }
 
     // ── Build category balance result ───────────────────────────────────────
