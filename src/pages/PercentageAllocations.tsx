@@ -24,7 +24,7 @@ const PCA_COLUMNS: TableColumnDef<PcaRow>[] = [
 const PCA_SORT_FIELDS = deriveSortFields(PCA_COLUMNS)
 
 export default function PercentageAllocations() {
-  usePageTitle('Percentage Allocations')
+  usePageTitle('Allocation Configs')
 
   const { configs, loading, error, fetch } = useAllocationStore()
   const [selectedId, setSelectedId] = useState<string>('')
@@ -75,7 +75,7 @@ export default function PercentageAllocations() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Percentage Allocations</h1>
+          <h1 className="text-xl font-bold text-gray-900">Allocation Configs</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             How inflows are split across categories by percentage
           </p>
