@@ -610,6 +610,7 @@ const isSearching = debouncedSearch.trim() !== ''
 - Use `searchRows(data, PAGE_COLUMNS, state.search, state.searchCol)` inside a `useMemo`
 - Include `state.search` and `state.searchCol` in the dependency array
 - **CategoryLedger B/F row exception**: the balance-brought-forward row (`id === 'bal-bf'`) must always be visible regardless of search — guard it explicitly: `r.id === 'bal-bf' || searchRows([r], LEDGER_COLUMNS, q, col).length > 0`
+- **CategoryLedger running balance recalculation**: `ledgerSortedWithBalance` is a `useMemo` derived from `ledgerSorted` that recalculates the running balance after sort/filter — `let running = 0; return ledgerSorted.map(row => { running += row.inflow - row.outflow; return { ...row, balance: running } })`. `ledgerPagedRows` and the tfoot balance use this, not the pre-computed values from load time.
 - **IntraFlow `col='all'` exception**: server handles description ilike for `col='all'`; only fire client `searchRows` for specific-column selection
 
 **Per-page column definitions:**

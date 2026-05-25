@@ -571,6 +571,25 @@ export default function CategoryLedger() {
     [ledgerRows, ledgerViewState.search, ledgerViewState.searchCol],
   )
 
+  // Recalculate running balance in date-ascending order for the filtered set,
+  // so the most recent row always carries the current cumulative balance regardless
+  // of display sort order.
+  const { ledgerFilteredWithBalance, closingBalance } = useMemo(() => {
+    const dateSorted = [...ledgerFiltered].sort(
+      (a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1),
+    )
+    let running = 0
+    const balanceMap = new Map<string, number>()
+    for (const row of dateSorted) {
+      running += row.inflow - row.outflow
+      balanceMap.set(row.id, running)
+    }
+    return {
+      ledgerFilteredWithBalance: ledgerFiltered.map(row => ({ ...row, balance: balanceMap.get(row.id) ?? row.balance })),
+      closingBalance: running,
+    }
+  }, [ledgerFiltered])
+
   const getLedgerValue = (row: LedgerRow, key: string) => {
     if (key === 'date')        return row.date
     if (key === 'inflow')      return row.inflow
@@ -582,24 +601,16 @@ export default function CategoryLedger() {
 
   const ledgerSorted = useMemo(() => {
     const adv = ledgerViewState.advancedSort
-    if (adv.length > 0) return multiSortRows(ledgerFiltered, getLedgerValue, adv, LEDGER_SORT_FIELDS)
-    return sortRows(ledgerFiltered, getLedgerValue, ledgerViewState.sortKey, ledgerViewState.sortDir, LEDGER_SORT_FIELDS)
-  }, [ledgerFiltered, ledgerViewState.sortKey, ledgerViewState.sortDir, ledgerViewState.advancedSort])
-
-  const ledgerSortedWithBalance = useMemo(() => {
-    let running = 0
-    return ledgerSorted.map(row => {
-      running += row.inflow - row.outflow
-      return { ...row, balance: running }
-    })
-  }, [ledgerSorted])
+    if (adv.length > 0) return multiSortRows(ledgerFilteredWithBalance, getLedgerValue, adv, LEDGER_SORT_FIELDS)
+    return sortRows(ledgerFilteredWithBalance, getLedgerValue, ledgerViewState.sortKey, ledgerViewState.sortDir, LEDGER_SORT_FIELDS)
+  }, [ledgerFilteredWithBalance, ledgerViewState.sortKey, ledgerViewState.sortDir, ledgerViewState.advancedSort])
 
   const ledgerPagedRows = useMemo(
-    () => ledgerSortedWithBalance.slice(
+    () => ledgerSorted.slice(
       ledgerViewState.page * ledgerViewState.pageSize,
       (ledgerViewState.page + 1) * ledgerViewState.pageSize,
     ),
-    [ledgerSortedWithBalance, ledgerViewState.page, ledgerViewState.pageSize],
+    [ledgerSorted, ledgerViewState.page, ledgerViewState.pageSize],
   )
 
   const ledgerTotals = useMemo(
@@ -1173,8 +1184,8 @@ export default function CategoryLedger() {
                             <td className="px-4 py-3 text-gray-700" colSpan={2}>Totals</td>
                             <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow)}</td>
                             <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow)}</td>
-                            <td className={`px-5 py-3 text-right font-mono ${(ledgerSortedWithBalance[ledgerSortedWithBalance.length - 1]?.balance ?? 0) >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                              {ledgerSortedWithBalance.length > 0 ? formatCurrency(ledgerSortedWithBalance[ledgerSortedWithBalance.length - 1].balance) : '—'}
+                            <td className={`px-5 py-3 text-right font-mono ${closingBalance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
+                              {ledgerSorted.length > 0 ? formatCurrency(closingBalance) : '—'}
                             </td>
                           </tr>
                         </tfoot>
