@@ -334,7 +334,6 @@ export default function PendingDeductions() {
                   <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
                   <SortableHeader field={PD_SORT_FIELDS[1]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Transfer Charge (₦)</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Net (₦)</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Stage Code</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Remarks</th>
@@ -345,7 +344,7 @@ export default function PendingDeductions() {
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 10 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -354,7 +353,7 @@ export default function PendingDeductions() {
                   ))
                 ) : displayed.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-20 text-center">
+                    <td colSpan={9} className="py-20 text-center">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <CheckCircle2 className="w-10 h-10 text-green-300" />
                         <p className="text-sm font-medium text-gray-600">No pending deductions</p>
@@ -394,9 +393,6 @@ export default function PendingDeductions() {
                             {row.description || '—'}
                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                            {Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : '—'}
-                          </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                           <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
@@ -425,7 +421,7 @@ export default function PendingDeductions() {
                             </div>
                           </td>
                         </tr>
-                        {isExpanded && <RowDetailPanel items={outflowDetailItems(row)} colSpan={10} />}
+                        {isExpanded && <RowDetailPanel items={outflowDetailItems(row)} colSpan={9} />}
                       </Fragment>
                     )
                   })
