@@ -131,7 +131,7 @@ export function useInflowTransactions(
     let query = supabase
       .from('inflow_transactions')
       .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
+      .order('recorded_at', { ascending: false })
       .order('date', { ascending: false })
 
     if (fetchAll) {
@@ -180,7 +180,7 @@ export function useOutflowTransactions(
     let query = supabase
       .from('outflow_transactions')
       .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
+      .order('recorded_at', { ascending: false })
       .order('date', { ascending: false })
 
     if (fetchAll) {
