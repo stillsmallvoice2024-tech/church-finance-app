@@ -45,13 +45,18 @@ export function useReportEngine(
     // For operational inflow row totals: exact day filter on recorded_at
     const dayStart = `${reportDate}T00:00:00.000Z`
 
-    const [seedRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
+    const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
            opInflowTypeRes, opTxnTypeRes, opNormalRes, intraFlowRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
         .eq('stage_code_2', 'Specific Seed')
         .lte(dateField, dateValue),
+      supabase
+        .from('outflow_transactions')
+        .select('stage_code_1, actual_amount, amount_disbursed')
+        .eq('stage_code_2', 'Specific Seed')
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
@@ -105,7 +110,7 @@ export function useReportEngine(
     ])
 
     const firstErr =
-      seedRes.error ?? savInRes.error ?? savOutRes.error ??
+      seedRes.error ?? seedOutRes.error ?? savInRes.error ?? savOutRes.error ??
       allInflowRes.error ?? pctOutRes.error
 
     if (firstErr) {
@@ -117,14 +122,18 @@ export function useReportEngine(
     // ── Opening balances — category_opening_balances is the sole source of truth ──
     const cobRows = cobRes.error ? [] : (cobRes.data ?? [])
 
-    const map = new Map<string, { specificSeed: number; savingsIn: number; savingsOut: number }>()
+    const map = new Map<string, { specificSeed: number; specificSeedOut: number; savingsIn: number; savingsOut: number }>()
     const ensure = (cat: string) => {
-      if (!map.has(cat)) map.set(cat, { specificSeed: 0, savingsIn: 0, savingsOut: 0 })
+      if (!map.has(cat)) map.set(cat, { specificSeed: 0, specificSeedOut: 0, savingsIn: 0, savingsOut: 0 })
       return map.get(cat)!
     }
 
     for (const r of seedRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed += Number(r.amount)
+    }
+    for (const r of seedOutRes.data ?? []) {
+      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeedOut +=
+        Number(r.actual_amount || r.amount_disbursed || 0)
     }
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
@@ -218,11 +227,11 @@ export function useReportEngine(
 
     const result = new Map<string, ReportCategoryBalance>()
     for (const name of allNames) {
-      const d = map.get(name) ?? { specificSeed: 0, savingsIn: 0, savingsOut: 0 }
+      const d = map.get(name) ?? { specificSeed: 0, specificSeedOut: 0, savingsIn: 0, savingsOut: 0 }
       result.set(name, {
         categoryName:        name,
         percentageAllocated: (allocMap.get(name) ?? 0) - (pctOutMap.get(name) ?? 0),
-        specificSeed:        d.specificSeed,
+        specificSeed:        d.specificSeed - d.specificSeedOut,
         savingsNet:          d.savingsIn - d.savingsOut,
       })
     }
