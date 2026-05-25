@@ -323,7 +323,7 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 
 ## PendingDeductions Resolve Guard
 
-`handleResolve` in `PendingDeductions.tsx` checks `stage_code_1` and `stage_code_2` before updating `is_pending_deduction`:
+`handleResolve` checks `stage_code_1` and `stage_code_2` before updating `is_pending_deduction`:
 - If either is blank/null → error toast + `openEdit(row)` — DB update is NOT called
 - Only proceeds to mark resolved when both stage codes are filled
 
@@ -331,7 +331,9 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 - Rows missing either stage code are **skipped** (not errored) — info toast shows skipped count
 - Valid rows resolved sequentially via `updateMutation.mutate` loop
 - Toast order: skipped warning → failed count → resolved count
-- Selection cleared and `refetch()` called after loop completes
+- `clearAll()` + `refetch()` after loop
+
+**Bulk edit** uses shared `BulkEditOutflowModal` (outflow fields). **Bulk delete** uses `useBulkDeleteAction` + `DeleteDialog`. Both gated on `canWrite()` / `canDelete()` from `useRole()`.
 
 ---
 
@@ -372,6 +374,11 @@ All table pages use `ExportDropdown` (`src/components/ui/ExportDropdown.tsx`) fo
 | All add/edit form modals | `src/components/modals/` |
 | Right-aligned monetary `<td>` | `src/components/ui/AmountCell.tsx` |
 | Two-mode CSV export button | `src/components/ui/ExportDropdown.tsx` |
+| Bulk selection state hook | `src/hooks/useBulkSelection.ts` |
+| Bulk delete / update executors | `src/hooks/useBulkActions.ts` |
+| Config-driven bulk action toolbar | `src/components/ui/BulkActionBar.tsx` |
+| Bulk edit (inflow fields) | `src/components/modals/BulkEditInflowModal.tsx` |
+| Bulk edit (outflow fields) | `src/components/modals/BulkEditOutflowModal.tsx` |
 
 ---
 
@@ -844,26 +851,43 @@ The **Optional Banking Details** section (`amount_refunded`, `transfer_charge`) 
 
 Pages using multi-select: **Inflows**, **Outflows** (table view only), **PendingDeductions**.
 
-### Shared mechanics
-- `selectedIds: Set<string>` state; cleared on page change, filter change, and year reset
-- Checkbox column is first (`w-10 pl-4 pr-2`); header checkbox = select/deselect all on current page; supports `indeterminate` via `useRef<HTMLInputElement>` synced in a `useEffect` on `[selectedIds, displayed]`
+### Shared infrastructure (all tables)
+
+| Hook / Component | Location | Purpose |
+|---|---|---|
+| `useBulkSelection<T>(rows)` | `src/hooks/useBulkSelection.ts` | `selectedIds`, `toggleRow`, `clearAll`, `selectAllRows`, `allSelected`, `headerRef` (indeterminate) |
+| `useBulkDeleteAction(deleteFn)` | `src/hooks/useBulkActions.ts` | Sequential delete loop; returns `execute(ids)` → `{ failed, total }` |
+| `useBulkUpdateAction(updateFn)` | `src/hooks/useBulkActions.ts` | Sequential update loop with missing-column strip-and-retry; returns `execute(ids, updates)` → `{ failed, total, strippedCols }` |
+| `BulkActionBar` | `src/components/ui/BulkActionBar.tsx` | Config-driven toolbar; renders only when `count > 0`; variants: `outline`, `danger`, `success`; per-action `show` guard |
+| `BulkEditInflowModal` | `src/components/modals/BulkEditInflowModal.tsx` | Fields: `bank_name`, `recorded_at`, `transaction_type`, `income_type_id`, `stage_code_1`, `stage_code_2` |
+| `BulkEditOutflowModal` | `src/components/modals/BulkEditOutflowModal.tsx` | Fields: `bank_name`, `recorded_at`, `transaction_type`, `stage_code_1`, `stage_code_2`; shared by Outflows + PendingDeductions |
+
+**Integration pattern for any table:**
+```tsx
+const { selectedIds, toggleRow, clearAll, selectAllRows, allSelected, headerRef } = useBulkSelection(rows)
+const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
+
+<BulkActionBar count={selectedIds.size} onClear={clearAll} actions={[
+  { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true), show: canWrite() },
+  { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 /> },
+]} />
+```
+
+- `clearAll` called on page change, filter change, year reset — wire into existing `useEffect` chains
+- Header checkbox: `checked={allSelected}` + `onChange={e => e.target.checked ? selectAllRows() : clearAll()}`; ref wired to `headerRef` for indeterminate state
+- Row checkbox: `onChange={() => toggleRow(row.id)}`
 - Selected rows get `bg-primary/5 hover:bg-primary/10` highlight
-- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0` — count badge + action buttons + Clear
+- **Strip-and-retry pattern** (inside `useBulkUpdateAction`): on schema column-missing error → `strippedCols.push(col)` → retry row without it; toast each stripped col after loop
 
 ### Inflows / Outflows
-- Actions: "Edit selected" (canWrite) → `BulkEditInflowModal` / `BulkEditOutflowModal`; "Delete selected" (canDelete) → `DeleteDialog` → sequential `deleteRecord` loop → `refetch()`
-- **BulkEdit modal** (inline component at bottom of page file):
-  - Inflows: `bank_name`, `recorded_at`, `transaction_type`, `income_type_id`, `stage_code_1`, `stage_code_2`
-  - Outflows: `bank_name`, `recorded_at`, `transaction_type`, `stage_code_1`, `stage_code_2`
-  - Blank fields skipped; `useUpdateTransaction` called per ID
-  - **Strip-and-retry pattern**: build `const baseUpdates` before loop; on schema error for a column → add to `strippedCols`, retry row without it; never mutate `baseUpdates` inside loop. Toast order: column warnings → success/fail count.
-  - **Form reset on close** (`if (open) return` guard so state is clean before next open)
+- Actions: "Edit selected" (canWrite) → `BulkEditInflowModal` / `BulkEditOutflowModal`; "Delete selected" (canDelete) → `DeleteDialog` → `executeBulkDelete`
 - colSpan: 10 (Inflows), 13 (Outflows)
 - Multi-select is **table view only** — cards view unchanged
 
 ### PendingDeductions
-- Action: "Resolve selected" (canWrite) — see PendingDeductions Resolve Guard section for bulk behaviour
-- colSpan: 9 (Checkbox + Date + Description + Disbursed + Transfer Charge + Net + Stage Code + Remarks + Actions)
+- Actions: "Resolve selected" (canWrite), "Edit selected" (canWrite) → `BulkEditOutflowModal`, "Delete selected" (canDelete)
+- Bulk resolve guard: rows missing either stage code are skipped (info toast); only fully-coded rows resolved
+- colSpan: 10
 
 ---
 
