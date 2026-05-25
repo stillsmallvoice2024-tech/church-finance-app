@@ -586,12 +586,20 @@ export default function CategoryLedger() {
     return sortRows(ledgerFiltered, getLedgerValue, ledgerViewState.sortKey, ledgerViewState.sortDir, LEDGER_SORT_FIELDS)
   }, [ledgerFiltered, ledgerViewState.sortKey, ledgerViewState.sortDir, ledgerViewState.advancedSort])
 
+  const ledgerSortedWithBalance = useMemo(() => {
+    let running = 0
+    return ledgerSorted.map(row => {
+      running += row.inflow - row.outflow
+      return { ...row, balance: running }
+    })
+  }, [ledgerSorted])
+
   const ledgerPagedRows = useMemo(
-    () => ledgerSorted.slice(
+    () => ledgerSortedWithBalance.slice(
       ledgerViewState.page * ledgerViewState.pageSize,
       (ledgerViewState.page + 1) * ledgerViewState.pageSize,
     ),
-    [ledgerSorted, ledgerViewState.page, ledgerViewState.pageSize],
+    [ledgerSortedWithBalance, ledgerViewState.page, ledgerViewState.pageSize],
   )
 
   const ledgerTotals = useMemo(
@@ -1165,8 +1173,8 @@ export default function CategoryLedger() {
                             <td className="px-4 py-3 text-gray-700" colSpan={2}>Totals</td>
                             <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow)}</td>
                             <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow)}</td>
-                            <td className={`px-5 py-3 text-right font-mono ${ledgerRows[ledgerRows.length - 1]?.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                              {ledgerRows.length > 0 ? formatCurrency(ledgerRows[ledgerRows.length - 1].balance) : '—'}
+                            <td className={`px-5 py-3 text-right font-mono ${(ledgerSortedWithBalance[ledgerSortedWithBalance.length - 1]?.balance ?? 0) >= 0 ? 'text-gray-800' : 'text-danger'}`}>
+                              {ledgerSortedWithBalance.length > 0 ? formatCurrency(ledgerSortedWithBalance[ledgerSortedWithBalance.length - 1].balance) : '—'}
                             </td>
                           </tr>
                         </tfoot>
