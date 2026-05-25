@@ -9,6 +9,7 @@ interface Options {
   defaultSortKey: string
   defaultSortDir: SortDirection
   defaultPageSize?: number
+  persistSort?: boolean
 }
 
 function persist(key: string, value: string) {
@@ -49,10 +50,12 @@ export function useDataViewState({
   defaultSortKey,
   defaultSortDir,
   defaultPageSize = 25,
+  persistSort = true,
 }: Options): DataViewState {
   const [view, _setView] = useState<DataViewMode>(() => getDefaultView(storageKey))
-  const [sortKey, _setSortKey] = useState<string>(() => read(`${storageKey}:sk`) ?? defaultSortKey)
+  const [sortKey, _setSortKey] = useState<string>(() => persistSort ? (read(`${storageKey}:sk`) ?? defaultSortKey) : defaultSortKey)
   const [sortDir, _setSortDir] = useState<SortDirection>(() => {
+    if (!persistSort) return defaultSortDir
     const v = read(`${storageKey}:sd`)
     return (v === 'asc' || v === 'desc') ? v : defaultSortDir
   })
@@ -79,10 +82,12 @@ export function useDataViewState({
   const setSort = useCallback((key: string, dir: SortDirection) => {
     _setSortKey(key)
     _setSortDir(dir)
-    persist(`${storageKey}:sk`, key)
-    persist(`${storageKey}:sd`, dir)
+    if (persistSort) {
+      persist(`${storageKey}:sk`, key)
+      persist(`${storageKey}:sd`, dir)
+    }
     _setPage(0)
-  }, [storageKey])
+  }, [storageKey, persistSort])
 
   const setPage = useCallback((p: number) => { _setPage(p) }, [])
 
