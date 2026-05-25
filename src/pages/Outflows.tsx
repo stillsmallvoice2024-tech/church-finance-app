@@ -229,10 +229,11 @@ export default function Outflows() {
     if (dateTo)    query = query.lte('date', dateTo)
     if (stageCode) query = query.eq('stage_code_1', stageCode)
     if (debouncedSearch) {
+      const safeSearch = debouncedSearch.replace(/[(),]/g, '')
       if (!outState.searchCol || outState.searchCol === 'all') {
-        query = query.or(`description.ilike.%${debouncedSearch}%,bank_description.ilike.%${debouncedSearch}%,bank_name.ilike.%${debouncedSearch}%,transaction_id.ilike.%${debouncedSearch}%,stage_code_1.ilike.%${debouncedSearch}%,transaction_type.ilike.%${debouncedSearch}%`)
+        query = query.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_id.ilike.%${safeSearch}%,stage_code_1.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
       } else if (outState.searchCol === 'description') {
-        query = query.or(`description.ilike.%${debouncedSearch}%,bank_description.ilike.%${debouncedSearch}%`)
+        query = query.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%`)
       } else if (OUTFLOW_SEARCH_COLS.has(outState.searchCol)) {
         query = query.ilike(outState.searchCol, `%${debouncedSearch}%`)
       }
