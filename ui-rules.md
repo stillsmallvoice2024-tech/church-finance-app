@@ -863,7 +863,7 @@ Pages using multi-select: **Inflows**, **Outflows** (table view only), **Pending
 
 ### PendingDeductions
 - Action: "Resolve selected" (canWrite) — see PendingDeductions Resolve Guard section for bulk behaviour
-- colSpan: 9 (Checkbox + Date + Description + Disbursed + Transfer Charge + Net + Stage Code + Remarks + Actions)
+- colSpan: 9 (Expand + Checkbox + Date + Description + Disbursed + Net + Stage Code + Remarks + Actions)
 
 ---
 
