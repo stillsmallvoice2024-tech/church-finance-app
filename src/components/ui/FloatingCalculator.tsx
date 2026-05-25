@@ -319,16 +319,16 @@ export function FloatingCalculator() {
         title={isOpen ? 'Close calculator' : 'Open calculator'}
         aria-label={isOpen ? 'Close calculator' : 'Open calculator'}
         className={[
-          'w-12 h-12 rounded-full shadow-lg flex items-center justify-center',
-          'transition-all duration-200',
+          'w-10 h-10 rounded-full shadow-lg flex items-center justify-center',
+          'transition-all duration-300',
           isOpen
-            ? 'bg-gray-700 hover:bg-gray-800 text-white'
-            : 'bg-primary hover:bg-primary-dark text-white',
+            ? 'opacity-100 bg-gray-700 hover:bg-gray-800 text-white'
+            : 'opacity-30 hover:opacity-100 focus:opacity-100 bg-primary hover:bg-primary-dark text-white',
         ].join(' ')}
       >
         {isOpen
-          ? <X className="w-5 h-5" />
-          : <Calculator className="w-5 h-5" />}
+          ? <X className="w-4 h-4" />
+          : <Calculator className="w-4 h-4" />}
       </button>
     </div>
   )
