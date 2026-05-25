@@ -147,6 +147,22 @@ Each `AllocationRow` carries `budget_portion: 'Percentage' | 'Specific Seed' | '
 
 - Queries `inflow_transactions` where `stage_code_2 = 'Specific Seed'`, filtered by accounting year
 - Injects synthetic "Opening Balance" rows from `category_opening_balances` (Specific Seed portion) **regardless of year filter**
+- Also fetches config-split inflows (`allocation_config_id IS NOT NULL AND stage_code_2 IS NULL AND transaction_type IS NULL`, year-filtered), resolves each config, and includes amounts for rows where `budget_portion = 'Specific Seed'`. Amount = `round(inflow.amount × row.percentage / 100, 2)`. `stage_code_1` is set to `row.category_name`; `specific_seed_description` is set to `inflow.description`.
+
+## Savings Portions (`SavingsPortions.tsx`)
+
+- Queries inflows `stage_code_2 = 'Savings'`, outflows `stage_code_2 = 'Savings'`, COB `budget_portion = 'Savings'` — all-time (no year filter)
+- Also fetches config-split inflows (`allocation_config_id IS NOT NULL AND stage_code_2 IS NULL AND transaction_type IS NULL`) and adds allocated amounts for config rows where `budget_portion = 'Savings'` to the category's deposited total.
+
+## Percentage Allocation (`PercentageAllocation.tsx`, route `/percentage-allocation`)
+
+- Shows per-category Percentage Allocation totals: allocated (deposited), withdrawn, net balance — all time
+- Sources:
+  - Direct inflows: `stage_code_2 = 'Percentage Allocation'`, grouped by `stage_code_1`
+  - Direct outflows: `stage_code_2 = 'Percentage Allocation'`, grouped by `stage_code_1`
+  - Opening balances: `category_opening_balances` where `budget_portion = 'Percentage Allocation'`
+  - Config-split inflows: `allocation_config_id IS NOT NULL AND stage_code_2 IS NULL AND transaction_type IS NULL`; includes config rows where `budget_portion = 'Percentage'` **or unset** (mirrors CategoryLedger Percentage ledger rule)
+- Pattern identical to `SavingsPortions.tsx`; storage key `'pa'`
 
 ---
 

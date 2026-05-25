@@ -224,7 +224,7 @@ Collapsible groups; state persisted in `localStorage` under key `nav-group-<id>`
 | Daily Finance (`daily`) | open | Dashboard, Inflows, Outflows, Import, Receipts |
 | Banking (`banking`) | open | Bank Ledger, Bank Deposits, Intrabank Transfers, Intra-Account Flows, Foreign Currency |
 | Review & Processing (`review`) | open | Pending Deductions, Refunds, Reversals |
-| Budget & Allocation (`budget`) | open | Categories, Category Ledger, Percentage Allocations, Specific Givings, Savings Portions |
+| Budget & Allocation (`budget`) | open | Categories, Allocation Configs (`/percentage-allocations`), Category Ledger, Percentage Allocation (`/percentage-allocation`), Specific Givings, Savings Portions |
 | Reports (`reports`) | **closed** | Reports, Financial Report |
 | Administration (`admin`) | **closed** | Setup, Settings, User Management†, Change Log† |
 
@@ -232,7 +232,7 @@ Collapsible groups; state persisted in `localStorage` under key `nav-group-<id>`
 
 **Active-state layout shift fix:** All nav items carry `border-l-2 pl-[10px] pr-3` at all times. Active → `border-accent bg-white/15 text-white`; inactive → `border-transparent text-white/70`. Padding never changes, eliminating layout shift.
 
-**Icon assignments (semantic):** `PiggyBank` → Savings Portions, `Hourglass` → Pending Deductions, `HandCoins` → Specific Givings, `Repeat2` → Intra-Account Flows, `ArrowRightLeft` → Intrabank Transfers, `FileUp` → Import, `Receipt` → Receipts.
+**Icon assignments (semantic):** `PiggyBank` → Savings Portions, `Hourglass` → Pending Deductions, `HandCoins` → Specific Givings, `Repeat2` → Intra-Account Flows, `ArrowRightLeft` → Intrabank Transfers, `FileUp` → Import, `Receipt` → Receipts, `Percent` → Allocation Configs, `PieChart` → Percentage Allocation.
 
 **Mobile bottom bar (BottomTabBar):** Primary tabs — Home, Inflows, Outflows, Import, More. More drawer shows all remaining items grouped by the same sections (2-col grid per section, section headers, `border-l-2` active indicator, `min-h-[48px]` tap targets, `aria-expanded` on More button). Drawer is scrollable with `max-h-[75vh]`.
 
