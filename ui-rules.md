@@ -486,6 +486,8 @@ Returns: `view/setView`, `sortKey/sortDir/setSort`, `page/setPage`, `pageSize/se
 
 Persistence: `view`, `sortKey`, `sortDir`, `pageSize`, `searchCol`, `advancedSort` persist to localStorage under `${storageKey}:*`. `search` is session-only.
 
+`persistSort?: boolean` (default `true`) — set to `false` to disable localStorage read/write for `sortKey`/`sortDir`; sort always starts from `defaultSortKey`/`defaultSortDir` on every mount (page refresh reverts to default). Used by Outflows.
+
 ### `TableColumnDef<T>` — unified column definition (`src/utils/tableColumns.ts`)
 
 Every list page defines a single `*_COLUMNS` array typed as `TableColumnDef<RowType>[]`. This is the single source of truth for sorting, searching, and the search column dropdown — no separate `SortField[]` or `SearchColumn[]` arrays needed.
@@ -816,6 +818,8 @@ Checkbox, Date, Recorded, **Bank**, Txn ID, Description, Disbursed (₦), Refund
 - `transfer_charge` is **not shown** as a column but is still deducted in the Net (₦) calculation
 - `bank_name` is displayed as the **Bank** column, positioned after Recorded; plain `whitespace-nowrap` text
 - `transaction_id` → Txn ID column; `max-w-[180px]` `<td>` with `DescriptionCell id={`ref-${row.id}`}` (no stopPropagation needed — outflow `<tr>` has no onClick)
+- **Default sort**: `recorded_at` desc (hook else-branch: `recorded_at desc, date desc`); `persistSort: false` so sort resets on page refresh; filter Clear button also resets sort + advancedSort
+- **Disbursed SortableHeader**: uses `OUT_SORT_FIELDS[4]` (amount_disbursed) — indices 0=date, 1=description, 2=bank_name, 3=transaction_type, 4=amount_disbursed
 
 ---
 
