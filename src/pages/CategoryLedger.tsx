@@ -464,12 +464,8 @@ export default function CategoryLedger() {
         })
       }
 
+      // balance is intentionally 0 here — ledgerFilteredWithBalance owns all balance computation
       const combined = [...bfRow, ...inRows, ...outRows].sort((a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1))
-      let balance = 0
-      for (const row of combined) {
-        balance += row.inflow - row.outflow
-        row.balance = balance
-      }
       setLedgerRows(combined)
     } catch (e: unknown) {
       setLedgerError(e instanceof Error ? e.message : 'Failed to load ledger')
@@ -571,21 +567,24 @@ export default function CategoryLedger() {
     [ledgerRows, ledgerViewState.search, ledgerViewState.searchCol],
   )
 
-  // Recalculate running balance in date-ascending order for the filtered set,
-  // so the most recent row always carries the current cumulative balance regardless
-  // of display sort order.
+  // Balance invariant — 5-step process, order matters:
+  // 1. Start from filtered rows (ledgerFiltered)
+  // 2. Sort a copy by date ASC (chronological order, inflows before outflows on same date)
+  // 3. Compute cumulative running balance oldest→newest
+  // 4. Freeze computed balance onto each row by ID
+  // 5. ledgerSorted applies display sort AFTER — balance values are never recalculated by sort
   const { ledgerFilteredWithBalance, closingBalance } = useMemo(() => {
-    const dateSorted = [...ledgerFiltered].sort(
+    const chronological = [...ledgerFiltered].sort(
       (a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1),
     )
     let running = 0
-    const balanceMap = new Map<string, number>()
-    for (const row of dateSorted) {
+    const balanceById = new Map<string, number>()
+    for (const row of chronological) {
       running += row.inflow - row.outflow
-      balanceMap.set(row.id, running)
+      balanceById.set(row.id, running)
     }
     return {
-      ledgerFilteredWithBalance: ledgerFiltered.map(row => ({ ...row, balance: balanceMap.get(row.id) ?? row.balance })),
+      ledgerFilteredWithBalance: ledgerFiltered.map(row => ({ ...row, balance: balanceById.get(row.id)! })),
       closingBalance: running,
     }
   }, [ledgerFiltered])
