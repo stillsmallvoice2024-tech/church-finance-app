@@ -613,6 +613,12 @@ const isSearching = debouncedSearch.trim() !== ''
 - **CategoryLedger running balance**: computed in **date-ascending order** after filtering (not display sort order), so the most recent row always carries the current cumulative balance. Pattern: sort `ledgerFiltered` by date asc into a temp array, accumulate running total into a `Map<id, balance>`, then re-map `ledgerFiltered` with updated balance values → `ledgerFilteredWithBalance`. `ledgerSorted` and `ledgerPagedRows` derive from this. `closingBalance` (the final accumulated value) is used in the tfoot. When sorted newest-first, the top row correctly shows the total balance.
 - **IntraFlow `col='all'` exception**: server handles description ilike for `col='all'`; only fire client `searchRows` for specific-column selection
 
+**PostgREST `or()` search sanitization:** Before interpolating a search term into a `.or()` filter string, strip characters that PostgREST treats as query separators: `,`, `(`, `)`. Use a `safeSearch` variable for the `or()` string only; single-column `.ilike()` paths receive the raw term (PostgREST handles values there correctly).
+```ts
+const safeSearch = debouncedSearch.replace(/[(),]/g, '')
+query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%`)
+```
+
 **Per-page column definitions:**
 | Page | Key | Columns (key → label, noSearch cols) |
 |---|---|---|
