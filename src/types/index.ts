@@ -172,8 +172,15 @@ export interface DynamicReportBlock {
   created_at: string
 }
 
+export interface TextBlockEmbed {
+  id: string
+  type: 'formula' | 'table'
+  config: Record<string, unknown>
+}
+
 export interface TextBlockConfig {
   text: string
+  embeds?: TextBlockEmbed[]
 }
 
 export interface MetricBlockConfig {
