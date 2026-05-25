@@ -290,6 +290,8 @@ Config resolution always uses `inflow.date` regardless of basis (allocation conf
 
 **Intra-flows included:** queries `intra_flows WHERE status='active' AND date <= reportDate` and applies FROM-debit / TO-credit adjustments. See "Intraflow Propagation: useReportEngine + reportQueryEngine" above.
 
+**Specific Seed outflows deducted:** `seedOutRes` queries `outflow_transactions WHERE stage_code_2='Specific Seed'` and subtracts from `specificSeed` (mirrors the savingsIn/savingsOut pattern). Without this, seed disbursements are silently dropped and the category shows inflated balances.
+
 **Operational balance keys** (always exact-day filter on `recorded_at`):
 - Income type rows: `it::${incomeTypeId}`
 - Tagged transaction-type rows: `tt::${transactionType}` (reversal, refund, bank_deposit, intrabank_transfer)
