@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import type { AdvancedSortLevel } from '../utils/sortUtils'
 
 export interface FieldChangeEntry {
   id:         string
@@ -16,6 +17,9 @@ export interface FieldChangeEntry {
   } | null
 }
 
+const FC_SORT_COLS = new Set(['changed_at', 'field_name', 'table_name'])
+const FC_SEARCH_COLS = new Set(['field_name', 'table_name', 'old_value', 'new_value'])
+
 export interface UseFieldChangesOptions {
   tableName?: string
   userId?:    string
@@ -23,10 +27,15 @@ export interface UseFieldChangesOptions {
   dateTo?:    string
   page?:      number
   pageSize?:  number
+  search?:    string
+  searchCol?: string
+  sortColumn?:    string
+  sortAscending?: boolean
+  advancedSort?:  AdvancedSortLevel[]
 }
 
 export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
-  const { tableName, userId, dateFrom, dateTo, page = 0, pageSize = 200 } = opts
+  const { tableName, userId, dateFrom, dateTo, page = 0, pageSize = 200, search, searchCol, sortColumn, sortAscending, advancedSort } = opts
 
   const [entries, setEntries] = useState<FieldChangeEntry[]>([])
   const [count,   setCount]   = useState(0)
@@ -44,13 +53,33 @@ export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
         old_value, new_value, changed_at,
         profiles:user_id ( full_name, email )
       `, { count: 'exact' })
-      .order('changed_at', { ascending: false })
-      .range(page * pageSize, (page + 1) * pageSize - 1)
+
+    // Server-side sort
+    if (advancedSort && advancedSort.length > 0) {
+      for (const l of advancedSort) {
+        if (FC_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
+      }
+    } else if (sortColumn && FC_SORT_COLS.has(sortColumn)) {
+      query = query.order(sortColumn, { ascending: sortAscending ?? false })
+    } else {
+      query = query.order('changed_at', { ascending: false })
+    }
+
+    query = query.range(page * pageSize, (page + 1) * pageSize - 1)
 
     if (tableName) query = query.eq('table_name', tableName)
     if (userId)    query = query.eq('user_id', userId)
     if (dateFrom)  query = query.gte('changed_at', dateFrom)
     if (dateTo)    query = query.lte('changed_at', dateTo + 'T23:59:59')
+
+    // Server-side search
+    if (search) {
+      if (!searchCol || searchCol === 'all') {
+        query = query.or(`field_name.ilike.%${search}%,table_name.ilike.%${search}%,old_value.ilike.%${search}%,new_value.ilike.%${search}%`)
+      } else if (FC_SEARCH_COLS.has(searchCol)) {
+        query = query.ilike(searchCol, `%${search}%`)
+      }
+    }
 
     const { data, error: err, count: total } = await query
 
@@ -61,7 +90,7 @@ export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [tableName, userId, dateFrom, dateTo, page, pageSize])
+  }, [tableName, userId, dateFrom, dateTo, page, pageSize, search, searchCol, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import {
   ArrowLeftRight, Plus, Pencil, Trash2,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
@@ -15,9 +15,8 @@ import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { useDataViewState }        from '../hooks/useDataViewState'
-import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
-import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { deriveSortFields } from '../utils/tableColumns'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { supabase }                from '../lib/supabase'
@@ -40,6 +39,9 @@ const IFL_COLUMNS: TableColumnDef<IntraFlowRow>[] = [
 ]
 
 const IFL_SORT_FIELDS = deriveSortFields(IFL_COLUMNS)
+
+const IFL_SORT_COLS = new Set(['date', 'total_amount', 'account_from', 'account_to', 'description'])
+const IFL_SEARCH_COLS = new Set(['description', 'account_from', 'account_to'])
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -96,39 +98,25 @@ export default function IntraFlow() {
 
   // Data
   const { data, count, loading, error, refetch } = useIntraFlows({
-    dateFrom:    dateFrom    || undefined,
-    dateTo:      dateTo      || undefined,
-    accountFrom: accountFrom || undefined,
-    accountTo:   accountTo   || undefined,
-    search:      (iflState.searchCol === 'all' ? debouncedSearch : '') || undefined,
-    page:        iflState.page,
-    pageSize:    iflState.pageSize,
+    dateFrom:     dateFrom    || undefined,
+    dateTo:       dateTo      || undefined,
+    accountFrom:  accountFrom || undefined,
+    accountTo:    accountTo   || undefined,
+    search:       debouncedSearch || undefined,
+    searchCol:    iflState.searchCol,
+    page:         iflState.page,
+    pageSize:     iflState.pageSize,
+    sortColumn:   iflState.advancedSort.length === 0 ? iflState.sortKey : undefined,
+    sortAscending: iflState.advancedSort.length === 0 ? (iflState.sortDir === 'asc') : undefined,
+    advancedSort: iflState.advancedSort.length > 0 ? iflState.advancedSort : undefined,
   })
 
-  // Sort + filter
-  const getIflValue = (r: IntraFlowRow, k: string) => {
-    if (k === 'total_amount') return Number(r.total_amount)
-    if (k === 'account_from') return r.account_from ?? ''
-    if (k === 'account_to')   return r.account_to ?? ''
-    if (k === 'description')  return r.description ?? ''
-    return r.date
-  }
-
-  const sorted = useMemo(() => {
-    const adv = iflState.advancedSort
-    if (adv.length > 0) return multiSortRows(data, getIflValue, adv, IFL_SORT_FIELDS)
-    return sortRows(data, getIflValue, iflState.sortKey, iflState.sortDir, IFL_SORT_FIELDS)
-  }, [data, iflState.sortKey, iflState.sortDir, iflState.advancedSort]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const displayed = useMemo(
-    () => iflState.searchCol === 'all' ? sorted : searchRows(sorted, IFL_COLUMNS, iflState.search, iflState.searchCol),
-    [sorted, iflState.search, iflState.searchCol],
-  )
+  const displayed = data
 
   // Summary
-  const total   = useMemo(() => data.reduce((s, r) => s + Number(r.total_amount), 0), [data])
-  const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.total_amount))) : 0, [data])
-  const average = useMemo(() => data.length ? total / data.length : 0, [total, data.length])
+  const total   = data.reduce((s, r) => s + Number(r.total_amount), 0)
+  const largest = data.length ? Math.max(...data.map(r => Number(r.total_amount))) : 0
+  const average = data.length ? total / data.length : 0
 
   // UI state
   const [editRecord,   setEditRecord]   = useState<IntraFlowRow | null>(null)
@@ -188,28 +176,31 @@ export default function IntraFlow() {
   }
 
   const handleExportAll = async () => {
-    let query = supabase
-      .from('intra_flows')
-      .select('*')
-      .order('date', { ascending: false })
-      .limit(10000)
+    let query = supabase.from('intra_flows').select('*').limit(10000)
+    const adv = iflState.advancedSort
+    if (adv.length > 0) {
+      for (const l of adv) {
+        if (IFL_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
+      }
+    } else if (IFL_SORT_COLS.has(iflState.sortKey)) {
+      query = query.order(iflState.sortKey, { ascending: iflState.sortDir === 'asc' })
+    } else {
+      query = query.order('date', { ascending: false })
+    }
     if (dateFrom)    query = query.gte('date', dateFrom)
     if (dateTo)      query = query.lte('date', dateTo)
     if (accountFrom) query = query.ilike('account_from', `%${accountFrom}%`)
     if (accountTo)   query = query.ilike('account_to', `%${accountTo}%`)
-    if (iflState.searchCol === 'all' && debouncedSearch)
-      query = query.ilike('description', `%${debouncedSearch}%`)
+    if (debouncedSearch) {
+      if (!iflState.searchCol || iflState.searchCol === 'all') {
+        query = query.or(`description.ilike.%${debouncedSearch}%,account_from.ilike.%${debouncedSearch}%,account_to.ilike.%${debouncedSearch}%`)
+      } else if (IFL_SEARCH_COLS.has(iflState.searchCol)) {
+        query = query.ilike(iflState.searchCol, `%${debouncedSearch}%`)
+      }
+    }
     const { data: rows } = await query
     if (!rows) return
-    const allRows = rows as IntraFlowRow[]
-    const adv = iflState.advancedSort
-    const allSorted = adv.length > 0
-      ? multiSortRows(allRows, getIflValue, adv, IFL_SORT_FIELDS)
-      : sortRows(allRows, getIflValue, iflState.sortKey, iflState.sortDir, IFL_SORT_FIELDS)
-    const allFiltered = iflState.searchCol === 'all'
-      ? allSorted
-      : searchRows(allSorted, IFL_COLUMNS, iflState.search, iflState.searchCol)
-    exportCSV(IFL_CSV_FILE, IFL_CSV_HEADERS, allFiltered.map(iflCsvRow))
+    exportCSV(IFL_CSV_FILE, IFL_CSV_HEADERS, (rows as IntraFlowRow[]).map(iflCsvRow))
   }
 
   if (error) return (

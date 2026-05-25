@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { normalizeNarration } from '../utils/normalizeNarration'
+import type { AdvancedSortLevel } from '../utils/sortUtils'
 
 // ── DB row types (mirror the exact columns in schema.sql) ──────────────────────
 
@@ -84,11 +85,15 @@ export interface TransactionFilters {
   dateFrom?: string
   dateTo?: string
   stageCode?: string    // filters on stage_code_1
-  search?: string       // ilike match across key text columns; not used when fetchAll is true
+  search?: string       // ilike search value
+  searchCol?: string    // 'all' (default) or specific DB column key
   pendingOnly?: boolean // filter outflows by is_pending_deduction = true
   page?: number         // 0-indexed; not used when fetchAll is true
   pageSize?: number     // not used when fetchAll is true
   fetchAll?: boolean    // fetch all rows (up to 10 000) so the caller can filter/paginate client-side
+  sortColumn?: string        // DB column to sort by
+  sortAscending?: boolean    // true = asc
+  advancedSort?: AdvancedSortLevel[]  // multi-level sort; takes priority over sortColumn
 }
 
 export interface IntraFlowFilters {
@@ -97,8 +102,12 @@ export interface IntraFlowFilters {
   accountFrom?: string // ilike match on account_from
   accountTo?: string   // ilike match on account_to
   search?: string
+  searchCol?: string   // 'all' (default) or specific DB column key
   page?: number
   pageSize?: number
+  sortColumn?: string
+  sortAscending?: boolean
+  advancedSort?: AdvancedSortLevel[]
 }
 
 // ── Shared result type ─────────────────────────────────────────────────────────
@@ -114,10 +123,13 @@ export interface PaginatedResult<T> {
 
 // ── useInflowTransactions ──────────────────────────────────────────────────────
 
+const INFLOW_SORT_COLS = new Set(['date', 'amount', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1'])
+const INFLOW_SEARCH_COLS = new Set(['description', 'bank_name', 'transaction_ref', 'transaction_type', 'stage_code_1'])
+
 export function useInflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<InflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, page = 0, pageSize = 50, fetchAll = false } = filters
+  const { dateFrom, dateTo, stageCode, search, searchCol, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
 
   const [data, setData] = useState<InflowTransaction[]>([])
   const [count, setCount] = useState(0)
@@ -131,8 +143,18 @@ export function useInflowTransactions(
     let query = supabase
       .from('inflow_transactions')
       .select('*', { count: 'exact' })
-      .order('recorded_at', { ascending: false })
-      .order('date', { ascending: false })
+
+    // Server-side sort
+    if (advancedSort && advancedSort.length > 0) {
+      for (const l of advancedSort) {
+        if (INFLOW_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
+      }
+    } else if (sortColumn && INFLOW_SORT_COLS.has(sortColumn)) {
+      query = query.order(sortColumn, { ascending: sortAscending ?? false })
+      if (sortColumn !== 'recorded_at') query = query.order('recorded_at', { ascending: false })
+    } else {
+      query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+    }
 
     if (fetchAll) {
       query = query.limit(10000)
@@ -140,10 +162,18 @@ export function useInflowTransactions(
       query = query.range(page * pageSize, page * pageSize + pageSize - 1)
     }
 
-    if (dateFrom)             query = query.gte('date', dateFrom)
-    if (dateTo)               query = query.lte('date', dateTo)
-    if (stageCode)            query = query.eq('stage_code_1', stageCode)
-    if (search && !fetchAll)  query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_ref.ilike.%${search}%,transaction_type.ilike.%${search}%`)
+    if (dateFrom)  query = query.gte('date', dateFrom)
+    if (dateTo)    query = query.lte('date', dateTo)
+    if (stageCode) query = query.eq('stage_code_1', stageCode)
+
+    // Server-side search
+    if (search && !fetchAll) {
+      if (!searchCol || searchCol === 'all') {
+        query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_ref.ilike.%${search}%,transaction_type.ilike.%${search}%`)
+      } else if (INFLOW_SEARCH_COLS.has(searchCol)) {
+        query = query.ilike(searchCol, `%${search}%`)
+      }
+    }
 
     const { data: rows, count: total, error: err } = await query
 
@@ -154,7 +184,7 @@ export function useInflowTransactions(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, stageCode, search, page, pageSize, fetchAll])
+  }, [dateFrom, dateTo, stageCode, search, searchCol, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -163,10 +193,13 @@ export function useInflowTransactions(
 
 // ── useOutflowTransactions ─────────────────────────────────────────────────────
 
+const OUTFLOW_SORT_COLS = new Set(['date', 'amount_disbursed', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1'])
+const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_name', 'transaction_id', 'stage_code_1', 'transaction_type'])
+
 export function useOutflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<OutflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, pendingOnly, page = 0, pageSize = 50, fetchAll = false } = filters
+  const { dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
 
   const [data, setData] = useState<OutflowTransaction[]>([])
   const [count, setCount] = useState(0)
@@ -180,8 +213,18 @@ export function useOutflowTransactions(
     let query = supabase
       .from('outflow_transactions')
       .select('*', { count: 'exact' })
-      .order('recorded_at', { ascending: false })
-      .order('date', { ascending: false })
+
+    // Server-side sort
+    if (advancedSort && advancedSort.length > 0) {
+      for (const l of advancedSort) {
+        if (OUTFLOW_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
+      }
+    } else if (sortColumn && OUTFLOW_SORT_COLS.has(sortColumn)) {
+      query = query.order(sortColumn, { ascending: sortAscending ?? false })
+      if (sortColumn !== 'recorded_at') query = query.order('recorded_at', { ascending: false })
+    } else {
+      query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+    }
 
     if (fetchAll) {
       query = query.limit(10000)
@@ -189,11 +232,21 @@ export function useOutflowTransactions(
       query = query.range(page * pageSize, page * pageSize + pageSize - 1)
     }
 
-    if (dateFrom)             query = query.gte('date', dateFrom)
-    if (dateTo)               query = query.lte('date', dateTo)
-    if (stageCode)            query = query.eq('stage_code_1', stageCode)
-    if (search && !fetchAll)  query = query.or(`description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_id.ilike.%${search}%,stage_code_1.ilike.%${search}%,transaction_type.ilike.%${search}%`)
-    if (pendingOnly)          query = query.eq('is_pending_deduction', true)
+    if (dateFrom)  query = query.gte('date', dateFrom)
+    if (dateTo)    query = query.lte('date', dateTo)
+    if (stageCode) query = query.eq('stage_code_1', stageCode)
+    if (pendingOnly) query = query.eq('is_pending_deduction', true)
+
+    // Server-side search
+    if (search && !fetchAll) {
+      if (!searchCol || searchCol === 'all') {
+        query = query.or(`description.ilike.%${search}%,bank_description.ilike.%${search}%,bank_name.ilike.%${search}%,transaction_id.ilike.%${search}%,stage_code_1.ilike.%${search}%,transaction_type.ilike.%${search}%`)
+      } else if (searchCol === 'description') {
+        query = query.or(`description.ilike.%${search}%,bank_description.ilike.%${search}%`)
+      } else if (OUTFLOW_SEARCH_COLS.has(searchCol)) {
+        query = query.ilike(searchCol, `%${search}%`)
+      }
+    }
 
     const { data: rows, count: total, error: err } = await query
 
@@ -212,7 +265,7 @@ export function useOutflowTransactions(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, stageCode, search, page, pageSize, fetchAll])
+  }, [dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -221,10 +274,13 @@ export function useOutflowTransactions(
 
 // ── useIntraFlows ──────────────────────────────────────────────────────────────
 
+const INTRAFLOW_SORT_COLS = new Set(['date', 'total_amount', 'account_from', 'account_to', 'description'])
+const INTRAFLOW_SEARCH_COLS = new Set(['description', 'account_from', 'account_to'])
+
 export function useIntraFlows(
   filters: IntraFlowFilters = {},
 ): PaginatedResult<IntraFlowRow> {
-  const { dateFrom, dateTo, accountFrom, accountTo, search, page = 0, pageSize = 50 } = filters
+  const { dateFrom, dateTo, accountFrom, accountTo, search, searchCol, page = 0, pageSize = 50, sortColumn, sortAscending, advancedSort } = filters
 
   const [data, setData] = useState<IntraFlowRow[]>([])
   const [count, setCount] = useState(0)
@@ -241,14 +297,33 @@ export function useIntraFlows(
     let query = supabase
       .from('intra_flows')
       .select('*', { count: 'exact' })
-      .order('date', { ascending: false })
-      .range(from, to)
+
+    // Server-side sort
+    if (advancedSort && advancedSort.length > 0) {
+      for (const l of advancedSort) {
+        if (INTRAFLOW_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
+      }
+    } else if (sortColumn && INTRAFLOW_SORT_COLS.has(sortColumn)) {
+      query = query.order(sortColumn, { ascending: sortAscending ?? false })
+    } else {
+      query = query.order('date', { ascending: false })
+    }
+
+    query = query.range(from, to)
 
     if (dateFrom)    query = query.gte('date', dateFrom)
     if (dateTo)      query = query.lte('date', dateTo)
     if (accountFrom) query = query.ilike('account_from', `%${accountFrom}%`)
     if (accountTo)   query = query.ilike('account_to', `%${accountTo}%`)
-    if (search)      query = query.ilike('description', `%${search}%`)
+
+    // Server-side search
+    if (search) {
+      if (!searchCol || searchCol === 'all') {
+        query = query.or(`description.ilike.%${search}%,account_from.ilike.%${search}%,account_to.ilike.%${search}%`)
+      } else if (INTRAFLOW_SEARCH_COLS.has(searchCol)) {
+        query = query.ilike(searchCol, `%${search}%`)
+      }
+    }
 
     const { data: rows, count: total, error: err } = await query
 
@@ -259,7 +334,7 @@ export function useIntraFlows(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, accountFrom, accountTo, search, page, pageSize])
+  }, [dateFrom, dateTo, accountFrom, accountTo, search, searchCol, page, pageSize, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 
