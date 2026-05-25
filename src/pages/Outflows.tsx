@@ -4,9 +4,10 @@ import {
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
-import { Modal }                   from '../components/ui/Modal'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
+import { BulkActionBar }           from '../components/ui/BulkActionBar'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
+import { BulkEditOutflowModal }    from '../components/modals/BulkEditOutflowModal'
 import { ReceiptBadge }            from '../components/ui/ReceiptBadge'
 import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
@@ -15,7 +16,9 @@ import { useDataViewState }        from '../hooks/useDataViewState'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields } from '../utils/tableColumns'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
-import { useDeleteTransaction, useUpdateTransaction } from '../hooks/useMutations'
+import { useDeleteTransaction }    from '../hooks/useMutations'
+import { useBulkSelection }        from '../hooks/useBulkSelection'
+import { useBulkDeleteAction }     from '../hooks/useBulkActions'
 import { useBanks }                from '../hooks/useBanks'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
@@ -103,26 +106,8 @@ export default function Outflows() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  useEffect(() => { setPage(0); setSelectedIds(new Set()) }, [dateFrom, dateTo, stageCode, debouncedSearch])
-
-  useEffect(() => {
-    setDateFrom(`${year}-01-01`)
-    setDateTo(`${year}-12-31`)
-    setPage(0)
-    setSelectedIds(new Set())
-  }, [year])
-
-  // Clear selection on page change
-  useEffect(() => { setSelectedIds(new Set()) }, [page])
-
   // Data controls state
   const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE, persistSort: false })
-
-  // Reset local page when sort/search controls change
-  useEffect(() => {
-    setPage(0)
-    setSelectedIds(new Set())
-  }, [outState.sortKey, outState.sortDir, outState.searchCol, outState.advancedSort, outState.pageSize])
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
     dateFrom:     dateFrom  || undefined,
@@ -148,11 +133,11 @@ export default function Outflows() {
   const [editRecord,        setEditRecord]        = useState<OutflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
   const [deleteId,          setDeleteId]          = useState<string | null>(null)
-  const [selectedIds,       setSelectedIds]       = useState<Set<string>>(new Set())
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
-  const [bulkDeleting,      setBulkDeleting]      = useState(false)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
   const [expandedId,        setExpandedId]        = useState<string | null>(null)
+
+  const { selectedIds, toggleRow, clearAll, selectAllRows, allSelected } = useBulkSelection(data)
 
   const toggleExpand = (id: string) => setExpandedId(prev => prev === id ? null : id)
 
@@ -160,10 +145,17 @@ export default function Outflows() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
+  const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
   const { banks }                                   = useBanks()
   const { categories }                              = useCategories()
 
   usePageTitle('Outflows')
+
+  // Clear selection when filters/page/sort change
+  useEffect(() => { setPage(0); clearAll() }, [dateFrom, dateTo, stageCode, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setDateFrom(`${year}-01-01`); setDateTo(`${year}-12-31`); setPage(0); clearAll() }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { clearAll() }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0); clearAll() }, [outState.sortKey, outState.sortDir, outState.searchCol, outState.advancedSort, outState.pageSize]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openEdit = (r: OutflowTransaction) => { setEditRecord(r); setModalOpen(true) }
 
@@ -186,14 +178,9 @@ export default function Outflows() {
 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds]
-    setBulkDeleting(true)
-    let failed = 0
-    for (const id of ids) {
-      try { await deleteRecord(id) } catch { failed++ }
-    }
-    setBulkDeleting(false)
+    const { failed } = await executeBulkDelete(ids)
     setConfirmBulkDelete(false)
-    setSelectedIds(new Set())
+    clearAll()
     refetch()
     if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
@@ -257,8 +244,6 @@ export default function Outflows() {
       </button>
     </div>
   )
-
-  const allOnPageSelected = data.length > 0 && data.every(r => selectedIds.has(r.id))
 
   return (
     <>
@@ -429,34 +414,14 @@ export default function Outflows() {
         )}
 
         {outState.view === 'table' && <Card padding={false}>
-          {selectedIds.size > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/10 bg-primary/5">
-              <span className="text-sm font-medium text-primary">{selectedIds.size} selected</span>
-              {canWrite() && (
-                <button
-                  onClick={() => setBulkEditOpen(true)}
-                  className="px-3 py-1.5 text-sm font-medium text-primary bg-white border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
-                >
-                  Edit selected
-                </button>
-              )}
-              {canDelete() && (
-                <button
-                  onClick={() => setConfirmBulkDelete(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete selected
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="ml-auto px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-          )}
+          <BulkActionBar
+            count={selectedIds.size}
+            onClear={clearAll}
+            actions={[
+              { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true),      show: canWrite() },
+              { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 className="w-3.5 h-3.5" /> },
+            ]}
+          />
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
@@ -465,8 +430,8 @@ export default function Outflows() {
                     <input
                       type="checkbox"
                       className="w-4 h-4 rounded border-gray-300"
-                      checked={allOnPageSelected}
-                      onChange={e => setSelectedIds(e.target.checked ? new Set(data.map(r => r.id)) : new Set())}
+                      checked={allSelected}
+                      onChange={e => e.target.checked ? selectAllRows() : clearAll()}
                     />
                   </th>
                   <th className="w-8 px-1 py-3" />
@@ -509,12 +474,7 @@ export default function Outflows() {
                               type="checkbox"
                               className="w-4 h-4 rounded border-gray-300"
                               checked={selectedIds.has(row.id)}
-                              onChange={e => {
-                                const next = new Set(selectedIds)
-                                if (e.target.checked) next.add(row.id)
-                                else next.delete(row.id)
-                                setSelectedIds(next)
-                              }}
+                              onChange={() => toggleRow(row.id)}
                             />
                           </td>
                           <td className="w-8 px-1 py-3">
@@ -595,8 +555,7 @@ export default function Outflows() {
         onClose={() => setBulkEditOpen(false)}
         ids={[...selectedIds]}
         banks={banks}
-        categories={categories}
-        onSuccess={() => { setSelectedIds(new Set()); refetch() }}
+        onSuccess={() => { clearAll(); refetch() }}
       />
       <DescriptionTooltip tooltip={descTooltip} />
     </>
@@ -615,142 +574,3 @@ function FilterGroup({ label, children, className = '' }: { label: string; child
   )
 }
 
-// ── BulkEditOutflowModal ───────────────────────────────────────────────────────
-
-function BulkEditOutflowModal({ open, onClose, ids, banks, categories, onSuccess }: {
-  open: boolean
-  onClose: () => void
-  ids: string[]
-  banks: { id: string; name: string }[]
-  categories: { id: string; name: string }[]
-  onSuccess: () => void
-}) {
-  const { mutate: update } = useUpdateTransaction('outflow_transactions')
-  const { push: toast }    = useToastStore()
-
-  const [bankName,   setBankName]   = useState('')
-  const [recordedAt, setRecordedAt] = useState('')
-  const [txnType,    setTxnType]    = useState('')
-  const [stageCode1, setStageCode1] = useState('')
-  const [stageCode2, setStageCode2] = useState('')
-  const [saving,     setSaving]     = useState(false)
-
-  useEffect(() => {
-    if (open) return
-    setBankName('')
-    setRecordedAt('')
-    setTxnType('')
-    setStageCode1('')
-    setStageCode2('')
-    setSaving(false)
-  }, [open])
-
-  const hasChanges = !!bankName || !!recordedAt || !!txnType || !!stageCode1 || !!stageCode2
-
-  const MISSING_COL_RE = /Could not find (?:the ')?(\w+)'? column/
-
-  const handleApply = async () => {
-    if (!hasChanges) return
-    setSaving(true)
-    const baseUpdates: Record<string, unknown> = {}
-    if (bankName)   baseUpdates.bank_name        = bankName
-    if (recordedAt) baseUpdates.recorded_at      = `${recordedAt}T00:00:00.000Z`
-    if (txnType)    baseUpdates.transaction_type  = txnType
-    if (stageCode1) baseUpdates.stage_code_1     = stageCode1
-    if (stageCode2) baseUpdates.stage_code_2     = stageCode2
-    let failed = 0
-    const strippedCols: string[] = []
-    for (const id of ids) {
-      // Build per-row updates from the immutable base, minus any schema-confirmed-missing columns
-      const rowUpdates = Object.fromEntries(
-        Object.entries(baseUpdates).filter(([k]) => !strippedCols.includes(k))
-      )
-      try {
-        await update({ id, updates: rowUpdates })
-      } catch (err: unknown) {
-        const col = (err instanceof Error ? err.message : '').match(MISSING_COL_RE)?.[1]
-        if (col && col in rowUpdates) {
-          if (!strippedCols.includes(col)) strippedCols.push(col)
-          const retryUpdates = Object.fromEntries(
-            Object.entries(rowUpdates).filter(([k]) => k !== col)
-          )
-          try { await update({ id, updates: retryUpdates }) } catch { failed++ }
-        } else {
-          failed++
-        }
-      }
-    }
-    setSaving(false)
-    for (const col of strippedCols) {
-      toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
-    }
-    if (failed === 0) toast(`Updated ${ids.length} transaction${ids.length !== 1 ? 's' : ''}`, 'success')
-    else toast(`${ids.length - failed} updated, ${failed} failed`, 'error')
-    onSuccess()
-    onClose()
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title={`Bulk Edit ${ids.length} Transaction${ids.length !== 1 ? 's' : ''}`} size="max-w-md">
-      <div className="space-y-4">
-        <p className="text-sm text-gray-500">Only filled fields will be applied. Leave blank to keep existing values.</p>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Bank Name</label>
-          <select value={bankName} onChange={e => setBankName(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Recorded Date</label>
-          <input type="date" value={recordedAt} onChange={e => setRecordedAt(e.target.value)} className={filterInputCls} />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Transaction Type</label>
-          <select value={txnType} onChange={e => setTxnType(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            <option value="refund">Refund</option>
-            <option value="reversal">Reversal</option>
-            <option value="bank_deposit">Bank Deposit</option>
-            <option value="intrabank_transfer">Intrabank Transfer</option>
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
-          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Stage Code 2 (Portion Type)</label>
-          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            <option value="Percentage Allocation">Percentage Allocation</option>
-            <option value="Specific Seed">Specific Seed</option>
-            <option value="Savings">Savings</option>
-          </select>
-        </div>
-
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={saving || !hasChanges}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Applying…' : `Apply to ${ids.length} record${ids.length !== 1 ? 's' : ''}`}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}

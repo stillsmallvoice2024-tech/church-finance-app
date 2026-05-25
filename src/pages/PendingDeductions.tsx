@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useYearRange } from '../hooks/useYearRange'
-import { Clock, CheckCircle2, Pencil, AlertCircle, RefreshCw, Terminal, X, ChevronRight, ChevronDown } from 'lucide-react'
+import { Clock, CheckCircle2, Pencil, Trash2, AlertCircle, RefreshCw, Terminal, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }                     from '../components/ui/Card'
+import { DeleteDialog }             from '../components/ui/DeleteDialog'
+import { BulkActionBar }            from '../components/ui/BulkActionBar'
 import { DataControlsBar }          from '../components/ui/DataControlsBar'
 import { SortableHeader }           from '../components/ui/SortableHeader'
 import { PaginationBar }            from '../components/ui/PaginationBar'
@@ -10,10 +12,15 @@ import { sortRows, multiSortRows }  from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { AddOutflowModal }          from '../components/modals/AddOutflowModal'
+import { BulkEditOutflowModal }     from '../components/modals/BulkEditOutflowModal'
 import { CanWrite }                 from '../components/auth/RoleGates'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
-import { useUpdateTransaction }     from '../hooks/useMutations'
+import { useUpdateTransaction, useDeleteTransaction } from '../hooks/useMutations'
+import { useBulkSelection }         from '../hooks/useBulkSelection'
+import { useBulkDeleteAction }      from '../hooks/useBulkActions'
+import { useBanks }                 from '../hooks/useBanks'
 import { useToastStore }            from '../store/toastStore'
+import { useRole }                  from '../hooks/useRole'
 import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
@@ -43,9 +50,9 @@ export default function PendingDeductions() {
   const [editRecord,    setEditRecord]    = useState<OutflowTransaction | null>(null)
   const [modalOpen,     setModalOpen]     = useState(false)
   const [resolvingId,   setResolvingId]   = useState<string | null>(null)
-  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set())
   const [bulkResolving, setBulkResolving] = useState(false)
-  const headerCheckboxRef = useRef<HTMLInputElement>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkEditOpen,  setBulkEditOpen]  = useState(false)
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
     pendingOnly: true,
@@ -59,14 +66,11 @@ export default function PendingDeductions() {
   const largest = useMemo(() => data.length ? Math.max(...data.map(r => Number(r.amount_disbursed))) : 0, [data])
 
   const { push: toast } = useToastStore()
+  const { canWrite, canDelete } = useRole()
   const updateMutation = useUpdateTransaction('outflow_transactions')
-
-  usePageTitle('Pending Deductions')
-
-  // Reset page + selection when search changes
-  useEffect(() => { pdState.setPage(0); setSelectedIds(new Set()) }, [pdState.search, pdState.setPage])
-  // Clear selection on page change
-  useEffect(() => { setSelectedIds(new Set()) }, [pdState.page])
+  const { mutate: deleteRecord } = useDeleteTransaction('outflow_transactions')
+  const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
+  const { banks } = useBanks()
 
   // Sort
   const getPdValue = (r: OutflowTransaction, k: string) => {
@@ -85,14 +89,14 @@ export default function PendingDeductions() {
     [sorted, pdState.search, pdState.searchCol],
   )
 
-  // Keep header checkbox indeterminate state in sync
-  useEffect(() => {
-    if (!headerCheckboxRef.current) return
-    const all  = displayed.length > 0 && displayed.every(r => selectedIds.has(r.id))
-    const some = displayed.some(r => selectedIds.has(r.id))
-    headerCheckboxRef.current.checked       = all
-    headerCheckboxRef.current.indeterminate = some && !all
-  }, [selectedIds, displayed])
+  const { selectedIds, toggleRow, clearAll, selectAllRows, headerRef: headerCheckboxRef } = useBulkSelection(displayed)
+
+  usePageTitle('Pending Deductions')
+
+  // Reset page + selection when search changes
+  useEffect(() => { pdState.setPage(0); clearAll() }, [pdState.search, pdState.setPage]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Clear selection on page change
+  useEffect(() => { clearAll() }, [pdState.page]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const PD_CSV_HEADERS = ['Date', 'Description', 'Bank', 'Disbursed (₦)', 'Transfer Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Stage Code 2', 'Remarks']
   const pdCsvRow = (r: OutflowTransaction) => [
@@ -141,8 +145,18 @@ export default function PendingDeductions() {
     setBulkResolving(false)
     if (failed   > 0) toast(`${failed} row(s) failed to resolve`, 'error')
     if (resolved > 0) toast(`${resolved} transaction(s) marked as resolved`, 'success')
-    setSelectedIds(new Set())
+    clearAll()
     refetch()
+  }
+
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds]
+    const { failed } = await executeBulkDelete(ids)
+    setConfirmBulkDelete(false)
+    clearAll()
+    refetch()
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
+    else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
   const handleResolve = async (row: OutflowTransaction) => {
@@ -277,29 +291,30 @@ export default function PendingDeductions() {
         {/* Table */}
         <Card padding={false}>
           {/* Bulk action bar */}
-          {selectedIds.size > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 border-b border-primary/10">
-              <span className="text-sm text-primary font-medium">{selectedIds.size} selected</span>
-              <CanWrite>
-                <button
-                  onClick={handleBulkResolve}
-                  disabled={bulkResolving}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {bulkResolving
-                    ? <span className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
-                    : <CheckCircle2 className="w-3.5 h-3.5" />}
-                  Resolve selected
-                </button>
-              </CanWrite>
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <X className="w-3 h-3" /> Clear
-              </button>
-            </div>
-          )}
+          <BulkActionBar
+            count={selectedIds.size}
+            onClear={clearAll}
+            actions={[
+              {
+                key: 'resolve', label: 'Resolve selected', variant: 'success',
+                icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+                onClick: handleBulkResolve, loading: bulkResolving,
+                show: canWrite(),
+              },
+              {
+                key: 'edit', label: 'Edit selected', variant: 'outline',
+                icon: <Pencil className="w-3.5 h-3.5" />,
+                onClick: () => setBulkEditOpen(true),
+                show: canWrite(),
+              },
+              {
+                key: 'delete', label: 'Delete selected', variant: 'danger',
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                onClick: () => setConfirmBulkDelete(true),
+                show: canDelete(),
+              },
+            ]}
+          />
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
@@ -313,10 +328,7 @@ export default function PendingDeductions() {
                       type="checkbox"
                       aria-label="Select all on page"
                       className="rounded border-gray-300 text-primary focus:ring-primary/30"
-                      onChange={e => {
-                        if (e.target.checked) setSelectedIds(new Set(displayed.map(r => r.id)))
-                        else setSelectedIds(new Set())
-                      }}
+                      onChange={e => e.target.checked ? selectAllRows() : clearAll()}
                     />
                   </th>
                   <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
@@ -374,13 +386,7 @@ export default function PendingDeductions() {
                               checked={isSelected}
                               aria-label="Select row"
                               className="rounded border-gray-300 text-primary focus:ring-primary/30"
-                              onChange={e => {
-                                setSelectedIds(prev => {
-                                  const next = new Set(prev)
-                                  e.target.checked ? next.add(row.id) : next.delete(row.id)
-                                  return next
-                                })
-                              }}
+                              onChange={() => toggleRow(row.id)}
                             />
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
@@ -442,6 +448,20 @@ export default function PendingDeductions() {
         onClose={() => setModalOpen(false)}
         onSuccess={handleModalSuccess}
         editRecord={editRecord}
+      />
+      <BulkEditOutflowModal
+        open={bulkEditOpen}
+        onClose={() => setBulkEditOpen(false)}
+        ids={[...selectedIds]}
+        banks={banks}
+        onSuccess={() => { clearAll(); refetch() }}
+      />
+      <DeleteDialog
+        open={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={handleBulkDelete}
+        loading={bulkDeleting}
+        label={`these ${selectedIds.size} pending deduction${selectedIds.size !== 1 ? 's' : ''}`}
       />
     </>
   )
