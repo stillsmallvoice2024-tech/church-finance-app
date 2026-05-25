@@ -130,6 +130,7 @@ create table public.inflow_transactions (
   income_type_id           uuid references public.income_types(id) on delete set null,
   is_pending_deduction     boolean not null default false,
   created_by               uuid references public.profiles(id),
+  recorded_at              timestamptz,
   created_at               timestamptz default now(),
   updated_at               timestamptz default now()
 );
@@ -160,6 +161,7 @@ create table public.outflow_transactions (
   allocation_config_id     uuid references public.allocation_configs(id) on delete set null,
   is_pending_deduction     boolean not null default false,
   created_by               uuid references public.profiles(id),
+  recorded_at              timestamptz,
   created_at               timestamptz default now(),
   updated_at               timestamptz default now()
 );
