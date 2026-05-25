@@ -212,6 +212,21 @@ WHERE account_to   = activeCategory AND account_to_stage2   = portionStage2 AND 
 - Circular allocation (same category+portion both sides) → skipped in summary
 - Deleted categories → `account_from`/`account_to` text snapshot remains readable even after FK goes NULL
 
+### Intraflow Propagation: `useReportEngine` + `reportQueryEngine`
+
+Same intra_flows logic now applied in both report engines — `balances` from `useReportEngine` always agrees with CategoryLedger summary for the same date.
+
+**`useReportEngine`** — queries `intra_flows WHERE status='active' AND date <= reportDate` (always `date`; `intra_flows` has no `recorded_at` column — filter is basis-independent). Applies identical FROM-debit / TO-credit adjustments to `allocMap` / `specificSeed` / `savingsIn` in the same pass as all other sources.
+
+**`reportQueryEngine.ts`** (`src/utils/reportQueryEngine.ts`) — used by Dynamic Reports, token parser, and `resolveTableBlock`:
+- `getCategoryInflows(category, dateRange?, portion?)` — `inflow_transactions` + intra_flows `account_to = category AND status='active'`; filters `account_to_stage2` when portion is set
+- `getCategoryPercentageInflows` — allocation-config split + intra_flows credits to percentage portion in same `Promise.all`
+- `getCategoryOutflows(category, dateRange?, portion?)` — `outflow_transactions` + intra_flows `account_from = category AND status='active'`; filters `account_from_stage2` when portion is set
+- `getCategoryBalance` / `resolveTableBlock` / `resolveTokens` inherit the fix automatically
+- `getNetMovement` — **not** updated; intra_flows net to zero across all categories
+
+**Portion → stage2 mapping** (`STAGE_CODE_MAP`): `seed → 'Specific Seed'`, `savings → 'Savings'`, `percentage → 'Percentage Allocation'`; `all` = no stage2 filter
+
 ---
 
 ## Outflow Amount Calculation
@@ -272,6 +287,8 @@ Config resolution always uses `inflow.date` regardless of basis (allocation conf
 `src/hooks/useReportEngine.ts` returns:
 - `balances: Map<categoryName, ReportCategoryBalance>` — standard category balances (percentage allocated, specific seed, savings net)
 - `operationalBalances: OperationalBalanceMap` — `Map<string, number>` for income-type and transaction-type rows
+
+**Intra-flows included:** queries `intra_flows WHERE status='active' AND date <= reportDate` and applies FROM-debit / TO-credit adjustments. See "Intraflow Propagation: useReportEngine + reportQueryEngine" above.
 
 **Operational balance keys** (always exact-day filter on `recorded_at`):
 - Income type rows: `it::${incomeTypeId}`
