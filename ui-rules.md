@@ -997,6 +997,55 @@ disabled={loading || checkingSchema || schemaStatus !== 'ok' || schemaStuck || (
 
 ---
 
+## Dynamic Reports (`src/pages/DynamicReportEditor.tsx`)
+
+Block-based report builder. Blocks: `text`, `metric`, `table`, `formula`.
+
+### Block Config Types
+- **MetricBlock**: `fn` (BALANCE/INFLOWS/OUTFLOWS/NET), `category?`, `portion?`, `dateFrom?`, `dateTo?`, `dateField?`, `displayCurrency?`, `label?`
+- **TableBlock**: `categories[]`, `columns[]` (inflows/outflows/balance), `portion?`, `dateFrom?`, `dateTo?`, `dateField?`, `displayCurrency?`
+- **FormulaBlock**: `terms[]` ({sign, fn, category?, portion?}), `dateFrom?`, `dateTo?`, `dateField?`, `displayCurrency?`
+
+### Token System
+Metric/formula blocks embed `{{FN:category:portion:dateFrom:dateTo:dateField}}` tokens. Resolved by `reportTokenParser.ts` → `resolveTokens` → `reportQueryEngine.ts`.
+
+### DateField Toggle (`DateFieldToggle` inline component)
+- Two options: `"Transaction Date"` (reads `date` col) and `"Recorded At"` (reads `recorded_at` col)
+- Shown in MetricBlock, TableBlock, FormulaBlock editors
+- When `recorded_at`, appends `T23:59:59` to `dateTo` before Supabase query; `intra_flows` always filtered on `date` (no `recorded_at` column)
+
+### INFLOWS Metric Special Layout
+- Shows "Income Type *" label (not "Category"); no Budget Portion dropdown
+- "Recorded Date" single-date shortcut sets `dateFrom = dateTo = selectedDate`
+- Separate Date From / Date To range fields remain alongside it
+- All other fn types keep Category + Budget Portion layout
+
+### Currency Display
+- `CURRENCY_SYMBOLS = { NGN: '₦', USD: '$', GBP: '£', EUR: '€', CNY: '¥' }`
+- `fmtAmount(n, currency?)` — defaults to NGN; falls back to `'₦'` for unknown codes
+- Per-block `displayCurrency` selector; cosmetic only (no conversion)
+
+### Collapsible BlockCard
+- `[open, setOpen]` — default open; header row is `role=button` + click toggles
+- On `open=true`: `setTimeout(() => bodyRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}), 60)`
+- Move/Delete buttons have `e.stopPropagation()` to prevent toggling collapse
+- ChevronDown rotates 180° when open
+
+### Phase 5 Features
+- **Print**: `window.print()` button; `no-print` CSS class hides toolbar elements during print
+- **Share link**: `navigator.clipboard.writeText(window.location.href)` with 2-second `linkCopied` confirmation
+- **Snapshots**: save frozen `SnapshotData` (resolved token values + table rows) via `useSaveSnapshot()`; load via `useReportSnapshots(reportId)`; `viewingSnapshot` state swaps `displayResolved`/`displayTableData` maps in preview without changing render code
+  - Amber "Snapshot: label · date" status bar + "Return to live" button when viewing snapshot
+  - Snapshot panel: label input + save button; list with View/Delete per entry
+
+### Hook locations
+- `useReportSnapshots(reportId)` — fetches from `dynamic_report_snapshots`, ordered desc; graceful if table missing
+- `useSaveSnapshot()` — inserts row
+- `useDeleteSnapshot()` — deletes by id
+All in `src/hooks/useDynamicReports.ts`.
+
+---
+
 ## Financial Report Page (`src/pages/FinancialReport.tsx`)
 
 Two modes toggled by "Edit Layout" button:

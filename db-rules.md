@@ -34,6 +34,9 @@
 | `audit_log` | Whole-record snapshots on INSERT/UPDATE/DELETE |
 | `field_changes` | Per-field old/new on UPDATE; `user_id` FK → `profiles(id)` |
 | `report_templates` | Saved report layouts; `layout` JSONB, `created_by` FK → `profiles(id)` |
+| `dynamic_reports` | Report shells; `title`, `created_by` FK → `profiles(id)` |
+| `dynamic_report_blocks` | Blocks per report; `report_id` FK, `block_type` (text/metric/table/formula), `position int`, `config_json jsonb` |
+| `dynamic_report_snapshots` | Frozen resolved values; `report_id` FK, `label`, `snapshot_at timestamptz`, `data jsonb` (`SnapshotData`: `resolvedAt`, `resolved: Record<string,number>`, `tableData: Record<string, TableRow[]>`); RLS: auth users read+write; index on `(report_id, snapshot_at DESC)` |
 | `bank_schema_check` | Helper view; `SELECT column_name::text FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'banks'`; queried by `checkBankStartingBalanceMigration()` to bypass PostgREST column cache |
 | `schema_discovery_view` | Optional helper view; `SELECT table_name::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`; queried by `discoverSchemaTables()` in `backupRestore.ts` to detect unmanaged tables; install via `SCHEMA_DISCOVERY_MIGRATION_SQL` exported from that module |
 
@@ -218,7 +221,7 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 
 ## Backup & Restore System (`src/utils/backupRestore.ts`)
 
-- **`MANAGED_TABLES`** — registry of 21 tables with metadata: `key`, `label`, `module`, `restorePriority`, `backupEnabled`, `restoreMode`, `conflictColumn`, `requiresMigration`, `sensitive`, `optional`, `dependencies`
+- **`MANAGED_TABLES`** — registry of 22 tables with metadata: `key`, `label`, `module`, `restorePriority`, `backupEnabled`, `restoreMode`, `conflictColumn`, `requiresMigration`, `sensitive`, `optional`, `dependencies`
 - **`restoreMode`** per table: `replace` (delete+insert), `merge` (upsert, rows preserved), `append` (upsert, nothing deleted — used for audit/log tables)
 - **`DELETE_TABLES`** — derived at module load from `MANAGED_TABLES` (reversed order, filtered to `restoreMode !== 'append'` and `backupEnabled`). Never manually maintained.
 - **`currencies` PK is `code`** (not `id`) — `conflictColumn: 'code'` required for upsert. All other tables use `conflictColumn: 'id'`.
