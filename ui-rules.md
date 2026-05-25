@@ -503,6 +503,15 @@ interface TableColumnDef<T = unknown> {
 
 **`noSearch: true`** — reserved exclusively for date/timestamp columns (Date, Upload Date, Timestamp, etc.). All numeric columns (Amount, Balance, Deposited, Withdrawn, Percentage, etc.) are searchable and must NOT have `noSearch`.
 
+**Accessor label rule — enum/coded columns:** When a column stores DB keys (e.g. `'bank_deposit'`) but renders human-readable labels via a local map (e.g. `TXN_TYPE_LABELS`), the `accessor` **must return the display label**, not the raw key — `searchRows` compares against the accessor value, so raw-key accessors make the column unsearchable by displayed text.
+```ts
+// ✓ correct — search "Bank Deposit" finds 'bank_deposit' rows
+accessor: r => TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? ''
+// ✗ wrong  — search "Bank Deposit" finds nothing; raw key is 'bank_deposit'
+accessor: r => r.transaction_type ?? ''
+```
+Columns following this pattern: `transaction_type` (Inflows, Outflows), `table_name` (ChangeLog — already correct).
+
 **Utilities exported from `src/utils/tableColumns.ts`:**
 
 ```ts
