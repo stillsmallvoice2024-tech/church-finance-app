@@ -180,6 +180,8 @@ export interface MetricBlockConfig {
   fn: 'BALANCE' | 'INFLOWS' | 'OUTFLOWS' | 'NET'
   category?: string
   portion?: string
+  displayCurrency?: string
+  dateField?: string
   dateFrom?: string
   dateTo?: string
   label?: string
@@ -189,6 +191,8 @@ export interface TableBlockConfig {
   categories: string[]
   columns: Array<'inflows' | 'outflows' | 'balance'>
   portion?: string
+  displayCurrency?: string
+  dateField?: string
   dateFrom?: string
   dateTo?: string
   label?: string
@@ -203,7 +207,31 @@ export interface FormulaTerm {
 
 export interface FormulaBlockConfig {
   terms: FormulaTerm[]
+  displayCurrency?: string
+  dateField?: string
   dateFrom?: string
   dateTo?: string
   label?: string
+}
+
+export interface SnapshotData {
+  resolvedAt: string
+  resolved:   Record<string, number>
+  tableData:  Record<string, Array<{
+    category:     string
+    inflows:      number
+    outflows:     number
+    balance:      number
+    inflowError:  string | null
+    outflowError: string | null
+  }>>
+}
+
+export interface DynamicReportSnapshot {
+  id:          string
+  report_id:   string
+  label:       string
+  snapshot_at: string
+  data:        SnapshotData
+  created_at:  string
 }

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import type { DynamicReport, DynamicReportBlock } from '../types'
+import type { DynamicReport, DynamicReportBlock, DynamicReportSnapshot, SnapshotData } from '../types'
 
 export function useDynamicReports() {
   const [reports, setReports] = useState<DynamicReport[]>([])
@@ -137,6 +137,71 @@ export function useSaveDynamicReportBlocks() {
     }
 
     setLoading(false)
+    return true
+  }, [])
+
+  return { mutate, loading, error }
+}
+
+export function useReportSnapshots(reportId: string | null) {
+  const [snapshots, setSnapshots] = useState<DynamicReportSnapshot[]>([])
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    if (!reportId) { setSnapshots([]); return }
+    setLoading(true)
+    setError(null)
+    const { data, error: err } = await supabase
+      .from('dynamic_report_snapshots')
+      .select('*')
+      .eq('report_id', reportId)
+      .order('snapshot_at', { ascending: false })
+    if (err && !/does not exist/i.test(err.message)) setError(err.message)
+    setSnapshots((data ?? []) as DynamicReportSnapshot[])
+    setLoading(false)
+  }, [reportId])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  return { snapshots, loading, error, refetch: fetch }
+}
+
+export function useSaveSnapshot() {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (
+    reportId: string,
+    label: string,
+    data: SnapshotData,
+  ): Promise<boolean> => {
+    setLoading(true)
+    setError(null)
+    const { error: err } = await supabase
+      .from('dynamic_report_snapshots')
+      .insert({ report_id: reportId, label, data })
+    setLoading(false)
+    if (err) { setError(err.message); return false }
+    return true
+  }, [])
+
+  return { mutate, loading, error }
+}
+
+export function useDeleteSnapshot() {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (snapshotId: string): Promise<boolean> => {
+    setLoading(true)
+    setError(null)
+    const { error: err } = await supabase
+      .from('dynamic_report_snapshots')
+      .delete()
+      .eq('id', snapshotId)
+    setLoading(false)
+    if (err) { setError(err.message); return false }
     return true
   }, [])
 

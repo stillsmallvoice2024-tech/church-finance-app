@@ -1027,6 +1027,24 @@ ALTER TABLE public.dynamic_report_blocks DROP CONSTRAINT IF EXISTS dynamic_repor
 ALTER TABLE public.dynamic_report_blocks ADD CONSTRAINT dynamic_report_blocks_block_type_check
   CHECK (block_type IN ('text', 'metric', 'table', 'formula'));
 
+-- Phase 5: Report snapshots
+CREATE TABLE IF NOT EXISTS public.dynamic_report_snapshots (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id   uuid NOT NULL REFERENCES dynamic_reports(id) ON DELETE CASCADE,
+  label       text NOT NULL,
+  snapshot_at timestamptz NOT NULL DEFAULT now(),
+  data        jsonb NOT NULL DEFAULT '{}',
+  created_at  timestamptz DEFAULT now()
+);
+ALTER TABLE public.dynamic_report_snapshots ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "drs_select" ON public.dynamic_report_snapshots FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "drs_all" ON public.dynamic_report_snapshots FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS idx_drs_report_at ON public.dynamic_report_snapshots(report_id, snapshot_at DESC);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────

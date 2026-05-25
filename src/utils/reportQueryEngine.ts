@@ -49,7 +49,10 @@ function findConfigForDate(
 async function getCategoryPercentageInflows(
   category: string,
   dateRange?: DateRange,
+  dateField?: string,
 ): Promise<QueryResult> {
+  const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
+
   let inflowQ = supabase
     .from('inflow_transactions')
     .select('amount, allocation_config_id, date, transaction_type, stage_code_2')
@@ -63,7 +66,8 @@ async function getCategoryPercentageInflows(
     .eq('status', 'active')
 
   if (dateRange) {
-    inflowQ = inflowQ.gte('date', dateRange.from).lte('date', dateRange.to)
+    const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to
+    inflowQ = inflowQ.gte(col, dateRange.from).lte(col, to)
     intraQ  = intraQ.gte('date', dateRange.from).lte('date', dateRange.to)
   }
 
@@ -116,10 +120,13 @@ export async function getCategoryInflows(
   category: string,
   dateRange?: DateRange,
   portion?: BudgetPortion,
+  dateField?: string,
 ): Promise<QueryResult> {
   if (portion === 'percentage') {
-    return getCategoryPercentageInflows(category, dateRange)
+    return getCategoryPercentageInflows(category, dateRange, dateField)
   }
+
+  const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
 
   let q = supabase
     .from('inflow_transactions')
@@ -133,7 +140,8 @@ export async function getCategoryInflows(
     .eq('status', 'active')
 
   if (dateRange) {
-    q      = q.gte('date', dateRange.from).lte('date', dateRange.to)
+    const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to
+    q      = q.gte(col, dateRange.from).lte(col, to)
     intraQ = intraQ.gte('date', dateRange.from).lte('date', dateRange.to)
   }
   if (portion && portion !== 'all') {
@@ -152,7 +160,10 @@ export async function getCategoryOutflows(
   category: string,
   dateRange?: DateRange,
   portion?: BudgetPortion,
+  dateField?: string,
 ): Promise<QueryResult> {
+  const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
+
   let q = supabase
     .from('outflow_transactions')
     .select('actual_amount, amount_disbursed')
@@ -165,7 +176,8 @@ export async function getCategoryOutflows(
     .eq('status', 'active')
 
   if (dateRange) {
-    q      = q.gte('date', dateRange.from).lte('date', dateRange.to)
+    const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to
+    q      = q.gte(col, dateRange.from).lte(col, to)
     intraQ = intraQ.gte('date', dateRange.from).lte('date', dateRange.to)
   }
 
@@ -176,7 +188,6 @@ export async function getCategoryOutflows(
     q      = q.eq('stage_code_2', 'Savings')
     intraQ = intraQ.eq('account_from_stage2', 'Savings')
   } else if (portion === 'percentage') {
-    // Percentage-allocated outflows: not seed, not savings
     q = q
       .not('stage_code_2', 'eq', 'Specific Seed')
       .not('stage_code_2', 'eq', 'Savings')
@@ -198,22 +209,25 @@ export async function getCategoryBalance(
   category: string,
   dateRange?: DateRange,
   portion?: BudgetPortion,
+  dateField?: string,
 ): Promise<QueryResult> {
   const [inflows, outflows] = await Promise.all([
-    getCategoryInflows(category, dateRange, portion),
-    getCategoryOutflows(category, dateRange, portion),
+    getCategoryInflows(category, dateRange, portion, dateField),
+    getCategoryOutflows(category, dateRange, portion, dateField),
   ])
   if (inflows.error)  return inflows
   if (outflows.error) return outflows
   return { value: inflows.value - outflows.value, error: null }
 }
 
-export async function getNetMovement(dateRange?: DateRange): Promise<QueryResult> {
+export async function getNetMovement(dateRange?: DateRange, dateField?: string): Promise<QueryResult> {
+  const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
   let inflowQ  = supabase.from('inflow_transactions').select('amount')
   let outflowQ = supabase.from('outflow_transactions').select('actual_amount, amount_disbursed')
   if (dateRange) {
-    inflowQ  = inflowQ.gte('date', dateRange.from).lte('date', dateRange.to)
-    outflowQ = outflowQ.gte('date', dateRange.from).lte('date', dateRange.to)
+    const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to
+    inflowQ  = inflowQ.gte(col, dateRange.from).lte(col, to)
+    outflowQ = outflowQ.gte(col, dateRange.from).lte(col, to)
   }
   const [inflowRes, outflowRes] = await Promise.all([inflowQ, outflowQ])
   if (inflowRes.error)  return { value: 0, error: inflowRes.error.message }
@@ -239,12 +253,13 @@ export async function resolveTableBlock(
   categories: string[],
   dateRange?: DateRange,
   portion?: BudgetPortion,
+  dateField?: string,
 ): Promise<TableRow[]> {
   return Promise.all(
     categories.filter(c => c.trim()).map(async category => {
       const [inf, out] = await Promise.all([
-        getCategoryInflows(category, dateRange, portion),
-        getCategoryOutflows(category, dateRange, portion),
+        getCategoryInflows(category, dateRange, portion, dateField),
+        getCategoryOutflows(category, dateRange, portion, dateField),
       ])
       return {
         category,
