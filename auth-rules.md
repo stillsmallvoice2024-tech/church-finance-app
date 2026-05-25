@@ -57,6 +57,7 @@ Using `!!role` causes edit/delete UI to disappear when profile fetch fails. Alwa
 - Helper DB functions: `is_admin()`, `is_finance_user()`
 - DELETE policies must check `auth.uid() IS NOT NULL`, not `is_admin()`
   - Legacy deployments may have admin-only DELETE policies that silently fail — migration SQL in `miscellaneous.md`
+- `intraflow_update` policy on `intra_flows` may be absent on existing DBs — it was not included in `add_intraflow_traceability.sql`; symptom: update returns 0 rows with no error → fix: run `supabase/fix_intraflow_update_policy.sql`
 - **`receipts` policies** must use `auth.uid() IS NOT NULL` for SELECT/INSERT/DELETE — never `is_finance_user()` or `is_admin()` (all authenticated users can upload/view/delete receipts)
 - **`profiles` policies must never call `is_admin()` or `is_finance_user()`** — both functions query `public.profiles`, causing infinite recursion
   - `profiles` policy set: all four operations use `auth.uid() IS NOT NULL` directly
