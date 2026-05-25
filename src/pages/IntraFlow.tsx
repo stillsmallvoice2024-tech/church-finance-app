@@ -401,6 +401,13 @@ export default function IntraFlow() {
                       className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
                       rightAlign
                     />
+                    <SortableHeader
+                      field={IFL_SORT_FIELDS[4]}
+                      activeSortKey={iflState.sortKey}
+                      activeSortDir={iflState.sortDir}
+                      onSort={iflState.setSort}
+                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                    />
                     {['Remark', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         {h}
@@ -412,7 +419,7 @@ export default function IntraFlow() {
                   {loading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>
-                        {Array.from({ length: 7 }).map((_, j) => (
+                        {Array.from({ length: 8 }).map((_, j) => (
                           <td key={j} className="px-4 py-3">
                             <div className="h-4 bg-gray-200 rounded animate-pulse" />
                           </td>
@@ -421,7 +428,7 @@ export default function IntraFlow() {
                     ))
                   ) : displayed.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-16 text-center">
+                      <td colSpan={8} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-gray-400">
                           <ArrowLeftRight className="w-10 h-10 text-gray-200" />
                           <p className="text-sm">No internal transfers match your filters.</p>
@@ -447,6 +454,9 @@ export default function IntraFlow() {
                             <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
                             <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
                             <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap text-right">{formatCurrency(Number(row.total_amount))}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500 max-w-[200px]">
+                              <DescriptionCell id={`desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
                               <DescriptionCell id={`rem-${row.id}`} text={row.remark} tooltip={descTooltip} setTooltip={setDescTooltip} />
                             </td>
@@ -465,7 +475,7 @@ export default function IntraFlow() {
                               </div>
                             </td>
                           </tr>
-                          {isExpanded && <RowDetailPanel items={intraFlowDetailItems(row)} colSpan={9} />}
+                          {isExpanded && <RowDetailPanel items={intraFlowDetailItems(row)} colSpan={8} />}
                         </Fragment>
                       )
                     })
