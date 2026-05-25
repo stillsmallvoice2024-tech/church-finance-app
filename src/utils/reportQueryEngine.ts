@@ -75,7 +75,7 @@ async function getCategoryPercentageInflows(
     inflowQ,
     supabase
       .from('allocation_configs')
-      .select('id, rows, start_date, end_date, effective_from, effective_to')
+      .select('id, rows, effective_from, effective_to')
       .eq('status', 'locked')
       .eq('is_special', false),
     intraQ,

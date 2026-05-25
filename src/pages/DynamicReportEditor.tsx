@@ -6,6 +6,7 @@ import {
   Eye, Pencil, Plus, X, RefreshCw, Sigma,
   Link2, Printer, Camera, History, ChevronDown as ChevronDownIcon,
 } from 'lucide-react'
+import { Modal } from '../components/ui/Modal'
 import { usePageTitle } from '../hooks/usePageTitle'
 import {
   useDynamicReportBlocks,
@@ -35,7 +36,7 @@ import {
 import type {
   DynamicReport, DynamicReportBlockType,
   TextBlockConfig, MetricBlockConfig, TableBlockConfig, FormulaBlockConfig, FormulaTerm,
-  DynamicReportSnapshot, SnapshotData,
+  DynamicReportSnapshot, SnapshotData, TextBlockEmbed,
 } from '../types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -90,130 +91,362 @@ function makeKey() {
   return Math.random().toString(36).slice(2)
 }
 
-// ── Token insertion popover ────────────────────────────────────────────────────
+// ── Insert block modal (metric / formula / table embed) ────────────────────────
 
-interface TokenPopoverProps {
-  categoryNames: string[]
-  onInsert: (token: string) => void
+type InsertTab = 'metric' | 'formula' | 'table'
+
+function InsertBlockModal({
+  open,
+  onClose,
+  categoryNames,
+  onInsertMetric,
+  onInsertEmbed,
+}: {
+  open: boolean
   onClose: () => void
-}
+  categoryNames: string[]
+  onInsertMetric: (token: string) => void
+  onInsertEmbed: (id: string, type: 'formula' | 'table', config: Record<string, unknown>) => void
+}) {
+  const [tab, setTab] = useState<InsertTab>('metric')
 
-function TokenPopover({ categoryNames, onInsert, onClose }: TokenPopoverProps) {
-  const [fn,       setFn]       = useState<TokenFn>('BALANCE')
-  const [category, setCategory] = useState(categoryNames[0] ?? '')
-  const [portion,  setPortion]  = useState<BudgetPortion>('all')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo,   setDateTo]   = useState('')
+  // Metric state
+  const [mFn,       setMFn]       = useState<TokenFn>('BALANCE')
+  const [mCategory, setMCategory] = useState(categoryNames[0] ?? '')
+  const [mPortion,  setMPortion]  = useState<BudgetPortion>('all')
+  const [mDateFrom, setMDateFrom] = useState('')
+  const [mDateTo,   setMDateTo]   = useState('')
+  const [mDateField, setMDateField] = useState('date')
+
+  // Formula state
+  const [fTerms,    setFTerms]    = useState<FormulaTerm[]>([])
+  const [fDateFrom, setFDateFrom] = useState('')
+  const [fDateTo,   setFDateTo]   = useState('')
+  const [fDateField, setFDateField] = useState('date')
+  const [fCurrency, setFCurrency] = useState('NGN')
+  const [fLabel,    setFLabel]    = useState('')
+
+  // Table state
+  const [tCats,     setTCats]     = useState<string[]>([])
+  const [tCols,     setTCols]     = useState<string[]>(['inflows', 'outflows', 'balance'])
+  const [tPortion,  setTPortion]  = useState<BudgetPortion>('all')
+  const [tDateFrom, setTDateFrom] = useState('')
+  const [tDateTo,   setTDateTo]   = useState('')
+  const [tDateField, setTDateField] = useState('date')
+  const [tCurrency, setTCurrency] = useState('NGN')
+  const [tLabel,    setTLabel]    = useState('')
+
+  // Reset on open
+  useEffect(() => {
+    if (!open) return
+    setTab('metric')
+    setMFn('BALANCE'); setMCategory(categoryNames[0] ?? ''); setMPortion('all')
+    setMDateFrom(''); setMDateTo(''); setMDateField('date')
+    setFTerms([]); setFDateFrom(''); setFDateTo(''); setFDateField('date'); setFCurrency('NGN'); setFLabel('')
+    setTCats([]); setTCols(['inflows', 'outflows', 'balance']); setTPortion('all')
+    setTDateFrom(''); setTDateTo(''); setTDateField('date'); setTCurrency('NGN'); setTLabel('')
+  }, [open, categoryNames])
+
+  const insertDisabled =
+    tab === 'metric'  ? (mFn !== 'NET' && !mCategory.trim()) :
+    tab === 'formula' ? fTerms.length === 0 :
+    tCats.length === 0
 
   const handleInsert = () => {
-    if (fn !== 'NET' && !category.trim()) return
-    const token = buildTokenString(
-      fn,
-      category.trim(),
-      portion !== 'all' ? portion : undefined,
-      dateFrom || undefined,
-      dateTo   || undefined,
-    )
-    onInsert(token)
+    if (tab === 'metric') {
+      const token = buildTokenString(
+        mFn, mCategory.trim(),
+        mPortion !== 'all' ? mPortion : undefined,
+        mDateFrom || undefined, mDateTo || undefined,
+        mDateField !== 'date' ? mDateField : undefined,
+      )
+      onInsertMetric(token)
+    } else if (tab === 'formula') {
+      onInsertEmbed(makeKey(), 'formula', {
+        terms:          fTerms,
+        dateFrom:       fDateFrom || undefined,
+        dateTo:         fDateTo   || undefined,
+        dateField:      fDateField !== 'date' ? fDateField : undefined,
+        displayCurrency: fCurrency,
+        label:          fLabel || undefined,
+      })
+    } else {
+      onInsertEmbed(makeKey(), 'table', {
+        categories:     tCats,
+        columns:        tCols,
+        portion:        tPortion,
+        dateFrom:       tDateFrom || undefined,
+        dateTo:         tDateTo   || undefined,
+        dateField:      tDateField !== 'date' ? tDateField : undefined,
+        displayCurrency: tCurrency,
+        label:          tLabel || undefined,
+      })
+    }
     onClose()
   }
 
-  const previewToken = buildTokenString(
-    fn,
-    category.trim(),
-    portion !== 'all' ? portion : undefined,
-    dateFrom || undefined,
-    dateTo   || undefined,
+  const metricPreview = buildTokenString(
+    mFn, mCategory.trim(),
+    mPortion !== 'all' ? mPortion : undefined,
+    mDateFrom || undefined, mDateTo || undefined,
+    mDateField !== 'date' ? mDateField : undefined,
   )
 
   return (
-    <div className="absolute z-20 top-full left-0 mt-1 w-80 bg-white rounded-xl border border-gray-200 shadow-lg p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-700">Insert Metric Token</span>
-        <button onClick={onClose} className="p-0.5 rounded text-gray-400 hover:text-gray-700">
-          <X className="w-3.5 h-3.5" />
-        </button>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Insert into Text Block"
+      size="max-w-lg"
+      footer={
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleInsert}
+            disabled={insertDisabled}
+            className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-40"
+          >
+            Insert
+          </button>
+        </div>
+      }
+    >
+      {/* Tab bar */}
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs mb-4">
+        {(['metric', 'formula', 'table'] as InsertTab[]).map(t => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 py-2 font-medium capitalize transition-colors border-r border-gray-200 last:border-r-0 ${
+              tab === t ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {t === 'metric' ? 'Metric' : t === 'formula' ? 'Formula' : 'Table'}
+          </button>
+        ))}
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Metric</label>
-        <select
-          value={fn}
-          onChange={e => setFn(e.target.value as TokenFn)}
-          className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-        >
-          {(Object.keys(FN_LABELS) as TokenFn[]).map(k => (
-            <option key={k} value={k}>{FN_LABELS[k]}</option>
-          ))}
-        </select>
-      </div>
-
-      {fn !== 'NET' && (
-        <>
+      {/* ── Metric tab ── */}
+      {tab === 'metric' && (
+        <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Category *</label>
-            <select
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              {categoryNames.length === 0 && (
-                <option value="">No categories found</option>
-              )}
-              {categoryNames.map(n => (
-                <option key={n} value={n}>{n}</option>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Metric</label>
+            <select value={mFn} onChange={e => setMFn(e.target.value as TokenFn)}
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+              {(Object.keys(FN_LABELS) as TokenFn[]).map(k => (
+                <option key={k} value={k}>{FN_LABELS[k]}</option>
               ))}
             </select>
+          </div>
+          {mFn !== 'NET' && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Category *</label>
+                <select value={mCategory} onChange={e => setMCategory(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                  {categoryNames.length === 0 && <option value="">No categories found</option>}
+                  {categoryNames.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Budget Portion</label>
+                <select value={mPortion} onChange={e => setMPortion(e.target.value as BudgetPortion)}
+                  className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                  {PORTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">From (optional)</label>
+              <input type="date" value={mDateFrom} onChange={e => setMDateFrom(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">To (optional)</label>
+              <input type="date" value={mDateTo} onChange={e => setMDateTo(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+          </div>
+          <DateFieldToggle value={mDateField} onChange={setMDateField} />
+          <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5 font-mono text-[11px] text-gray-500 break-all">
+            {metricPreview}
+          </div>
+        </div>
+      )}
+
+      {/* ── Formula tab ── */}
+      {tab === 'formula' && (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            {fTerms.length === 0 && (
+              <p className="text-xs text-gray-400 italic py-2 text-center">Add at least one term to compute a result.</p>
+            )}
+            {fTerms.map((term, idx) => (
+              <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setFTerms(fTerms.map((t, i) => i === idx ? { ...t, sign: t.sign === '+' ? '-' : '+' } : t))}
+                  className={`w-7 h-7 rounded-lg text-sm font-bold shrink-0 flex items-center justify-center border ${
+                    term.sign === '+'
+                      ? 'bg-success/10 text-success border-success/30'
+                      : 'bg-danger/10 text-danger border-danger/30'
+                  }`}
+                >{term.sign}</button>
+                <select value={term.fn}
+                  onChange={e => setFTerms(fTerms.map((t, i) => i === idx ? { ...t, fn: e.target.value as FormulaTerm['fn'] } : t))}
+                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 w-28">
+                  <option value="BALANCE">Balance</option>
+                  <option value="INFLOWS">Inflows</option>
+                  <option value="OUTFLOWS">Outflows</option>
+                  <option value="NET">Net Movement</option>
+                </select>
+                {term.fn !== 'NET' && (
+                  <select value={term.category ?? ''}
+                    onChange={e => setFTerms(fTerms.map((t, i) => i === idx ? { ...t, category: e.target.value } : t))}
+                    className="flex-1 min-w-0 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30">
+                    <option value="">— category —</option>
+                    {categoryNames.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                )}
+                {term.fn !== 'NET' && (
+                  <select value={term.portion ?? 'all'}
+                    onChange={e => setFTerms(fTerms.map((t, i) => i === idx ? { ...t, portion: e.target.value } : t))}
+                    className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 w-28">
+                    {PORTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
+                {term.fn === 'NET' && <span className="flex-1 text-xs text-gray-400 italic">all categories</span>}
+                <button type="button"
+                  onClick={() => setFTerms(fTerms.filter((_, i) => i !== idx))}
+                  className="p-1 rounded text-gray-400 hover:text-danger shrink-0">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button type="button"
+            onClick={() => setFTerms([...fTerms, { sign: '+', fn: 'BALANCE', category: categoryNames[0] ?? '', portion: 'all' }])}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
+            <Plus className="w-3 h-3" /> Add term
+          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
+              <input type="date" value={fDateFrom} onChange={e => setFDateFrom(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
+              <input type="date" value={fDateTo} onChange={e => setFDateTo(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+          </div>
+          <DateFieldToggle value={fDateField} onChange={setFDateField} />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
+            <select value={fCurrency} onChange={e => setFCurrency(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+              {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
+            <input type="text" value={fLabel} onChange={e => setFLabel(e.target.value)}
+              placeholder="e.g. Net Income"
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+        </div>
+      )}
+
+      {/* ── Table tab ── */}
+      {tab === 'table' && (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Categories</label>
+            {tCats.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {tCats.map(cat => (
+                  <span key={cat} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full">
+                    {cat}
+                    <button type="button" onClick={() => setTCats(tCats.filter(c => c !== cat))}
+                      className="rounded-full hover:bg-primary/20 p-0.5">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <select value="" onChange={e => { if (e.target.value) setTCats([...tCats, e.target.value]); e.target.value = '' }}
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-gray-500"
+              disabled={categoryNames.filter(n => !tCats.includes(n)).length === 0}>
+              <option value="">
+                {categoryNames.filter(n => !tCats.includes(n)).length === 0 ? 'All categories added' : '+ Add a category…'}
+              </option>
+              {categoryNames.filter(n => !tCats.includes(n)).map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Columns to show</label>
+            <div className="flex items-center gap-4">
+              {ALL_COLUMNS.map(c => (
+                <label key={c.key} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer select-none">
+                  <input type="checkbox" checked={tCols.includes(c.key)}
+                    onChange={() => {
+                      const next = tCols.includes(c.key) ? tCols.filter(x => x !== c.key) : [...tCols, c.key]
+                      if (next.length > 0) setTCols(next)
+                    }}
+                    className="rounded border-gray-300 text-primary" />
+                  {c.label}
+                </label>
+              ))}
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Budget Portion</label>
-            <select
-              value={portion}
-              onChange={e => setPortion(e.target.value as BudgetPortion)}
-              className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              {PORTION_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
+            <select value={tPortion} onChange={e => setTPortion(e.target.value as BudgetPortion)}
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+              {PORTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-        </>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date From</label>
+              <input type="date" value={tDateFrom} onChange={e => setTDateFrom(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date To</label>
+              <input type="date" value={tDateTo} onChange={e => setTDateTo(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+          </div>
+          <DateFieldToggle value={tDateField} onChange={setTDateField} />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
+            <select value={tCurrency} onChange={e => setTCurrency(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+              {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Label (optional)</label>
+            <input type="text" value={tLabel} onChange={e => setTLabel(e.target.value)}
+              placeholder="e.g. Category Summary"
+              className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+        </div>
       )}
-
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">From (optional)</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">To (optional)</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-      </div>
-
-      {/* Preview of generated token */}
-      <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5 font-mono text-[11px] text-gray-500 break-all">
-        {previewToken}
-      </div>
-
-      <button
-        onClick={handleInsert}
-        disabled={fn !== 'NET' && !category.trim()}
-        className="w-full py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-40"
-      >
-        Insert
-      </button>
-    </div>
+    </Modal>
   )
 }
 
@@ -230,16 +463,15 @@ function TextBlockEditor({
 }) {
   const cfg = block.config_json as Partial<TextBlockConfig>
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const [showPopover, setShowPopover] = useState(false)
+  const [showInsert, setShowInsert] = useState(false)
   const cursorRef = useRef(0)
 
-  const handleInsertToken = (token: string) => {
+  const insertAtCursor = (token: string, extraConfig?: Record<string, unknown>) => {
     const el = textareaRef.current
     const pos = cursorRef.current
     const current = cfg.text ?? ''
     const next = current.slice(0, pos) + token + current.slice(pos)
-    onChange({ text: next })
-    // Restore cursor after token
+    onChange({ ...cfg, text: next, ...extraConfig })
     requestAnimationFrame(() => {
       if (el) {
         const newPos = pos + token.length
@@ -249,39 +481,50 @@ function TextBlockEditor({
     })
   }
 
+  const handleInsertMetric = (token: string) => {
+    insertAtCursor(token)
+  }
+
+  const handleInsertEmbed = (id: string, type: 'formula' | 'table', config: Record<string, unknown>) => {
+    const existing = Array.isArray(cfg.embeds) ? (cfg.embeds as TextBlockEmbed[]) : []
+    insertAtCursor(`{{EMBED:${id}}}`, {
+      embeds: [...existing, { id, type, config }],
+    })
+  }
+
   return (
     <div className="space-y-2">
-      <div className="relative flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => {
             cursorRef.current = textareaRef.current?.selectionStart ?? (cfg.text?.length ?? 0)
-            setShowPopover(p => !p)
+            setShowInsert(true)
           }}
           className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
         >
           <Plus className="w-3 h-3" />
-          Insert metric
+          Insert
         </button>
         <span className="text-[10px] text-gray-400">
-          or type <code className="font-mono bg-gray-100 px-1 rounded">{'{{BALANCE:CategoryName}}'}</code>
+          metric, formula, or table — or type <code className="font-mono bg-gray-100 px-1 rounded">{'{{BALANCE:Cat}}'}</code> directly
         </span>
-        {showPopover && (
-          <TokenPopover
-            categoryNames={categoryNames}
-            onInsert={handleInsertToken}
-            onClose={() => setShowPopover(false)}
-          />
-        )}
       </div>
       <textarea
         ref={textareaRef}
         rows={5}
         value={cfg.text ?? ''}
-        onChange={e => onChange({ text: e.target.value })}
+        onChange={e => onChange({ ...cfg, text: e.target.value })}
         onBlur={e => { cursorRef.current = e.target.selectionStart }}
-        placeholder="Write your notes here… Use 'Insert metric' to embed live values."
+        placeholder="Write notes here… Click 'Insert' to embed a live metric, formula result, or table."
         className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 font-mono"
+      />
+      <InsertBlockModal
+        open={showInsert}
+        onClose={() => setShowInsert(false)}
+        categoryNames={categoryNames}
+        onInsertMetric={handleInsertMetric}
+        onInsertEmbed={handleInsertEmbed}
       />
     </div>
   )
@@ -886,26 +1129,96 @@ function ResolvedValue({ result, currency = 'NGN' }: { result: QueryResult | und
   )
 }
 
+const EMBED_TOKEN_RE = /\{\{EMBED:([^}]+)\}\}/g
+
 function TextBlockPreview({
   block,
   resolved,
+  tableData,
 }: {
   block: EditorBlock
   resolved: Map<string, QueryResult>
+  tableData: Map<string, TableRow[]>
 }) {
-  const cfg = block.config_json as Partial<TextBlockConfig>
-  const text = cfg.text ?? ''
+  const cfg    = block.config_json as Partial<TextBlockConfig>
+  const text   = cfg.text ?? ''
+  const embeds = (Array.isArray(cfg.embeds) ? cfg.embeds : []) as TextBlockEmbed[]
+
   if (!text.trim()) {
     return <p className="text-gray-300 italic text-sm">Empty text block</p>
   }
-  const segments = splitByTokens(text)
+
+  // Split by metric tokens, then further split each string segment by {{EMBED:id}} tokens
+  type Seg =
+    | { kind: 'text';    content: string }
+    | { kind: 'metric';  raw: string }
+    | { kind: 'embed';   id: string }
+
+  const segments: Seg[] = []
+  for (const s of splitByTokens(text)) {
+    if (typeof s !== 'string') {
+      segments.push({ kind: 'metric', raw: s.raw })
+      continue
+    }
+    EMBED_TOKEN_RE.lastIndex = 0
+    let last = 0; let m: RegExpExecArray | null
+    while ((m = EMBED_TOKEN_RE.exec(s)) !== null) {
+      if (m.index > last) segments.push({ kind: 'text', content: s.slice(last, m.index) })
+      segments.push({ kind: 'embed', id: m[1] })
+      last = m.index + m[0].length
+    }
+    if (last < s.length) segments.push({ kind: 'text', content: s.slice(last) })
+  }
+
   return (
-    <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+    <div className="text-sm text-gray-800 leading-relaxed">
       {segments.map((seg, i) => {
-        if (typeof seg === 'string') return <span key={i}>{seg}</span>
-        return <ResolvedValue key={i} result={resolved.get(seg.raw)} />
+        if (seg.kind === 'text') {
+          return <span key={i} className="whitespace-pre-wrap">{seg.content}</span>
+        }
+        if (seg.kind === 'metric') {
+          return <ResolvedValue key={i} result={resolved.get(seg.raw)} />
+        }
+        // Embed
+        const embed = embeds.find(e => e.id === seg.id)
+        if (!embed) {
+          return <span key={i} className="text-[10px] text-gray-300 font-mono">[missing embed]</span>
+        }
+        if (embed.type === 'formula') {
+          const fCfg = embed.config as Partial<FormulaBlockConfig>
+          const terms: FormulaTerm[] = Array.isArray(fCfg.terms) ? fCfg.terms : []
+          const df = (fCfg.dateField as string | undefined) || undefined
+          let total = 0; let pending = false
+          for (const term of terms) {
+            const pa  = term.portion && term.portion !== 'all' ? term.portion as BudgetPortion : undefined
+            const key = buildTokenString(term.fn as TokenFn, term.category ?? '', pa,
+              fCfg.dateFrom as string | undefined, fCfg.dateTo as string | undefined, df)
+            const r = resolved.get(key)
+            if (!r) { pending = true; break }
+            if (r.error) return (
+              <span key={i} className="text-danger text-xs font-medium bg-red-50 px-1.5 py-0.5 rounded border border-red-200" title={r.error}>[error]</span>
+            )
+            total += term.sign === '+' ? r.value : -r.value
+          }
+          if (pending || terms.length === 0) {
+            return <span key={i} className="text-gray-300 text-xs font-mono animate-pulse">…</span>
+          }
+          return <ResolvedValue key={i} result={{ value: total, error: null }} currency={(fCfg.displayCurrency as string) ?? 'NGN'} />
+        }
+        if (embed.type === 'table') {
+          return (
+            <div key={i} className="my-3">
+              <TableBlockPreview
+                block={{ key: seg.id, block_type: 'table', config_json: embed.config }}
+                rows={tableData.get(seg.id)}
+                resolving={false}
+              />
+            </div>
+          )
+        }
+        return null
       })}
-    </p>
+    </div>
   )
 }
 
@@ -1204,6 +1517,27 @@ function collectTokensFromBlocks(blocks: EditorBlock[]): ParsedToken[] {
     if (b.block_type === 'text') {
       const cfg = b.config_json as Partial<TextBlockConfig>
       tokens.push(...parseTokens(cfg.text ?? ''))
+      // Collect metric tokens from formula embeds stored in this text block
+      const embeds = (Array.isArray(cfg.embeds) ? cfg.embeds : []) as TextBlockEmbed[]
+      for (const embed of embeds) {
+        if (embed.type !== 'formula') continue
+        const fCfg = embed.config as Partial<FormulaBlockConfig>
+        const df   = (fCfg.dateField as string | undefined) || undefined
+        for (const term of (fCfg.terms ?? []) as FormulaTerm[]) {
+          if (term.fn !== 'NET' && !term.category) continue
+          const pa = term.portion && term.portion !== 'all' ? term.portion as BudgetPortion : undefined
+          tokens.push({
+            raw:       buildTokenString(term.fn as TokenFn, term.category ?? '', pa,
+              fCfg.dateFrom as string | undefined, fCfg.dateTo as string | undefined, df),
+            fn:        term.fn as TokenFn,
+            category:  term.category ?? '',
+            portion:   pa,
+            dateFrom:  fCfg.dateFrom as string | undefined,
+            dateTo:    fCfg.dateTo   as string | undefined,
+            dateField: df,
+          })
+        }
+      }
     } else if (b.block_type === 'metric') {
       const cfg = b.config_json as Partial<MetricBlockConfig>
       if (!cfg.fn) continue
@@ -1334,6 +1668,33 @@ export default function DynamicReportEditor() {
     )
     const tMap = new Map<string, TableRow[]>()
     for (const r of tableResults) tMap.set(r.key, r.rows)
+
+    // Resolve table embeds stored inside text blocks
+    const textEmbedResults = await Promise.all(
+      currentBlocks
+        .filter(b => b.block_type === 'text')
+        .flatMap(b => {
+          const cfg    = b.config_json as Partial<TextBlockConfig>
+          const embeds = (Array.isArray(cfg.embeds) ? cfg.embeds : []) as TextBlockEmbed[]
+          return embeds
+            .filter(e => e.type === 'table')
+            .map(async e => {
+              const tCfg = e.config as Partial<TableBlockConfig>
+              const cats = (Array.isArray(tCfg.categories) ? tCfg.categories : []).filter(Boolean) as string[]
+              if (cats.length === 0) return { key: e.id, rows: [] as TableRow[] }
+              const dr      = tCfg.dateFrom && tCfg.dateTo
+                ? { from: tCfg.dateFrom as string, to: tCfg.dateTo as string }
+                : undefined
+              const portion = (tCfg.portion as BudgetPortion | undefined) ?? 'all'
+              const df      = (tCfg.dateField as string | undefined) || undefined
+              const rows    = await resolveTableBlock(cats, dr, portion !== 'all' ? portion : undefined, df)
+                .catch(() => [] as TableRow[])
+              return { key: e.id, rows }
+            })
+        }),
+    )
+    for (const r of textEmbedResults) tMap.set(r.key, r.rows)
+
     setTableData(tMap)
 
     setResolving(false)
@@ -1644,7 +2005,7 @@ export default function DynamicReportEditor() {
           {blocks.map(block => (
             <div key={block.key}>
               {block.block_type === 'text' && (
-                <TextBlockPreview block={block} resolved={displayResolved} />
+                <TextBlockPreview block={block} resolved={displayResolved} tableData={displayTableData} />
               )}
               {block.block_type === 'metric' && (
                 <MetricBlockPreview block={block} resolved={displayResolved} />
