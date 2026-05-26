@@ -31,6 +31,18 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 
 ---
 
+## Non-Normal Transaction Income Type Rule
+
+**Non-Normal types:** `refund` | `reversal` | `bank_deposit` | `intrabank_transfer`
+
+- `income_type_id` is always `null` — never set, never auto-classified, never inherited
+- `allocation_config_id` is always `null` — no config resolution of any kind
+- Transaction type serves as the effective type label (UI shows it in place of the income type picker; `operationalBalances` keys it as `tt::${transactionType}`)
+- Enforced at every entry point: AddInflowModal (useEffects clear both fields on txnType change; onSubmit forces null), Import.tsx ManualEntryForm (guarded at save), ImportModal.tsx batch (`if (!txnType)` block)
+- CategoryLedger allocation already skips via `if (r.transaction_type) continue`; `recalculateTransactions` excludes them via `income_type_id IN (...)` filter
+
+---
+
 ## Allocation Configs
 
 **Regular configs** (`is_special = false`):
@@ -45,6 +57,11 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 - Linked to income types via `income_types.special_config_id`
 - Auto-applied to inflow transactions when that income type is selected
 - `useSpecialConfigOptions()` exposes `reload()`; `AddIncomeTypeModal` calls it on open
+
+**Catch-all "General" type in AddInflowModal config effects:**
+- `isCatchAll = incomeType.rules.length === 0` — catch-all types always resolve to date-based config
+- `special_config_id` / `special_config_group_id` on catch-all types are ignored (matches `getFinalConfig` rule 2)
+- Switching from any special-config type to a non-special or catch-all type resets `selectedConfigId` to date-based — the guard is `else { setSelectedConfigId(getConfigForDate(...)) }` not `else if (!incomeTypeId)`
 
 ---
 

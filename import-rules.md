@@ -153,9 +153,9 @@ Pipeline stages (all before Step 4 opens):
 
 ---
 
-## Config Propagation Precedence (Import Modal)
+## Config Propagation Precedence (All Entry Flows)
 
-**Resolver:** `src/utils/configResolver.ts` — single source of truth for all config resolution.
+**Resolver:** `src/utils/configResolver.ts` — single source of truth for all config resolution. Used by ImportModal.tsx (Step 4 display + runImport) and Import.tsx ManualEntryForm (display + doSaveInflow). AddInflowModal uses the same precedence logic via reactive useEffects.
 
 ```ts
 getFinalConfig(rowState: RowResolverState, generalConfigId, resolveGroupConfig?) → string | null
@@ -206,6 +206,11 @@ resolveDefaultIncomeType(description, stageCode1, incomeTypes, userPrefs?) → I
 - `applyBarSpecialConfigs` memo: deduplicates versioned group configs — only the today-active version per group appears in the dropdown (prevents multiple "Config 2024 / Config 2025" entries)
 
 **`src/utils/resolveImportConfig.ts`:** Backward-compat shim; re-exports everything from `configResolver.ts`. `resolveFinalRowConfig` is deprecated — delegates to `getFinalConfig` internally.
+
+**Import.tsx ManualEntryForm** (`doSaveInflow` + Allocation Config UI):
+- Uses `getFinalConfig` with `isManualOverride = !!configOverride` — `configOverride` is either `''` (use auto) or a UUID (explicit override)
+- `resolveGroupConfig` callback: `(groupId) => getSpecialConfigVersionForDate(configs, groupId, v('date'))?.id ?? null`
+- UI shows "Auto-applying: Config Name" when a special-config income type is active; "Using: Config Name — effective date" for date-based; "Not applicable" for non-Normal types
 
 ---
 
@@ -356,13 +361,14 @@ Called from `extractTargetName()`. Handles the pattern `To <bank>/Description/Pa
 **Transaction types:** `''` = Normal | `'refund'` | `'reversal'` | `'bank_deposit'` | `'intrabank_transfer'`
 
 **Rule:** If `transactionType !== ''` (i.e. any non-Normal type):
-- Skip all allocation — do **not** set `allocation_config_id` (no general config, no income-type-linked config, no date-based fallback)
-- Save the transaction record only
-- Account assignment can be done later via the inflow/outflow edit modal
+- Do **not** set `income_type_id` — skip all income type resolution (no auto-classify, no user selection, no inheritance)
+- Do **not** set `allocation_config_id` — skip all config resolution (no general config, no income-type-linked config, no date-based fallback)
+- Transaction type serves as the effective type label for UI and reporting
 
-Applies to both:
-- `ImportModal.tsx` batch wizard — guarded with `if (!txnType)` before config resolution block (inflow) and `if (!txnType && cfg)` (outflow)
-- `Import.tsx` ManualEntryForm — `effectiveConfigId` set to `undefined` when `txnType` is set (inflow); `txnType ? undefined : getConfigForDate(...)` (outflow)
+Applies to all entry flows:
+- `ImportModal.tsx` batch wizard — consolidated `if (!txnType)` block skips both `income_type_id` and `allocation_config_id` for inflow; `if (!txnType && cfg)` for outflow
+- `Import.tsx` ManualEntryForm — `income_type_id` guarded by `txnType ? undefined : ...`; `effectiveConfigId` from `getFinalConfig` wrapped in same guard
+- `AddInflowModal.tsx` — useEffects clear `incomeTypeId` + `selectedConfigId` on txnType change; `onSubmit` forces null for both regardless of UI state
 
 ---
 
