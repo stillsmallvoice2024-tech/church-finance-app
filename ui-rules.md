@@ -1178,6 +1178,18 @@ Each subgroup header shows ↑/↓ `ChevronUp`/`ChevronDown` buttons (alongside 
 - Threaded: main component → `SortableTableBlock` → `SortableGroup` (curries `group.id` and passes index-aware `undefined` at boundaries) → `SortableSubgroup`
 - No cross-group subgroup movement (DnD or buttons)
 
+### Template Pin/Unpin
+
+Pinned template persists across page navigation and reloads via `useReportTemplateStore` (`src/store/reportTemplateStore.ts`, Zustand + `persist`, key `church-finance-report-template-pin`).
+
+- **Pin**: `Pin` icon button per template in dropdown; clicking pins that template (replaces any existing pin)
+- **Unpin**: shows `PinOff` on the currently pinned template; clicking clears pin
+- **Auto-load**: `useEffect` on page mount loads pinned template once after `templates` array first populates (guarded by `pinnedAutoLoadedRef`)
+- **Auto-replace**: `loadTemplate()` calls `pinTemplate(tpl.id)` when `pinnedTemplateId !== null` — selecting a new template moves the pin
+- **Delete guard**: `handleDeleteTemplate` calls `unpinTemplate()` if deleted template was pinned
+- **Logout clear**: `useAuth.ts` calls `clearPin()` on `SIGNED_OUT` event
+- **Trigger button**: shows a small `Pin` indicator alongside the template name when a pin is active
+
 ### Subgroup Drag-and-Drop Rules
 
 - Items inside a subgroup can be reordered within that subgroup via DnD or ▲/▼ buttons
