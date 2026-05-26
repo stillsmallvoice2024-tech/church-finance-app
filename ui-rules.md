@@ -135,7 +135,7 @@ Pages using RowDetailPanel: IntraFlow, CategoryLedger.
 Tables must be inside an `overflow-x-auto` container. Two patterns:
 
 1. **Standard** (most pages): `<div className="overflow-x-auto"><table ...>`
-2. **Rounded-card** (CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions, Setup tabs): `<div className="... rounded-xl overflow-x-auto">`
+2. **Rounded-card** (CategoryLedger, AllocationConfigs, PercentageAllocation, SpecificGivings, SavingsPortions, Setup tabs): `<div className="... rounded-xl overflow-x-auto">`
 
 **Never use `overflow-hidden` alone** on a table container — clips without allowing scroll, breaking mobile.
 
@@ -224,7 +224,7 @@ Collapsible groups; state persisted in `localStorage` under key `nav-group-<id>`
 | Daily Finance (`daily`) | open | Dashboard, Inflows, Outflows, Import, Receipts |
 | Banking (`banking`) | open | Bank Ledger, Bank Deposits, Intrabank Transfers, Intra-Account Flows, Foreign Currency |
 | Review & Processing (`review`) | open | Pending Deductions, Refunds, Reversals |
-| Budget & Allocation (`budget`) | open | Categories, Category Ledger, Percentage Allocations, Specific Givings, Savings Portions |
+| Budget & Allocation (`budget`) | open | Categories, Allocation Configs, Category Ledger, Percentage Allocation, Specific Givings, Savings Portions |
 | Reports (`reports`) | **closed** | Reports, Financial Report |
 | Administration (`admin`) | **closed** | Setup, Settings, User Management†, Change Log† |
 
@@ -352,13 +352,13 @@ All table pages use `ExportDropdown` (`src/components/ui/ExportDropdown.tsx`) fo
 
 **Export All strategies:**
 - **Server-paginated** (Inflows, Outflows, IntraFlow, ChangeLog, PendingDeductions): async Supabase query (`.limit(10000)`) with active filters; then client sort+search
-- **Client-side paginated** (BankLedger, BankDeposits, Categories, CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions, Receipts): use `sortedRows` / `sorted*` directly — no extra fetch
+- **Client-side paginated** (BankLedger, BankDeposits, Categories, CategoryLedger, AllocationConfigs, PercentageAllocation, SpecificGivings, SavingsPortions, Receipts): use `sortedRows` / `sorted*` directly — no extra fetch
 - **Non-paginated** (IntraBankTransfers, RefundTransactions, ReversalTransactions, UserManagement): both modes use the same in-memory array
 - **Inflows/Outflows shortcut:** when `isSearching = true`, use `allMatching` directly instead of a new Supabase fetch
 
 **CategoryLedger:** context-sensitive — summary → `summarySorted`; ledger → `ledgerSorted` excluding B/F row (`r.id !== 'bal-bf'`).
 
-**Pages with ExportDropdown (18 total):** Inflows, Outflows, IntraFlow, ForeignCurrency, ChangeLog, BankLedger, BankDeposits, IntraBankTransfers, PendingDeductions, RefundTransactions, ReversalTransactions, Categories, CategoryLedger, PercentageAllocations, SpecificGivings, SavingsPortions, UserManagement, Receipts.
+**Pages with ExportDropdown (19 total):** Inflows, Outflows, IntraFlow, ForeignCurrency, ChangeLog, BankLedger, BankDeposits, IntraBankTransfers, PendingDeductions, RefundTransactions, ReversalTransactions, Categories, CategoryLedger, AllocationConfigs (`PercentageAllocations.tsx`), PercentageAllocation (`PercentageAllocation.tsx`), SpecificGivings, SavingsPortions, UserManagement, Receipts.
 
 ---
 
@@ -634,7 +634,8 @@ query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearc
 | Categories | `cat` | name, group |
 | CategoryLedger summary | `cl-sum` | name, percentage, percentageAllocated, specificSeed, savingsNet |
 | CategoryLedger ledger | `cl-led` | date†, description, inflow, outflow, balance |
-| PercentageAllocations | `pca` | category_name, percentage |
+| AllocationConfigs (`PercentageAllocations.tsx`) | `pca` | category_name, percentage |
+| PercentageAllocation (`PercentageAllocation.tsx`) | `pa` | category, deposited, balance |
 | SavingsPortions | `svp` | category, deposited, balance |
 | SpecificGivings | `sg` | category, total |
 | Receipts | `rcp` | created_at†, file_name |
@@ -660,7 +661,7 @@ query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearc
 
 ### Pages using DataControlsBar (14)
 
-Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), SpecificGivings (`sg`), PercentageAllocations (`pca`), SavingsPortions (`svp`), Receipts (`rcp`), IntraFlow (`ifl`), ChangeLog (`cl`), PendingDeductions (`pd`).
+Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), AllocationConfigs (`pca`), PercentageAllocation (`pa`), SpecificGivings (`sg`), SavingsPortions (`svp`), Receipts (`rcp`), IntraFlow (`ifl`), ChangeLog (`cl`), PendingDeductions (`pd`).
 
 **IntraFlow** — server search (description ilike) fires only for `col='all'`; domain filters (date, accountFrom, accountTo) stay in filter card above DataControlsBar; view toggle managed via DataControlsBar `view` prop.
 **ChangeLog** — client-side sort + search only (server supplies current page by table+date filter); defaultPageSize 50, pageSizeOptions `[25, 50, 100, 200]`.

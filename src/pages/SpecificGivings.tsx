@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
@@ -72,6 +73,7 @@ export default function SpecificGivings() {
   const [error,   setError]   = useState<string | null>(null)
 
   const sgState = useDataViewState({ storageKey: 'sg', defaultSortKey: 'total', defaultSortDir: 'desc' })
+  const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -80,7 +82,7 @@ export default function SpecificGivings() {
     const start = `${year}-01-01`
     const end   = `${year}-12-31`
 
-    const [directRes, configSplitRes, cobRes] = await Promise.all([
+    const [directRes, configSplitRes, cobRes, intraflowRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('id, date, stage_code_1, specific_seed_description, description, amount')
@@ -100,6 +102,12 @@ export default function SpecificGivings() {
         .from('category_opening_balances')
         .select('amount, category_id, categories(name, id)')
         .eq('budget_portion', 'Specific Seed'),
+      supabase
+        .from('intra_flows')
+        .select('id, date, account_from, account_from_stage2, account_to, account_to_stage2, total_amount, description')
+        .eq('status', 'active')
+        .gte('date', start)
+        .lte('date', end),
     ])
 
     if (directRes.error) {
@@ -165,11 +173,43 @@ export default function SpecificGivings() {
       }
     }
 
-    setRows([...cobOpeningRows, ...txRows, ...configSpecificRows])
+    const intraflowSpecificRows: SpecificRow[] = []
+    for (const r of intraflowRes.error ? [] : (intraflowRes.data ?? [])) {
+      const amount    = Number(r.total_amount)
+      if (amount <= 0) continue
+      const fromCat   = (r.account_from       as string | null) || ''
+      const fromStage = (r.account_from_stage2 as string | null) || ''
+      const toCat     = (r.account_to         as string | null) || ''
+      const toStage   = (r.account_to_stage2   as string | null) || ''
+      const note      = (r.description as string | null) || null
+      if (fromCat === toCat && fromStage === toStage) continue
+      if (toStage === 'Specific Seed' && toCat) {
+        intraflowSpecificRows.push({
+          id:                        `if-to-${r.id as string}`,
+          date:                      r.date as string,
+          stage_code_1:              toCat,
+          specific_seed_description: `Transfer In (from ${fromCat || 'unknown'})`,
+          description:               note,
+          amount,
+        })
+      }
+      if (fromStage === 'Specific Seed' && fromCat) {
+        intraflowSpecificRows.push({
+          id:                        `if-from-${r.id as string}`,
+          date:                      r.date as string,
+          stage_code_1:              fromCat,
+          specific_seed_description: `Transfer Out (to ${toCat || 'unknown'})`,
+          description:               note,
+          amount:                    -amount,
+        })
+      }
+    }
+
+    setRows([...cobOpeningRows, ...txRows, ...configSpecificRows, ...intraflowSpecificRows])
     setLoading(false)
   }, [year])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, intraflowVersion])
 
   const allGrouped = useMemo(() => groupRows(rows), [rows])
 

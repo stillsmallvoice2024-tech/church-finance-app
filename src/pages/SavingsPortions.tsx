@@ -5,6 +5,7 @@ import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency } from '../utils/formatters'
+import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
@@ -36,12 +37,13 @@ export default function SavingsPortions() {
   const [error,   setError]   = useState<string | null>(null)
 
   const svpState = useDataViewState({ storageKey: 'svp', defaultSortKey: 'balance', defaultSortDir: 'desc' })
+  const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    const [inflowRes, outflowRes, cobRes, configSplitRes] = await Promise.all([
+    const [inflowRes, outflowRes, cobRes, configSplitRes, intraflowRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
@@ -60,6 +62,10 @@ export default function SavingsPortions() {
         .not('allocation_config_id', 'is', null)
         .is('stage_code_2', null)
         .is('transaction_type', null),
+      supabase
+        .from('intra_flows')
+        .select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
+        .eq('status', 'active'),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -122,6 +128,18 @@ export default function SavingsPortions() {
       }
     }
 
+    for (const r of intraflowRes.error ? [] : (intraflowRes.data ?? [])) {
+      const amount    = Number(r.total_amount)
+      if (amount <= 0) continue
+      const fromCat   = (r.account_from       as string | null) || ''
+      const fromStage = (r.account_from_stage2 as string | null) || ''
+      const toCat     = (r.account_to         as string | null) || ''
+      const toStage   = (r.account_to_stage2   as string | null) || ''
+      if (fromCat === toCat && fromStage === toStage) continue
+      if (toStage === 'Savings' && toCat)   ensure(toCat).deposited  += amount
+      if (fromStage === 'Savings' && fromCat) ensure(fromCat).withdrawn += amount
+    }
+
     const result: SavingsRow[] = [...map.entries()].map(([category, v]) => ({
       category,
       deposited: v.deposited,
@@ -133,7 +151,7 @@ export default function SavingsPortions() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, intraflowVersion])
 
   // Filter by search
   const visibleRows = useMemo(
