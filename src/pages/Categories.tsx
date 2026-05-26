@@ -29,6 +29,11 @@ import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
+import {
+  autoCreateLinkedOutflowType,
+  syncLinkedOutflowTypeName,
+  handleCategoryDeleteCleanup,
+} from '../hooks/useOutflowTypes'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -186,6 +191,14 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
         console.error('[CategoryModal] ob upsert failed', msg)
         setObError(msg)
         return
+      }
+
+      // Auto-create linked outflow type for new categories (fire-and-forget)
+      if (!isEdit) {
+        autoCreateLinkedOutflowType(savedId, name.trim()).catch(() => {/* non-critical */})
+      } else if (editRecord && name.trim() !== editRecord.name) {
+        // Sync linked outflow type name if category was renamed (fire-and-forget)
+        syncLinkedOutflowTypeName(savedId, name.trim(), editRecord.name).catch(() => {/* non-critical */})
       }
 
       onSuccess()
@@ -402,6 +415,8 @@ export default function Categories() {
   const handleDelete = async () => {
     if (!deleteTarget) return
     try {
+      // Clean up auto-created outflow types before removing the category
+      await handleCategoryDeleteCleanup(deleteTarget.id)
       await deleteCategory(deleteTarget.id)
       toast.success(`"${deleteTarget.name}" deleted.`)
       refetch()
