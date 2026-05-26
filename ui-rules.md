@@ -372,6 +372,7 @@ All table pages use `ExportDropdown` (`src/components/ui/ExportDropdown.tsx`) fo
 | All add/edit form modals | `src/components/modals/` |
 | Right-aligned monetary `<td>` | `src/components/ui/AmountCell.tsx` |
 | Two-mode CSV export button | `src/components/ui/ExportDropdown.tsx` |
+| Floating calculator (global) | `src/components/ui/FloatingCalculator.tsx` |
 
 ---
 
@@ -1300,3 +1301,41 @@ grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3
 
 ### Pages using this standard
 Inflows, Outflows, BankLedger, BankDeposits, IntraBankTransfers, IntraFlow, Categories, RefundTransactions, ReversalTransactions, CategoryLedger
+
+---
+
+## Floating Calculator
+
+Global non-blocking calculator available on every authenticated page.
+
+**Files:**
+- Component: `src/components/ui/FloatingCalculator.tsx`
+- Store: `src/store/calculatorStore.ts` (Zustand)
+- Mount point: `Layout.tsx` (renders once, below `<ToastContainer />`)
+
+**Architecture:**
+- `z-index: 49` — below modals (z-50), non-blocking
+- Outer container has `pointer-events: none`; FAB and panel re-enable with `pointer-events: auto`
+- All calculator buttons use `onMouseDown e.preventDefault()` — never steals focus from page form inputs
+- Per-page state keyed by `location.pathname`; each route has independent display value, operator, and history
+- History capped at 50 entries per page; cleared for all pages on logout (`clearAllHistories()`)
+
+**FAB behaviour:**
+- Size: `w-10 h-10` — do not make larger
+- Closed: `opacity-30` idle, restores to `opacity-100` on hover/focus
+- Open: always `opacity-100`; icon switches to `X`
+
+**Keyboard support:**
+- Active when calculator is open and focus is not in an external form element (`INPUT`, `TEXTAREA`, `SELECT`, `contentEditable`)
+- Skips entirely when `[role="dialog"][aria-modal="true"]` is present (lets open modals handle keys first)
+- Keys: `0-9`, `.`, `+`, `-`, `*`/`×`, `/`/`÷`, `Enter`/`=`, `Escape` (AC), `Backspace`, `Delete` (CE), `%`
+
+**Inactive (faded) state:**
+- Panel fades to `opacity-60` when user clicks outside; restores on click-into panel or any key press
+- Page remains fully interactive while panel is visible (no backdrop, no scroll-lock)
+
+**Do not:**
+- Add a backdrop or block pointer events on the page
+- Set `document.body.style.overflow` (unlike `Modal.tsx`)
+- Increase FAB size beyond `w-10 h-10`
+- Wire keyboard handler in capture phase — bubble phase + target checks is correct
