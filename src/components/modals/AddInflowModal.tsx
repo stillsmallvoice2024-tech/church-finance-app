@@ -135,12 +135,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       return
     }
     if (configManuallySet) return
-    if (selectedIncomeType?.special_config_group_id && watchedDate) {
+    const isCatchAll = selectedIncomeType !== null && selectedIncomeType.rules.length === 0
+    if (!isCatchAll && selectedIncomeType?.special_config_group_id && watchedDate) {
       const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
       setSelectedConfigId(version?.id ?? '')
-    } else if (selectedIncomeType?.special_config_id) {
+    } else if (!isCatchAll && selectedIncomeType?.special_config_id) {
       setSelectedConfigId(selectedIncomeType.special_config_id)
-    } else if (!incomeTypeId) {
+    } else {
       if (watchedDate) {
         const cfg = getConfigForDate(lockedConfigs, watchedDate)
         setSelectedConfigId(cfg?.id ?? '')
@@ -152,12 +153,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   useEffect(() => {
     if (transactionType) return          // non-Normal: no allocation config
     if (configManuallySet || !watchedDate) return
-    if (selectedIncomeType?.special_config_group_id) {
+    const isCatchAll = selectedIncomeType !== null && selectedIncomeType.rules.length === 0
+    if (!isCatchAll && selectedIncomeType?.special_config_group_id) {
       const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
       setSelectedConfigId(version?.id ?? '')
       return
     }
-    if (selectedIncomeType?.special_config_id) return
+    if (!isCatchAll && selectedIncomeType?.special_config_id) return
     const cfg = getConfigForDate(lockedConfigs, watchedDate)
     setSelectedConfigId(cfg?.id ?? '')
   }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps

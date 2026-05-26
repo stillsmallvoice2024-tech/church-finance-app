@@ -14,7 +14,8 @@ import { useCategories } from '../hooks/useCategories'
 import { useAddInflow, useAddOutflow, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
-import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
+import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../store/allocationStore'
+import { getFinalConfig, type RowResolverState } from '../utils/configResolver'
 import { formatDate } from '../utils/formatters'
 import { formatCurrency } from '../utils/currency'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
@@ -571,12 +572,16 @@ function ManualEntryForm() {
   const doSaveInflow = async () => {
     setSaving(true)
     try {
-      const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
-      const effectiveConfigId  = txnType ? undefined : (
-        configOverride
-        || selectedIncomeType?.special_config_id
-        || getConfigForDate(configs, v('date'))?.id
-      )
+      const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
+      const effectiveConfigId: string | undefined = txnType ? undefined : (getFinalConfig(
+        {
+          incomeType:         selectedIncomeType,
+          allocationConfigId: configOverride,
+          isManualOverride:   !!configOverride,
+        } satisfies RowResolverState,
+        getConfigForDate(configs, v('date'))?.id ?? null,
+        (groupId) => getSpecialConfigVersionForDate(configs, groupId, v('date'))?.id ?? null,
+      ) ?? undefined)
       const selectedBank = banks.find(b => b.id === v('bank_id'))
       let input: AddInflowInput = {
         date:                       v('date'),
@@ -836,21 +841,29 @@ function ManualEntryForm() {
               <p className="text-xs text-gray-400 italic mt-1">Not applicable for non-Normal transactions</p>
             </div>
           ) : cfgLoaded && v('date') && (() => {
-            const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
-            const autoCfg = selectedIncomeType?.special_config_id
-              ? configs.find(c => c.id === selectedIncomeType.special_config_id)
-              : getConfigForDate(configs, v('date'))
-            const effectiveCfg = configOverride
-              ? configs.find(c => c.id === configOverride)
-              : autoCfg
+            const selIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
+            const isCatchAll = selIncomeType !== null && selIncomeType.rules.length === 0
+            const resolvedConfigId = getFinalConfig(
+              {
+                incomeType:         selIncomeType,
+                allocationConfigId: configOverride,
+                isManualOverride:   !!configOverride,
+              } satisfies RowResolverState,
+              getConfigForDate(configs, v('date'))?.id ?? null,
+              (groupId) => getSpecialConfigVersionForDate(configs, groupId, v('date'))?.id ?? null,
+            )
+            const effectiveCfg = resolvedConfigId ? configs.find(c => c.id === resolvedConfigId) : null
+            const isAutoSpecial = !configOverride && !isCatchAll &&
+              selIncomeType && (selIncomeType.special_config_id || selIncomeType.special_config_group_id)
             return (
               <div className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config</p>
                 {effectiveCfg ? (
                   <p className="text-xs text-primary">
-                    Using: <strong>{effectiveCfg.name}</strong>
-                    {!configOverride && autoCfg && (
-                      <span className="text-gray-400 ml-1">— effective {formatDate(autoCfg.start_date)}</span>
+                    {isAutoSpecial ? 'Auto-applying: ' : 'Using: '}
+                    <strong>{effectiveCfg.name}</strong>
+                    {!isAutoSpecial && !configOverride && (
+                      <span className="text-gray-400 ml-1">— effective {formatDate(effectiveCfg.start_date)}</span>
                     )}
                   </p>
                 ) : (
