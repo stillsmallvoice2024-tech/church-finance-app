@@ -1176,7 +1176,10 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
     </div>
   )
 
-  if (error && !/outflow_types|relation.*does not exist/i.test(error)) return (
+  const isTableMissing = !!error && /relation.*does not exist|could not find the 'outflow_types' relation/i.test(error)
+  const isCacheStale   = !!error && !isTableMissing && /could not find the '.*' column of 'outflow_types'/i.test(error)
+
+  if (error && !isTableMissing && !isCacheStale) return (
     <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 max-w-2xl">
       <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
     </div>
@@ -1184,10 +1187,16 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
 
   return (
     <div className="max-w-2xl space-y-4">
-      {error && /outflow_types|relation.*does not exist/i.test(error) && (
+      {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+        </div>
+      )}
+      {isCacheStale && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>PostgREST schema cache is stale. Run <code className="font-mono text-xs">NOTIFY pgrst, 'reload schema';</code> in your Supabase SQL editor, then refresh this page.</span>
         </div>
       )}
 
