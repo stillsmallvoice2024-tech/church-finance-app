@@ -15,7 +15,8 @@ import { ResetDataModal }           from '../components/modals/ResetDataModal'
 import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeModal'
 import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
 import { AddOutflowTypeModal }       from '../components/modals/AddOutflowTypeModal'
-import { useOutflowTypes, deleteOutflowType, type OutflowType } from '../hooks/useOutflowTypes'
+import { useOutflowTypes, useCategoryOutflowTypeMaps, deleteOutflowType, type OutflowType } from '../hooks/useOutflowTypes'
+import { useCategories } from '../hooks/useCategories'
 import { useCurrencies, useAddCurrency, useDeleteCurrency } from '../hooks/useCurrencies'
 import {
   useLockAllocationConfig,
@@ -1069,6 +1070,55 @@ ALTER TABLE outflow_transactions
   ADD COLUMN IF NOT EXISTS outflow_type_id uuid REFERENCES outflow_types(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_outflow_type_id ON outflow_transactions(outflow_type_id);
 
+-- Outflow Types: new classification metadata columns
+ALTER TABLE public.outflow_types
+  ADD COLUMN IF NOT EXISTS is_system        boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_locked        boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS auto_created     boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS manually_renamed boolean NOT NULL DEFAULT false;
+
+-- Ensure "General" permanent system fallback type exists
+INSERT INTO public.outflow_types (name, color, is_system, is_locked)
+VALUES ('General', '#64748b', true, true)
+ON CONFLICT (name) DO UPDATE SET is_system = true, is_locked = true;
+
+-- Category-OutflowType many-to-many mapping table
+CREATE TABLE IF NOT EXISTS public.category_outflow_type_map (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id     uuid NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  outflow_type_id uuid NOT NULL REFERENCES outflow_types(id) ON DELETE CASCADE,
+  created_at      timestamptz DEFAULT now(),
+  UNIQUE(category_id, outflow_type_id)
+);
+ALTER TABLE public.category_outflow_type_map ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "cotm_read" ON public.category_outflow_type_map FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "cotm_write" ON public.category_outflow_type_map FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS idx_cotm_category ON public.category_outflow_type_map(category_id);
+CREATE INDEX IF NOT EXISTS idx_cotm_type     ON public.category_outflow_type_map(outflow_type_id);
+
+-- Auto-create linked outflow types for existing categories (idempotent)
+DO $$
+DECLARE
+  cat RECORD;
+  ot_id uuid;
+BEGIN
+  FOR cat IN SELECT id, name FROM public.categories LOOP
+    SELECT id INTO ot_id FROM public.outflow_types WHERE LOWER(name) = LOWER(cat.name) LIMIT 1;
+    IF ot_id IS NULL THEN
+      INSERT INTO public.outflow_types (name, color, auto_created)
+      VALUES (cat.name, '#64748b', true)
+      RETURNING id INTO ot_id;
+    END IF;
+    INSERT INTO public.category_outflow_type_map (category_id, outflow_type_id)
+    VALUES (cat.id, ot_id)
+    ON CONFLICT (category_id, outflow_type_id) DO NOTHING;
+  END LOOP;
+END $$;
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
@@ -1167,6 +1217,17 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
   onDelete: (t: OutflowType) => void
 }) {
   const { outflowTypes, loading, error } = useOutflowTypes()
+  const { maps }                         = useCategoryOutflowTypeMaps()
+  const { categories }                   = useCategories()
+
+  // Build outflow_type_id → linked category names
+  const typeToCategories = new Map<string, string[]>()
+  for (const m of maps) {
+    const catName = categories.find(c => c.id === m.category_id)?.name
+    if (!catName) continue
+    const existing = typeToCategories.get(m.outflow_type_id) ?? []
+    typeToCategories.set(m.outflow_type_id, [...existing, catName])
+  }
 
   if (loading) return (
     <div className="max-w-2xl space-y-2">
@@ -1201,7 +1262,7 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">Define outflow types for reporting and expense classification. Does not affect balances or allocations.</p>
+        <p className="text-sm text-gray-500">Outflow types for reporting and expense classification. Does not affect balances or allocations.</p>
         <button
           onClick={onAdd}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
@@ -1218,20 +1279,48 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
         </div>
       ) : (
         <div className="space-y-2">
-          {outflowTypes.map(t => (
-            <div key={t.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
-              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
-              <p className="flex-1 text-sm font-medium text-gray-900">{t.name}</p>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+          {outflowTypes.map(t => {
+            const linkedCats = typeToCategories.get(t.id) ?? []
+            const isStandalone = !t.is_system && linkedCats.length === 0
+            return (
+              <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
+                <div className="w-3 h-3 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: t.color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                    {t.is_system && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>
+                    )}
+                    {!t.is_system && linkedCats.length > 0 && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Linked Category</span>
+                    )}
+                    {isStandalone && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Standalone</span>
+                    )}
+                  </div>
+                  {linkedCats.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">↳ {linkedCats.join(', ')}</p>
+                  )}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  {t.is_locked ? (
+                    <span className="p-1.5 text-gray-300" title="System type — cannot be edited or deleted">
+                      <Lock className="w-4 h-4" />
+                    </span>
+                  ) : (
+                    <>
+                      <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

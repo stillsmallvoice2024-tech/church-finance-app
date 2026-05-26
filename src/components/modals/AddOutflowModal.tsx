@@ -10,7 +10,7 @@ import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
-import { useOutflowTypeOptions } from '../../hooks/useOutflowTypes'
+import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../../hooks/useOutflowTypes'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 
@@ -64,6 +64,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { categories }    = useCategories()
   const { banks }         = useBanks()
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
+  const { maps: categoryOutflowMaps } = useCategoryOutflowTypeMaps()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
 
@@ -119,14 +120,18 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
-  // Auto-default outflow_type from stage_code_1 name (only if not already set by user)
+  // Auto-suggest outflow type from the category-outflow map when stage_code_1 changes
+  // (only if user hasn't already picked a type; never forced — user can override)
   const currentTypeId = useWatch({ control, name: 'outflow_type_id' })
   useEffect(() => {
     if (!open || isEdit || currentTypeId) return
     if (!stage1Watch) return
-    const match = outflowTypeOptions.find(t => t.name.toLowerCase() === stage1Watch.toLowerCase())
-    if (match) setValue('outflow_type_id', match.id)
-  }, [stage1Watch, outflowTypeOptions, open, isEdit, currentTypeId, setValue])
+    const cat = categories.find(c => c.name === stage1Watch)
+    if (cat) {
+      const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+      if (suggested) setValue('outflow_type_id', suggested.id)
+    }
+  }, [stage1Watch, categories, categoryOutflowMaps, outflowTypeOptions, open, isEdit, currentTypeId, setValue])
 
   const onSubmit = async (values: FormValues) => {
     try {

@@ -140,13 +140,35 @@ create table public.inflow_transactions (
 -- OUTFLOW TYPES (reporting/classification layer)
 -- ============================================================
 create table public.outflow_types (
-  id         uuid default gen_random_uuid() primary key,
-  name       text not null unique,
-  color      text not null default '#64748b',
-  created_by uuid references public.profiles(id),
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  id               uuid default gen_random_uuid() primary key,
+  name             text not null unique,
+  color            text not null default '#64748b',
+  is_system        boolean not null default false,
+  is_locked        boolean not null default false,
+  auto_created     boolean not null default false,
+  manually_renamed boolean not null default false,
+  created_by       uuid references public.profiles(id),
+  created_at       timestamptz default now(),
+  updated_at       timestamptz default now()
 );
+
+-- System fallback type
+insert into public.outflow_types (name, color, is_system, is_locked)
+values ('General', '#64748b', true, true)
+on conflict (name) do update set is_system = true, is_locked = true;
+
+-- ============================================================
+-- CATEGORY-OUTFLOW TYPE MAPPING (many-to-many)
+-- ============================================================
+create table public.category_outflow_type_map (
+  id              uuid default gen_random_uuid() primary key,
+  category_id     uuid not null references public.categories(id) on delete cascade,
+  outflow_type_id uuid not null references public.outflow_types(id) on delete cascade,
+  created_at      timestamptz default now(),
+  unique(category_id, outflow_type_id)
+);
+create index idx_cotm_category on public.category_outflow_type_map(category_id);
+create index idx_cotm_type     on public.category_outflow_type_map(outflow_type_id);
 
 -- ============================================================
 -- TRANSACTIONS — OUTFLOWS
