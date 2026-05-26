@@ -10,6 +10,7 @@ import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
+import { useOutflowTypeOptions } from '../../hooks/useOutflowTypes'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 
@@ -39,6 +40,7 @@ const schema = z.object({
   transaction_id:          z.string().optional(),
   stage_code_1:            z.string().optional(),
   stage_code_2:            z.string().optional(),
+  outflow_type_id:         z.string().optional(),
   remarks:                 z.string().optional(),
   fx_currency:             z.string().optional(),
   fx_amount:               optNum,
@@ -59,8 +61,9 @@ interface Props {
 }
 
 export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props) {
-  const { categories } = useCategories()
-  const { banks }      = useBanks()
+  const { categories }    = useCategories()
+  const { banks }         = useBanks()
+  const { options: outflowTypeOptions } = useOutflowTypeOptions()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
 
@@ -78,10 +81,12 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     handleSubmit,
     formState: { errors, isDirty },
     reset: resetForm,
+    setValue,
     control,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   const transactionType = useWatch({ control, name: 'transaction_type' })
+  const stage1Watch     = useWatch({ control, name: 'stage_code_1' })
 
   useEffect(() => {
     if (!open) return
@@ -100,6 +105,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         transaction_id:          editRecord.transaction_id          ?? '',
         stage_code_1:            editRecord.stage_code_1            ?? '',
         stage_code_2:            editRecord.stage_code_2            ?? '',
+        outflow_type_id:         editRecord.outflow_type_id         ?? '',
         remarks:                 editRecord.remarks                 ?? '',
         fx_currency:             editRecord.fx_currency             ?? '',
         fx_amount:               editRecord.fx_amount               ?? undefined,
@@ -112,6 +118,15 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       resetForm({ date: new Date().toISOString().slice(0, 10), recorded_at_date: new Date().toISOString().slice(0, 10), amount_disbursed: undefined })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
+
+  // Auto-default outflow_type from stage_code_1 name (only if not already set by user)
+  const currentTypeId = useWatch({ control, name: 'outflow_type_id' })
+  useEffect(() => {
+    if (!open || isEdit || currentTypeId) return
+    if (!stage1Watch) return
+    const match = outflowTypeOptions.find(t => t.name.toLowerCase() === stage1Watch.toLowerCase())
+    if (match) setValue('outflow_type_id', match.id)
+  }, [stage1Watch, outflowTypeOptions, open, isEdit, currentTypeId, setValue])
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -127,6 +142,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             transaction_id:          values.transaction_id          || null,
             stage_code_1:            values.stage_code_1            || null,
             stage_code_2:            values.stage_code_2            || null,
+            outflow_type_id:         values.outflow_type_id         || null,
             remarks:                 values.remarks                 || null,
             is_pending_deduction:    isPending,
             fx_currency:             values.fx_currency             || null,
@@ -149,6 +165,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           transaction_id:          values.transaction_id          || undefined,
           stage_code_1:            values.stage_code_1            || undefined,
           stage_code_2:            values.stage_code_2            || undefined,
+          outflow_type_id:         values.outflow_type_id         || null,
           remarks:                 values.remarks                 || undefined,
           fx_currency:             values.fx_currency             || undefined,
           fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
@@ -308,6 +325,16 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             </select>
           </Field>
         </div>
+
+        {/* Outflow Type — reporting/classification only, does not affect balances */}
+        <Field label="Outflow Type (reporting)" error={errors.outflow_type_id?.message}>
+          <select {...register('outflow_type_id')} className={inputCls(!!errors.outflow_type_id)}>
+            <option value="">— Unclassified —</option>
+            {outflowTypeOptions.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </Field>
 
         {/* Pending Deduction */}
         <label className="flex items-center gap-3 cursor-pointer select-none">

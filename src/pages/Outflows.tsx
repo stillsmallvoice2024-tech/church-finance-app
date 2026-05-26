@@ -29,6 +29,7 @@ import { supabase }                from '../lib/supabase'
 import { normalizeNarration }      from '../utils/normalizeNarration'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useCategories }           from '../hooks/useCategories'
+import { useOutflowTypes }         from '../hooks/useOutflowTypes'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
@@ -46,22 +47,25 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   intrabank_transfer:  'Intrabank Transfer',
 }
 
+// Keep numeric cols before text-only cols to preserve OUT_SORT_FIELDS indices:
+// SORT[0]=date, SORT[1]=description, SORT[2]=bank_name, SORT[3]=transaction_type, SORT[4]=amount_disbursed, SORT[5]=outflow_type
 const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
-  { key: 'date',             label: 'Date',         sortType: 'date',    primary: true, noSearch: true },
-  { key: 'description',      label: 'Description',  sortType: 'text',    accessor: r => r.display_description },
-  { key: 'bank_name',        label: 'Bank',         sortType: 'text',    accessor: r => r.bank_name ?? '' },
-  { key: 'bank_description', label: 'Bank Narration',                    accessor: r => r.bank_description ?? '' },
-  { key: 'transaction_id',   label: 'Txn ID',                            accessor: r => r.transaction_id ?? '' },
-  { key: 'transaction_type', label: 'Type',         sortType: 'text',    accessor: r => TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '' },
-  { key: 'stage_code_1',     label: 'Stage Code',                        accessor: r => r.stage_code_1 ?? '' },
-  { key: 'amount_disbursed', label: 'Disbursed',    sortType: 'numeric', accessor: r => String(r.amount_disbursed) },
-  { key: 'net',              label: 'Net',                               accessor: r => String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge)) },
+  { key: 'date',             label: 'Date',          sortType: 'date',    primary: true, noSearch: true },
+  { key: 'description',      label: 'Description',   sortType: 'text',    accessor: r => r.display_description },
+  { key: 'bank_name',        label: 'Bank',          sortType: 'text',    accessor: r => r.bank_name ?? '' },
+  { key: 'bank_description', label: 'Bank Narration',                     accessor: r => r.bank_description ?? '' },
+  { key: 'transaction_id',   label: 'Txn ID',                             accessor: r => r.transaction_id ?? '' },
+  { key: 'transaction_type', label: 'Type',          sortType: 'text',    accessor: r => TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '' },
+  { key: 'amount_disbursed', label: 'Disbursed',     sortType: 'numeric', accessor: r => String(r.amount_disbursed) },
+  { key: 'outflow_type',     label: 'Outflow Type',  sortType: 'text',    accessor: r => r.outflow_type_name ?? '' },
+  { key: 'stage_code_1',     label: 'Stage Code',                         accessor: r => r.stage_code_1 ?? '' },
+  { key: 'net',              label: 'Net',                                accessor: r => String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge)) },
 ]
 
 const OUT_SORT_FIELDS = deriveSortFields(OUT_COLUMNS)
 
 const OUTFLOW_SORT_COLS = new Set(['date', 'amount_disbursed', 'bank_name', 'description', 'transaction_type', 'recorded_at'])
-const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_name', 'transaction_id', 'stage_code_1', 'transaction_type'])
+const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_name', 'transaction_id', 'stage_code_1', 'transaction_type', 'outflow_type'])
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
@@ -94,12 +98,13 @@ export default function Outflows() {
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
-  const [dateFrom,        setDateFrom]        = useState(yearStart)
-  const [dateTo,          setDateTo]          = useState(yearEnd)
-  const [stageCode,       setStageCode]       = useState('')
-  const [searchInput,     setSearchInput]     = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [page,            setPage]            = useState(0)
+  const [dateFrom,          setDateFrom]          = useState(yearStart)
+  const [dateTo,            setDateTo]            = useState(yearEnd)
+  const [stageCode,         setStageCode]         = useState('')
+  const [outflowTypeFilter, setOutflowTypeFilter] = useState('')
+  const [searchInput,       setSearchInput]       = useState('')
+  const [debouncedSearch,   setDebouncedSearch]   = useState('')
+  const [page,              setPage]              = useState(0)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput), 400)
@@ -122,7 +127,10 @@ export default function Outflows() {
     advancedSort: outState.advancedSort.length > 0 ? outState.advancedSort : undefined,
   })
 
-  const displayed = data
+  // Client-side outflow type filter (server doesn't filter by outflow_type_id yet)
+  const displayed = outflowTypeFilter
+    ? data.filter(r => r.outflow_type_id === outflowTypeFilter)
+    : data
 
   // Summary (current page, disbursed amounts)
   const total   = displayed.reduce((s, r) => s + Number(r.amount_disbursed), 0)
@@ -148,11 +156,12 @@ export default function Outflows() {
   const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
   const { banks }                                   = useBanks()
   const { categories }                              = useCategories()
+  const { outflowTypes }                            = useOutflowTypes()
 
   usePageTitle('Outflows')
 
   // Clear selection when filters/page/sort change
-  useEffect(() => { setPage(0); clearAll() }, [dateFrom, dateTo, stageCode, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0); clearAll() }, [dateFrom, dateTo, stageCode, outflowTypeFilter, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setDateFrom(`${year}-01-01`); setDateTo(`${year}-12-31`); setPage(0); clearAll() }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { clearAll() }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(0); clearAll() }, [outState.sortKey, outState.sortDir, outState.searchCol, outState.advancedSort, outState.pageSize]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -186,12 +195,12 @@ export default function Outflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Remarks']
+  const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Outflow Type', 'Remarks']
   const outflowCsvRow = (r: OutflowTransaction) => [
     r.date, r.transaction_id, r.display_description, r.bank_description,
     r.amount_disbursed, r.amount_refunded, r.transfer_charge,
     Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge),
-    r.stage_code_1, r.remarks,
+    r.stage_code_1, r.outflow_type_name ?? '', r.remarks,
   ]
   const OUT_CSV_FILE = `outflows-${new Date().toISOString().slice(0, 10)}.csv`
 
@@ -281,9 +290,19 @@ export default function Outflows() {
                 ))}
               </select>
             </FilterGroup>
-            {(dateFrom || dateTo || stageCode) && (
+            {outflowTypes.length > 0 && (
+              <FilterGroup label="Outflow Type" className="min-w-[180px]">
+                <select value={outflowTypeFilter} onChange={e => setOutflowTypeFilter(e.target.value)} className={`${filterInputCls} bg-white`}>
+                  <option value="">All types</option>
+                  {outflowTypes.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </FilterGroup>
+            )}
+            {(dateFrom || dateTo || stageCode || outflowTypeFilter) && (
               <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setStageCode(''); setSearchInput(''); outState.setSort('recorded_at', 'desc'); outState.setAdvancedSort([]) }}
+                onClick={() => { setDateFrom(''); setDateTo(''); setStageCode(''); setOutflowTypeFilter(''); setSearchInput(''); outState.setSort('recorded_at', 'desc'); outState.setAdvancedSort([]) }}
                 className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Clear
@@ -372,6 +391,9 @@ export default function Outflows() {
                       </div>
                     )}
                     {row.stage_code_1 && <p className="text-[11px] text-gray-400 mt-1">{row.stage_code_1}</p>}
+                    {row.outflow_type_name && (
+                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-50 text-violet-600">{row.outflow_type_name}</span>
+                    )}
                   </div>
                   {/* Metrics footer */}
                   <div className={`border-t border-gray-100 bg-gray-50/40 px-4 py-3 ${netDiffers ? 'grid grid-cols-3' : 'grid grid-cols-2'}`}>
@@ -438,6 +460,7 @@ export default function Outflows() {
                   <SortableHeader field={OUT_SORT_FIELDS[0]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={OUT_SORT_FIELDS[2]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
+                  <SortableHeader field={OUT_SORT_FIELDS[5]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={OUT_SORT_FIELDS[4]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">📎</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
@@ -445,9 +468,9 @@ export default function Outflows() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  Array.from({ length: 8 }).map((_, i) => (
+                  Array.from({ length: 9 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -456,7 +479,7 @@ export default function Outflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
                     </td>
                   </tr>
@@ -493,6 +516,11 @@ export default function Outflows() {
                           <td className="px-4 py-3 text-sm text-gray-800 max-w-[280px]">
                             <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </td>
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            {row.outflow_type_name
+                              ? <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700">{row.outflow_type_name}</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
                           <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
                           <td className="px-2 py-3">
                             <ReceiptBadge entityType="outflow" entityId={row.id} />
@@ -512,7 +540,7 @@ export default function Outflows() {
                             </div>
                           </td>
                         </tr>
-                        {isExpanded && <OutflowRowDetail key={`detail-${row.id}`} row={row} colSpan={8} />}
+                        {isExpanded && <OutflowRowDetail key={`detail-${row.id}`} row={row} colSpan={9} />}
                       </>
                     )
                   })

@@ -14,6 +14,8 @@ import { useSpecialConfigGroups, type SpecialConfigGroupWithVersions } from '../
 import { ResetDataModal }           from '../components/modals/ResetDataModal'
 import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeModal'
 import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
+import { AddOutflowTypeModal }       from '../components/modals/AddOutflowTypeModal'
+import { useOutflowTypes, deleteOutflowType, type OutflowType } from '../hooks/useOutflowTypes'
 import { useCurrencies, useAddCurrency, useDeleteCurrency } from '../hooks/useCurrencies'
 import {
   useLockAllocationConfig,
@@ -24,7 +26,7 @@ import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Currencies'] as const
+const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 // ── General tab ──────────────────────────────────────────────────────────────────
@@ -1045,6 +1047,28 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_drs_report_at ON public.dynamic_report_snapshots(report_id, snapshot_at DESC);
 
+-- Outflow Types table (reporting/classification layer — does not affect balances)
+CREATE TABLE IF NOT EXISTS public.outflow_types (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       text NOT NULL UNIQUE,
+  color      text NOT NULL DEFAULT '#64748b',
+  created_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.outflow_types ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "ot_read"  ON public.outflow_types FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "ot_write" ON public.outflow_types FOR ALL USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- outflow_type_id FK on outflow_transactions
+ALTER TABLE outflow_transactions
+  ADD COLUMN IF NOT EXISTS outflow_type_id uuid REFERENCES outflow_types(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_outflow_type_id ON outflow_transactions(outflow_type_id);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
@@ -1135,6 +1159,76 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
+// ── Outflow Types tab ──────────────────────────────────────────────────────────────────
+
+function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
+  onAdd:    () => void
+  onEdit:   (t: OutflowType) => void
+  onDelete: (t: OutflowType) => void
+}) {
+  const { outflowTypes, loading, error } = useOutflowTypes()
+
+  if (loading) return (
+    <div className="max-w-2xl space-y-2">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+      ))}
+    </div>
+  )
+
+  if (error && !/outflow_types|relation.*does not exist/i.test(error)) return (
+    <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 max-w-2xl">
+      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+    </div>
+  )
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      {error && /outflow_types|relation.*does not exist/i.test(error) && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">Define outflow types for reporting and expense classification. Does not affect balances or allocations.</p>
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Outflow Type
+        </button>
+      </div>
+
+      {outflowTypes.length === 0 && !error ? (
+        <div className="py-12 flex flex-col items-center gap-3 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+          <Layers className="w-10 h-10 text-gray-200" />
+          <p className="text-sm">No outflow types yet. Add one to classify expense purposes.</p>
+          <p className="text-xs text-center text-gray-300 max-w-xs">Examples: Medical, Transport, Utilities, Salaries, Events</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {outflowTypes.map(t => (
+            <div key={t.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
+              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+              <p className="flex-1 text-sm font-medium text-gray-900">{t.name}</p>
+              <div className="flex gap-1 shrink-0">
+                <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DatabaseTab() {
   const [copied, setCopied] = useState(false)
 
@@ -1204,10 +1298,14 @@ export default function SetupPage() {
   const [copyFromVersion,       setCopyFromVersion]       = useState<AllocationConfig | null>(null)
   const [specialRefetch,        setSpecialRefetch]        = useState(0)
   const [resetModalOpen,       setResetModalOpen]       = useState(false)
-  const [incomeTypeModalOpen,  setIncomeTypeModalOpen]  = useState(false)
-  const [editIncomeType,       setEditIncomeType]       = useState<IncomeType | null>(null)
+  const [incomeTypeModalOpen,    setIncomeTypeModalOpen]    = useState(false)
+  const [editIncomeType,         setEditIncomeType]         = useState<IncomeType | null>(null)
   const [deleteIncomeTypeTarget, setDeleteIncomeTypeTarget] = useState<IncomeType | null>(null)
-  const [incomeTypeRefetch,    setIncomeTypeRefetch]    = useState(0)
+  const [incomeTypeRefetch,      setIncomeTypeRefetch]      = useState(0)
+  const [outflowTypeModalOpen,   setOutflowTypeModalOpen]   = useState(false)
+  const [editOutflowType,        setEditOutflowType]        = useState<OutflowType | null>(null)
+  const [deleteOutflowTypeTarget, setDeleteOutflowTypeTarget] = useState<OutflowType | null>(null)
+  const [outflowTypeRefetch,     setOutflowTypeRefetch]     = useState(0)
   const [devToolsOpen,         setDevToolsOpen]         = useState(false)
   const { configs, reload: reloadAllocs } = useAllocationStore()
 
@@ -1357,6 +1455,14 @@ export default function SetupPage() {
               onAdd={() => { setEditIncomeType(null); setIncomeTypeModalOpen(true) }}
               onEdit={t => { setEditIncomeType(t); setIncomeTypeModalOpen(true) }}
               onDelete={t => setDeleteIncomeTypeTarget(t)}
+            />
+          )}
+          {activeTab === 'Outflow Types' && (
+            <OutflowTypesTab
+              key={outflowTypeRefetch}
+              onAdd={() => { setEditOutflowType(null); setOutflowTypeModalOpen(true) }}
+              onEdit={t => { setEditOutflowType(t); setOutflowTypeModalOpen(true) }}
+              onDelete={t => setDeleteOutflowTypeTarget(t)}
             />
           )}
           {activeTab === 'Currencies'     && <CurrenciesTab />}
@@ -1541,6 +1647,29 @@ export default function SetupPage() {
         }}
         loading={false}
         label={deleteIncomeTypeTarget ? `"${deleteIncomeTypeTarget.name}"` : 'this income type'}
+      />
+      <AddOutflowTypeModal
+        open={outflowTypeModalOpen}
+        onClose={() => { setOutflowTypeModalOpen(false); setEditOutflowType(null) }}
+        onSaved={() => { setOutflowTypeModalOpen(false); setEditOutflowType(null); setOutflowTypeRefetch(n => n + 1) }}
+        editRecord={editOutflowType}
+      />
+      <DeleteDialog
+        open={!!deleteOutflowTypeTarget}
+        onClose={() => setDeleteOutflowTypeTarget(null)}
+        onConfirm={async () => {
+          if (!deleteOutflowTypeTarget) return
+          try {
+            await deleteOutflowType(deleteOutflowTypeTarget.id)
+            setDeleteOutflowTypeTarget(null)
+            setOutflowTypeRefetch(n => n + 1)
+            toast('Outflow type deleted', 'success')
+          } catch (e) {
+            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+          }
+        }}
+        loading={false}
+        label={deleteOutflowTypeTarget ? `"${deleteOutflowTypeTarget.name}"` : 'this outflow type'}
       />
     </>
   )

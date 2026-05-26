@@ -13,6 +13,7 @@ import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } 
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
+import { useOutflowTypeOptions } from '../../hooks/useOutflowTypes'
 import {
   resolveDefaultIncomeType,
   getFinalConfig,
@@ -296,6 +297,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // Income types for auto-classify + per-row picker
   const { incomeTypes } = useIncomeTypes()
+  // Outflow types for auto-mapping from stage_code_1 name
+  const outflowTypeOptions = useOutflowTypeOptions()
 
   // Sync bank prop → internalBank when parent provides/updates it (e.g. async bank data load)
   useEffect(() => {
@@ -831,6 +834,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (sc) {
             if (sc.s1) row.stage_code_1 = sc.s1
             if (sc.s2) row.stage_code_2 = sc.s2
+            if (sc.s1 && outflowTypeOptions.length > 0) {
+              const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
+              if (match) row.outflow_type_id = match.id
+            }
           }
           row.is_pending_deduction = rowPendingDeductions.has(ri)
           if (txnType) row.transaction_type = txnType

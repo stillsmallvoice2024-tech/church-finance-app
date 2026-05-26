@@ -8,8 +8,9 @@ import { useAuditLog } from '../hooks/useAuditLog'
 import { exportCSV } from '../utils/csvExport'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
+import { useOutflowTypes } from '../hooks/useOutflowTypes'
 
-type ReportTab = 'annual' | 'monthly' | 'income_types' | 'fx' | 'audit'
+type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'fx' | 'audit'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS        = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i)
@@ -471,6 +472,180 @@ function IncomeTypeBreakdownPanel() {
   )
 }
 
+// ── Outflow Type Breakdown ─────────────────────────────────────────────────────
+
+interface OutflowTypeRow {
+  id:     string | null
+  name:   string
+  color:  string
+  amount: number
+  count:  number
+}
+
+function OutflowTypeBreakdownPanel() {
+  const activeYear = useAccountingYearStore(s => s.year)
+  const { outflowTypes } = useOutflowTypes()
+
+  const [year,    setYear]    = useState(activeYear)
+  const [month,   setMonth]   = useState(0)
+  const [rows,    setRows]    = useState<OutflowTypeRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+
+  useEffect(() => { setYear(activeYear) }, [activeYear])
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    const y  = year.toString()
+    const lo = month === 0
+      ? `${y}-01-01`
+      : `${y}-${String(month).padStart(2, '0')}-01`
+    const hi = month === 0
+      ? `${y}-12-31`
+      : `${y}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`
+
+    const { data, error: err } = await supabase
+      .from('outflow_transactions')
+      .select('actual_amount, amount_disbursed, outflow_type_id')
+      .gte('date', lo)
+      .lte('date', hi)
+
+    if (err) { setError(err.message); setLoading(false); return }
+
+    const agg = new Map<string | null, { amount: number; count: number }>()
+    for (const r of data ?? []) {
+      const id  = (r.outflow_type_id as string | null) ?? null
+      const amt = Number((r as { actual_amount?: number }).actual_amount || r.amount_disbursed || 0)
+      const cur = agg.get(id) ?? { amount: 0, count: 0 }
+      cur.amount += amt
+      cur.count  += 1
+      agg.set(id, cur)
+    }
+
+    const result: OutflowTypeRow[] = []
+    for (const ot of outflowTypes) {
+      const agged = agg.get(ot.id)
+      if (!agged) continue
+      result.push({ id: ot.id, name: ot.name, color: ot.color, ...agged })
+    }
+    const unclassified = agg.get(null)
+    if (unclassified) {
+      result.push({ id: null, name: 'Unclassified', color: '#94a3b8', ...unclassified })
+    }
+    result.sort((a, b) => b.amount - a.amount)
+    setRows(result)
+    setLoading(false)
+  }, [year, month, outflowTypes])
+
+  useEffect(() => { load() }, [load])
+
+  const grandTotal  = rows.reduce((s, r) => s + r.amount, 0)
+  const periodLabel = month === 0 ? String(year) : `${MONTH_NAMES[month - 1]} ${year}`
+
+  const handleExport = () =>
+    exportCSV(
+      `outflow_type_breakdown_${periodLabel.replace(' ', '_')}`,
+      ['Outflow Type', 'Total (₦)', 'Count', '% of Total'],
+      rows.map(r => [
+        r.name,
+        r.amount,
+        r.count,
+        grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
+      ]),
+    )
+
+  return (
+    <ReportSection
+      title="Outflow Type Breakdown"
+      onExport={rows.length > 0 ? handleExport : undefined}
+      extra={
+        <div className="flex items-center gap-2">
+          <select
+            value={month}
+            onChange={e => setMonth(Number(e.target.value))}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value={0}>All months</option>
+            {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select
+            value={year}
+            onChange={e => setYear(Number(e.target.value))}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      }
+    >
+      {error   && <ErrBox msg={error} />}
+      {loading && <Skeleton />}
+      {!loading && rows.length === 0 && (
+        <div className="py-16 text-center space-y-2">
+          <p className="text-sm text-gray-400">No outflow-type-tagged transactions for {periodLabel}.</p>
+          {outflowTypes.length === 0 && (
+            <p className="text-xs text-gray-400">
+              Set up outflow types in <span className="font-medium">Setup → Outflow Types</span>, then tag transactions when adding or importing.
+            </p>
+          )}
+        </div>
+      )}
+      {!loading && rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                <th className="px-5 py-3 text-left font-medium">Outflow Type</th>
+                <th className="px-5 py-3 text-right font-medium">Transactions</th>
+                <th className="px-5 py-3 text-right font-medium">Total (₦)</th>
+                <th className="px-5 py-3 text-right font-medium">% Share</th>
+                <th className="px-5 py-3 w-40" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map(r => {
+                const pct = grandTotal > 0 ? (r.amount / grandTotal) * 100 : 0
+                return (
+                  <tr key={r.id ?? '__unclassified__'} className="hover:bg-gray-50">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
+                        <span className={`font-medium ${r.id ? 'text-gray-800' : 'text-gray-400 italic'}`}>
+                          {r.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-danger">₦{fmtNGN(r.amount)}</td>
+                    <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
+                    <td className="px-5 py-3">
+                      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${pct}%`, backgroundColor: r.color }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+              <tr className="bg-gray-50 font-bold border-t border-gray-200">
+                <td className="px-5 py-3 text-gray-700">Total — {periodLabel}</td>
+                <td className="px-5 py-3 text-right text-gray-500">
+                  {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
+                </td>
+                <td className="px-5 py-3 text-right text-danger">₦{fmtNGN(grandTotal)}</td>
+                <td className="px-5 py-3 text-right text-gray-400">100%</td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </ReportSection>
+  )
+}
+
 // ── FX Holdings ────────────────────────────────────────────────────────────────
 
 const FX_META = [
@@ -631,11 +806,12 @@ export default function Reports() {
   usePageTitle('Reports')
 
   const allTabs: { id: ReportTab; label: string; adminOnly?: boolean }[] = [
-    { id: 'annual',       label: 'Annual Summary'        },
-    { id: 'monthly',      label: 'Monthly Breakdown'     },
-    { id: 'income_types', label: 'Income Type Breakdown' },
-    { id: 'fx',           label: 'FX Holdings'           },
-    { id: 'audit',        label: 'Audit Log', adminOnly: true },
+    { id: 'annual',        label: 'Annual Summary'         },
+    { id: 'monthly',       label: 'Monthly Breakdown'      },
+    { id: 'income_types',  label: 'Income Type Breakdown'  },
+    { id: 'outflow_types', label: 'Outflow Type Breakdown' },
+    { id: 'fx',            label: 'FX Holdings'            },
+    { id: 'audit',         label: 'Audit Log', adminOnly: true },
   ]
 
   const visibleTabs = allTabs.filter(t => !t.adminOnly || isAdmin())
@@ -679,11 +855,12 @@ export default function Reports() {
 
       {/* Report content */}
       <div className="print:space-y-8">
-        {tab === 'annual'       && <AnnualSummaryPanel />}
-        {tab === 'monthly'      && <MonthlyBreakdownPanel />}
-        {tab === 'income_types' && <IncomeTypeBreakdownPanel />}
-        {tab === 'fx'           && <FXHoldingsPanel />}
-        {tab === 'audit'        && isAdmin() && <AuditLogPanel />}
+        {tab === 'annual'        && <AnnualSummaryPanel />}
+        {tab === 'monthly'       && <MonthlyBreakdownPanel />}
+        {tab === 'income_types'  && <IncomeTypeBreakdownPanel />}
+        {tab === 'outflow_types' && <OutflowTypeBreakdownPanel />}
+        {tab === 'fx'            && <FXHoldingsPanel />}
+        {tab === 'audit'         && isAdmin() && <AuditLogPanel />}
       </div>
     </div>
   )

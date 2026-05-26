@@ -52,6 +52,8 @@ export interface OutflowTransaction {
   fx_rate: number | null
   transaction_type: string | null
   original_transaction_id: string | null
+  outflow_type_id: string | null
+  outflow_type_name: string | null  // joined from outflow_types; null when unset
   recorded_at: string | null
   created_by: string | null
   created_at: string
@@ -213,7 +215,7 @@ export function useOutflowTransactions(
 
     let query = supabase
       .from('outflow_transactions')
-      .select('*', { count: 'exact' })
+      .select('*, outflow_types ( name )', { count: 'exact' })
 
     // Server-side sort
     if (advancedSort && advancedSort.length > 0) {
@@ -256,13 +258,18 @@ export function useOutflowTransactions(
       setError(err.message)
     } else {
       setData(
-        (rows ?? []).map(r => ({
-          ...(r as Omit<OutflowTransaction, 'display_description'>),
-          display_description: normalizeNarration(
-            (r as { description?: string | null }).description ??
-            (r as { bank_description?: string | null }).bank_description
-          ),
-        })) as OutflowTransaction[]
+        (rows ?? []).map(r => {
+          const raw = r as Record<string, unknown>
+          const ot  = raw.outflow_types as { name: string } | null
+          return {
+            ...(r as Omit<OutflowTransaction, 'display_description' | 'outflow_type_name'>),
+            display_description: normalizeNarration(
+              (raw.description as string | null) ??
+              (raw.bank_description as string | null)
+            ),
+            outflow_type_name: ot?.name ?? null,
+          }
+        }) as OutflowTransaction[]
       )
       setCount(total ?? 0)
     }
