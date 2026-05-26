@@ -51,10 +51,12 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 ## Category Ledger (`CategoryLedger.tsx`)
 
 4 aggregate summary cards (computed from all unfiltered rows):
-- **% Allocated** — total NGN allocated via percentage configs
+- **% Allocation** — net NGN balance in the Percentage Allocation bucket (`allocMap − pctOutMap`); includes opening balances, config-allocated inflows, and intraflow adjustments, minus pct-allocation outflows
 - **Specific Seeds** — total Specific Seed portion
 - **Savings Net** — net savings (in − out)
 - **Grand Total** — sum of all three
+
+**`loadSummary` pctOutMap:** queries `outflow_transactions` excluding `stage_code_2 = 'Specific Seed'` and `stage_code_2 = 'Savings'` (same filter as `useReportEngine`'s `pctOutRes`); subtracted per-category from `allocMap` when building `percentageAllocated`. Without this subtraction the card shows cumulative inflows, not current balance.
 
 Per-inflow allocation config resolution (used in both `loadSummary` and `loadLedger`):
 1. **If `transaction_type` is set → skip entirely** (refund, reversal, bank_deposit, intrabank_transfer are never allocated)
