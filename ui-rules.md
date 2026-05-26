@@ -910,6 +910,40 @@ Applied in `AddInflowModal` and `AddOutflowModal`. Shows only `NOTIFY pgrst` (ca
 
 ---
 
+## In-Page Tab Bar Pattern
+
+Used on `IntraFlow.tsx` (Internal Transfers | Bulk Reallocation). Canonical pattern for adding tabs within a single route without creating a new sidebar item:
+
+```tsx
+// Tab state
+const [tab, setTab] = useState<'tab1' | 'tab2'>('tab1')
+
+// Tab bar (render at top of return, before page content)
+<div className="border-b border-gray-200 mb-5 -mt-1">
+  <nav className="-mb-px flex">
+    {(['tab1', 'tab2'] as const).map(t => (
+      <button key={t} onClick={() => setTab(t)}
+        className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+          tab === t
+            ? 'border-primary text-primary'
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+        }`}
+      >
+        {t === 'tab1' ? 'Label One' : 'Label Two'}
+      </button>
+    ))}
+  </nav>
+</div>
+
+{tab === 'tab2' ? <TabTwoComponent /> : <>{/* existing tab1 content */}</>}
+```
+
+- Modals and portals that belong to tab1 remain outside the conditional so they're always mounted
+- Error states for tab1 data go inside the tab1 conditional branch, not as early returns
+- `usePageTitle` set to the parent page name (e.g. `'Intra Accounts'`), not per-tab
+
+---
+
 ## Page Architecture Conventions
 
 - Pages are display-first; data fetching via `use<Entity>.ts` hook at the top of each page component

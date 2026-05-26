@@ -153,6 +153,19 @@ Each `AllocationRow` carries `budget_portion: 'Percentage' | 'Specific Seed' | '
 
 ---
 
+## Bulk Reallocation (`BulkReallocation.tsx`)
+
+- Located at `/intra-flow` under the **Bulk Reallocation** tab (alongside Internal Transfers tab)
+- Moves balances between any two budget portions across selected categories by inserting `intra_flows` records with `account_from = account_to = categoryName`, `account_from_stage2 = sourcePortion`, `account_to_stage2 = destPortion`
+- Rows tagged `transfer_type='bulk_reallocation'` and share a `batch_id` UUID per execution
+- **Balance computation** for a given portion: opening balances (`category_opening_balances`) + direct inflows (`stage_code_2 = portion`) + config-split inflows (Percentage Allocation only) − outflows (`stage_code_2 = portion`) ± intra_flows (`account_to/from_stage2 = portion, status='active'`)
+- Modes: Full Balance (all of source), Percentage (% of source), Fixed Amount (capped at source balance)
+- Preview step required before execution; warns on categories that will zero out the source portion
+- Batch insert via single `supabase.from('intra_flows').insert([...])` call; all existing pages (SavingsPortions, PercentageAllocation, CategoryLedger, reportQueryEngine) already handle these rows correctly — no special-casing needed
+- Bumps `intraflowVersion` after execution so dependent pages reload
+
+---
+
 ## Savings Portions (`SavingsPortions.tsx`)
 
 - Queries all-time: direct savings inflows/outflows, config-split inflows (Savings rows), category opening balances (Savings portion)
