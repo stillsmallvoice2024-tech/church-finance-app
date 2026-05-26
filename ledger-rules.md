@@ -52,11 +52,16 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 
 4 aggregate summary cards (computed from all unfiltered rows):
 - **% Allocation** — net NGN balance in the Percentage Allocation bucket (`allocMap − pctOutMap`); includes opening balances, config-allocated inflows, and intraflow adjustments, minus pct-allocation outflows
-- **Specific Seeds** — total Specific Seed portion
+- **Specific Seeds** — net Specific Seed balance; includes direct seed inflows, COB, config-split allocations, intraflow adjustments, minus outflows tagged `stage_code_2 = 'Specific Seed'`
 - **Savings Net** — net savings (in − out)
 - **Grand Total** — sum of all three
 
-**`loadSummary` pctOutMap:** queries `outflow_transactions` excluding `stage_code_2 = 'Specific Seed'` and `stage_code_2 = 'Savings'` (same filter as `useReportEngine`'s `pctOutRes`); subtracted per-category from `allocMap` when building `percentageAllocated`. Without this subtraction the card shows cumulative inflows, not current balance.
+**`loadSummary` query pattern** — all three non-percentage buckets follow the same net-balance formula (inflows + COB + config-splits + intraflow credits − outflows − intraflow debits):
+- `pctOutRes`: `outflow_transactions` excluding Specific Seed and Savings → subtracted from `allocMap` per category
+- `seedOutRes`: `outflow_transactions WHERE stage_code_2 = 'Specific Seed'` → subtracted from `specificSeed` per category
+- `savOutRes`: `outflow_transactions WHERE stage_code_2 = 'Savings'` → subtracted via `savingsOut` per category (existing)
+
+Without each outflow query the corresponding card shows cumulative inflows, not current balance.
 
 Per-inflow allocation config resolution (used in both `loadSummary` and `loadLedger`):
 1. **If `transaction_type` is set → skip entirely** (refund, reversal, bank_deposit, intrabank_transfer are never allocated)
