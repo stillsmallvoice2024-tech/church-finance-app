@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useReportTemplateStore } from '../store/reportTemplateStore'
 import type { UserProfile } from '../types'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
@@ -144,6 +145,9 @@ export function useAuthListener(): void {
         if (requestIdRef.current === requestId && mounted && !signal.aborted) {
           console.log(`[auth:${requestId}] clearAuth`)
           useAuthStore.getState().clearAuth()
+          if (event === 'SIGNED_OUT') {
+            useReportTemplateStore.getState().clearPin()
+          }
         }
       }
     }
