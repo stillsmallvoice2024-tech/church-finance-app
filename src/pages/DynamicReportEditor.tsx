@@ -1413,12 +1413,13 @@ function FormulaBlockPreview({
   resolved: Map<string, QueryResult>
   resolving: boolean
 }) {
-  const cfg      = block.config_json as Partial<FormulaBlockConfig>
-  const terms    = cfg.terms ?? []
-  const currency = cfg.displayCurrency ?? 'NGN'
-  const dateFrom = cfg.dateFrom
-  const dateTo   = cfg.dateTo
-  const label    = cfg.label || 'Formula Result'
+  const cfg       = block.config_json as Partial<FormulaBlockConfig>
+  const terms     = cfg.terms ?? []
+  const currency  = cfg.displayCurrency ?? 'NGN'
+  const dateFrom  = cfg.dateFrom
+  const dateTo    = cfg.dateTo
+  const dateField = (cfg.dateField as string | undefined) || undefined
+  const label     = cfg.label || 'Formula Result'
   const dateLabel = dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : null
 
   if (terms.length === 0) {
@@ -1438,7 +1439,7 @@ function FormulaBlockPreview({
     const portionArg = term.portion && term.portion !== 'all'
       ? term.portion as BudgetPortion
       : undefined
-    const key    = buildTokenString(term.fn as TokenFn, term.category ?? '', portionArg, dateFrom, dateTo)
+    const key = buildTokenString(term.fn as TokenFn, term.category ?? '', portionArg, dateFrom, dateTo, dateField)
     const result = resolved.get(key)
     if (result && !result.error) {
       total += term.sign === '-' ? -result.value : result.value
