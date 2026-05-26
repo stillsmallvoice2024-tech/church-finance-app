@@ -24,7 +24,7 @@ import { deriveSortFields, searchRows } from '../utils/tableColumns'
 const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
   { key: 'name',                label: 'Category',      sortType: 'text',    primary: true, accessor: r => r.name },
   { key: 'percentage',          label: '% Alloc',       sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
-  { key: 'percentageAllocated', label: '₦ Allocated',   sortType: 'numeric', primary: true },
+  { key: 'percentageAllocated', label: '₦ Allocation',   sortType: 'numeric', primary: true },
   { key: 'specificSeed',        label: 'Specific Seed', sortType: 'numeric', primary: true },
   { key: 'savingsNet',          label: 'Savings Net',   sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut },
 ]
@@ -128,19 +128,23 @@ export default function CategoryLedger() {
     setLoading(true)
     setError(null)
 
-    const [seedRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes] = await Promise.all([
+    const [seedRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed'),
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings'),
       supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Savings'),
       supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type'),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
       supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active'),
+      supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed')
+        .not('stage_code_2', 'eq', 'Specific Seed')
+        .not('stage_code_2', 'eq', 'Savings'),
     ])
 
-    if (seedRes.error || savInRes.error || savOutRes.error || allInflowRes.error) {
+    if (seedRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {
       setError(
         seedRes.error?.message ?? savInRes.error?.message ??
-        savOutRes.error?.message ?? allInflowRes.error?.message ?? 'Failed to load',
+        savOutRes.error?.message ?? allInflowRes.error?.message ??
+        pctOutRes.error?.message ?? 'Failed to load',
       )
       setLoading(false)
       return
@@ -232,6 +236,12 @@ export default function CategoryLedger() {
       }
     }
 
+    const pctOutMap = new Map<string, number>()
+    for (const r of pctOutRes.data ?? []) {
+      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
+      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.actual_amount || r.amount_disbursed || 0))
+    }
+
     const allNames = new Set<string>([
       ...categories.map(c => c.name),
       ...pctMap.keys(),
@@ -244,7 +254,7 @@ export default function CategoryLedger() {
       return {
         name,
         percentage:          pctMap.has(name) ? pctMap.get(name)! : null,
-        percentageAllocated: allocMap.get(name) ?? 0,
+        percentageAllocated: (allocMap.get(name) ?? 0) - (pctOutMap.get(name) ?? 0),
         ...d,
       }
     }).sort((a, b) => a.name.localeCompare(b.name))
@@ -623,7 +633,7 @@ export default function CategoryLedger() {
   const activeLedgerField = LEDGER_SORT_FIELDS.find(f => f.key === ledgerViewState.sortKey)
 
   const CL_CSV_FILE = `category-ledger-${new Date().toISOString().slice(0, 10)}.csv`
-  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', '₦ Allocated', 'Specific Seed', 'Savings Net']
+  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', '₦ Allocation', 'Specific Seed', 'Savings Net']
   const summaryCsvRow = (r: CategoryRow) => [r.name, r.percentage ?? '', r.percentageAllocated, r.specificSeed, r.savingsIn - r.savingsOut]
   const LEDGER_CSV_HEADERS = ['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
   const ledgerCsvRow = (r: LedgerRow) => [r.date, r.display_description, r.inflow || '', r.outflow || '', r.balance]
@@ -691,7 +701,7 @@ export default function CategoryLedger() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-xl bg-primary/5 border border-primary/20 px-3 py-3 min-w-0 overflow-hidden">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1.5 flex items-center gap-1">
-                  <Percent className="w-3 h-3 shrink-0" /><span className="truncate">% Allocated</span>
+                  <Percent className="w-3 h-3 shrink-0" /><span className="truncate">% Allocation</span>
                 </p>
                 <p className="text-sm font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc)}</p>
               </div>
@@ -826,7 +836,7 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-4 py-3 hidden md:table-cell"
                         >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocated</span>
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocation</span>
                         </SortableHeader>
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[3]}
