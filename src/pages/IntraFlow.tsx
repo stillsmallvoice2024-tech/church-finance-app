@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
+import BulkReallocation from './BulkReallocation'
 import {
   ArrowLeftRight, Plus, Pencil, Trash2,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
@@ -140,7 +141,8 @@ export default function IntraFlow() {
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('intra_flows')
   const { categories } = useCategories()
 
-  usePageTitle('Internal Transfers')
+  usePageTitle('Intra Accounts')
+  const [tab, setTab] = useState<'transfers' | 'reallocation'>('transfers')
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: IntraFlowRow) => { setEditRecord(r); setModalOpen(true) }
@@ -203,21 +205,41 @@ export default function IntraFlow() {
     exportCSV(IFL_CSV_FILE, IFL_CSV_HEADERS, (rows as IntraFlowRow[]).map(iflCsvRow))
   }
 
-  if (error) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-      <AlertCircle className="w-10 h-10 text-danger" />
-      <p className="font-semibold text-gray-800">Failed to load internal transfers</p>
-      <p className="text-sm text-gray-500">{error}</p>
-      <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
-        <RefreshCw className="w-4 h-4" /> Retry
-      </button>
-    </div>
-  )
-
   const hasActiveFilters = dateFrom || dateTo || accountFrom || accountTo
 
   return (
     <>
+      {/* Tab bar */}
+      <div className="border-b border-gray-200 mb-5 -mt-1">
+        <nav className="-mb-px flex">
+          {(['transfers', 'reallocation'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                tab === t
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {t === 'transfers' ? 'Internal Transfers' : 'Bulk Reallocation'}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {tab === 'reallocation' ? (
+        <BulkReallocation />
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+          <AlertCircle className="w-10 h-10 text-danger" />
+          <p className="font-semibold text-gray-800">Failed to load internal transfers</p>
+          <p className="text-sm text-gray-500">{error}</p>
+          <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
+            <RefreshCw className="w-4 h-4" /> Retry
+          </button>
+        </div>
+      ) : (
       <div className="space-y-5">
 
         {/* Header */}
@@ -493,6 +515,7 @@ export default function IntraFlow() {
           />
         </Card>
       </div>
+      )}
 
       <AddIntraFlowModal
         open={modalOpen}
