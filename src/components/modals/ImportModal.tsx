@@ -770,12 +770,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (credit > 0) {
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
-          // Resolve income type: per-row override → keyword auto-classify
-          const effIncomeTypeId = rowIncomeTypes[ri]
-            ?? (desc ? resolveDefaultIncomeType(desc, '', incomeTypes)?.id : undefined)
-          if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
-          // Non-Normal transactions skip allocation entirely
+          // Non-Normal transactions skip income type and allocation entirely
           if (!txnType) {
+            const effIncomeTypeId = rowIncomeTypes[ri]
+              ?? (desc ? resolveDefaultIncomeType(desc, '', incomeTypes)?.id : undefined)
+            if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
             const rowState: RowResolverState = {
               incomeType:          incomeTypes.find(t => t.id === effIncomeTypeId) ?? null,
               allocationConfigId:  rowConfigs[ri] ?? '',
@@ -1640,55 +1639,65 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       <div className="text-gray-400">{date}</div>
                                     </div>
                                     <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
-                                    <select value={displaySelId}
-                                      onChange={e => {
-                                        if (e.target.value === '__create__') {
-                                          setCreateConfigPendingRow(ri)
-                                        } else {
-                                          // User explicitly chose a config — mark as manual override
-                                          setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
-                                          setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
-                                        }
-                                      }}
-                                      className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                      <option value="">General (date-based)</option>
-                                      {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                      {/* Render linked config as an option even if not yet in specialConfigs */}
-                                      {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
-                                        const extra = allocConfigs.find(c => c.id === displaySelId)
-                                        return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
-                                      })()}
-                                      <option value="__create__">＋ Create New Config…</option>
-                                    </select>
-                                    <div className="relative">
-                                      <select
-                                        value={effIncomeTypeId}
+                                    {txnType ? (
+                                      <span className="text-xs text-gray-400 italic">N/A</span>
+                                    ) : (
+                                      <select value={displaySelId}
                                         onChange={e => {
-                                          const newId = e.target.value
-                                          // Update income type and clear manual override so the new
-                                          // type's linked config takes effect immediately
-                                          setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
-                                          setRowManualOverrides(prev => {
-                                            const next = { ...prev }
-                                            delete next[ri]
-                                            return next
-                                          })
+                                          if (e.target.value === '__create__') {
+                                            setCreateConfigPendingRow(ri)
+                                          } else {
+                                            // User explicitly chose a config — mark as manual override
+                                            setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                            setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
+                                          }
                                         }}
-                                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
-                                      >
-                                        <option value="">— None —</option>
-                                        {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                        <option value="">General (date-based)</option>
+                                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        {/* Render linked config as an option even if not yet in specialConfigs */}
+                                        {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
+                                          const extra = allocConfigs.find(c => c.id === displaySelId)
+                                          return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
+                                        })()}
+                                        <option value="__create__">＋ Create New Config…</option>
                                       </select>
-                                      {autoType && !rowIncomeTypes[ri] && (
-                                        <Sparkles className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-400" />
-                                      )}
-                                      {effIncomeType && (
-                                        <span
-                                          className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
-                                          style={{ background: effIncomeType.color }}
-                                        />
-                                      )}
-                                    </div>
+                                    )}
+                                    {txnType ? (
+                                      <span className="text-xs text-gray-600 px-1">
+                                        {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label ?? txnType}
+                                      </span>
+                                    ) : (
+                                      <div className="relative">
+                                        <select
+                                          value={effIncomeTypeId}
+                                          onChange={e => {
+                                            const newId = e.target.value
+                                            // Update income type and clear manual override so the new
+                                            // type's linked config takes effect immediately
+                                            setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
+                                            setRowManualOverrides(prev => {
+                                              const next = { ...prev }
+                                              delete next[ri]
+                                              return next
+                                            })
+                                          }}
+                                          className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
+                                        >
+                                          <option value="">— None —</option>
+                                          {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        </select>
+                                        {autoType && !rowIncomeTypes[ri] && (
+                                          <Sparkles className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-400" />
+                                        )}
+                                        {effIncomeType && (
+                                          <span
+                                            className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                                            style={{ background: effIncomeType.color }}
+                                          />
+                                        )}
+                                      </div>
+                                    )}
                                     <select value={txnType}
                                       onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
