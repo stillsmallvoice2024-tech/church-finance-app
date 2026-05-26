@@ -503,7 +503,7 @@ function ManualEntryForm() {
   const set = (key: string, val: string) => {
     setFields(prev => {
       const next = { ...prev, [key]: val }
-      if (direction === 'inflow' && !incomeTypeAutoSet && key === 'description') {
+      if (!txnType && direction === 'inflow' && !incomeTypeAutoSet && key === 'description') {
         const match = classifyIncomeType(val, '', incomeTypes)
         setIncomeTypeId(match ? match.id : '')
       }
@@ -518,6 +518,14 @@ function ManualEntryForm() {
     set(key, stripped)
   }
   const vCurrency = (key: string): string => formatCurrency(v(key))
+
+  // Clear income type when switching to a non-Normal transaction type
+  useEffect(() => {
+    if (txnType) {
+      setIncomeTypeId('')
+      setIncomeTypeAutoSet(false)
+    }
+  }, [txnType])
 
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
     setDirection(d)
@@ -579,7 +587,7 @@ function ManualEntryForm() {
         transaction_ref:            v('transaction_ref') || await generateFallbackTransactionId(v('date'), v('amount'), v('description') ?? '', selectedBank?.name ?? ''),
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
-        income_type_id:             incomeTypeId                   || undefined,
+        income_type_id:             txnType ? undefined : (incomeTypeId || undefined),
         transaction_type:           txnType                        || undefined,
         original_transaction_id:    v('original_transaction_id')   || undefined,
         fx_currency:                v('fx_currency')               || undefined,
@@ -793,29 +801,41 @@ function ManualEntryForm() {
           {/* Income Type */}
           {incomeTypes.length > 0 && (
             <Field label="Income Type">
-              <div className="space-y-1">
-                <select
-                  value={incomeTypeId}
-                  onChange={e => { setIncomeTypeId(e.target.value); setIncomeTypeAutoSet(!!e.target.value) }}
-                  className={iCls}
-                >
-                  <option value="">— Unclassified —</option>
-                  {incomeTypes.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-                {incomeTypeId && !incomeTypeAutoSet && (
-                  <p className="text-[10px] flex items-center gap-1 text-indigo-500">
-                    <Sparkles className="w-3 h-3" />
-                    Auto-detected · change above to override
-                  </p>
-                )}
-              </div>
+              {txnType ? (
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+                  {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label ?? txnType}
+                  <span className="text-xs text-gray-400 ml-2">— auto-set from transaction type</span>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <select
+                    value={incomeTypeId}
+                    onChange={e => { setIncomeTypeId(e.target.value); setIncomeTypeAutoSet(!!e.target.value) }}
+                    className={iCls}
+                  >
+                    <option value="">— Unclassified —</option>
+                    {incomeTypes.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  {incomeTypeId && !incomeTypeAutoSet && (
+                    <p className="text-[10px] flex items-center gap-1 text-indigo-500">
+                      <Sparkles className="w-3 h-3" />
+                      Auto-detected · change above to override
+                    </p>
+                  )}
+                </div>
+              )}
             </Field>
           )}
 
           {/* Allocation Config */}
-          {cfgLoaded && v('date') && (() => {
+          {txnType ? (
+            <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config</p>
+              <p className="text-xs text-gray-400 italic mt-1">Not applicable for non-Normal transactions</p>
+            </div>
+          ) : cfgLoaded && v('date') && (() => {
             const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId)
             const autoCfg = selectedIncomeType?.special_config_id
               ? configs.find(c => c.id === selectedIncomeType.special_config_id)

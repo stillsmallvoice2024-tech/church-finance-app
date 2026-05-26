@@ -109,6 +109,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   // Auto-classify income type from description + stage code
   useEffect(() => {
+    if (transactionType) {               // non-Normal: income type not applicable
+      setIncomeTypeId('')
+      setIncomeTypeAutoSet(false)
+      return
+    }
     if (incomeTypeId && !incomeTypeAutoSet) return   // manually set — leave it
     if (!incomeTypes.length) return
     const match = classifyIncomeType(description ?? '', stageCode1 ?? '', incomeTypes)
@@ -120,10 +125,15 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       setIncomeTypeId('')
       setIncomeTypeAutoSet(false)
     }
-  }, [description, stageCode1, incomeTypes]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [description, stageCode1, incomeTypes, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-apply special config when income type changes (unless config was manually picked)
   useEffect(() => {
+    if (transactionType) {               // non-Normal: no allocation config
+      setSelectedConfigId('')
+      setConfigManuallySet(false)
+      return
+    }
     if (configManuallySet) return
     if (selectedIncomeType?.special_config_group_id && watchedDate) {
       const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
@@ -136,10 +146,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         setSelectedConfigId(cfg?.id ?? '')
       }
     }
-  }, [incomeTypeId, selectedIncomeType, watchedDate, allocConfigs]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [incomeTypeId, selectedIncomeType, watchedDate, allocConfigs, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-select allocation config by date (unless manually overridden or income-type config applied)
   useEffect(() => {
+    if (transactionType) return          // non-Normal: no allocation config
     if (configManuallySet || !watchedDate) return
     if (selectedIncomeType?.special_config_group_id) {
       const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
@@ -149,7 +160,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     if (selectedIncomeType?.special_config_id) return
     const cfg = getConfigForDate(lockedConfigs, watchedDate)
     setSelectedConfigId(cfg?.id ?? '')
-  }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Populate / clear form when modal opens
   useEffect(() => {
@@ -196,7 +207,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             date:                       values.date,
             amount:                     values.amount,
             description:                values.description  || null,
-            allocation_config_id:       selectedConfigId   || null,
+            allocation_config_id:       values.transaction_type ? null : (selectedConfigId || null),
             bank_name:                  values.bank_name   || null,
             stage_code_1:               values.stage_code_1 || null,
             stage_code_2:               values.stage_code_2 || null,
@@ -208,7 +219,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : null,
             transaction_type:           values.transaction_type        || null,
             original_transaction_id:    values.original_transaction_id || null,
-            income_type_id:             incomeTypeId || null,
+            income_type_id:             values.transaction_type ? null : (incomeTypeId || null),
             ...(values.created_at_date ? { created_at: `${values.created_at_date}T00:00:00.000Z` } : {}),
             ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
           },
@@ -218,7 +229,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           date:                       values.date,
           amount:                     values.amount,
           description:                values.description  || undefined,
-          allocation_config_id:       selectedConfigId   || undefined,
+          allocation_config_id:       values.transaction_type ? undefined : (selectedConfigId || undefined),
           bank_name:                  values.bank_name   || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
@@ -230,7 +241,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
           transaction_type:           values.transaction_type        || undefined,
           original_transaction_id:    values.original_transaction_id || undefined,
-          income_type_id:             incomeTypeId || undefined,
+          income_type_id:             values.transaction_type ? undefined : (incomeTypeId || undefined),
           ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
         }
         await add(input)
@@ -348,37 +359,48 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         {/* Income Type */}
         {incomeTypes.length > 0 && (
           <Field label="Income Type">
-            <div className="flex items-center gap-2">
-              {selectedIncomeType && (
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: selectedIncomeType.color }} />
-              )}
-              <select
-                value={incomeTypeId}
-                onChange={e => {
-                  setIncomeTypeId(e.target.value)
-                  setIncomeTypeAutoSet(false)
-                  // If user manually clears the type, let date-based config take over
-                  if (!e.target.value) setConfigManuallySet(false)
-                }}
-                className={`flex-1 ${inputCls(false)}`}
-              >
-                <option value="">— None —</option>
-                {incomeTypes.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
-            {incomeTypeAutoSet && incomeTypeId && (
-              <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
-                <Sparkles className="w-3 h-3" /> Auto-suggested from description · click to change
-              </p>
+            {transactionType ? (
+              <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+                {TXN_TYPES.find(t => t.value === transactionType)?.label ?? transactionType}
+                <span className="text-xs text-gray-400 ml-2">— auto-set from transaction type</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  {selectedIncomeType && (
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: selectedIncomeType.color }} />
+                  )}
+                  <select
+                    value={incomeTypeId}
+                    onChange={e => {
+                      setIncomeTypeId(e.target.value)
+                      setIncomeTypeAutoSet(false)
+                      // If user manually clears the type, let date-based config take over
+                      if (!e.target.value) setConfigManuallySet(false)
+                    }}
+                    className={`flex-1 ${inputCls(false)}`}
+                  >
+                    <option value="">— None —</option>
+                    {incomeTypes.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {incomeTypeAutoSet && incomeTypeId && (
+                  <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
+                    <Sparkles className="w-3 h-3" /> Auto-suggested from description · click to change
+                  </p>
+                )}
+              </>
             )}
           </Field>
         )}
 
         {/* Allocation Config */}
         <Field label="Allocation Config">
-          {selectedIncomeType?.special_config_id && !configManuallySet ? (
+          {transactionType ? (
+            <p className="text-xs text-gray-400 italic">Not applicable for non-Normal transactions</p>
+          ) : selectedIncomeType?.special_config_id && !configManuallySet ? (
             <div className="space-y-1">
               <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
                 <span className="text-xs text-primary font-medium">
