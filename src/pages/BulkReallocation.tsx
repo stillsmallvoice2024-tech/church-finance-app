@@ -1,16 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import {
   ArrowRight, RefreshCw, AlertCircle, AlertTriangle,
   CheckSquare, Square,
 } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { useCategories, type BudgetPortion } from '../hooks/useCategories'
+import { useReportEngine } from '../hooks/useReportEngine'
 import { useAuthStore } from '../store/authStore'
 import { useToastStore } from '../store/toastStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
+import type { ReportCategoryBalance } from '../types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -27,79 +29,12 @@ interface CatRow {
   amount:      number
 }
 
-// ── Balance computation ────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-async function fetchPortionBalances(portion: BudgetPortion): Promise<Map<string, number>> {
-  const [inflowRes, outflowRes, cobRes, intraRes] = await Promise.all([
-    supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', portion),
-    supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', portion),
-    supabase.from('category_opening_balances').select('amount, categories(name)').eq('budget_portion', portion),
-    supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active'),
-  ])
-
-  const map = new Map<string, number>()
-  const add = (cat: string, v: number) => map.set(cat, (map.get(cat) ?? 0) + v)
-
-  for (const ob of (cobRes.data ?? []) as { amount: number; categories: unknown }[]) {
-    const name = (ob.categories as { name: string } | null)?.name
-    if (name) add(name, Number(ob.amount))
-  }
-
-  for (const r of (inflowRes.data ?? []) as { stage_code_1: string | null; amount: number }[]) {
-    add(r.stage_code_1 ?? '(Uncategorised)', Number(r.amount))
-  }
-
-  for (const r of (outflowRes.data ?? []) as { stage_code_1: string | null; actual_amount: number | null; amount_disbursed: number | null }[]) {
-    add(r.stage_code_1 ?? '(Uncategorised)', -Number(r.actual_amount ?? r.amount_disbursed ?? 0))
-  }
-
-  for (const r of (intraRes.data ?? []) as {
-    account_from: string | null; account_from_stage2: string | null
-    account_to: string | null; account_to_stage2: string | null
-    total_amount: number
-  }[]) {
-    const amount = Number(r.total_amount)
-    if (amount <= 0) continue
-    if (r.account_to_stage2 === portion && r.account_to)   add(r.account_to, amount)
-    if (r.account_from_stage2 === portion && r.account_from) add(r.account_from, -amount)
-  }
-
-  // Config-split allocation for Percentage Allocation portion
-  if (portion === 'Percentage Allocation') {
-    const { data: splitData } = await supabase
-      .from('inflow_transactions')
-      .select('amount, allocation_config_id')
-      .not('allocation_config_id', 'is', null)
-      .is('stage_code_2', null)
-      .is('transaction_type', null)
-
-    if ((splitData ?? []).length > 0) {
-      const configIds = [
-        ...new Set((splitData ?? []).map((r: { allocation_config_id: string }) => r.allocation_config_id)),
-      ]
-      const { data: configs } = await supabase
-        .from('allocation_configs')
-        .select('id, rows')
-        .in('id', configIds)
-
-      type CR = { category_name: string; budget_portion?: string; percentage?: number }
-      const configMap = new Map(
-        (configs ?? []).map(c => [c.id as string, c.rows as CR[]])
-      )
-
-      for (const inflow of (splitData ?? []) as { amount: number; allocation_config_id: string }[]) {
-        for (const row of configMap.get(inflow.allocation_config_id) ?? []) {
-          if (row.budget_portion !== 'Percentage Allocation') continue
-          const pct = Number(row.percentage ?? 0)
-          if (pct <= 0) continue
-          const amt = Math.round(Number(inflow.amount) * pct / 100 * 100) / 100
-          if (amt > 0) add(row.category_name || '(Uncategorised)', amt)
-        }
-      }
-    }
-  }
-
-  return map
+function getPortionBalance(bal: ReportCategoryBalance, portion: BudgetPortion): number {
+  if (portion === 'Percentage Allocation') return bal.percentageAllocated
+  if (portion === 'Specific Seed')         return bal.specificSeed
+  return bal.savingsNet
 }
 
 function computeAmount(srcBalance: number, mode: Mode, pct: number, fixed: number): number {
@@ -179,51 +114,36 @@ export default function BulkReallocation() {
   const { categories, loading: catLoading } = useCategories()
   const { push: toast } = useToastStore()
 
+  const today = new Date().toISOString().slice(0, 10)
+  const { balances: reportBalances, loading: balLoading, error: balError, refetch: refetchBalances } =
+    useReportEngine(today)
+
   const [srcPortion, setSrcPortion] = useState<BudgetPortion>('Percentage Allocation')
   const [dstPortion, setDstPortion] = useState<BudgetPortion>('Savings')
   const [mode,       setMode]       = useState<Mode>('full')
   const [pct,        setPct]        = useState(100)
   const [fixedAmt,   setFixedAmt]   = useState(0)
 
-  const [srcBalances, setSrcBalances] = useState<Map<string, number>>(new Map())
-  const [dstBalances, setDstBalances] = useState<Map<string, number>>(new Map())
-  const [balLoading,  setBalLoading]  = useState(false)
-  const [balError,    setBalError]    = useState<string | null>(null)
-
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [step,        setStep]        = useState<Step>('configure')
-  const [date,        setDate]        = useState(new Date().toISOString().slice(0, 10))
+  const [date,        setDate]        = useState(today)
   const [description, setDescription] = useState('')
   const [executing,   setExecuting]   = useState(false)
 
-  const loadBalances = useCallback(async () => {
-    setBalLoading(true)
-    setBalError(null)
-    try {
-      const [src, dst] = await Promise.all([
-        fetchPortionBalances(srcPortion),
-        fetchPortionBalances(dstPortion),
-      ])
-      setSrcBalances(src)
-      setDstBalances(dst)
-    } catch (e) {
-      setBalError(e instanceof Error ? e.message : 'Failed to load balances')
-    } finally {
-      setBalLoading(false)
-    }
-  }, [srcPortion, dstPortion])
-
-  useEffect(() => { loadBalances() }, [loadBalances])
-
   const tableRows = useMemo((): CatRow[] =>
-    categories.map(cat => ({
-      id:         cat.id,
-      name:       cat.name,
-      srcBalance: srcBalances.get(cat.name) ?? 0,
-      dstBalance: dstBalances.get(cat.name) ?? 0,
-      amount:     computeAmount(srcBalances.get(cat.name) ?? 0, mode, pct, fixedAmt),
-    })),
-    [categories, srcBalances, dstBalances, mode, pct, fixedAmt],
+    categories.map(cat => {
+      const bal = reportBalances.get(cat.name)
+      const srcBalance = bal ? getPortionBalance(bal, srcPortion) : 0
+      const dstBalance = bal ? getPortionBalance(bal, dstPortion) : 0
+      return {
+        id:         cat.id,
+        name:       cat.name,
+        srcBalance,
+        dstBalance,
+        amount:     computeAmount(srcBalance, mode, pct, fixedAmt),
+      }
+    }),
+    [categories, reportBalances, srcPortion, dstPortion, mode, pct, fixedAmt],
   )
 
   const selectedRows = useMemo(
@@ -271,10 +191,10 @@ export default function BulkReallocation() {
         description,
       })
       useTransactionSyncStore.getState().bumpIntraflow()
+      refetchBalances()
       toast(`Bulk reallocation complete — ${count} transfer${count === 1 ? '' : 's'} created.`, 'success')
       setStep('configure')
       setSelectedIds(new Set())
-      loadBalances()
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Execution failed', 'error')
     } finally {
@@ -530,7 +450,7 @@ export default function BulkReallocation() {
           )}
 
           <button
-            onClick={loadBalances}
+            onClick={refetchBalances}
             disabled={balLoading}
             title="Refresh balances"
             className="self-end mb-0.5 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
