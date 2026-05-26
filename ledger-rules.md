@@ -147,6 +147,27 @@ Each `AllocationRow` carries `budget_portion: 'Percentage' | 'Specific Seed' | '
 
 - Queries `inflow_transactions` where `stage_code_2 = 'Specific Seed'`, filtered by accounting year
 - Injects synthetic "Opening Balance" rows from `category_opening_balances` (Specific Seed portion) **regardless of year filter**
+- Config-split inflows (`allocation_config_id NOT NULL`, `stage_code_2 NULL`) processed for rows with `budget_portion = 'Specific Seed'`
+- **Intraflow rows** (year-filtered, `status = 'active'`): TO `Specific Seed` → `SpecificRow` with positive amount for the TO category; FROM `Specific Seed` → `SpecificRow` with negative amount for the FROM category. Circular flows skipped. Rows appear as targets in the per-category breakdown; net effects propagate to per-category totals and the grand total.
+- Subscribes to `intraflowVersion` (`useTransactionSyncStore`) → reloads on any intraflow write/delete
+
+---
+
+## Savings Portions (`SavingsPortions.tsx`)
+
+- Queries all-time: direct savings inflows/outflows, config-split inflows (Savings rows), category opening balances (Savings portion)
+- **Intraflow rows** (`status = 'active'`, all-time): TO `Savings` → added to `deposited` for TO category; FROM `Savings` → added to `withdrawn` for FROM category. Circular flows skipped.
+- Subscribes to `intraflowVersion` → reloads on any intraflow write/delete
+
+---
+
+## Percentage Allocation (`PercentageAllocation.tsx`)
+
+- Balance-driven page (nav: "Percentage Allocation", storageKey `pa`) — mirrors SavingsPortions structure for the Percentage Allocation portion
+- Queries all-time: direct `stage_code_2 = 'Percentage Allocation'` inflows/outflows, config-split inflows (Percentage/unset rows), category opening balances (Percentage Allocation portion)
+- **Intraflow rows** (`status = 'active'`, all-time): TO `Percentage Allocation` → added to `deposited`; FROM → added to `withdrawn`. Circular flows skipped.
+- Subscribes to `intraflowVersion` → reloads on any intraflow write/delete
+- **Distinct from** `PercentageAllocations.tsx` (nav: "Allocation Configs", storageKey `pca`) which is a read-only display of `allocation_configs` rows — no balance computation
 
 ---
 
@@ -180,6 +201,8 @@ No DB transaction — step 1 commits even if step 2 fails. Accepted trade-off.
 - `useEffect([viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion, intraflowVersion])`
 
 Omitting either version from either effect causes that view to go stale after writes.
+
+`PercentageAllocation`, `SavingsPortions`, `SpecificGivings` subscribe to `intraflowVersion` only (`useEffect([load, intraflowVersion])`). Outflow changes do not need a separate version here — `load` is already triggered on mount and the pages fetch fresh data each call.
 
 ---
 
