@@ -49,6 +49,7 @@ export function outflowDetailItems(row: OutflowTransaction): DetailItem[] {
     { label: 'Net (₦)',             value: net !== Number(row.amount_disbursed) ? formatCurrency(net) : null, mono: true },
     { label: 'Stage Code 1',        value: row.stage_code_1 },
     { label: 'Stage Code 2',        value: row.stage_code_2 },
+    { label: 'Outflow Type',        value: row.outflow_type_name },
     {
       label: 'FX',
       value: row.fx_currency

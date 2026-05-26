@@ -137,6 +137,18 @@ create table public.inflow_transactions (
 );
 
 -- ============================================================
+-- OUTFLOW TYPES (reporting/classification layer)
+-- ============================================================
+create table public.outflow_types (
+  id         uuid default gen_random_uuid() primary key,
+  name       text not null unique,
+  color      text not null default '#64748b',
+  created_by uuid references public.profiles(id),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- ============================================================
 -- TRANSACTIONS — OUTFLOWS
 -- ============================================================
 create table public.outflow_transactions (
@@ -160,12 +172,12 @@ create table public.outflow_transactions (
   transaction_type         text,
   original_transaction_id  text,
   allocation_config_id     uuid references public.allocation_configs(id) on delete set null,
+  outflow_type_id          uuid references public.outflow_types(id) on delete set null,
   is_pending_deduction     boolean not null default false,
   created_by               uuid references public.profiles(id),
-  recorded_at              timestamptz,
+  recorded_at              timestamptz default now(),
   created_at               timestamptz default now(),
-  updated_at               timestamptz default now(),
-  recorded_at              timestamptz default now()
+  updated_at               timestamptz default now()
 );
 
 -- ============================================================
