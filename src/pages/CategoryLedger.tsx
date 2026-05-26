@@ -128,8 +128,9 @@ export default function CategoryLedger() {
     setLoading(true)
     setError(null)
 
-    const [seedRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
+    const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed'),
+      supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Specific Seed'),
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings'),
       supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Savings'),
       supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type'),
@@ -140,9 +141,9 @@ export default function CategoryLedger() {
         .not('stage_code_2', 'eq', 'Savings'),
     ])
 
-    if (seedRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {
+    if (seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {
       setError(
-        seedRes.error?.message ?? savInRes.error?.message ??
+        seedRes.error?.message ?? seedOutRes.error?.message ?? savInRes.error?.message ??
         savOutRes.error?.message ?? allInflowRes.error?.message ??
         pctOutRes.error?.message ?? 'Failed to load',
       )
@@ -170,6 +171,9 @@ export default function CategoryLedger() {
 
     for (const r of seedRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed += Number(r.amount)
+    }
+    for (const r of seedOutRes.data ?? []) {
+      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed -= Number(r.actual_amount || r.amount_disbursed || 0)
     }
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
