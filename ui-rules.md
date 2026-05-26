@@ -288,7 +288,7 @@ Section order: Profile → Password → **Theme** → **Data Management** → Ap
 - **Allocation** — allocation configs (draft/lock workflow)
 - **Special Configs** — group-based UI; each group shows active version (effective dates, type, status) + "Create New Version" button + expandable version history table; "Create New Group" at top; uses `useSpecialConfigGroups()` hook
 - **Income Types** — user-defined inflow labels with keyword/stage-code rules
-- **Outflow Types** — user-defined reporting labels for outflows (name + color); CRUD via `AddOutflowTypeModal`; uses `useOutflowTypes()` hook; shows migration hint if table missing; mirrors Income Types UX exactly
+- **Outflow Types** — reporting labels with many-to-many category links; CRUD via `AddOutflowTypeModal`; uses `useOutflowTypes()` + `useCategoryOutflowTypeMaps()` + `useCategories()`; badges: System (blue) / Linked Category (green) / Standalone (gray); locked types show lock icon with no edit/delete; linked category names shown inline below type name; `AddOutflowTypeModal` includes linked categories multi-select (loads existing mappings via `fetchOutflowTypeMappings`, saves via `syncOutflowTypeCategoryMappings`)
 - **Currencies** — add/remove currencies (code, name, symbol, flag emoji); shows migration SQL
 
 **Database tab removed from primary nav.** Migration SQL is now inside the **Developer Tools** collapsible section below the tab content (collapsed by default). `devToolsOpen` state controls visibility. Do not re-add Database as a primary tab — it is infrastructure tooling, not operational config.

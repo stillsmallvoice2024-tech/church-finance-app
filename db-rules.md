@@ -15,7 +15,8 @@
 | `banks` | Bank accounts; `currency` (default NGN); starting balance cols: `starting_balance`, `starting_balance_category`, `starting_balance_budget_portion`, `starting_balance_alloc_type`, `starting_balance_allocations jsonb`; opening balance propagated to `inflow_transactions` as `transaction_type = 'balance_brought_forward'` via `src/utils/bankOpeningBalance.ts` |
 | `currencies` | User-managed currency list; code PK, name, symbol, flag emoji |
 | `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type`; versioning cols: `config_group_id` → `special_config_groups(id)`, `effective_from date`, `effective_to date`, `version_number int`; **no `start_date`/`end_date`** — only `effective_from`/`effective_to` exist |
-| `outflow_types` | Reporting-only labels for outflows; `name` (unique), `color`, `created_by` FK → `profiles(id)` — **no effect on balances or allocations** |
+| `outflow_types` | Reporting-only labels for outflows; `name` (unique), `color`, `is_system bool`, `is_locked bool`, `auto_created bool`, `manually_renamed bool`, `created_by` FK → `profiles(id)` — **no effect on balances or allocations**. "General" is a permanent system type (locked, undeletable). |
+| `category_outflow_type_map` | Many-to-many: `category_id` FK → `categories(id) ON DELETE CASCADE`, `outflow_type_id` FK → `outflow_types(id) ON DELETE CASCADE`, `UNIQUE(category_id, outflow_type_id)`; indexes on both FKs. Drives auto-suggest in AddOutflowModal and ImportModal. |
 | `income_types` | Inflow labels; `color`, `special_config_id` (legacy), `special_config_group_id` → `special_config_groups(id)` |
 | `special_config_groups` | Groups multiple versions of the same special config; `name`, `created_at`; income types link here via `special_config_group_id` |
 | `transaction_allocation_snapshots` | Per-transaction snapshot of resolved special config at calculation time; `transaction_id` UNIQUE, `config_version_id`, `config_group_id`, `resolved_rows jsonb`, `allocation_type`, `is_recalculated bool`, `recalculated_at` |
@@ -57,6 +58,8 @@
 | Columns | Tables | Required by |
 |---|---|---|
 | `outflow_type_id uuid REFERENCES outflow_types(id) ON DELETE SET NULL` + `CREATE INDEX idx_outflow_type_id` | `outflow_transactions` | Outflow Types feature; requires `outflow_types` table to exist first |
+| `is_system bool`, `is_locked bool`, `auto_created bool`, `manually_renamed bool` | `outflow_types` | Classification metadata — see Outflow Types section below |
+| `CREATE TABLE category_outflow_type_map` + RLS + indexes | — | Outflow type ↔ category many-to-many mapping |
 | `transaction_type text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds, BankDeposits pages |
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
 | `currency text NOT NULL DEFAULT 'NGN'`, `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section — also requires `bank_schema_check` view + GRANT (see SQL below) |
@@ -219,6 +222,40 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 **Backdated recalculation**: after creating a backdated locked version, `getImpactedTransactionCount` finds transactions in the new version's date range → optionally calls `recalculateTransactions` which updates `allocation_config_id` + upserts `transaction_allocation_snapshots` + writes `recalculation_logs`.
 
 **Data migration** (in `MIGRATION_SQL`): each existing `is_special = true` allocation_config gets its own group (version 1); income types' `special_config_group_id` is backfilled from `special_config_id`.
+
+---
+
+## Outflow Types Architecture
+
+**Tables:** `outflow_types` + `category_outflow_type_map` (many-to-many).
+
+**`outflow_types` metadata columns:**
+- `is_system` — permanent system entry; never delete
+- `is_locked` — blocks edit and delete from UI and hook (`deleteOutflowType` checks this and throws)
+- `auto_created` — created automatically when a category was added
+- `manually_renamed` — set to `true` when user explicitly renames; stops category-rename sync
+
+**"General" system type:** seeded by migration `ON CONFLICT (name) DO UPDATE SET is_system=true, is_locked=true`. Always exists, always visible, uneditable.
+
+**Category lifecycle hooks** (`src/pages/Categories.tsx` → functions in `src/hooks/useOutflowTypes.ts`):
+- **Add category** → `autoCreateLinkedOutflowType(id, name)` — creates outflow type with same name (or links existing case-insensitive match), inserts mapping row
+- **Rename category** → `syncLinkedOutflowTypeName(id, newName, oldName)` — renames linked types that are `auto_created=true AND manually_renamed=false AND name matches old name`; once manually renamed, sync stops
+- **Delete category** → `handleCategoryDeleteCleanup(id)` — for each mapped `auto_created` type: if 0 transactions → delete type; if has transactions → leave (mapping cascade-deleted by FK)
+
+**Mapping semantics:**
+- One outflow type may map to many categories; one category may map to many outflow types
+- First mapping entry = suggested default (used by `getDefaultOutflowTypeForCategory`)
+- Linked outflow type is suggestion-only — user can always override before save
+- User can unlink auto-created types or manually link standalone types via `AddOutflowTypeModal`
+
+**Hooks / functions** (`src/hooks/useOutflowTypes.ts`):
+- `useCategoryOutflowTypeMaps()` — fetch all mappings
+- `getDefaultOutflowTypeForCategory(catId, maps, types)` — pure; returns first mapped type or null
+- `syncOutflowTypeCategoryMappings(typeId, newCategoryIds[])` — diff and apply link/unlink
+- `linkOutflowTypeToCategory / unlinkOutflowTypeFromCategory` — single-pair mutations
+- `fetchOutflowTypeMappings(typeId)` — returns `categoryId[]` for a type
+
+**Setup tab badges:** System (blue) / Linked Category (green) / Standalone (gray); locked types show lock icon, no edit/delete buttons.
 
 ---
 
