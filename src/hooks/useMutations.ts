@@ -133,6 +133,8 @@ export interface AddIntraFlowInput {
   description?: string
   transaction_ref?: string
   remark?: string
+  transfer_type?: string
+  batch_id?: string
   // Optional: caller may pre-supply resolved IDs; hook resolves them from DB if absent
   from_category_id?: string | null
   to_category_id?: string | null
