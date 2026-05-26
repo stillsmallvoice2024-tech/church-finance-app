@@ -15,13 +15,14 @@
 | `banks` | Bank accounts; `currency` (default NGN); starting balance cols: `starting_balance`, `starting_balance_category`, `starting_balance_budget_portion`, `starting_balance_alloc_type`, `starting_balance_allocations jsonb`; opening balance propagated to `inflow_transactions` as `transaction_type = 'balance_brought_forward'` via `src/utils/bankOpeningBalance.ts` |
 | `currencies` | User-managed currency list; code PK, name, symbol, flag emoji |
 | `allocation_configs` | Budget split configs; `rows` JSONB, `status` draft/locked, `is_special`, `allocation_type`; versioning cols: `config_group_id` → `special_config_groups(id)`, `effective_from date`, `effective_to date`, `version_number int`; **no `start_date`/`end_date`** — only `effective_from`/`effective_to` exist |
+| `outflow_types` | Reporting-only labels for outflows; `name` (unique), `color`, `created_by` FK → `profiles(id)` — **no effect on balances or allocations** |
 | `income_types` | Inflow labels; `color`, `special_config_id` (legacy), `special_config_group_id` → `special_config_groups(id)` |
 | `special_config_groups` | Groups multiple versions of the same special config; `name`, `created_at`; income types link here via `special_config_group_id` |
 | `transaction_allocation_snapshots` | Per-transaction snapshot of resolved special config at calculation time; `transaction_id` UNIQUE, `config_version_id`, `config_group_id`, `resolved_rows jsonb`, `allocation_type`, `is_recalculated bool`, `recalculated_at` |
 | `recalculation_logs` | Audit trail for bulk recalculation actions; `config_group_id`, `config_version_id`, `performed_by`, `affected_count`, `reason`, `action_summary` |
 | `income_type_rules` | Keyword/stage-code rules per income type |
 | `inflow_transactions` | Money received; `bank_name` text, FX fields, `income_type_id`, `allocation_config_id` |
-| `outflow_transactions` | Money paid out; `bank_name` text, FX fields, `is_pending_deduction` |
+| `outflow_transactions` | Money paid out; `bank_name` text, FX fields, `is_pending_deduction`, `outflow_type_id` nullable FK → `outflow_types(id) ON DELETE SET NULL` |
 | `intra_flows` | Internal fund movements between categories; `account_from`/`account_to` text (name snapshot), `account_from_stage2`/`account_to_stage2` text (portion label), `total_amount`, `from_category_id`/`to_category_id` UUID FK → `categories(id) ON DELETE SET NULL` (authoritative ID), `status text DEFAULT 'active' CHECK (status IN ('active','reversed','void'))`, `reversal_of_id` UUID FK → `intra_flows(id)` |
 | `bank_deposits` | Physical cash deposits; `currency`, `fx_amount`, `fx_rate` |
 | `intrabank_transfers` | Bank-to-bank transfers |
@@ -55,6 +56,7 @@
 
 | Columns | Tables | Required by |
 |---|---|---|
+| `outflow_type_id uuid REFERENCES outflow_types(id) ON DELETE SET NULL` + `CREATE INDEX idx_outflow_type_id` | `outflow_transactions` | Outflow Types feature; requires `outflow_types` table to exist first |
 | `transaction_type text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds, BankDeposits pages |
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
 | `currency text NOT NULL DEFAULT 'NGN'`, `starting_balance numeric`, `starting_balance_category text`, `starting_balance_budget_portion text`, `starting_balance_alloc_type text`, `starting_balance_allocations jsonb NOT NULL DEFAULT '[]'` | `banks` | AddBankModal opening balance section — also requires `bank_schema_check` view + GRANT (see SQL below) |
@@ -237,4 +239,4 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 
 - **Database tab** — displays `MIGRATION_SQL` with a copy-to-clipboard button; user pastes into Supabase SQL editor
 - `MIGRATION_SQL` is an idempotent string of `DO $$ ... EXCEPTION ...` blocks
-- Tabs: General, Banks, Allocation, Special Configs, Income Types, Currencies, Database
+- Tabs: General, Banks, Allocation, Special Configs, Income Types, **Outflow Types**, Currencies, Database

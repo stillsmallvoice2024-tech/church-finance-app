@@ -33,6 +33,7 @@ Also contains `ManualEntryForm` for single-transaction entry.
 - Both passed to `doSaveOutflow` → `AddOutflowInput`; omitted if blank
 - Setting `stage_code_1` is what links a manually-entered outflow to **CategoryLedger**
 - Batch wizard outflow tab has per-row stage code dropdowns and a per-row **Pending Deduction** checkbox (column 7 of the debit grid)
+- **`outflow_type_id` auto-mapping** (batch wizard): after `stage_code_1` is set for a row, `runImport` looks up `outflowTypeOptions` by case-insensitive name match and sets `outflow_type_id` if found — non-blocking, no UX change; `useOutflowTypeOptions()` called at modal top level
 - Pending deduction state: `rowPendingDeductions: Set<number>` (by `ri`); bulk "Mark Pending" / "Clear Pending" buttons in the apply bar target selected rows or all filtered rows; `runImport` writes `is_pending_deduction = true` only for rows in the set
 
 ---

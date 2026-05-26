@@ -288,6 +288,7 @@ Section order: Profile → Password → **Theme** → **Data Management** → Ap
 - **Allocation** — allocation configs (draft/lock workflow)
 - **Special Configs** — group-based UI; each group shows active version (effective dates, type, status) + "Create New Version" button + expandable version history table; "Create New Group" at top; uses `useSpecialConfigGroups()` hook
 - **Income Types** — user-defined inflow labels with keyword/stage-code rules
+- **Outflow Types** — user-defined reporting labels for outflows (name + color); CRUD via `AddOutflowTypeModal`; uses `useOutflowTypes()` hook; shows migration hint if table missing; mirrors Income Types UX exactly
 - **Currencies** — add/remove currencies (code, name, symbol, flag emoji); shows migration SQL
 
 **Database tab removed from primary nav.** Migration SQL is now inside the **Developer Tools** collapsible section below the tab content (collapsed by default). `devToolsOpen` state controls visibility. Do not re-add Database as a primary tab — it is infrastructure tooling, not operational config.
@@ -1005,6 +1006,19 @@ disabled={loading || checkingSchema || schemaStatus !== 'ok' || schemaStuck || (
 ```
 
 **Key rule:** Define `isSchemaCacheError` immediately after `const error = addError || updateError`, before any `useEffect` that references it — avoids React TDZ crash.
+
+---
+
+## Reports Page (`src/pages/Reports.tsx`)
+
+Tab-based report page. `ReportTab` type: `'summary' | 'income_types' | 'outflow_types' | ...`
+
+### Outflow Type Breakdown tab (`OutflowTypeBreakdownPanel`)
+- Mirrors `IncomeTypeBreakdownPanel` exactly; uses `text-danger` (red) for amounts
+- Queries `outflow_transactions` grouped by `outflow_type_id`; uses `actual_amount || amount_disbursed`
+- "Unclassified" row shown for null `outflow_type_id`
+- Year + month selectors; CSV export; color swatch + name + count + total (₦) + % share + progress bar
+- Hook: `useOutflowTypes()` from `src/hooks/useOutflowTypes.ts`
 
 ---
 
