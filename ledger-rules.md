@@ -219,11 +219,29 @@ Same intra_flows logic now applied in both report engines — `balances` from `u
 **`useReportEngine`** — queries `intra_flows WHERE status='active' AND date <= reportDate` (always `date`; `intra_flows` has no `recorded_at` column — filter is basis-independent). Applies identical FROM-debit / TO-credit adjustments to `allocMap` / `specificSeed` / `savingsIn` in the same pass as all other sources.
 
 **`reportQueryEngine.ts`** (`src/utils/reportQueryEngine.ts`) — used by Dynamic Reports, token parser, and `resolveTableBlock`:
-- `getCategoryInflows(category, dateRange?, portion?)` — `inflow_transactions` + intra_flows `account_to = category AND status='active'`; filters `account_to_stage2` when portion is set
-- `getCategoryPercentageInflows` — allocation-config split + intra_flows credits to percentage portion in same `Promise.all`
-- `getCategoryOutflows(category, dateRange?, portion?)` — `outflow_transactions` + intra_flows `account_from = category AND status='active'`; filters `account_from_stage2` when portion is set
-- `getCategoryBalance` / `resolveTableBlock` / `resolveTokens` inherit the fix automatically
-- `getNetMovement` — **not** updated; intra_flows net to zero across all categories
+
+**`getCategoryInflows(category, dateRange?, portion?, dateField?)`**
+- `'percentage'` — `getCategoryConfigInflows` (Percentage Allocation filter) + pct intra_flows
+- `'seed'` / `'savings'` — direct stage_code_1+stage_code_2 query + `getCategoryConfigInflows` (portion filter) + stage2-filtered intra_flows
+- `'all'` — direct seed txns + direct savings txns + `getCategoryConfigInflows(null, all portions)` + all intra_flows (no stage2 filter)
+- **Critical:** querying `stage_code_1=category` alone misses all percentage-allocated inflows (stage_code_2=null, no stage_code_1 set); must use `getCategoryConfigInflows` for those
+
+**`getCategoryConfigInflows(category, dateRange, dateField, portionFilter)`** — private helper:
+- Fetches all `transaction_type IS NULL` inflows; skips `stage_code_2='Specific Seed'/'Savings'` (handled by direct queries)
+- Uses `fetchLockedConfigs()` which fetches ALL locked configs (including `is_special=true`) so explicit `allocation_config_id` references to special configs resolve correctly
+- `findConfigForDate` date-based fallback still filters `is_special=true` — specials are never applied by date
+- `portionFilter=null` → sums all config rows for the category across all budget_portions
+- Normalises `budget_portion='Percentage'` → `'Percentage Allocation'` for comparison
+
+**`getCategoryBalance`** — `opening_balance + inflows − outflows`; includes `category_opening_balances` via `getCategoryOpeningBalance`
+
+**`getCategoryOpeningBalance(category, portion?)`** — fetches `category_opening_balances` with `categories(name)` join, filters in JS by category name and optional portion
+
+**`resolveTableBlock`** — balance column now includes opening balance (same as `getCategoryBalance`)
+
+**`getCategoryOutflows`** — unchanged; `stage_code_1=category` is correct (outflows always have stage_code_1 set)
+
+**`getNetMovement`** — not updated; intra_flows net to zero across all categories
 
 **Portion → stage2 mapping** (`STAGE_CODE_MAP`): `seed → 'Specific Seed'`, `savings → 'Savings'`, `percentage → 'Percentage Allocation'`; `all` = no stage2 filter
 

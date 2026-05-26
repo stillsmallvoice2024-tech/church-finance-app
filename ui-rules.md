@@ -1020,6 +1020,13 @@ Block-based report builder. Blocks: `text`, `metric`, `table`, `formula`.
 ### Token System
 Metric/formula blocks embed `{{FN:category:portion:dateFrom:dateTo:dateField}}` tokens. Resolved by `reportTokenParser.ts` → `resolveTokens` → `reportQueryEngine.ts`.
 
+**FormulaBlockPreview key lookup** — must pass `dateField` to `buildTokenString` when looking up resolved values. Omitting it causes a key mismatch (e.g. `{{BALANCE:Cat:2024-01-01:2024-12-31}}` vs `{{BALANCE:Cat:2024-01-01:2024-12-31:recorded_at}}`) → result is always `undefined` → 0. The correct pattern:
+```ts
+const dateField = (cfg.dateField as string | undefined) || undefined
+const key = buildTokenString(term.fn, term.category ?? '', portionArg, dateFrom, dateTo, dateField)
+```
+**`collectTokensFromBlocks`** (the source) always passes `df`; `FormulaBlockPreview` (the lookup) must match it exactly.
+
 ### DateField Toggle (`DateFieldToggle` inline component)
 - Two options: `"Transaction Date"` (reads `date` col) and `"Recorded At"` (reads `recorded_at` col)
 - Shown in MetricBlock, TableBlock, FormulaBlock editors

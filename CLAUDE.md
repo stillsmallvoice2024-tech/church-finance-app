@@ -43,6 +43,7 @@ npm run dev          # dev server
 npm run build        # production build + type-check
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint, zero warnings tolerance
+npm test             # vitest unit tests (pure-logic utils; no DB required)
 ```
 
 **Always run `npm run build` after code changes.**
