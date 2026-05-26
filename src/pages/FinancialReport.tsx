@@ -1,4 +1,4 @@
-import { useState, useId, useCallback } from 'react'
+import { useState, useId, useCallback, useEffect, useRef } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -35,6 +35,8 @@ import {
   Check,
   TableProperties,
   Layers,
+  Pin,
+  PinOff,
 } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReportEngine } from '../hooks/useReportEngine'
@@ -51,6 +53,7 @@ import {
   normaliseTables,
 } from '../utils/reportExport'
 import { useToastStore } from '../store/toastStore'
+import { useReportTemplateStore } from '../store/reportTemplateStore'
 import type {
   ReportGroup,
   ReportGroupChild,
@@ -1034,6 +1037,7 @@ export default function FinancialReport() {
   const { incomeTypes } = useIncomeTypes()
   const { templates, refetch: refetchTemplates } = useReportTemplates()
   const { mutate: deleteTemplate } = useDeleteReportTemplate()
+  const { pinnedTemplateId, pin: pinTemplate, unpin: unpinTemplate } = useReportTemplateStore()
 
   const [reportDate,    setReportDate]    = useState(today)
   const [reportBasis,   setReportBasis]   = useState<ReportBasis>('transaction_date')
@@ -1043,6 +1047,7 @@ export default function FinancialReport() {
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [activeId,      setActiveId]      = useState<string | null>(null)
   const [tplMenuOpen,   setTplMenuOpen]   = useState(false)
+  const pinnedAutoLoadedRef = useRef(false)
 
   const { balances, operationalBalances, loading, refetch } = useReportEngine(reportDate, reportBasis)
 
@@ -1053,12 +1058,30 @@ export default function FinancialReport() {
 
   const currentLayout: ReportLayout = { tables, basis: reportBasis }
 
+  // Auto-load pinned template once after templates have loaded
+  useEffect(() => {
+    if (pinnedAutoLoadedRef.current) return
+    if (templates.length === 0) return
+    if (!pinnedTemplateId) return
+    const pinned = templates.find(t => t.id === pinnedTemplateId)
+    if (!pinned) return
+    pinnedAutoLoadedRef.current = true
+    const t = ensureMultiTable(pinned.layout)
+    setTables(t)
+    if (pinned.layout.basis) setReportBasis(pinned.layout.basis)
+    setSelectedTplId(pinned.id)
+  }, [templates, pinnedTemplateId])
+
   const loadTemplate = (tpl: ReportTemplate) => {
     const t = ensureMultiTable(tpl.layout)
     setTables(t)
     if (tpl.layout.basis) setReportBasis(tpl.layout.basis)
     setSelectedTplId(tpl.id)
     setTplMenuOpen(false)
+    // Auto-replace pin if one exists
+    if (pinnedTemplateId !== null) {
+      pinTemplate(tpl.id)
+    }
   }
 
   const handleSaved = (tpl: ReportTemplate) => {
@@ -1071,6 +1094,7 @@ export default function FinancialReport() {
     try {
       await deleteTemplate(tpl.id)
       if (selectedTplId === tpl.id) { setSelectedTplId(null); setTables([]) }
+      if (pinnedTemplateId === tpl.id) unpinTemplate()
       refetchTemplates()
       push('Template deleted', 'success')
     } catch {
@@ -1934,34 +1958,46 @@ export default function FinancialReport() {
             >
               <Settings2 className="w-3.5 h-3.5" />
               {selectedTpl ? selectedTpl.name : 'Templates'}
+              {pinnedTemplateId && <Pin className="w-3 h-3 text-primary shrink-0" />}
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
 
             {tplMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-20 py-1">
+              <div className="absolute right-0 top-full mt-1 w-60 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-20 py-1">
                 <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Saved Templates</div>
                 {templates.length === 0 && (
                   <p className="px-3 py-2 text-xs text-gray-400">No templates yet</p>
                 )}
-                {templates.map(tpl => (
-                  <div key={tpl.id} className="flex items-center gap-1 px-2 py-1">
-                    <button
-                      type="button"
-                      onClick={() => loadTemplate(tpl)}
-                      className="flex-1 flex items-center gap-2 text-left px-2 py-1 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-                    >
-                      {selectedTplId === tpl.id && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
-                      <span className="truncate">{tpl.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteTemplate(tpl)}
-                      className="p-1 text-red-400 hover:text-red-600 rounded"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                {templates.map(tpl => {
+                  const isPinned = pinnedTemplateId === tpl.id
+                  return (
+                    <div key={tpl.id} className="flex items-center gap-1 px-2 py-1">
+                      <button
+                        type="button"
+                        onClick={() => loadTemplate(tpl)}
+                        className="flex-1 flex items-center gap-2 text-left px-2 py-1 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                      >
+                        {selectedTplId === tpl.id && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                        <span className="truncate">{tpl.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        title={isPinned ? 'Unpin template' : 'Pin template'}
+                        onClick={() => isPinned ? unpinTemplate() : pinTemplate(tpl.id)}
+                        className={`p-1 rounded transition ${isPinned ? 'text-primary hover:text-primary/70' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
+                      >
+                        {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate(tpl)}
+                        className="p-1 text-red-400 hover:text-red-600 rounded"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )
+                })}
                 <div className="border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">
                   <button
                     type="button"
