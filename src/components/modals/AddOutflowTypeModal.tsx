@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
+import { TypeColorPicker, TYPE_PRESET_COLORS } from '../ui/TypeColorPicker'
 import {
   saveOutflowType,
   syncOutflowTypeCategoryMappings,
@@ -9,12 +10,6 @@ import {
   type OutflowType,
 } from '../../hooks/useOutflowTypes'
 import { useCategories } from '../../hooks/useCategories'
-
-const PRESET_COLORS = [
-  '#ef4444', '#f97316', '#f59e0b', '#84cc16',
-  '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6',
-  '#ec4899', '#64748b', '#0ea5e9', '#a16207',
-]
 
 interface Props {
   open:        boolean
@@ -30,11 +25,15 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
   const { categories } = useCategories()
 
   const [name,            setName]            = useState('')
-  const [color,           setColor]           = useState(PRESET_COLORS[0])
+  const [color,           setColor]           = useState(TYPE_PRESET_COLORS[0])
   const [linkedCatIds,    setLinkedCatIds]    = useState<string[]>([])
   const [originalName,    setOriginalName]    = useState('')
   const [loading,         setLoading]         = useState(false)
   const [error,           setError]           = useState<string | null>(null)
+
+  // Dirty detection
+  const initialRef = useRef({ name: '', color: TYPE_PRESET_COLORS[0] })
+  const isDirty = name !== initialRef.current.name || color !== initialRef.current.color
 
   useEffect(() => {
     if (!open) return
@@ -43,13 +42,15 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
       setName(editRecord.name)
       setOriginalName(editRecord.name)
       setColor(editRecord.color)
+      initialRef.current = { name: editRecord.name, color: editRecord.color }
       // Load current mappings
       fetchOutflowTypeMappings(editRecord.id).then(ids => setLinkedCatIds(ids))
     } else {
       setName('')
       setOriginalName('')
-      setColor(PRESET_COLORS[0])
+      setColor(TYPE_PRESET_COLORS[0])
       setLinkedCatIds([])
+      initialRef.current = { name: '', color: TYPE_PRESET_COLORS[0] }
     }
   }, [open, editRecord])
 
@@ -103,6 +104,7 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
       onClose={onClose}
       title={isEdit ? 'Edit Outflow Type' : 'Add Outflow Type'}
       size="max-w-md"
+      isDirty={isDirty && !isLocked}
       footer={footerEl}
     >
       <form id="outflow-type-form" onSubmit={handleSubmit} className="space-y-4">
@@ -128,31 +130,9 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
           />
         </Field>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <p className="text-xs font-medium text-gray-600">Color</p>
-          <div className="flex flex-wrap gap-2">
-            {PRESET_COLORS.map(c => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => !isLocked && setColor(c)}
-                disabled={isLocked}
-                className={`w-7 h-7 rounded-full border-2 transition-transform disabled:opacity-50 ${color === c ? 'border-gray-800 scale-110' : 'border-transparent'}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <div className="w-5 h-5 rounded-full border border-gray-200 shrink-0" style={{ backgroundColor: color }} />
-            <input
-              type="text"
-              value={color}
-              onChange={e => !isLocked && setColor(e.target.value)}
-              placeholder="#hex"
-              disabled={isLocked}
-              className="flex-1 text-xs font-mono border border-gray-200 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
-            />
-          </div>
+          <TypeColorPicker value={color} onChange={setColor} disabled={isLocked} />
         </div>
 
         {/* Linked categories */}
