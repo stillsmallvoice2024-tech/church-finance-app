@@ -1775,7 +1775,33 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     </div>
                       ) : (
                     /* ── Card view ── */
-                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
+                    <>
+                      {filtered.length > 0 && (
+                        <div className="flex items-center gap-2 px-1 pb-1">
+                          <input
+                            type="checkbox"
+                            checked={allInflowFilteredSelected}
+                            ref={el => { if (el) el.indeterminate = someInflowFilteredSelected && !allInflowFilteredSelected }}
+                            onChange={e => {
+                              setSelectedInflowRis(prev => {
+                                const next = new Set(prev)
+                                if (e.target.checked) filtered.forEach(({ ri }) => next.add(ri))
+                                else filtered.forEach(({ ri }) => next.delete(ri))
+                                return next
+                              })
+                            }}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shrink-0"
+                          />
+                          <span className="text-xs text-gray-500 select-none">
+                            {allInflowFilteredSelected
+                              ? `All ${filtered.length} selected`
+                              : someInflowFilteredSelected
+                                ? `${filtered.filter(({ ri }) => selectedInflowRis.has(ri)).length} of ${filtered.length} selected`
+                                : `Select all ${filtered.length}`}
+                          </span>
+                        </div>
+                      )}
+                      <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
                       {filtered.length === 0
                         ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
                         : filtered.map(({ ri, raw, credit }) => {
@@ -1931,6 +1957,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           })
                       }
                     </div>
+                    </>
                       )
                     })()}
                   </div>
@@ -2244,7 +2271,33 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                   </div>
                     ) : (
                   /* ── Card view ── */
-                  <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
+                  <>
+                    {filtered.length > 0 && (
+                      <div className="flex items-center gap-2 px-1 pb-1">
+                        <input
+                          type="checkbox"
+                          checked={allOutflowFilteredSelected}
+                          ref={el => { if (el) el.indeterminate = someOutflowFilteredSelected && !allOutflowFilteredSelected }}
+                          onChange={e => {
+                            setSelectedOutflowRis(prev => {
+                              const next = new Set(prev)
+                              if (e.target.checked) filtered.forEach(({ ri }) => next.add(ri))
+                              else filtered.forEach(({ ri }) => next.delete(ri))
+                              return next
+                            })
+                          }}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shrink-0"
+                        />
+                        <span className="text-xs text-gray-500 select-none">
+                          {allOutflowFilteredSelected
+                            ? `All ${filtered.length} selected`
+                            : someOutflowFilteredSelected
+                              ? `${filtered.filter(({ ri }) => selectedOutflowRis.has(ri)).length} of ${filtered.length} selected`
+                              : `Select all ${filtered.length}`}
+                        </span>
+                      </div>
+                    )}
+                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
                     {filtered.length === 0
                       ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
                       : filtered.map(({ ri, raw, debit }) => {
@@ -2405,6 +2458,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         })
                     }
                   </div>
+                  </>
                     )
                   })()}
                 </div>
