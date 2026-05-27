@@ -181,10 +181,10 @@ export default function Inflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (₦)', 'Stage Code 2', 'Specific Seed', 'Txn Ref', 'Remark']
+  const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (₦)', 'Transaction Type', 'Txn Ref', 'Remark']
   const inflowCsvRow = (r: InflowTransaction) => [
     r.date, r.description, r.amount,
-    r.stage_code_2, r.specific_seed_description, r.transaction_ref, r.remark,
+    r.transaction_type, r.transaction_ref, r.remark,
   ]
   const INF_CSV_FILE = `inflows-${new Date().toISOString().slice(0, 10)}.csv`
 
