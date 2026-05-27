@@ -287,8 +287,9 @@ Section order: Profile → Password → **Theme** → **Data Management** → Ap
 - **Banks** — list/add/edit/delete banks (multi-row starting balance allocation)
 - **Allocation** — allocation configs (draft/lock workflow)
 - **Special Configs** — group-based UI; each group shows active version (effective dates, type, status) + "Create New Version" button + expandable version history table; "Create New Group" at top; uses `useSpecialConfigGroups()` hook
-- **Income Types** — user-defined inflow labels with keyword/stage-code rules
+- **Income Types** — user-defined inflow labels with keyword/stage-code rules; CRUD via `AddIncomeTypeModal`
 - **Outflow Types** — user-defined reporting labels for outflows (name + color); CRUD via `AddOutflowTypeModal`; uses `useOutflowTypes()` hook; shows migration hint if table missing; mirrors Income Types UX exactly
+- Both modals use **`TypeColorPicker`** (`src/components/ui/TypeColorPicker.tsx`): 14 unified preset swatches (`TYPE_PRESET_COLORS`), native `<input type="color">` (Pipette icon trigger), hex text input, live preview swatch, `disabled` prop. Use for any future type-management UI with color selection.
 - **Currencies** — add/remove currencies (code, name, symbol, flag emoji); shows migration SQL
 
 **Database tab removed from primary nav.** Migration SQL is now inside the **Developer Tools** collapsible section below the tab content (collapsed by default). `devToolsOpen` state controls visibility. Do not re-add Database as a primary tab — it is infrastructure tooling, not operational config.
@@ -374,6 +375,7 @@ All table pages use `ExportDropdown` (`src/components/ui/ExportDropdown.tsx`) fo
 | Right-aligned monetary `<td>` | `src/components/ui/AmountCell.tsx` |
 | Two-mode CSV export button | `src/components/ui/ExportDropdown.tsx` |
 | Floating calculator (global) | `src/components/ui/FloatingCalculator.tsx` |
+| Type color picker (shared) | `src/components/ui/TypeColorPicker.tsx` |
 
 ---
 
