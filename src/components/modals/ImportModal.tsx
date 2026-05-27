@@ -2,10 +2,11 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import {
-  Upload, FileSpreadsheet, ChevronRight, ChevronLeft,
+  Upload, FileSpreadsheet, ChevronRight, ChevronLeft, ChevronDown,
   CheckCircle2, AlertTriangle, RefreshCw, FileText, Sparkles,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
+import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
@@ -367,6 +368,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [selectedInflowRis,  setSelectedInflowRis]  = useState<Set<number>>(new Set())
   const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
 
+  // Step 4 — view toggle (table vs cards) + per-card expanded state
+  const { view: importRowView, setView: setImportRowView } = useViewToggle('import-step4-view')
+  const [expandedInflowCardRis,  setExpandedInflowCardRis]  = useState<Set<number>>(new Set())
+  const [expandedOutflowCardRis, setExpandedOutflowCardRis] = useState<Set<number>>(new Set())
+
   // ── Row-level memoized auto-classification ────────────────────────────────
   // Pre-compute keyword-matched income types for all inflow rows once, keyed by ri.
   // Avoids re-running classifyIncomeType for every row on every render (critical for 500+ rows).
@@ -465,6 +471,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowManualOverrides({})
     setSelectedInflowRis(new Set())
     setSelectedOutflowRis(new Set())
+    setExpandedInflowCardRis(new Set())
+    setExpandedOutflowCardRis(new Set())
     setPrecomputedInflowIds({})
     setPrecomputedOutflowIds({})
     setDuplicateRis(new Set())
@@ -1433,7 +1441,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               </div>
             )}
 
-            {/* Tabs */}
+            {/* Tabs + view toggle */}
             <div className="flex items-center justify-between border-b border-gray-200">
               <div className="flex">
                 {(['inflow', 'outflow'] as const).map(tab => (
@@ -1450,6 +1458,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     {tab === 'inflow' ? 'Credit (Inflow)' : 'Debit (Outflow)'}
                   </button>
                 ))}
+              </div>
+              <div className="pb-1 pr-1">
+                <ViewToggle storageKey="import-step4-view" value={importRowView} onChange={setImportRowView} />
               </div>
             </div>
 
@@ -1605,7 +1616,30 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     {(() => {
                       const allInflowFilteredSelected = filtered.length > 0 && filtered.every(({ ri }) => selectedInflowRis.has(ri))
                       const someInflowFilteredSelected = filtered.some(({ ri }) => selectedInflowRis.has(ri))
-                      return (
+
+                      // Shared row-data extractor used by both table and card views
+                      const buildInflowRowData = (ri: number, raw: unknown[]) => {
+                        const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
+                        const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+                        const txnType = rowTxnTypes[ri] ?? ''
+                        const origId  = rowOrigTxnIds[ri] ?? ''
+                        const autoType        = autoClassifiedTypes[ri] ?? null
+                        const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
+                        const effIncomeType   = incomeTypes.find(t => t.id === effIncomeTypeId) ?? null
+                        const rowState: RowResolverState = {
+                          incomeType:         effIncomeType,
+                          allocationConfigId: rowConfigs[ri] ?? '',
+                          isManualOverride:   rowManualOverrides[ri] ?? false,
+                        }
+                        const displaySelId = getFinalConfig(
+                          rowState,
+                          '',
+                          (groupId) => getSpecialConfigVersionForDate(allocConfigs, groupId, date || new Date().toISOString().slice(0, 10))?.id ?? null,
+                        ) ?? ''
+                        return { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId }
+                      }
+
+                      return importRowView === 'table' ? (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                         <input
@@ -1628,25 +1662,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         {filtered.length === 0
                           ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
                           : filtered.map(({ ri, raw, credit }) => {
-                              const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
-                              const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                              const txnType = rowTxnTypes[ri] ?? ''
-                              const origId  = rowOrigTxnIds[ri] ?? ''
-                              // Auto-classify from pre-computed map (avoids re-running keyword matching per render)
-                              const autoType        = autoClassifiedTypes[ri] ?? null
-                              const effIncomeTypeId = rowIncomeTypes[ri] ?? autoType?.id ?? ''
-                              const effIncomeType   = incomeTypes.find(t => t.id === effIncomeTypeId) ?? null
-                              const rowState: RowResolverState = {
-                                incomeType:         effIncomeType,
-                                allocationConfigId: rowConfigs[ri] ?? '',
-                                isManualOverride:   rowManualOverrides[ri] ?? false,
-                              }
-                              // '' = "General (date-based)" in display; real general config resolved at import time
-                              const displaySelId = getFinalConfig(
-                                rowState,
-                                '',
-                                (groupId) => getSpecialConfigVersionForDate(allocConfigs, groupId, date || new Date().toISOString().slice(0, 10))?.id ?? null,
-                              ) ?? ''
+                              const { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId } = buildInflowRowData(ri, raw)
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
                                 <div key={ri} className={isInflowSelected ? 'bg-primary/5' : undefined}>
@@ -1688,7 +1704,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                           if (e.target.value === '__create__') {
                                             setCreateConfigPendingRow(ri)
                                           } else {
-                                            // User explicitly chose a config — mark as manual override
                                             setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
                                             setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
                                           }
@@ -1696,7 +1711,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                         <option value="">General (date-based)</option>
                                         {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        {/* Render linked config as an option even if not yet in specialConfigs */}
                                         {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
                                           const extra = allocConfigs.find(c => c.id === displaySelId)
                                           return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
@@ -1714,8 +1728,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                           value={effIncomeTypeId}
                                           onChange={e => {
                                             const newId = e.target.value
-                                            // Update income type and clear manual override so the new
-                                            // type's linked config takes effect immediately
                                             setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
                                             setRowManualOverrides(prev => {
                                               const next = { ...prev }
@@ -1760,6 +1772,164 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             })
                         }
                       </div>
+                    </div>
+                      ) : (
+                    /* ── Card view ── */
+                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
+                      {filtered.length === 0
+                        ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
+                        : filtered.map(({ ri, raw, credit }) => {
+                            const { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId } = buildInflowRowData(ri, raw)
+                            const isInflowSelected = selectedInflowRis.has(ri)
+                            const isExpanded = expandedInflowCardRis.has(ri)
+                            const configName = displaySelId
+                              ? (allocConfigs.find(c => c.id === displaySelId)?.name ?? 'Config')
+                              : 'General'
+                            const typeName = txnType
+                              ? (TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label ?? txnType)
+                              : ''
+                            return (
+                              <div key={ri} className={`rounded-xl border overflow-hidden shadow-sm bg-white ${
+                                isInflowSelected ? 'border-primary/40' : 'border-gray-200'
+                              } ${isInflowSelected ? 'bg-primary/5' : ''}`}>
+                                {/* Section 1 — header body */}
+                                <div className="px-4 pt-3.5 pb-3">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        checked={isInflowSelected}
+                                        onChange={e => {
+                                          setSelectedInflowRis(prev => {
+                                            const next = new Set(prev)
+                                            e.target.checked ? next.add(ri) : next.delete(ri)
+                                            return next
+                                          })
+                                        }}
+                                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shrink-0"
+                                      />
+                                      <span className="text-[10px] font-mono text-gray-400 shrink-0">#{ri + 1}</span>
+                                      {date && <span className="text-[11px] font-semibold text-gray-400 truncate">{date}</span>}
+                                    </div>
+                                    <span className="text-sm font-mono font-bold text-success tabular-nums shrink-0 ml-2">
+                                      ₦{credit.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-700 line-clamp-2 leading-snug">
+                                    {desc || <span className="text-gray-400">—</span>}
+                                  </p>
+                                </div>
+                                {/* Section 2 — meta / controls */}
+                                <div className="border-t border-gray-100">
+                                  {!isExpanded ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedInflowCardRis(prev => { const s = new Set(prev); s.add(ri); return s })}
+                                      className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/40 text-xs text-gray-500 hover:bg-gray-50 transition-colors text-left"
+                                    >
+                                      <span className="truncate min-w-0 mr-2">
+                                        {configName}
+                                        {effIncomeType ? ` · ${effIncomeType.name}` : ''}
+                                        {typeName ? ` · ${typeName}` : ''}
+                                      </span>
+                                      <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                    </button>
+                                  ) : (
+                                    <div className="px-4 py-3 bg-gray-50/40 space-y-3">
+                                      {/* Allocation Config */}
+                                      <div>
+                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Allocation Config</label>
+                                        {txnType ? (
+                                          <span className="text-xs text-gray-400 italic">N/A for {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label}</span>
+                                        ) : (
+                                          <select value={displaySelId}
+                                            onChange={e => {
+                                              if (e.target.value === '__create__') {
+                                                setCreateConfigPendingRow(ri)
+                                              } else {
+                                                setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                                setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
+                                              }
+                                            }}
+                                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                            <option value="">General (date-based)</option>
+                                            {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
+                                              const extra = allocConfigs.find(c => c.id === displaySelId)
+                                              return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
+                                            })()}
+                                            <option value="__create__">＋ Create New Config…</option>
+                                          </select>
+                                        )}
+                                      </div>
+                                      {/* Income Type */}
+                                      {!txnType && (
+                                        <div>
+                                          <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Income Type</label>
+                                          <div className="relative">
+                                            <select
+                                              value={effIncomeTypeId}
+                                              onChange={e => {
+                                                const newId = e.target.value
+                                                setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
+                                                setRowManualOverrides(prev => {
+                                                  const next = { ...prev }
+                                                  delete next[ri]
+                                                  return next
+                                                })
+                                              }}
+                                              className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                                            >
+                                              <option value="">— None —</option>
+                                              {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                            </select>
+                                            {autoType && !rowIncomeTypes[ri] && (
+                                              <Sparkles className="pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-400" />
+                                            )}
+                                            {effIncomeType && (
+                                              <span
+                                                className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                                                style={{ background: effIncomeType.color }}
+                                              />
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {/* Transaction Type */}
+                                      <div>
+                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
+                                        <select value={txnType}
+                                          onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                          className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                          {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        </select>
+                                      </div>
+                                      {/* Original Txn ID */}
+                                      {(txnType === 'refund' || txnType === 'reversal') && (
+                                        <div>
+                                          <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Original Txn ID</label>
+                                          <input type="text" value={origId}
+                                            onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
+                                            placeholder="ID of original transaction"
+                                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                                          />
+                                        </div>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedInflowCardRis(prev => { const s = new Set(prev); s.delete(ri); return s })}
+                                        className="w-full flex items-center justify-center gap-1 text-xs text-gray-400 hover:text-gray-600 pt-1"
+                                      >
+                                        <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+                                        Less
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })
+                      }
                     </div>
                       )
                     })()}
@@ -1928,11 +2098,21 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     )
                   })()}
 
-                  {/* Row table */}
+                  {/* Row table / card view */}
                   {(() => {
                     const allOutflowFilteredSelected = filtered.length > 0 && filtered.every(({ ri }) => selectedOutflowRis.has(ri))
                     const someOutflowFilteredSelected = filtered.some(({ ri }) => selectedOutflowRis.has(ri))
-                    return (
+
+                    const buildOutflowRowData = (ri: number, raw: unknown[]) => {
+                      const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
+                      const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
+                      const sc      = rowStageCodes[ri] ?? { s1: '', s2: '' }
+                      const txnType = rowTxnTypes[ri] ?? ''
+                      const origId  = rowOrigTxnIds[ri] ?? ''
+                      return { date, desc, sc, txnType, origId }
+                    }
+
+                    return importRowView === 'table' ? (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
                     <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                       <input
@@ -1955,11 +2135,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       {filtered.length === 0
                         ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
                         : filtered.map(({ ri, raw, debit }) => {
-                            const date    = dateIdx >= 0 ? (parseDate(raw[dateIdx], dateFormat) ?? '') : ''
-                            const desc    = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-                            const sc      = rowStageCodes[ri] ?? { s1: '', s2: '' }
-                            const txnType = rowTxnTypes[ri] ?? ''
-                            const origId  = rowOrigTxnIds[ri] ?? ''
+                            const { date, desc, sc, txnType, origId } = buildOutflowRowData(ri, raw)
                             const isOutflowSelected = selectedOutflowRis.has(ri)
                             return (
                               <div key={ri} className={isOutflowSelected ? 'bg-primary/5' : undefined}>
@@ -1997,7 +2173,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     onChange={e => {
                                       const s1 = e.target.value
                                       setRowStageCodes(prev => ({ ...prev, [ri]: { s1, s2: prev[ri]?.s2 ?? '' } }))
-                                      // Auto-suggest outflow type from category mapping
                                       const cat = categories.find((c: { name: string }) => c.name === s1)
                                       let suggestedId = ''
                                       if (cat) {
@@ -2066,6 +2241,169 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           })
                       }
                     </div>
+                  </div>
+                    ) : (
+                  /* ── Card view ── */
+                  <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
+                    {filtered.length === 0
+                      ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
+                      : filtered.map(({ ri, raw, debit }) => {
+                          const { date, desc, sc, txnType, origId } = buildOutflowRowData(ri, raw)
+                          const isOutflowSelected = selectedOutflowRis.has(ri)
+                          const isExpanded = expandedOutflowCardRis.has(ri)
+                          const isPending = rowPendingDeductions.has(ri)
+                          const outflowTypeName = outflowTypeOptions.find(t => t.id === (rowOutflowTypes[ri] ?? ''))?.name ?? ''
+                          const typeName = txnType
+                            ? (TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label ?? txnType)
+                            : ''
+                          return (
+                            <div key={ri} className={`rounded-xl border overflow-hidden shadow-sm ${
+                              isOutflowSelected ? 'border-primary/40 bg-primary/5' : 'border-gray-200 bg-white'
+                            }`}>
+                              {/* Section 1 — header body */}
+                              <div className="px-4 pt-3.5 pb-3">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isOutflowSelected}
+                                      onChange={e => {
+                                        setSelectedOutflowRis(prev => {
+                                          const next = new Set(prev)
+                                          e.target.checked ? next.add(ri) : next.delete(ri)
+                                          return next
+                                        })
+                                      }}
+                                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shrink-0"
+                                    />
+                                    <span className="text-[10px] font-mono text-gray-400 shrink-0">#{ri + 1}</span>
+                                    {date && <span className="text-[11px] font-semibold text-gray-400 truncate">{date}</span>}
+                                    {isPending && (
+                                      <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold">Pending</span>
+                                    )}
+                                  </div>
+                                  <span className="text-sm font-mono font-bold text-danger tabular-nums shrink-0 ml-2">
+                                    ₦{debit.toLocaleString()}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-700 line-clamp-2 leading-snug">
+                                  {desc || <span className="text-gray-400">—</span>}
+                                </p>
+                              </div>
+                              {/* Section 2 — meta / controls */}
+                              <div className="border-t border-gray-100">
+                                {!isExpanded ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedOutflowCardRis(prev => { const s = new Set(prev); s.add(ri); return s })}
+                                    className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/40 text-xs text-gray-500 hover:bg-gray-50 transition-colors text-left"
+                                  >
+                                    <span className="truncate min-w-0 mr-2">
+                                      {sc.s1 || '—'}
+                                      {sc.s2 ? ` · ${sc.s2}` : ''}
+                                      {outflowTypeName ? ` · ${outflowTypeName}` : ''}
+                                      {typeName ? ` · ${typeName}` : ''}
+                                    </span>
+                                    <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                  </button>
+                                ) : (
+                                  <div className="px-4 py-3 bg-gray-50/40 space-y-3">
+                                    {/* Stage Code 1 */}
+                                    <div>
+                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Stage Code 1</label>
+                                      <select value={sc.s1}
+                                        onChange={e => {
+                                          const s1 = e.target.value
+                                          setRowStageCodes(prev => ({ ...prev, [ri]: { s1, s2: prev[ri]?.s2 ?? '' } }))
+                                          const cat = categories.find((c: { name: string }) => c.name === s1)
+                                          let suggestedId = ''
+                                          if (cat) {
+                                            const sug = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+                                            suggestedId = sug?.id ?? ''
+                                          } else if (s1) {
+                                            const match = outflowTypeOptions.find(t => t.name.toLowerCase() === s1.toLowerCase())
+                                            suggestedId = match?.id ?? ''
+                                          }
+                                          setRowOutflowTypes(prev => ({ ...prev, [ri]: suggestedId }))
+                                        }}
+                                        className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                        <option value="">— None —</option>
+                                        {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                      </select>
+                                    </div>
+                                    {/* Stage Code 2 */}
+                                    <div>
+                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Stage Code 2</label>
+                                      <select value={sc.s2}
+                                        onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
+                                        className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                        <option value="">— None —</option>
+                                        <option value="Percentage Allocation">Percentage Allocation</option>
+                                        <option value="Specific Seed">Specific Seed</option>
+                                        <option value="Savings">Savings</option>
+                                      </select>
+                                    </div>
+                                    {/* Outflow Type */}
+                                    {outflowTypeOptions.length > 0 && (
+                                      <div>
+                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Outflow Type</label>
+                                        <select value={rowOutflowTypes[ri] ?? ''}
+                                          onChange={e => setRowOutflowTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                          className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                          <option value="">— None —</option>
+                                          {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        </select>
+                                      </div>
+                                    )}
+                                    {/* Pending Deduction */}
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={isPending}
+                                        onChange={e => setRowPendingDeductions(prev => {
+                                          const next = new Set(prev)
+                                          e.target.checked ? next.add(ri) : next.delete(ri)
+                                          return next
+                                        })}
+                                        className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400/30 cursor-pointer"
+                                      />
+                                      <span className="text-xs text-gray-600">Mark as Pending Deduction</span>
+                                    </label>
+                                    {/* Transaction Type */}
+                                    <div>
+                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
+                                      <select value={txnType}
+                                        onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                        className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                        {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                      </select>
+                                    </div>
+                                    {/* Original Txn ID */}
+                                    {(txnType === 'refund' || txnType === 'reversal') && (
+                                      <div>
+                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Original Txn ID</label>
+                                        <input type="text" value={origId}
+                                          onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
+                                          placeholder="ID of original transaction"
+                                          className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                                        />
+                                      </div>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedOutflowCardRis(prev => { const s = new Set(prev); s.delete(ri); return s })}
+                                      className="w-full flex items-center justify-center gap-1 text-xs text-gray-400 hover:text-gray-600 pt-1"
+                                    >
+                                      <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+                                      Less
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                    }
                   </div>
                     )
                   })()}
