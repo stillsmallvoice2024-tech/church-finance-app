@@ -5,6 +5,7 @@ import { useUpdateTransaction }   from '../../hooks/useMutations'
 import { useBulkUpdateAction }    from '../../hooks/useBulkActions'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
+import { useOutflowTypes }        from '../../hooks/useOutflowTypes'
 
 export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
   open: boolean
@@ -17,12 +18,14 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
   const { execute, loading: saving } = useBulkUpdateAction(update)
   const { push: toast }             = useToastStore()
   const { categories }              = useCategories()
+  const { outflowTypes }            = useOutflowTypes()
 
-  const [bankName,   setBankName]   = useState('')
-  const [recordedAt, setRecordedAt] = useState('')
-  const [txnType,    setTxnType]    = useState('')
-  const [stageCode1, setStageCode1] = useState('')
-  const [stageCode2, setStageCode2] = useState('')
+  const [bankName,      setBankName]      = useState('')
+  const [recordedAt,    setRecordedAt]    = useState('')
+  const [txnType,       setTxnType]       = useState('')
+  const [stageCode1,    setStageCode1]    = useState('')
+  const [stageCode2,    setStageCode2]    = useState('')
+  const [outflowTypeId, setOutflowTypeId] = useState('')
 
   useEffect(() => {
     if (open) return
@@ -31,18 +34,20 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
     setTxnType('')
     setStageCode1('')
     setStageCode2('')
+    setOutflowTypeId('')
   }, [open])
 
-  const hasChanges = !!bankName || !!recordedAt || !!txnType || !!stageCode1 || !!stageCode2
+  const hasChanges = !!bankName || !!recordedAt || !!txnType || !!stageCode1 || !!stageCode2 || !!outflowTypeId
 
   const handleApply = async () => {
     if (!hasChanges) return
     const baseUpdates: Record<string, unknown> = {}
-    if (bankName)   baseUpdates.bank_name       = bankName
-    if (recordedAt) baseUpdates.recorded_at     = `${recordedAt}T00:00:00.000Z`
-    if (txnType)    baseUpdates.transaction_type = txnType
-    if (stageCode1) baseUpdates.stage_code_1    = stageCode1
-    if (stageCode2) baseUpdates.stage_code_2    = stageCode2
+    if (bankName)      baseUpdates.bank_name       = bankName
+    if (recordedAt)    baseUpdates.recorded_at     = `${recordedAt}T00:00:00.000Z`
+    if (txnType)       baseUpdates.transaction_type = txnType
+    if (stageCode1)    baseUpdates.stage_code_1    = stageCode1
+    if (stageCode2)    baseUpdates.stage_code_2    = stageCode2
+    if (outflowTypeId) baseUpdates.outflow_type_id = outflowTypeId
 
     const { failed, strippedCols } = await execute(ids, baseUpdates)
     for (const col of strippedCols) {
@@ -100,6 +105,16 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
             <option value="Savings">Savings</option>
           </select>
         </div>
+
+        {outflowTypes.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Outflow Type</label>
+            <select value={outflowTypeId} onChange={e => setOutflowTypeId(e.target.value)} className={filterInputCls}>
+              <option value="">— Keep existing —</option>
+              {outflowTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">

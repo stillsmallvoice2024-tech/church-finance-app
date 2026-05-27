@@ -23,6 +23,7 @@ import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
 import { normalizeId } from '../utils/normalizeId'
+import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -471,6 +472,8 @@ function ManualEntryForm() {
   useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
   const { incomeTypes } = useIncomeTypes()
+  const { options: outflowTypeOptions } = useOutflowTypeOptions()
+  const { maps: categoryOutflowMaps }   = useCategoryOutflowTypeMaps()
 
   // Direction toggle
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
@@ -487,6 +490,7 @@ function ManualEntryForm() {
   const [isPending,      setIsPending]      = useState(false)
   const [outflowS1,      setOutflowS1]      = useState('')
   const [outflowS2,      setOutflowS2]      = useState('')
+  const [outflowTypeId,  setOutflowTypeId]  = useState('')
 
   // Form field values
   const [fields, setFields] = useState<Record<string, string>>({
@@ -528,6 +532,19 @@ function ManualEntryForm() {
     }
   }, [txnType])
 
+  // Auto-fill outflow type from category mapping when stage_code_1 changes
+  useEffect(() => {
+    if (!outflowS1) { setOutflowTypeId(''); return }
+    const cat = categories.find(c => c.name === outflowS1)
+    if (cat) {
+      const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+      setOutflowTypeId(suggested?.id ?? '')
+      return
+    }
+    const match = outflowTypeOptions.find(t => t.name.toLowerCase() === outflowS1.toLowerCase())
+    setOutflowTypeId(match?.id ?? '')
+  }, [outflowS1, categories, categoryOutflowMaps, outflowTypeOptions])
+
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
     setDirection(d)
     setFields({ date: new Date().toISOString().slice(0, 10) })
@@ -539,6 +556,7 @@ function ManualEntryForm() {
     setIsPending(false)
     setOutflowS1('')
     setOutflowS2('')
+    setOutflowTypeId('')
     setDupWarning(null)
     setPendingSave(null)
   }
@@ -644,6 +662,7 @@ function ManualEntryForm() {
         is_pending_deduction:    isPending,
         stage_code_1:            outflowS1             || undefined,
         stage_code_2:            outflowS2             || undefined,
+        outflow_type_id:         outflowTypeId         || undefined,
         remarks:                 v('remarks')          || undefined,
         transaction_type:        txnType               || undefined,
         original_transaction_id: v('original_transaction_id') || undefined,
@@ -670,6 +689,7 @@ function ManualEntryForm() {
       setIsPending(false)
       setOutflowS1('')
       setOutflowS2('')
+      setOutflowTypeId('')
       setTxnType('')
       setErrors({})
     } catch (e: unknown) {
@@ -1000,7 +1020,7 @@ function ManualEntryForm() {
             </Field>
           </div>
 
-          {/* Category (Stage Code 1 + 2) */}
+          {/* Category (Stage Code 1 + 2) + Outflow Type */}
           <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Budget Allocation (optional)</p>
             <div className="grid grid-cols-2 gap-3">
@@ -1019,6 +1039,14 @@ function ManualEntryForm() {
                 </select>
               </Field>
             </div>
+            {outflowTypeOptions.length > 0 && (
+              <Field label="Outflow Type">
+                <select value={outflowTypeId} onChange={e => setOutflowTypeId(e.target.value)} className={iCls}>
+                  <option value="">— None —</option>
+                  {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </Field>
+            )}
             <p className="text-[11px] text-gray-400">Links this outflow to the category ledger for tracking.</p>
           </div>
 
