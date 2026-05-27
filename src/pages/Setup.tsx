@@ -1119,6 +1119,28 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Backfill outflow_type_id for existing outflows from stage_code_1 → category mapping
+DO $$
+BEGIN
+  UPDATE outflow_transactions ot
+  SET outflow_type_id = (
+    SELECT cotm.outflow_type_id
+    FROM category_outflow_type_map cotm
+    JOIN categories c ON c.id = cotm.category_id
+    WHERE c.name = ot.stage_code_1
+    ORDER BY cotm.created_at
+    LIMIT 1
+  )
+  WHERE ot.stage_code_1 IS NOT NULL
+    AND ot.outflow_type_id IS NULL
+    AND EXISTS (
+      SELECT 1 FROM category_outflow_type_map cotm2
+      JOIN categories c2 ON c2.id = cotm2.category_id
+      WHERE c2.name = ot.stage_code_1
+    );
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────

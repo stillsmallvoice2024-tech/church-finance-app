@@ -324,6 +324,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [rowStageCodes,   setRowStageCodes]   = useState<Record<number, { s1: string; s2: string }>>({})
   const [rowTxnTypes,     setRowTxnTypes]     = useState<Record<number, string>>({})
   const [rowOrigTxnIds,   setRowOrigTxnIds]   = useState<Record<number, string>>({})
+  const [rowOutflowTypes, setRowOutflowTypes] = useState<Record<number, string>>({})
   const [batchTxnType,    setBatchTxnType]    = useState('')
   const [createConfigPendingRow, setCreateConfigPendingRow] = useState<number | 'apply' | null>(null)
   const [bsConfigTab,     setBsConfigTab]     = useState<'inflow' | 'outflow'>('inflow')
@@ -337,6 +338,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [applyS1,           setApplyS1]           = useState('')
   const [applyS2,           setApplyS2]           = useState('')
   const [applyIncomeType,   setApplyIncomeType]   = useState('')
+  const [applyOutflowType,  setApplyOutflowType]  = useState('')
 
   // When the user picks an income type in the Apply bar, auto-derive its linked config
   // so both fields stay in sync without requiring a separate manual selection.
@@ -448,6 +450,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowStageCodes({})
     setRowTxnTypes({})
     setRowOrigTxnIds({})
+    setRowOutflowTypes({})
     setBatchTxnType('')
     setCreateConfigPendingRow(null)
     setBsConfigTab('inflow')
@@ -457,6 +460,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setApplyS1('')
     setApplyS2('')
     setApplyIncomeType('')
+    setApplyOutflowType('')
     setRowIncomeTypes({})
     setRowManualOverrides({})
     setSelectedInflowRis(new Set())
@@ -606,6 +610,24 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
       setRowStageCodes(initial)
 
+      // Also initialize outflow types from category mapping for pre-populated stage codes
+      if (outflowTypeOptions.length > 0) {
+        const initialOt: Record<number, string> = {}
+        for (const riKey of Object.keys(initial)) {
+          const ri = Number(riKey)
+          const sc = initial[ri]
+          if (!sc.s1) continue
+          const cat = categories.find((c: { name: string }) => c.name === sc.s1)
+          if (cat) {
+            const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+            if (suggested) { initialOt[ri] = suggested.id; continue }
+          }
+          const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
+          if (match) initialOt[ri] = match.id
+        }
+        setRowOutflowTypes(initialOt)
+      }
+
       // ── Stage 3: Generate fallback IDs AFTER normalization ────────────────
       // Separate maps for inflow (transaction_ref) and outflow (transaction_id).
       // Fallback IDs use normalized descriptions so they match on re-import.
@@ -702,7 +724,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     } finally {
       setDupCheckLoading(false)
     }
-  }, [sheet, config, targetTable, mapping, dateFormat, internalBank, skipTxnIds])
+  }, [sheet, config, targetTable, mapping, dateFormat, internalBank, skipTxnIds,
+      categories, categoryOutflowMaps, outflowTypeOptions])
 
   const proceedToImport = useCallback(() => {
     if (!sheet || !config || !targetTable) return
@@ -835,16 +858,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (sc) {
             if (sc.s1) row.stage_code_1 = sc.s1
             if (sc.s2) row.stage_code_2 = sc.s2
-            if (sc.s1 && outflowTypeOptions.length > 0) {
-              const cat = categories.find((c: { name: string }) => c.name === sc.s1)
-              if (cat) {
-                const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
-                if (suggested) row.outflow_type_id = suggested.id
-              } else {
-                // Fallback: name match if no category found
-                const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
-                if (match) row.outflow_type_id = match.id
-              }
+          }
+          const otId = rowOutflowTypes[ri]
+          if (otId) {
+            row.outflow_type_id = otId
+          } else if (sc?.s1 && outflowTypeOptions.length > 0) {
+            // Fallback auto-mapping for rows not explicitly configured in UI
+            const cat = categories.find((c: { name: string }) => c.name === sc.s1)
+            if (cat) {
+              const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+              if (suggested) row.outflow_type_id = suggested.id
+            } else {
+              const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
+              if (match) row.outflow_type_id = match.id
             }
           }
           row.is_pending_deduction = rowPendingDeductions.has(ri)
@@ -1004,7 +1030,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     }
   }, [sheet, config, targetTable, mapping, user, skipTxnIds,
       dateFormat, fxCurrency, rowPendingDeductions,
-      rowConfigs, rowManualOverrides, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
+      rowConfigs, rowManualOverrides, rowStageCodes, rowTxnTypes, rowOrigTxnIds, rowOutflowTypes,
       internalBank,
       rowIncomeTypes, incomeTypes,
       duplicateRis, precomputedInflowIds, precomputedOutflowIds])
@@ -1809,6 +1835,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       <option value="Specific Seed">Specific Seed</option>
                       <option value="Savings">Savings</option>
                     </select>
+                    {outflowTypeOptions.length > 0 && (
+                      <select value={applyOutflowType} onChange={e => setApplyOutflowType(e.target.value)}
+                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
+                        <option value="">Outflow Type</option>
+                        {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    )}
                     <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
                       className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                       <option value="">— Type —</option>
@@ -1816,7 +1849,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     </select>
                     <button
                       type="button"
-                      disabled={(!applyS1 && !applyS2 && !batchTxnType) || outflowTargetRis.length === 0}
+                      disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType) || outflowTargetRis.length === 0}
                       onClick={() => {
                         if (applyS1 || applyS2) {
                           setRowStageCodes(prev => {
@@ -1828,6 +1861,31 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                               }
                             return next
                           })
+                        }
+                        if (applyOutflowType !== '') {
+                          setRowOutflowTypes(prev => {
+                            const next = { ...prev }
+                            for (const ri of outflowTargetRis) next[ri] = applyOutflowType
+                            return next
+                          })
+                        } else if (applyS1) {
+                          // Auto-suggest outflow type from applied stage_code_1
+                          const cat = categories.find((c: { name: string }) => c.name === applyS1)
+                          let suggestedId = ''
+                          if (cat) {
+                            const sug = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+                            suggestedId = sug?.id ?? ''
+                          } else {
+                            const match = outflowTypeOptions.find(t => t.name.toLowerCase() === applyS1.toLowerCase())
+                            suggestedId = match?.id ?? ''
+                          }
+                          if (suggestedId) {
+                            setRowOutflowTypes(prev => {
+                              const next = { ...prev }
+                              for (const ri of outflowTargetRis) next[ri] = suggestedId
+                              return next
+                            })
+                          }
                         }
                         if (batchTxnType !== '') {
                           setRowTxnTypes(prev => {
@@ -1936,7 +1994,21 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                   </div>
                                   <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
                                   <select value={sc.s1}
-                                    onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: e.target.value, s2: prev[ri]?.s2 ?? '' } }))}
+                                    onChange={e => {
+                                      const s1 = e.target.value
+                                      setRowStageCodes(prev => ({ ...prev, [ri]: { s1, s2: prev[ri]?.s2 ?? '' } }))
+                                      // Auto-suggest outflow type from category mapping
+                                      const cat = categories.find((c: { name: string }) => c.name === s1)
+                                      let suggestedId = ''
+                                      if (cat) {
+                                        const sug = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+                                        suggestedId = sug?.id ?? ''
+                                      } else if (s1) {
+                                        const match = outflowTypeOptions.find(t => t.name.toLowerCase() === s1.toLowerCase())
+                                        suggestedId = match?.id ?? ''
+                                      }
+                                      setRowOutflowTypes(prev => ({ ...prev, [ri]: suggestedId }))
+                                    }}
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                     <option value="">— None —</option>
                                     {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -1968,6 +2040,17 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                   </select>
                                 </div>
+                                {outflowTypeOptions.length > 0 && (
+                                  <div className="px-3 pb-2 flex items-center gap-2">
+                                    <span className="text-[10px] text-gray-400 w-28 shrink-0">Outflow Type:</span>
+                                    <select value={rowOutflowTypes[ri] ?? ''}
+                                      onChange={e => setRowOutflowTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                      className="flex-1 text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                      <option value="">— None —</option>
+                                      {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                  </div>
+                                )}
                                 {(txnType === 'refund' || txnType === 'reversal') && (
                                   <div className="px-3 pb-2 flex items-center gap-2">
                                     <span className="text-[10px] text-gray-400 w-28 shrink-0">Original Txn ID:</span>
