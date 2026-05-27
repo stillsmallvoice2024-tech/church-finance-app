@@ -181,7 +181,7 @@ export default function Inflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (₦)', 'Transaction Type', 'Txn Ref', 'Remark']
+  const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (Naira)', 'Transaction Type', 'Txn Ref', 'Remark']
   const inflowCsvRow = (r: InflowTransaction) => [
     r.date, r.description, r.amount,
     r.transaction_type, r.transaction_ref, r.remark,
