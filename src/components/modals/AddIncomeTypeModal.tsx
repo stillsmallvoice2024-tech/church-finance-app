@@ -4,23 +4,11 @@ import { Modal } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { TechDetails } from '../ui/TechDetails'
+import { TypeColorPicker, TYPE_PRESET_COLORS } from '../ui/TypeColorPicker'
 import {
   saveIncomeType, useSpecialConfigGroupOptions,
   type IncomeType, type IncomeTypeInput,
 } from '../../hooks/useIncomeTypes'
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const COLORS = [
-  { value: '#6366f1', label: 'Indigo'  },
-  { value: '#10b981', label: 'Green'   },
-  { value: '#f59e0b', label: 'Amber'   },
-  { value: '#ef4444', label: 'Red'     },
-  { value: '#3b82f6', label: 'Blue'    },
-  { value: '#8b5cf6', label: 'Purple'  },
-  { value: '#06b6d4', label: 'Cyan'    },
-  { value: '#64748b', label: 'Slate'   },
-]
 
 const MIGRATION_SQL =
 `CREATE TABLE IF NOT EXISTS public.income_types (
@@ -78,7 +66,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
 
   const [name,                setName]                = useState('')
   const [description,         setDescription]         = useState('')
-  const [color,               setColor]               = useState(COLORS[0].value)
+  const [color,               setColor]               = useState(TYPE_PRESET_COLORS[0])
   const [specialConfigGroup,  setSpecialConfigGroup]  = useState('')
   const [rules,          setRules]          = useState<RuleDraft[]>([{ rule_type: 'keyword', rule_value: '' }])
   const [saving,         setSaving]         = useState(false)
@@ -87,7 +75,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
   const isMigrationError = !!error && /relation.*does not exist|does not exist/i.test(error)
 
   // Dirty detection — compare to snapshot taken on open
-  const initialRef = useRef({ name: '', description: '', color: COLORS[0].value, specialConfigGroup: '' })
+  const initialRef = useRef({ name: '', description: '', color: TYPE_PRESET_COLORS[0], specialConfigGroup: '' })
   const isDirty =
     name !== initialRef.current.name ||
     description !== initialRef.current.description ||
@@ -116,10 +104,10 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
         specialConfigGroup: editRecord.special_config_group_id ?? '',
       }
     } else {
-      setName(''); setDescription(''); setColor(COLORS[0].value)
+      setName(''); setDescription(''); setColor(TYPE_PRESET_COLORS[0])
       setSpecialConfigGroup('')
       setRules([{ rule_type: 'keyword', rule_value: '' }])
-      initialRef.current = { name: '', description: '', color: COLORS[0].value, specialConfigGroup: '' }
+      initialRef.current = { name: '', description: '', color: TYPE_PRESET_COLORS[0], specialConfigGroup: '' }
     }
   }, [open, editRecord])
 
@@ -218,20 +206,10 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
         </Field>
 
         {/* Color */}
-        <Field label="Color">
-          <div className="flex gap-2 flex-wrap">
-            {COLORS.map(c => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColor(c.value)}
-                title={c.label}
-                className={`w-7 h-7 rounded-full transition-all ${color === c.value ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : 'hover:scale-110'}`}
-                style={{ backgroundColor: c.value }}
-              />
-            ))}
-          </div>
-        </Field>
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-gray-600">Color</p>
+          <TypeColorPicker value={color} onChange={setColor} />
+        </div>
 
         {/* Recognition Rules */}
         <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
