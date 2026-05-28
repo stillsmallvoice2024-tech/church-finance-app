@@ -14,9 +14,17 @@ export function useRole() {
 
   return {
     role,
+    // Role predicates
     isAdmin:      (): boolean => resolved && role === 'admin',
     isAccountant: (): boolean => resolved && role === 'accountant',
-    canWrite:     (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canDelete:    (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    isViewer:     (): boolean => resolved && role === 'viewer',
+    isReadOnly:   (): boolean => resolved && role === 'viewer',
+    // Action predicates — admin + accountant
+    canWrite:                (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    canDelete:               (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    canEditTransactions:     (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    canImportTransactions:   (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    // Admin-only
+    canManageConfigs:        (): boolean => resolved && role === 'admin',
   }
 }

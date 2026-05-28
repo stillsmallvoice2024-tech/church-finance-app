@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useAuthListener } from './hooks/useAuth'
 import { useAccountCodesStore } from './store/accountCodesStore'
 import './store/themeStore' // side-effect: applies stored theme class immediately
 import { supabase } from './lib/supabase'
 import { AuthGuard } from './components/auth/AuthGuard'
+import { useRole } from './hooks/useRole'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import LoginPage from './components/auth/LoginPage'
@@ -37,6 +38,21 @@ import Receipts             from './pages/Receipts'
 import ChangeLog            from './pages/ChangeLog'
 import ResetPassword        from './pages/ResetPassword'
 import AcceptInvite         from './pages/AcceptInvite'
+
+// ── Route-level role guards ────────────────────────────────────────────────────
+// These run inside AuthGuard (loading=false, user set) so canWrite/isAdmin resolve correctly.
+
+function CanWriteGuard() {
+  const { canWrite } = useRole()
+  if (!canWrite()) return <Navigate to="/" replace />
+  return <Outlet />
+}
+
+function AdminOnlyGuard() {
+  const { isAdmin } = useRole()
+  if (!isAdmin()) return <Navigate to="/" replace />
+  return <Outlet />
+}
 
 export default function App() {
   useAuthListener()
@@ -87,10 +103,17 @@ export default function App() {
             <Route path="dynamic-reports" element={<ErrorBoundary><DynamicReports /></ErrorBoundary>} />
             <Route path="dynamic-reports/:id" element={<ErrorBoundary><DynamicReportEditor /></ErrorBoundary>} />
             <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
-            <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
-            <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
             <Route path="pending-deductions" element={<ErrorBoundary><PendingDeductions /></ErrorBoundary>} />
-            <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
+            {/* Viewer-blocked routes: admin + accountant only */}
+            <Route element={<CanWriteGuard />}>
+              <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
+              <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
+            </Route>
+            {/* Admin-only routes */}
+            <Route element={<AdminOnlyGuard />}>
+              <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
+              <Route path="change-log" element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
+            </Route>
             <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
             <Route path="percentage-allocation" element={<ErrorBoundary><PercentageAllocation /></ErrorBoundary>} />
             <Route path="specific-givings" element={<ErrorBoundary><SpecificGivings /></ErrorBoundary>} />
@@ -102,7 +125,6 @@ export default function App() {
             <Route path="refunds"              element={<ErrorBoundary><RefundTransactions /></ErrorBoundary>} />
             <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
             <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
-            <Route path="change-log"           element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
           </Route>
         </Route>
 

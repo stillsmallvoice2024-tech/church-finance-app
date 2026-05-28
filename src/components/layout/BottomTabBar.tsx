@@ -11,18 +11,27 @@ import {
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 
-const PRIMARY_TABS = [
+interface PrimaryTab {
+  label: string
+  path: string
+  icon: React.ElementType
+  end?: boolean
+}
+
+const BASE_PRIMARY_TABS: PrimaryTab[] = [
   { label: 'Home',     path: '/',         icon: LayoutDashboard, end: true },
-  { label: 'Inflows',  path: '/inflows',  icon: TrendingUp      },
-  { label: 'Outflows', path: '/outflows', icon: TrendingDown    },
-  { label: 'Import',   path: '/import',   icon: FileUp          },
+  { label: 'Inflows',  path: '/inflows',  icon: TrendingUp                 },
+  { label: 'Outflows', path: '/outflows', icon: TrendingDown               },
 ]
+
+const IMPORT_TAB: PrimaryTab = { label: 'Import', path: '/import', icon: FileUp }
 
 interface DrawerItem {
   label: string
   path: string
   icon: React.ElementType
   adminOnly?: boolean
+  canWriteOnly?: boolean
 }
 
 interface DrawerSection {
@@ -71,7 +80,7 @@ const DRAWER_SECTIONS: DrawerSection[] = [
   {
     label: 'Administration',
     items: [
-      { label: 'Setup',       path: '/setup',      icon: SlidersHorizontal },
+      { label: 'Setup',       path: '/setup',      icon: SlidersHorizontal, canWriteOnly: true },
       { label: 'Settings',    path: '/settings',   icon: Settings          },
       { label: 'Users',       path: '/users',      icon: Users,         adminOnly: true },
       { label: 'Change Log',  path: '/change-log', icon: ClipboardList, adminOnly: true },
@@ -81,8 +90,10 @@ const DRAWER_SECTIONS: DrawerSection[] = [
 
 export function BottomTabBar() {
   const [moreOpen, setMoreOpen] = useState(false)
-  const { isAdmin } = useRole()
+  const { isAdmin, canWrite } = useRole()
   const admin = isAdmin()
+  const write = canWrite()
+  const primaryTabs = write ? [...BASE_PRIMARY_TABS, IMPORT_TAB] : BASE_PRIMARY_TABS
 
   return (
     <>
@@ -113,9 +124,10 @@ export function BottomTabBar() {
           {/* Scrollable grouped content */}
           <nav className="overflow-y-auto px-4 py-3 space-y-4" aria-label="More navigation">
             {DRAWER_SECTIONS.map(section => {
-              const visibleItems = admin
-                ? section.items
-                : section.items.filter(i => !i.adminOnly)
+              const visibleItems = section.items.filter(i =>
+                (!i.adminOnly || admin) &&
+                (!i.canWriteOnly || write)
+              )
               if (visibleItems.length === 0) return null
 
               return (
@@ -154,7 +166,7 @@ export function BottomTabBar() {
         className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex lg:hidden safe-area-inset-bottom"
         aria-label="Primary navigation"
       >
-        {PRIMARY_TABS.map(({ label, path, icon: Icon, end }) => (
+        {primaryTabs.map(({ label, path, icon: Icon, end }) => (
           <NavLink
             key={path}
             to={path}

@@ -17,6 +17,7 @@ interface NavItem {
   path: string
   icon: React.ElementType
   adminOnly?: boolean
+  canWriteOnly?: boolean  // hidden for viewer role
 }
 
 interface NavGroupDef {
@@ -35,7 +36,7 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Dashboard', path: '/',        icon: LayoutDashboard },
       { label: 'Inflows',   path: '/inflows',  icon: TrendingUp      },
       { label: 'Outflows',  path: '/outflows', icon: TrendingDown    },
-      { label: 'Import',    path: '/import',   icon: FileUp          },
+      { label: 'Import',    path: '/import',   icon: FileUp,         canWriteOnly: true },
       { label: 'Intra-Account Flows', path: '/intra-flow', icon: Repeat2 },
       { label: 'Receipts',  path: '/receipts', icon: Receipt         },
     ],
@@ -89,7 +90,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Administration',
     defaultOpen: false,
     items: [
-      { label: 'Setup',           path: '/setup',       icon: SlidersHorizontal },
+      { label: 'Setup',           path: '/setup',       icon: SlidersHorizontal, canWriteOnly: true },
       { label: 'Settings',        path: '/settings',    icon: Settings          },
       { label: 'User Management', path: '/users',       icon: Users,         adminOnly: true },
       { label: 'Change Log',      path: '/change-log',  icon: ClipboardList, adminOnly: true },
@@ -133,8 +134,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const { isAdmin } = useRole()
+  const { isAdmin, canWrite } = useRole()
   const showAdmin = isAdmin()
+  const showWrite = canWrite()
   const activeYear = useAccountingYearStore(s => s.year)
   const { openState, toggle } = useGroupOpenState()
 
@@ -186,9 +188,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-3" aria-label="Main navigation">
           {NAV_GROUPS.map(group => {
-            const visibleItems = showAdmin
-              ? group.items
-              : group.items.filter(item => !item.adminOnly)
+            const visibleItems = group.items.filter(item =>
+              (!item.adminOnly || showAdmin) &&
+              (!item.canWriteOnly || showWrite)
+            )
 
             if (visibleItems.length === 0) return null
 

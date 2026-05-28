@@ -5,8 +5,9 @@ import {
   CheckCircle2, AlertTriangle, Loader2, X,
   TrendingUp, TrendingDown, Sparkles,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
+import { useRole } from '../hooks/useRole'
 import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
@@ -73,6 +74,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Import() {
+  const { canImportTransactions } = useRole()
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
   const [skipDups, setSkipDups]       = useState(false)
@@ -187,6 +189,9 @@ export default function Import() {
     setDupChecked(true)
     setDupLoading(false)
   }, [])
+
+  // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
+  if (!canImportTransactions()) return <Navigate to="/" replace />
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
