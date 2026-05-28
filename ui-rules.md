@@ -847,13 +847,18 @@ The **Optional Banking Details** section (`amount_refunded`, `transfer_charge`) 
 
 ## Multi-Select Rows + Bulk Operations
 
-Pages using multi-select: **Inflows**, **Outflows** (table view only), **PendingDeductions**.
+Pages using multi-select: **Inflows**, **Outflows** (table view only), **PendingDeductions**, **IntraFlow** (Internal Transfers tab, table view only).
+
+### Shared utilities
+- `useBulkSelection` (`src/hooks/useBulkSelection.ts`) — generic hook: `Set<string>` state, `headerRef` for indeterminate, `toggleRow`/`clearAll`/`selectAllRows`
+- `useBulkActions` (`src/hooks/useBulkActions.ts`) — `useBulkDeleteAction` (sequential loop) + `useBulkUpdateAction` (strip-and-retry on missing columns)
+- `BulkActionBar` (`src/components/ui/BulkActionBar.tsx`) — renders `null` when count=0; shows count badge + configurable action buttons + Clear; placed above `overflow-x-auto`
 
 ### Shared mechanics
 - `selectedIds: Set<string>` state; cleared on page change, filter change, and year reset
 - Checkbox column is first (`w-10 pl-4 pr-2`); header checkbox = select/deselect all on current page; supports `indeterminate` via `useRef<HTMLInputElement>` synced in a `useEffect` on `[selectedIds, displayed]`
 - Selected rows get `bg-primary/5 hover:bg-primary/10` highlight
-- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0` — count badge + action buttons + Clear
+- **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0` — wrap `BulkActionBar` + `<div className="overflow-x-auto">` in a `<>` Fragment
 
 ### Inflows / Outflows
 - Actions: "Edit selected" (canWrite) → `BulkEditInflowModal` / `BulkEditOutflowModal`; "Delete selected" (canDelete) → `DeleteDialog` → sequential `deleteRecord` loop → `refetch()`
@@ -865,6 +870,12 @@ Pages using multi-select: **Inflows**, **Outflows** (table view only), **Pending
   - **Form reset on close** (`if (open) return` guard so state is clean before next open)
 - colSpan: 10 (Inflows), 13 (Outflows)
 - Multi-select is **table view only** — cards view unchanged
+
+### IntraFlow (Internal Transfers)
+- Actions: "Edit selected" (canWrite) → `BulkEditIntraFlowModal`; "Delete selected" (canDelete) → `DeleteDialog`
+- `BulkEditIntraFlowModal` (`src/components/modals/BulkEditIntraFlowModal.tsx`): editable fields: `date`, `account_from`, `account_from_stage2`, `account_to`, `account_to_stage2`, `description`, `remark`; uses `useBulkUpdateAction`
+- colSpan: 9 (Checkbox + Expand + Date + From + To + Amount + Description + Remark + Actions)
+- Selection also clears on tab change (transfers ↔ reallocation)
 
 ### PendingDeductions
 - Action: "Resolve selected" (canWrite) — see PendingDeductions Resolve Guard section for bulk behaviour
