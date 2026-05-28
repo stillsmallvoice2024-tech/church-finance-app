@@ -576,7 +576,7 @@ export default function UserManagement() {
       </div>
 
       {/* ── Stats ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: 'Total Members', value: totalCount,      icon: <Users className="w-5 h-5 text-primary" /> },
           { label: 'Admins',        value: adminCount,      icon: <Shield className="w-5 h-5 text-primary" /> },

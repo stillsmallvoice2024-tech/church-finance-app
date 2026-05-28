@@ -241,7 +241,7 @@ export default function SavingsPortions() {
       {!loading && rows.length > 0 && (
         <>
           {/* Summary strip */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
               <div className="flex items-center justify-center gap-1.5 text-success mb-1">
                 <TrendingUp className="w-4 h-4" />

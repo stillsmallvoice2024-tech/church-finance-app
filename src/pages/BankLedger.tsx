@@ -236,7 +236,7 @@ export default function BankLedger() {
       {/* Bank selector + date filters */}
       <Card>
         <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex flex-col gap-1 min-w-[200px]">
+          <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[200px]">
             <label className="text-xs font-medium text-gray-500">Bank</label>
             <select
               value={selectedBank}
