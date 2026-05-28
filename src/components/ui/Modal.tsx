@@ -30,6 +30,24 @@ interface ModalProps {
    * before calling onClose. Cancel buttons inside the form bypass this guard.
    */
   isDirty?: boolean
+  /**
+   * When true, all close paths are disabled: X button hidden, ESC no-op, backdrop no-op.
+   * Use during async processing to prevent accidental mid-operation dismissal.
+   */
+  disableClose?: boolean
+  /**
+   * When true, clicking the backdrop does nothing.
+   * X button and ESC still work (subject to isDirty guard).
+   */
+  disableBackdropClose?: boolean
+  /** Custom title for the dirty-state confirm overlay (default: "Discard changes?") */
+  confirmTitle?: string
+  /** Custom message for the dirty-state confirm overlay */
+  confirmMessage?: string
+  /** Label for the "keep" action in the dirty-state confirm overlay (default: "Continue Editing") */
+  confirmKeepLabel?: string
+  /** Label for the "discard" action in the dirty-state confirm overlay (default: "Discard Changes") */
+  confirmDiscardLabel?: string
 }
 
 export function Modal({
@@ -41,12 +59,19 @@ export function Modal({
   headerExtra,
   footer,
   isDirty,
+  disableClose,
+  disableBackdropClose,
+  confirmTitle,
+  confirmMessage,
+  confirmKeepLabel,
+  confirmDiscardLabel,
 }: ModalProps) {
   const [confirmingClose, setConfirmingClose] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
 
   const requestClose = () => {
+    if (disableClose) return
     if (isDirty) {
       setConfirmingClose(true)
     } else {
@@ -88,11 +113,12 @@ export function Modal({
     return () => document.removeEventListener('keydown', trap)
   }, [open])
 
-  // ESC — with dirty guard
+  // ESC — with dirty guard and disableClose guard
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      if (disableClose) return
       if (confirmingClose) {
         setConfirmingClose(false)
       } else {
@@ -101,7 +127,7 @@ export function Modal({
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [open, isDirty, confirmingClose]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, isDirty, confirmingClose, disableClose]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset confirmation state whenever modal closes
   useEffect(() => {
@@ -127,10 +153,10 @@ export function Modal({
       role="dialog"
       aria-labelledby="modal-title"
     >
-      {/* Backdrop */}
+      {/* Backdrop — disabled when disableClose or disableBackdropClose */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={requestClose}
+        onClick={disableClose || disableBackdropClose ? undefined : requestClose}
         aria-hidden="true"
       />
 
@@ -148,7 +174,12 @@ export function Modal({
             {headerExtra}
             <button
               onClick={requestClose}
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              disabled={disableClose}
+              className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-colors ${
+                disableClose
+                  ? 'text-gray-200 cursor-not-allowed'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+              }`}
               aria-label="Close modal"
             >
               <X className="w-5 h-5" />
@@ -172,22 +203,26 @@ export function Modal({
         {confirmingClose && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 backdrop-blur-sm sm:rounded-2xl p-6">
             <div className="text-center space-y-4 max-w-xs w-full">
-              <p className="font-semibold text-gray-900 text-base">Discard changes?</p>
-              <p className="text-sm text-gray-500">You have unsaved changes that will be lost.</p>
+              <p className="font-semibold text-gray-900 text-base">
+                {confirmTitle ?? 'Discard changes?'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {confirmMessage ?? 'You have unsaved changes that will be lost.'}
+              </p>
               <div className="flex gap-3 justify-center">
                 <button
                   type="button"
                   onClick={() => setConfirmingClose(false)}
                   className="flex-1 px-4 min-h-[44px] text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Continue Editing
+                  {confirmKeepLabel ?? 'Continue Editing'}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setConfirmingClose(false); onClose() }}
                   className="flex-1 px-4 min-h-[44px] text-sm font-medium text-white bg-danger rounded-lg hover:opacity-90 transition-colors"
                 >
-                  Discard Changes
+                  {confirmDiscardLabel ?? 'Discard Changes'}
                 </button>
               </div>
             </div>
