@@ -47,10 +47,9 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   intrabank_transfer:  'Intrabank Transfer',
 }
 
-// Keep numeric cols before text-only cols to preserve OUT_SORT_FIELDS indices:
-// SORT[0]=date, SORT[1]=description, SORT[2]=bank_name, SORT[3]=transaction_type, SORT[4]=amount_disbursed, SORT[5]=outflow_type
 const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
   { key: 'date',             label: 'Date',          sortType: 'date',    primary: true, noSearch: true },
+  { key: 'recorded_at',      label: 'Recorded',      sortType: 'date',    primary: true, noSearch: true },
   { key: 'description',      label: 'Description',   sortType: 'text',    accessor: r => r.display_description },
   { key: 'bank_name',        label: 'Bank',          sortType: 'text',    accessor: r => r.bank_name ?? '' },
   { key: 'bank_description', label: 'Bank Narration',                     accessor: r => r.bank_description ?? '' },
@@ -63,6 +62,7 @@ const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
 ]
 
 const OUT_SORT_FIELDS = deriveSortFields(OUT_COLUMNS)
+const outSF = (key: string) => OUT_SORT_FIELDS.find(f => f.key === key)!
 
 const OUTFLOW_SORT_COLS = new Set(['date', 'amount_disbursed', 'bank_name', 'description', 'transaction_type', 'recorded_at'])
 const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_name', 'transaction_id', 'stage_code_1', 'transaction_type', 'outflow_type'])
@@ -122,8 +122,8 @@ export default function Outflows() {
     searchCol:    outState.searchCol,
     page,
     pageSize:     outState.pageSize,
-    sortColumn:   outState.advancedSort.length === 0 && outState.sortKey !== 'recorded_at' ? outState.sortKey : undefined,
-    sortAscending: outState.advancedSort.length === 0 && outState.sortKey !== 'recorded_at' ? (outState.sortDir === 'asc') : undefined,
+    sortColumn:   outState.advancedSort.length === 0 ? outState.sortKey : undefined,
+    sortAscending: outState.advancedSort.length === 0 ? (outState.sortDir === 'asc') : undefined,
     advancedSort: outState.advancedSort.length > 0 ? outState.advancedSort : undefined,
   })
 
@@ -320,7 +320,7 @@ export default function Outflows() {
           sortKey={outState.sortKey}
           sortDir={outState.sortDir}
           onSort={outState.setSort}
-          defaultSortKey="date"
+          defaultSortKey="recorded_at"
           defaultSortDir="desc"
           view={outState.view}
           onViewChange={outState.setView}
@@ -457,11 +457,12 @@ export default function Outflows() {
                     />
                   </th>
                   <th className="w-8 px-1 py-3" />
-                  <SortableHeader field={OUT_SORT_FIELDS[0]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={OUT_SORT_FIELDS[2]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={outSF('date')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={outSF('recorded_at')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={outSF('bank_name')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
-                  <SortableHeader field={OUT_SORT_FIELDS[5]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={OUT_SORT_FIELDS[4]} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
+                  <SortableHeader field={outSF('outflow_type')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={outSF('amount_disbursed')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">📎</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
                 </tr>
@@ -470,7 +471,7 @@ export default function Outflows() {
                 {loading ? (
                   Array.from({ length: 9 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 10 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -479,7 +480,7 @@ export default function Outflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={10}>
                       <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
                     </td>
                   </tr>
@@ -512,6 +513,9 @@ export default function Outflows() {
                             </button>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                            {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                           <td className="px-4 py-3 text-sm text-gray-800 max-w-[280px]">
                             <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
@@ -540,7 +544,7 @@ export default function Outflows() {
                             </div>
                           </td>
                         </tr>
-                        {isExpanded && <OutflowRowDetail key={`detail-${row.id}`} row={row} colSpan={9} />}
+                        {isExpanded && <OutflowRowDetail key={`detail-${row.id}`} row={row} colSpan={10} />}
                       </>
                     )
                   })

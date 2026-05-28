@@ -50,6 +50,7 @@ const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
 const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
   { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
+  { key: 'recorded_at',      label: 'Recorded',    sortType: 'date',    primary: true, noSearch: true },
   { key: 'amount',           label: 'Amount',      sortType: 'numeric', primary: true, accessor: r => String(r.amount) },
   { key: 'bank_name',        label: 'Bank',        sortType: 'text',    accessor: r => r.bank_name ?? '' },
   { key: 'transaction_ref',  label: 'Txn Ref',                          accessor: r => r.transaction_ref ?? '' },
@@ -58,6 +59,7 @@ const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
 ]
 
 const INF_SORT_FIELDS = deriveSortFields(INF_COLUMNS)
+const infSF = (key: string) => INF_SORT_FIELDS.find(f => f.key === key)!
 
 const INFLOW_SORT_COLS = new Set(['date', 'amount', 'bank_name', 'description', 'transaction_type', 'recorded_at'])
 const INFLOW_SEARCH_COLS = new Set(['description', 'bank_name', 'transaction_ref', 'transaction_type', 'stage_code_1'])
@@ -105,7 +107,7 @@ export default function Inflows() {
   }, [searchInput])
 
   // Data controls state
-  const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'date', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
+  const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
   const { data, count, loading, error, refetch } = useInflowTransactions({
     dateFrom:     dateFrom  || undefined,
@@ -279,7 +281,7 @@ export default function Inflows() {
           sortKey={infState.sortKey}
           sortDir={infState.sortDir}
           onSort={infState.setSort}
-          defaultSortKey="date"
+          defaultSortKey="recorded_at"
           defaultSortDir="desc"
           view={infState.view}
           onViewChange={infState.setView}
@@ -402,13 +404,13 @@ export default function Inflows() {
                       onChange={e => e.target.checked ? selectAllRows() : clearAll()} />
                   </th>
                   <th className="w-8" />
-                  <SortableHeader field={INF_SORT_FIELDS[0]} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Recorded</th>
+                  <SortableHeader field={infSF('date')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={infSF('recorded_at')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Bank</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Txn Ref</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Type</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
-                  <SortableHeader field={INF_SORT_FIELDS[1]} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
+                  <SortableHeader field={infSF('amount')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
                 </tr>
               </thead>

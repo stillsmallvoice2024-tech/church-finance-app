@@ -569,6 +569,18 @@ const PAGE_SORT_FIELDS = deriveSortFields(PAGE_COLUMNS)   // module-level consta
 
 **Column ordering rule — `*_COLUMNS` array:** `deriveSortFields()` includes only columns with `sortType` defined, preserving their array index order. Text-only columns (e.g. `description`, `bank_name`) that appear before numeric columns in the array will shift all subsequent numeric sort-field indices, breaking `SortableHeader` hardcoded index references. **Always place `description` (and any other text-only columns without `sortType`) AFTER all numeric columns in every `*_COLUMNS` definition.**
 
+**Key-based `SortableHeader` lookup pattern:** Define a `pageSF(key)` helper after `deriveSortFields()` and use it for all `SortableHeader field=` props. This is immune to column reordering and is required for any page that has `SortableHeader` in its table.
+```ts
+const INF_SORT_FIELDS = deriveSortFields(INF_COLUMNS)
+const infSF = (key: string) => INF_SORT_FIELDS.find(f => f.key === key)!
+
+// In JSX — never use SORT_FIELDS[n] directly:
+<SortableHeader field={infSF('date')} ... />
+<SortableHeader field={infSF('recorded_at')} ... />
+<SortableHeader field={infSF('amount')} rightAlign ... />
+```
+Applied: `infSF` in `Inflows.tsx`, `outSF` in `Outflows.tsx`.
+
 ```ts
 // Correct — Description last, no sortType, numeric fields at expected indices
 const BL_COLUMNS: TableColumnDef<LedgerRow>[] = [
@@ -628,8 +640,8 @@ query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearc
 **Per-page column definitions:**
 | Page | Key | Columns (key → label, noSearch cols) |
 |---|---|---|
-| Inflows | `inf` | date†, description, bank_name, transaction_ref, transaction_type, amount |
-| Outflows | `out` | date†, description, bank_name, bank_description, transaction_id, transaction_type, stage_code_1, amount_disbursed, net |
+| Inflows | `inf` | date†, recorded_at†, description, bank_name, transaction_ref, transaction_type, amount |
+| Outflows | `out` | date†, recorded_at†, description, bank_name, bank_description, transaction_id, transaction_type, stage_code_1, amount_disbursed, net |
 | BankLedger | `bl` | date†, description, inflow, outflow, balance |
 | BankDeposits | `bd` | date†, description, bank_name, transaction_ref, amount |
 | ForeignCurrency | `fx` | date†, amount, narration, transaction_ref |
@@ -815,22 +827,22 @@ const openEdit = (row: Row) => {
 
 Checkbox, Expand-chevron, Date, Recorded, **Bank**, **Txn Ref**, Type, Description, Amount (₦), Actions (10 total).
 
-- `bank_name` → Bank column after Recorded; plain `whitespace-nowrap` text
+- Date, Recorded, and Amount use `infSF('date')`, `infSF('recorded_at')`, `infSF('amount')` SortableHeaders respectively
+- `bank_name` → Bank column after Recorded; plain `whitespace-nowrap` text (no sort header)
 - `transaction_ref` → Txn Ref column; `max-w-[180px]` `<td>` with `DescriptionCell id={`ref-${row.id}`}` + `onClick={e => e.stopPropagation()}` (prevents triggering row expand)
 - Type column shows income type badge + transaction type badge (stacked `flex-col`); fallback `—` when both null
 - Expanded remark row uses `colSpan={10}`
+- **Default sort**: `recorded_at` desc; `defaultSortKey: 'recorded_at'` in `useDataViewState`
 
 ---
 
 ## Outflows Table — Column Order
 
-Checkbox, Date, Recorded, **Bank**, Txn ID, Description, Disbursed (₦), Refunded (₦), Net (₦), Stage Code 1, Remarks, 📎, Actions (13 total).
+Checkbox, Expand-chevron, Date, Recorded, **Bank**, Description, Outflow Type, Disbursed (₦), 📎, Actions (10 total).
 
-- `transfer_charge` is **not shown** as a column but is still deducted in the Net (₦) calculation
-- `bank_name` is displayed as the **Bank** column, positioned after Recorded; plain `whitespace-nowrap` text
-- `transaction_id` → Txn ID column; `max-w-[180px]` `<td>` with `DescriptionCell id={`ref-${row.id}`}` (no stopPropagation needed — outflow `<tr>` has no onClick)
-- **Default sort**: `recorded_at` desc (hook else-branch: `recorded_at desc, date desc`); `persistSort: false` so sort resets on page refresh; filter Clear button also resets sort + advancedSort
-- **Disbursed SortableHeader**: uses `OUT_SORT_FIELDS[4]` (amount_disbursed) — indices 0=date, 1=description, 2=bank_name, 3=transaction_type, 4=amount_disbursed
+- Date, Recorded, Bank, Outflow Type, and Disbursed use `outSF('date')`, `outSF('recorded_at')`, `outSF('bank_name')`, `outSF('outflow_type')`, `outSF('amount_disbursed')` SortableHeaders respectively
+- Txn ID, Refunded (₦), Net (₦), Stage Code 1, Remarks, FX fields, and bank_description are surfaced in the expandable `OutflowRowDetail` row (colSpan=10) — not as table columns
+- **Default sort**: `recorded_at` desc (hook else-branch: `recorded_at desc, date desc`); `defaultSortKey: 'recorded_at'`; `persistSort: false` so sort resets on page refresh; filter Clear button also resets sort + advancedSort
 
 ---
 
