@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
@@ -29,6 +29,95 @@ import { supabase } from '../lib/supabase'
 
 const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Currencies'] as const
 type Tab = typeof TABS[number]
+
+// ── Compact shared search + sort bar for Setup tabs ──────────────────────────────
+
+interface SortOpt { value: string; label: string }
+
+function SetupSearchSort({
+  search, onSearch, sort, onSort, sortOptions, placeholder = 'Search…',
+}: {
+  search: string; onSearch: (s: string) => void
+  sort: string;   onSort:   (v: string) => void
+  sortOptions: SortOpt[]; placeholder?: string
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+      <div className="relative flex-1">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => onSearch(e.target.value)}
+          placeholder={placeholder}
+          className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => onSearch('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            aria-label="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      <select
+        value={sort}
+        onChange={e => onSort(e.target.value)}
+        className="py-1.5 pl-2.5 pr-6 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white text-gray-700 sm:w-auto"
+        aria-label="Sort order"
+      >
+        {sortOptions.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function applySetupSort<T>(data: T[], sort: string): T[] {
+  const sep = sort.lastIndexOf('|')
+  const key = sort.slice(0, sep)
+  const dir = sort.slice(sep + 1)
+  return [...data].sort((a, b) => {
+    const av = String((a as Record<string, unknown>)[key] ?? '')
+    const bv = String((b as Record<string, unknown>)[key] ?? '')
+    const cmp = av.localeCompare(bv)
+    return dir === 'asc' ? cmp : -cmp
+  })
+}
+
+const BANK_SORT_OPTS: SortOpt[] = [
+  { value: 'name|asc',        label: 'Name A→Z' },
+  { value: 'name|desc',       label: 'Name Z→A' },
+  { value: 'created_at|desc', label: 'Newest' },
+  { value: 'created_at|asc',  label: 'Oldest' },
+]
+
+const ALLOC_SORT_OPTS: SortOpt[] = [
+  { value: 'name|asc',        label: 'Name A→Z' },
+  { value: 'name|desc',       label: 'Name Z→A' },
+  { value: 'start_date|desc', label: 'Effective date newest' },
+  { value: 'start_date|asc',  label: 'Effective date oldest' },
+  { value: 'created_at|desc', label: 'Created newest' },
+  { value: 'created_at|asc',  label: 'Created oldest' },
+]
+
+const SPECIAL_SORT_OPTS: SortOpt[] = [
+  { value: 'name|asc',        label: 'Name A→Z' },
+  { value: 'name|desc',       label: 'Name Z→A' },
+  { value: 'created_at|desc', label: 'Newest' },
+  { value: 'created_at|asc',  label: 'Oldest' },
+]
+
+const TYPE_SORT_OPTS: SortOpt[] = [
+  { value: 'name|asc',        label: 'Name A→Z' },
+  { value: 'name|desc',       label: 'Name Z→A' },
+  { value: 'created_at|desc', label: 'Newest' },
+  { value: 'created_at|asc',  label: 'Oldest' },
+]
 
 // ── General tab ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +198,16 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
   onDelete: (bank: DbBank) => void
 }) {
   const { banks, loading, error } = useBanks()
+  const [search, setSearch] = useState('')
+  const [sort,   setSort]   = useState('name|asc')
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = q
+      ? banks.filter(b => [b.name, b.account_number ?? '', b.account_type ?? ''].some(v => v.toLowerCase().includes(q)))
+      : banks
+    return applySetupSort(filtered, sort)
+  }, [banks, search, sort])
 
   if (loading) {
     return (
@@ -129,28 +228,6 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
     )
   }
 
-  if (banks.length === 0) {
-    return (
-      <div className="max-w-2xl space-y-3">
-        <div className="flex justify-end">
-          <button
-            onClick={onAdd}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Bank
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
-          <Landmark className="w-10 h-10 text-gray-300" />
-          <div>
-            <p className="text-sm font-medium text-gray-600">No banks configured yet</p>
-            <p className="text-xs text-gray-400 mt-1">Add a bank to link it to your transactions and reports.</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="max-w-2xl space-y-3">
       <div className="flex justify-end">
@@ -161,50 +238,72 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
           <Plus className="w-4 h-4" /> Add Bank
         </button>
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bank Name</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Number</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-              <th className="px-4 py-3 w-24" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {banks.map(bank => (
-              <tr key={bank.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 font-medium text-gray-900">{bank.name}</td>
-                <td className="px-4 py-3 text-gray-500 font-mono text-xs">
-                  {bank.account_number ?? <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">
-                  {bank.account_type ?? <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      onClick={() => onEdit(bank)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(bank)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-2 text-xs text-gray-400">{banks.length} bank{banks.length !== 1 ? 's' : ''} configured</p>
+
+      {banks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
+          <Landmark className="w-10 h-10 text-gray-300" />
+          <div>
+            <p className="text-sm font-medium text-gray-600">No banks configured yet</p>
+            <p className="text-xs text-gray-400 mt-1">Add a bank to link it to your transactions and reports.</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={BANK_SORT_OPTS} placeholder="Search banks…" />
+          {visible.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">No banks match your search.</p>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bank Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 w-24" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {visible.map(bank => (
+                    <tr key={bank.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-gray-900">{bank.name}</td>
+                      <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                        {bank.account_number ?? <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">
+                        {bank.account_type ?? <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => onEdit(bank)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => onDelete(bank)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-gray-400">
+            {visible.length !== banks.length
+              ? `${visible.length} of ${banks.length} banks`
+              : `${banks.length} bank${banks.length !== 1 ? 's' : ''} configured`}
+          </p>
+        </>
+      )}
     </div>
   )
 }
@@ -219,8 +318,18 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
   onDelete:     (c: AllocationConfig) => void
 }) {
   const { configs, loading, error, fetch } = useAllocationStore()
+  const [search, setSearch] = useState('')
+  const [sort,   setSort]   = useState('name|asc')
 
   useEffect(() => { fetch() }, [fetch])
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = q
+      ? configs.filter(c => [c.name, c.status ?? ''].some(v => v.toLowerCase().includes(q)))
+      : configs
+    return applySetupSort(filtered, sort)
+  }, [configs, search, sort])
 
   const statusBadge = (config: AllocationConfig) => {
     const isLocked = config.status === 'locked'
@@ -278,78 +387,84 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
       )}
 
       {!loading && !error && configs.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Effective From</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total %</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 w-28" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {configs.map(config => {
-                const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
-                const balanced = Math.abs(total - 100) < 0.01
-                return (
-                  <tr key={config.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{config.name}</td>
-                    <td className="px-4 py-3 text-gray-500">{formatDate(config.start_date)}</td>
-                    <td className={`px-4 py-3 text-right font-mono font-semibold ${balanced ? 'text-success' : 'text-danger'}`}>
-                      {total.toFixed(1)}%
-                    </td>
-                    <td className="px-4 py-3">{statusBadge(config)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {config.status === 'draft' ? (
-                          <>
-                            <button
-                              onClick={() => onLock(config)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-                              title="Approve & Lock"
-                            >
-                              <Lock className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => onEdit(config)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                              title="Edit"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => onEditLocked(config)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                            title="Edit locked config"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => onDelete(config)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+        <>
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={ALLOC_SORT_OPTS} placeholder="Search configurations…" />
+          {visible.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">No configurations match your search.</p>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Effective From</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total %</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 w-28" />
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {!loading && configs.length > 0 && (
-        <p className="text-xs text-gray-400">
-          {configs.length} configuration{configs.length !== 1 ? 's' : ''}
-        </p>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {visible.map(config => {
+                    const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
+                    const balanced = Math.abs(total - 100) < 0.01
+                    return (
+                      <tr key={config.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-gray-900">{config.name}</td>
+                        <td className="px-4 py-3 text-gray-500">{formatDate(config.start_date)}</td>
+                        <td className={`px-4 py-3 text-right font-mono font-semibold ${balanced ? 'text-success' : 'text-danger'}`}>
+                          {total.toFixed(1)}%
+                        </td>
+                        <td className="px-4 py-3">{statusBadge(config)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            {config.status === 'draft' ? (
+                              <>
+                                <button
+                                  onClick={() => onLock(config)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                                  title="Approve & Lock"
+                                >
+                                  <Lock className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => onEdit(config)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                                  title="Edit"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => onEditLocked(config)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                                title="Edit locked config"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => onDelete(config)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-gray-400">
+            {visible.length !== configs.length
+              ? `${visible.length} of ${configs.length} configurations`
+              : `${configs.length} configuration${configs.length !== 1 ? 's' : ''}`}
+          </p>
+        </>
       )}
     </div>
   )
@@ -364,6 +479,14 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
 }) {
   const { groups, loading, error } = useSpecialConfigGroups()
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
+  const [sort,   setSort]   = useState('name|asc')
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = q ? groups.filter(g => g.name.toLowerCase().includes(q)) : groups
+    return applySetupSort(filtered, sort)
+  }, [groups, search, sort])
 
   const toggleExpand = (id: string) =>
     setExpandedGroups(prev => {
@@ -426,8 +549,13 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
           </div>
         </div>
       ) : (
+        <>
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={SPECIAL_SORT_OPTS} placeholder="Search groups…" />
+          {visible.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">No groups match your search.</p>
+          ) : (
         <div className="space-y-3">
-          {groups.map(g => {
+          {visible.map(g => {
             const isExpanded = expandedGroups.has(g.id)
             const av = g.active_version
             const isAmt = av?.allocation_type === 'amount'
@@ -546,8 +674,14 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
             )
           })}
         </div>
+          )}
+        </>
       )}
-      <p className="text-xs text-gray-400">{groups.length} group{groups.length !== 1 ? 's' : ''}</p>
+      <p className="text-xs text-gray-400">
+        {visible.length !== groups.length
+          ? `${visible.length} of ${groups.length} groups`
+          : `${groups.length} group${groups.length !== 1 ? 's' : ''}`}
+      </p>
     </div>
   )
 }
@@ -1151,6 +1285,16 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
   onDelete: (t: IncomeType) => void
 }) {
   const { incomeTypes, loading, error } = useIncomeTypes()
+  const [search, setSearch] = useState('')
+  const [sort,   setSort]   = useState('name|asc')
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = q
+      ? incomeTypes.filter(t => [t.name, t.description ?? ''].some(v => v.toLowerCase().includes(q)))
+      : incomeTypes
+    return applySetupSort(filtered, sort)
+  }, [incomeTypes, search, sort])
 
   if (loading) return (
     <div className="max-w-2xl space-y-2">
@@ -1176,11 +1320,11 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-gray-500">Define custom income types with auto-recognition rules.</p>
         <button
           onClick={onAdd}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Income Type
         </button>
@@ -1192,40 +1336,50 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
           <p className="text-sm">No income types yet. Add one to get started.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {incomeTypes.map(t => (
-            <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
-              {/* Color swatch */}
-              <div className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ backgroundColor: t.color }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">{t.name}</p>
-                {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
-                {/* Rules summary */}
-                {t.rules.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {t.rules.map(r => (
-                      <span key={r.id} className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                        <span className="text-gray-400">{r.rule_type === 'keyword' ? 'kw:' : 'sc:'}</span>
-                        {r.rule_value}
-                      </span>
-                    ))}
+        <>
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={TYPE_SORT_OPTS} placeholder="Search income types…" />
+          {visible.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">No income types match your search.</p>
+          ) : (
+            <div className="space-y-2">
+              {visible.map(t => (
+                <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
+                  <div className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ backgroundColor: t.color }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                    {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
+                    {t.rules.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {t.rules.map(r => (
+                          <span key={r.id} className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                            <span className="text-gray-400">{r.rule_type === 'keyword' ? 'kw:' : 'sc:'}</span>
+                            {r.rule_value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {t.special_config_name && (
+                      <p className="text-[11px] text-primary mt-1">↳ Auto-applies: {t.special_config_name}</p>
+                    )}
                   </div>
-                )}
-                {t.special_config_name && (
-                  <p className="text-[11px] text-primary mt-1">↳ Auto-applies: {t.special_config_name}</p>
-                )}
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+          <p className="text-xs text-gray-400">
+            {visible.length !== incomeTypes.length
+              ? `${visible.length} of ${incomeTypes.length} income types`
+              : `${incomeTypes.length} income type${incomeTypes.length !== 1 ? 's' : ''}`}
+          </p>
+        </>
       )}
     </div>
   )
@@ -1241,15 +1395,24 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
   const { outflowTypes, loading, error } = useOutflowTypes()
   const { maps }                         = useCategoryOutflowTypeMaps()
   const { categories }                   = useCategories()
+  const [search, setSearch] = useState('')
+  const [sort,   setSort]   = useState('name|asc')
 
-  // Build outflow_type_id → linked category names
-  const typeToCategories = new Map<string, string[]>()
-  for (const m of maps) {
-    const catName = categories.find(c => c.id === m.category_id)?.name
-    if (!catName) continue
-    const existing = typeToCategories.get(m.outflow_type_id) ?? []
-    typeToCategories.set(m.outflow_type_id, [...existing, catName])
-  }
+  const typeToCategories = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const map of maps) {
+      const catName = categories.find(c => c.id === map.category_id)?.name
+      if (!catName) continue
+      m.set(map.outflow_type_id, [...(m.get(map.outflow_type_id) ?? []), catName])
+    }
+    return m
+  }, [maps, categories])
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = q ? outflowTypes.filter(t => t.name.toLowerCase().includes(q)) : outflowTypes
+    return applySetupSort(filtered, sort)
+  }, [outflowTypes, search, sort])
 
   if (loading) return (
     <div className="max-w-2xl space-y-2">
@@ -1283,11 +1446,11 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-gray-500">Outflow types for reporting and expense classification. Does not affect balances or allocations.</p>
         <button
           onClick={onAdd}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Outflow Type
         </button>
@@ -1300,50 +1463,62 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
           <p className="text-xs text-center text-gray-300 max-w-xs">Examples: Medical, Transport, Utilities, Salaries, Events</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {outflowTypes.map(t => {
-            const linkedCats = typeToCategories.get(t.id) ?? []
-            const isStandalone = !t.is_system && linkedCats.length === 0
-            return (
-              <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
-                <div className="w-3 h-3 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: t.color }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-gray-900">{t.name}</p>
-                    {t.is_system && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>
-                    )}
-                    {!t.is_system && linkedCats.length > 0 && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Linked Category</span>
-                    )}
-                    {isStandalone && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Standalone</span>
-                    )}
+        <>
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={TYPE_SORT_OPTS} placeholder="Search outflow types…" />
+          {visible.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">No outflow types match your search.</p>
+          ) : (
+            <div className="space-y-2">
+              {visible.map(t => {
+                const linkedCats = typeToCategories.get(t.id) ?? []
+                const isStandalone = !t.is_system && linkedCats.length === 0
+                return (
+                  <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
+                    <div className="w-3 h-3 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: t.color }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                        {t.is_system && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>
+                        )}
+                        {!t.is_system && linkedCats.length > 0 && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Linked Category</span>
+                        )}
+                        {isStandalone && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Standalone</span>
+                        )}
+                      </div>
+                      {linkedCats.length > 0 && (
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">↳ {linkedCats.join(', ')}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {t.is_locked ? (
+                        <span className="p-1.5 text-gray-300" title="System type — cannot be edited or deleted">
+                          <Lock className="w-4 h-4" />
+                        </span>
+                      ) : (
+                        <>
+                          <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  {linkedCats.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">↳ {linkedCats.join(', ')}</p>
-                  )}
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  {t.is_locked ? (
-                    <span className="p-1.5 text-gray-300" title="System type — cannot be edited or deleted">
-                      <Lock className="w-4 h-4" />
-                    </span>
-                  ) : (
-                    <>
-                      <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+                )
+              })}
+            </div>
+          )}
+          <p className="text-xs text-gray-400">
+            {visible.length !== outflowTypes.length
+              ? `${visible.length} of ${outflowTypes.length} outflow types`
+              : `${outflowTypes.length} outflow type${outflowTypes.length !== 1 ? 's' : ''}`}
+          </p>
+        </>
       )}
     </div>
   )
