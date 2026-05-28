@@ -9,9 +9,42 @@
 - Three roles: `admin`, `accountant`, `viewer` — stored in `profiles.role`
 - Roles are enforced at **both** the frontend (`useRole`) and database (RLS) layers
 - `useRole()` returns actual role-based booleans — checks `profile.role`, guards on `loading`
-- `isAdmin()` → `role === 'admin'`; `canWrite()` → `role === 'admin' || role === 'accountant'`; `canDelete()` same as `canWrite()`
-- `<AdminOnly>` hides children when role ≠ `admin`; `<CanWrite>` hides when role is `viewer`
 - During profile hydration (`loading === true`), all permission methods return `false` — prevents flash
+
+### `useRole()` helpers
+
+| Helper | Access |
+|---|---|
+| `isAdmin()` | `role === 'admin'` |
+| `isAccountant()` | `role === 'accountant'` |
+| `isViewer()` / `isReadOnly()` | `role === 'viewer'` |
+| `canWrite()` | admin \| accountant |
+| `canDelete()` | admin \| accountant |
+| `canEditTransactions()` | admin \| accountant |
+| `canImportTransactions()` | admin \| accountant |
+| `canManageConfigs()` | admin only |
+
+### `RoleGates` components
+
+| Component | Access |
+|---|---|
+| `<AdminOnly>` | admin only |
+| `<CanWrite>` | admin \| accountant |
+| `<CanImport>` | admin \| accountant |
+| `<CanManageConfigs>` | admin only |
+
+### Route-level guards (`App.tsx`)
+
+- `<CanWriteGuard>` — wraps `/import`, `/setup`; redirects viewer → `/`
+- `<AdminOnlyGuard>` — wraps `/users`, `/change-log`; redirects non-admin → `/`
+- Route guards are primary enforcement; page-level guards in `Import.tsx`, `Setup.tsx`, `UserManagement.tsx` are defense-in-depth
+
+### Navigation visibility
+
+- Sidebar and BottomTabBar items support `adminOnly?: boolean` and `canWriteOnly?: boolean` flags
+- `canWriteOnly: true` → hidden for viewers (Import, Setup)
+- `adminOnly: true` → hidden for non-admins (User Management, Change Log)
+- Import tab removed from primary bottom bar for viewers
 
 ## Critical: Loading guard replaces the old `!!user` gate
 
