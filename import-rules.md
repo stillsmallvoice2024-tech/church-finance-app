@@ -19,6 +19,28 @@ Also contains `ManualEntryForm` for single-transaction entry.
 
 ---
 
+## ImportModal Dismiss Guard & Session Autosave
+
+### Dismiss guard
+
+- **Backdrop:** permanently disabled (`disableBackdropClose` always passed to `Modal`). No click-outside close at any step.
+- **Processing lock:** `isProcessing = importing || parsing || dupCheckLoading` → when true, `disableClose={true}` is passed to `Modal`, disabling X button, ESC, and backdrop entirely.
+- **Dirty state:** `isDirty = !result && (step > 1 || fileName !== '' || sheets.length > 0)`. When dirty and not processing, X / ESC / Reset all show a confirm dialog.
+- **Confirm dialog copy:** "Discard import progress?" / "Current import setup and unsaved work will be lost." / "Continue Import" / "Discard Changes".
+- **Reset button** (header, visible at step > 1): guarded by `confirmingReset` state when dirty; calls `reset()` after confirmation.
+- **Route change:** `useBlocker(open && isDirty && !isProcessing && !result)` — blocks React Router navigation; renders a portal confirm dialog at `z-[60]`.
+- **Page refresh / tab close:** `beforeunload` handler added when `isDirty && !isProcessing`; removed on cleanup.
+
+### Session autosave
+
+- Key: `church-import-session` in `sessionStorage` (auto-cleared on browser/tab close).
+- Saved on every meaningful state change when `isDirty && !preloadedFile`. Includes: step, fileName, sheets (parsed rows), mapping, dateFormat, fxCurrency, bankId/bankName, all per-row configs, processedRows (step ≥ 4), precomputed IDs, duplicateRis, dupStats, bsConfigTab.
+- **Restore:** runs once on `false→true` open transition (`prevOpenRef` guard). Only restores if `sheets.length > 0 && step >= 2`. Numeric-keyed `Record<number, T>` objects are re-keyed (JSON.parse coerces number keys to strings).
+- **Session cleared** on: deliberate close (`handleClose` → `reset()`), explicit `reset()`, route-blocker "Discard Changes".
+- **`preloadedFile` skips save/restore** — parent-provided file re-parses on open; session state would conflict.
+
+---
+
 ## `bank_name` Propagation During Import
 
 - `ManualEntryForm` — `doSaveInflow` and `doSaveOutflow` resolve `bank_id` → `bank_name` before calling mutation

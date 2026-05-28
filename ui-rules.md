@@ -181,6 +181,9 @@ Toast container uses `.toast-safe-bottom` (CSS var `--tab-bar-height: 64px`) on 
 - **`isDirty` prop:** when `true`, ESC / backdrop / × show a "Discard changes?" overlay instead of closing immediately. Cancel buttons inside the form bypass this guard (explicit intent).
   - react-hook-form modals: pass `formState.isDirty`
   - Controlled-state modals: snapshot initial values in a `useRef` on open and compare
+- **`disableClose` prop:** blocks ALL close paths — X button visually disabled (`text-gray-200 cursor-not-allowed`), ESC no-op, backdrop no-op. Use during async processing to prevent mid-operation dismissal.
+- **`disableBackdropClose` prop:** backdrop click does nothing; X and ESC still work (subject to `isDirty` guard). Use for wizards where accidental backdrop tap is a high risk.
+- **Custom confirm dialog text:** `confirmTitle`, `confirmMessage`, `confirmKeepLabel`, `confirmDiscardLabel` props override the default "Discard changes?" overlay copy. Pass these when the modal context needs domain-specific wording (e.g. "Discard import progress?" / "Continue Import").
 - **Focus trap:** Tab/Shift+Tab are trapped within the modal panel while open. Focus moves to the first focusable element on open; returns to the triggering element on close. No manual focus management needed in individual modals.
 
 ---

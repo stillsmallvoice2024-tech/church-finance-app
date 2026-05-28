@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { useBlocker } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft, ChevronDown,
@@ -450,6 +450,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const reset = useCallback(() => {
     try { sessionStorage.removeItem(SESSION_KEY) } catch {}
     setConfirmingReset(false)
+    setNavBlockShowing(false)
     setStep(1)
     setSheets([])
     setParseErr(null)
@@ -582,9 +583,32 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     return () => window.removeEventListener('beforeunload', handler)
   }, [isDirty, isProcessing])
 
-  // ── Route change blocker ──────────────────────────────────────────────────
-  // Intercepts React Router navigation attempts when the user has dirty state.
-  const blocker = useBlocker(open && isDirty && !isProcessing && !result)
+  // ── Route change guard ────────────────────────────────────────────────────
+  // useBlocker requires the Data Router API (createBrowserRouter) which this app
+  // does not use. Instead, capture anchor clicks in the capture phase to intercept
+  // React Router <Link> navigation before the router processes it.
+  const navigate = useNavigate()
+  const [navBlockShowing, setNavBlockShowing] = useState(false)
+  const pendingNavPathRef = useRef('')
+
+  useEffect(() => {
+    if (!open || !isDirty || isProcessing || !!result) return
+    const handler = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[href]')
+      if (!anchor) return
+      try {
+        const url = new URL(anchor.href, window.location.href)
+        if (url.origin !== window.location.origin) return // external
+        if (url.pathname === window.location.pathname) return // same page
+        e.preventDefault()
+        e.stopPropagation()
+        pendingNavPathRef.current = url.pathname + url.search
+        setNavBlockShowing(true)
+      } catch {}
+    }
+    document.addEventListener('click', handler, true)
+    return () => document.removeEventListener('click', handler, true)
+  }, [open, isDirty, isProcessing, result])
 
   // ── File parsing ─────────────────────────────────────────────────────────
 
@@ -2835,8 +2859,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       document.body
     )}
 
-    {/* Route-change blocker confirm dialog */}
-    {blocker.state === 'blocked' && createPortal(
+    {/* Route-change confirm dialog */}
+    {navBlockShowing && createPortal(
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 text-center">
           <p className="font-semibold text-gray-900 text-base">Discard import progress?</p>
@@ -2844,14 +2868,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => blocker.reset?.()}
+              onClick={() => setNavBlockShowing(false)}
               className="flex-1 px-4 min-h-[44px] text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Continue Import
             </button>
             <button
               type="button"
-              onClick={() => { try { sessionStorage.removeItem(SESSION_KEY) } catch {}; blocker.proceed?.() }}
+              onClick={() => {
+                try { sessionStorage.removeItem(SESSION_KEY) } catch {}
+                setNavBlockShowing(false)
+                navigate(pendingNavPathRef.current)
+              }}
               className="flex-1 px-4 min-h-[44px] text-sm font-medium text-white bg-danger rounded-lg hover:opacity-90 transition-colors"
             >
               Discard Changes
