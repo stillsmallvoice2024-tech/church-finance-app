@@ -10,7 +10,9 @@ import { Modal }        from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { exportCSV }    from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
+import { Navigate } from 'react-router-dom'
 import { useAuth }      from '../hooks/useAuth'
+import { useRole }      from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { supabase }     from '../lib/supabase'
@@ -434,6 +436,7 @@ function ChangePasswordModal({
 
 export default function UserManagement() {
   const { user, profile } = useAuth()
+  const { isAdmin }       = useRole()
   const { push: toast }   = useToastStore()
 
   usePageTitle('User Management')
@@ -517,6 +520,9 @@ export default function UserManagement() {
   const totalCount      = users.length
   const adminCount      = users.filter(u => u.role === 'admin').length
   const accountantCount = users.filter(u => u.role === 'accountant').length
+
+  // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
+  if (!isAdmin()) return <Navigate to="/" replace />
 
   return (
     <div className="space-y-6">

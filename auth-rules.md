@@ -49,9 +49,16 @@ Old pattern `isAdmin: () => !!user` has been removed — it bypassed all role ch
 
 ## Auth Store & Hook
 
-- `src/store/authStore.ts` — Zustand: `user`, `profile`, `loading`, `setUser`, `setProfile`, `setLoading`
+- `src/store/authStore.ts` — Zustand: `user`, `profile`, `role`, `loading`, `profileFetchFailed`
+  - `setProfile()` atomically sets `profile` + `role` + resets `profileFetchFailed`
+  - `clearAuth()` resets all fields including `profileFetchFailed`
 - `src/hooks/useAuth.ts` — manages Supabase auth event listeners + `fetchProfile` call
 - Uses request ownership model (monotonic `requestIdRef` + `AbortController`) for background-tab resilience — see `miscellaneous.md`
+
+### fetchProfile rules (critical)
+- Uses raw `fetch` with **no** `credentials: 'include'` — Supabase REST authenticates via `Authorization: Bearer <token>`; adding `credentials: 'include'` causes browsers to apply the credentialed-CORS check, which fails against Supabase's default `Access-Control-Allow-Origin: *`, silently dropping the response
+- Retries up to 3 times (0 / 500 / 1 000 ms backoff) before marking `profileFetchFailed = true`
+- `AuthGuard` shows `ProfileErrorScreen` (with sign-out button) when `!profile && profileFetchFailed` — prevents silent viewer-like state for authenticated users whose profile could not load
 
 ---
 

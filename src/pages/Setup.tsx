@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Navigate } from 'react-router-dom'
 import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
+import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useBanks, type DbBank } from '../hooks/useBanks'
 import { AddBankModal } from '../components/modals/AddBankModal'
@@ -1577,6 +1579,7 @@ function DatabaseTab() {
 // ── Page ──────────────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
+  const { canWrite } = useRole()
   const [activeTab,      setActiveTab]      = useState<Tab>('General')
   const [bankModalOpen,  setBankModalOpen]  = useState(false)
   const [editBankRecord, setEditBankRecord] = useState<DbBank | null>(null)
@@ -1611,6 +1614,9 @@ export default function SetupPage() {
   const { mutate: deleteAllocConfig               } = useDeleteAllocationConfig()
 
   usePageTitle('Setup')
+
+  // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
+  if (!canWrite()) return <Navigate to="/" replace />
 
   const handleNewAlloc    = () => { setEditAllocRecord(null); setAllocModalOpen(true) }
   const handleEditAlloc   = (c: AllocationConfig) => { setEditAllocRecord(c); setAllocModalOpen(true) }
