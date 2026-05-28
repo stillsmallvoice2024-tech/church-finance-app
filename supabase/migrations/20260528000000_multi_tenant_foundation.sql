@@ -21,14 +21,18 @@ CREATE INDEX IF NOT EXISTS idx_organizations_slug       ON public.organizations(
 CREATE INDEX IF NOT EXISTS idx_organizations_created_by ON public.organizations(created_by);
 
 -- Permissive policies for Phase 1; will tighten in Phase 2
-DROP POLICY IF EXISTS "orgs_select" ON public.organizations;
-DROP POLICY IF EXISTS "orgs_insert" ON public.organizations;
-DROP POLICY IF EXISTS "orgs_update" ON public.organizations;
-DROP POLICY IF EXISTS "orgs_delete" ON public.organizations;
-CREATE POLICY "orgs_select" ON public.organizations FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "orgs_insert" ON public.organizations FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "orgs_update" ON public.organizations FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "orgs_delete" ON public.organizations FOR DELETE USING (public.is_admin());
+DO $$ BEGIN
+  CREATE POLICY "orgs_select" ON public.organizations FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "orgs_insert" ON public.organizations FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "orgs_update" ON public.organizations FOR UPDATE USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "orgs_delete" ON public.organizations FOR DELETE USING (public.is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ── 2. Org Members ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.org_members (
@@ -49,14 +53,18 @@ ALTER TABLE public.org_members ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS idx_org_members_org_id  ON public.org_members(org_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_user_id ON public.org_members(user_id);
 
-DROP POLICY IF EXISTS "org_members_select" ON public.org_members;
-DROP POLICY IF EXISTS "org_members_insert" ON public.org_members;
-DROP POLICY IF EXISTS "org_members_update" ON public.org_members;
-DROP POLICY IF EXISTS "org_members_delete" ON public.org_members;
-CREATE POLICY "org_members_select" ON public.org_members FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "org_members_insert" ON public.org_members FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "org_members_update" ON public.org_members FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "org_members_delete" ON public.org_members FOR DELETE USING (public.is_admin());
+DO $$ BEGIN
+  CREATE POLICY "org_members_select" ON public.org_members FOR SELECT USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "org_members_insert" ON public.org_members FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "org_members_update" ON public.org_members FOR UPDATE USING (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "org_members_delete" ON public.org_members FOR DELETE USING (public.is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ── 3. Nullable org_id on all business tables ─────────────────
 -- IMPORTANT: nullable only; no NOT NULL; no query rewrites; no RLS changes.
