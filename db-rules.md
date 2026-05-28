@@ -40,18 +40,22 @@
 | `dynamic_report_snapshots` | Frozen resolved values; `report_id` FK, `label`, `snapshot_at timestamptz`, `data jsonb` (`SnapshotData`: `resolvedAt`, `resolved: Record<string,number>`, `tableData: Record<string, TableRow[]>`); RLS: read=any auth, write=`is_finance_user()`, delete=`is_admin()`; index on `(report_id, snapshot_at DESC)` |
 | `bank_schema_check` | Helper view; `SELECT column_name::text FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'banks'`; queried by `checkBankStartingBalanceMigration()` to bypass PostgREST column cache |
 | `schema_discovery_view` | Optional helper view; `SELECT table_name::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`; queried by `discoverSchemaTables()` in `backupRestore.ts` to detect unmanaged tables; install via `SCHEMA_DISCOVERY_MIGRATION_SQL` exported from that module |
+| `organizations` | Multi-tenant anchor; `name`, `slug` UNIQUE, `created_by` → profiles, `metadata jsonb`; **Phase 1 only — no isolation enforced yet** |
+| `org_members` | Org membership; `org_id`, `user_id`, `role` (admin/accountant/viewer), `status` (active/invited/suspended), `invited_by`; UNIQUE(org_id, user_id) — one user may belong to multiple orgs |
 
 ---
 
 ## Migration Strategy
 
-- `supabase/schema.sql` = complete DDL for fresh installs — **not auto-run** against existing projects
+- `supabase/schema.sql` = complete DDL for **fresh installs only** — uses bare `CREATE TABLE` (no `IF NOT EXISTS`) for core tables; **never run against an existing DB** (will fail on first duplicate table)
 - Incremental patches live in `MIGRATION_SQL` constant in `Setup.tsx` (Database tab — run manually in Supabase SQL editor)
+- Large feature migrations also get a standalone file in `supabase/migrations/` (e.g. `20260528000000_multi_tenant_foundation.sql`) — same SQL, runnable directly in Supabase SQL editor
 - New column or table → update **both** `schema.sql` AND `Setup.tsx`
 - **Receipts feature** has its own separate `MIGRATION_SQL` displayed inline on the Receipts page and in the ReceiptBadge error panel — it is **not** in `Setup.tsx`. Includes: table creation, RLS enable + policies, storage bucket, and `storage.objects` INSERT/SELECT/DELETE policies.
   - Policy blocks use `DROP POLICY IF EXISTS` + `CREATE POLICY` (not `DO $$ EXCEPTION duplicate_object`) — re-running the migration replaces any pre-existing wrong policies
   - Correct receipts INSERT/DELETE policy: `is_finance_user()` — re-run full receipts migration if older `auth.uid() IS NOT NULL` policies are present
 - **Security hardening migration**: `supabase/migrations/20260519000000_security_hardening.sql` — apply once in Supabase SQL editor; idempotent (`DROP IF EXISTS` before every `CREATE`)
+- **Multi-tenant foundation migration**: `supabase/migrations/20260528000000_multi_tenant_foundation.sql` — adds `organizations`, `org_members`, nullable `org_id` on 26 business tables, org helper stubs; idempotent; also in `Setup.tsx` MIGRATION_SQL; detailed notes in `supabase/migrations/MULTI_TENANT_FOUNDATION.md`
 
 ### Live-DB Migration Notes
 
@@ -67,6 +71,7 @@
 | `special_config_group_id uuid` | `income_types` | Links income type to a config group (replaces per-version `special_config_id` link) |
 | `from_category_id uuid`, `to_category_id uuid`, `status text`, `reversal_of_id uuid` | `intra_flows` | Intraflow traceability — run `supabase/add_intraflow_traceability.sql`; backfills IDs from name text for existing rows; `status DEFAULT 'active'` |
 | `transfer_type text`, `batch_id uuid` | `intra_flows` | Bulk reallocation tagging — run `supabase/add_bulk_reallocation_support.sql`; adds `idx_intra_batch` index on `batch_id` |
+| `org_id uuid REFERENCES organizations(id) ON DELETE SET NULL` (nullable) | 26 business tables (see multi-tenant migration) | Multi-tenant Phase 1 — structural only; no queries or RLS changed; skipped: `profiles`, `audit_log`, `field_changes`, `dynamic_report_blocks`, `dynamic_report_snapshots` |
 
 `recorded_at` migration is already in `MIGRATION_SQL` in `Setup.tsx` and backfills from `created_at` for existing rows. If adding manually:
 ```sql
@@ -199,6 +204,8 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 - **DELETE policy rule**: transaction/receipt tables use `is_finance_user()`; config/setup/profile tables use `is_admin()`. Do NOT use bare `auth.uid() IS NOT NULL` for destructive ops.
 - `useDeleteTransaction(table)` passes `count: 'exact'` and throws if `count === 0` — catches silent RLS denials
 - `outflow_types` and `category_outflow_type_map`: RLS enabled (added in security hardening); read=any auth, write=`is_finance_user()`, delete=`is_admin()` / `is_finance_user()`
+- **Org-aware helper stubs** (Phase 1 — enforce nothing yet): `get_current_org_id()` returns NULL; `is_org_admin(p_org_id)` and `is_org_finance_user(p_org_id)` check `org_members` not `profiles.role`; all `SECURITY DEFINER STABLE`
+- **Policy idempotency**: `CREATE POLICY` has no `IF NOT EXISTS` — always wrap in `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;`. Never use `DROP POLICY IF EXISTS` + `CREATE POLICY` in migration SQL — Supabase flags `DROP` as a destructive operation and warns the user
 
 ---
 
