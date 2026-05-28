@@ -8,6 +8,10 @@ export function useRole() {
   // Guard on loading to avoid flash: no permissions until profile is hydrated.
   const resolved = !loading && !!user
 
+  if (resolved && role === null) {
+    console.warn('[role] resolved=true but role=null — profile may not have loaded correctly')
+  }
+
   return {
     role,
     isAdmin:      (): boolean => resolved && role === 'admin',

@@ -10,9 +10,10 @@ const PROFILE_FETCH_TIMEOUT_MS = 10_000
 type AuthEvent = AuthChangeEvent | 'FOCUS_REVALIDATE'
 
 // ── fetchProfile ───────────────────────────────────────────────────────────────
-// Raw fetch with credentials: 'include' and AbortSignal for precise
-// cancellation control. Bypasses the Supabase client builder so the caller
-// fully owns the request lifecycle.
+// Raw fetch with AbortSignal for precise cancellation control.
+// No `credentials: 'include'` — Supabase REST uses Bearer tokens, not cookies.
+// Using credentials:include with Supabase's default CORS (Allow-Origin: *) causes
+// browsers to block the response, leaving profile null and role unresolved.
 async function fetchProfile(
   userId: string,
   accessToken: string,
@@ -24,7 +25,6 @@ async function fetchProfile(
   const res = await fetch(
     `${baseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
     {
-      credentials: 'include',
       signal,
       headers: {
         apikey:        anonKey,
@@ -41,6 +41,32 @@ async function fetchProfile(
 
   const rows = (await res.json()) as UserProfile[]
   return rows[0] ?? null
+}
+
+// ── fetchProfileWithRetry ──────────────────────────────────────────────────────
+// Retries up to MAX_ATTEMPTS times with exponential backoff on null returns.
+// AbortError propagates immediately (caller owns cancellation).
+const RETRY_DELAYS_MS = [0, 500, 1000]
+
+async function fetchProfileWithRetry(
+  userId: string,
+  accessToken: string,
+  signal: AbortSignal,
+): Promise<UserProfile | null> {
+  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+    if (signal.aborted) return null
+
+    if (attempt > 0) {
+      await new Promise<void>(r => setTimeout(r, RETRY_DELAYS_MS[attempt]))
+      if (signal.aborted) return null
+      console.log(`[auth] fetchProfile retry attempt ${attempt + 1}`)
+    }
+
+    // fetchProfile throws AbortError if aborted — propagate immediately
+    const profile = await fetchProfile(userId, accessToken, signal)
+    if (profile) return profile
+  }
+  return null
 }
 
 // ── useAuthListener ────────────────────────────────────────────────────────────
@@ -101,7 +127,7 @@ export function useAuthListener(): void {
             return
           }
 
-          const profile = await fetchProfile(session.user.id, session.access_token, signal)
+          const profile = await fetchProfileWithRetry(session.user.id, session.access_token, signal)
 
           // ── Re-verify ownership after every await ──────────────────────────
           if (signal.aborted) {
@@ -116,9 +142,10 @@ export function useAuthListener(): void {
 
           if (profile) {
             useAuthStore.getState().setProfile(profile)
-            console.log(`[auth:${requestId}] success — profile loaded`)
+            console.log(`[auth:${requestId}] profile loaded  role=${profile.role}`)
           } else {
-            console.warn(`[auth:${requestId}] user authenticated but profile returned null`)
+            console.warn(`[auth:${requestId}] profile fetch failed after retries — user authenticated but role unresolved`)
+            useAuthStore.getState().setProfileFetchFailed(true)
           }
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {
