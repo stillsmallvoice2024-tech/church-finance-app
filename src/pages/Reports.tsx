@@ -9,6 +9,7 @@ import { exportCSV } from '../utils/csvExport'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { useOutflowTypes } from '../hooks/useOutflowTypes'
+import { ReportDateFilter, useReportDateFilter } from '../components/ui/ReportDateFilter'
 
 type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'fx' | 'audit'
 
@@ -306,36 +307,26 @@ function IncomeTypeBreakdownPanel() {
   const activeYear = useAccountingYearStore(s => s.year)
   const { incomeTypes } = useIncomeTypes()
 
-  const [year,    setYear]    = useState(activeYear)
-  const [month,   setMonth]   = useState(0)   // 0 = all months
+  const filter  = useReportDateFilter(activeYear)
   const [rows,    setRows]    = useState<IncomeTypeRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
-  useEffect(() => { setYear(activeYear) }, [activeYear])
-
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    const y  = year.toString()
-    const lo = month === 0
-      ? `${y}-01-01`
-      : `${y}-${String(month).padStart(2, '0')}-01`
-    const hi = month === 0
-      ? `${y}-12-31`
-      : `${y}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`
+    const { lo, queryHi, col } = filter.range
 
     const { data, error: err } = await supabase
       .from('inflow_transactions')
       .select('amount, income_type_id')
-      .gte('date', lo)
-      .lte('date', hi)
+      .gte(col, lo)
+      .lte(col, queryHi)
 
     if (err) { setError(err.message); setLoading(false); return }
 
-    // Aggregate by income_type_id
     const agg = new Map<string | null, { amount: number; count: number }>()
     for (const r of data ?? []) {
-      const id = (r.income_type_id as string | null) ?? null
+      const id  = (r.income_type_id as string | null) ?? null
       const cur = agg.get(id) ?? { amount: 0, count: 0 }
       cur.amount += Number(r.amount)
       cur.count  += 1
@@ -343,13 +334,11 @@ function IncomeTypeBreakdownPanel() {
     }
 
     const result: IncomeTypeRow[] = []
-    // Known income types first
     for (const it of incomeTypes) {
       const agged = agg.get(it.id)
       if (!agged) continue
       result.push({ id: it.id, name: it.name, color: it.color, ...agged })
     }
-    // Unclassified
     const unclassified = agg.get(null)
     if (unclassified) {
       result.push({ id: null, name: 'Unclassified', color: '#94a3b8', ...unclassified })
@@ -357,19 +346,16 @@ function IncomeTypeBreakdownPanel() {
     result.sort((a, b) => b.amount - a.amount)
     setRows(result)
     setLoading(false)
-  }, [year, month, incomeTypes])
+  }, [filter.range, incomeTypes])
 
   useEffect(() => { load() }, [load])
 
-  const grandTotal = rows.reduce((s, r) => s + r.amount, 0)
-
-  const periodLabel = month === 0
-    ? String(year)
-    : `${MONTH_NAMES[month - 1]} ${year}`
+  const grandTotal  = rows.reduce((s, r) => s + r.amount, 0)
+  const periodLabel = filter.periodLabel
 
   const handleExport = () =>
     exportCSV(
-      `income_type_breakdown_${periodLabel.replace(' ', '_')}`,
+      `income_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
       ['Income Type', 'Total (₦)', 'Count', '% of Total'],
       rows.map(r => [
         r.name,
@@ -383,25 +369,7 @@ function IncomeTypeBreakdownPanel() {
     <ReportSection
       title="Income Type Breakdown"
       onExport={rows.length > 0 ? handleExport : undefined}
-      extra={
-        <div className="flex items-center gap-2">
-          <select
-            value={month}
-            onChange={e => setMonth(Number(e.target.value))}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <option value={0}>All months</option>
-            {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
-          <select
-            value={year}
-            onChange={e => setYear(Number(e.target.value))}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-      }
+      extra={<ReportDateFilter hook={filter} />}
     >
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
@@ -454,7 +422,6 @@ function IncomeTypeBreakdownPanel() {
                   </tr>
                 )
               })}
-              {/* Grand total */}
               <tr className="bg-gray-50 font-bold border-t border-gray-200">
                 <td className="px-5 py-3 text-gray-700">Total — {periodLabel}</td>
                 <td className="px-5 py-3 text-right text-gray-500">
@@ -486,29 +453,20 @@ function OutflowTypeBreakdownPanel() {
   const activeYear = useAccountingYearStore(s => s.year)
   const { outflowTypes } = useOutflowTypes()
 
-  const [year,    setYear]    = useState(activeYear)
-  const [month,   setMonth]   = useState(0)
+  const filter  = useReportDateFilter(activeYear)
   const [rows,    setRows]    = useState<OutflowTypeRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
-  useEffect(() => { setYear(activeYear) }, [activeYear])
-
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    const y  = year.toString()
-    const lo = month === 0
-      ? `${y}-01-01`
-      : `${y}-${String(month).padStart(2, '0')}-01`
-    const hi = month === 0
-      ? `${y}-12-31`
-      : `${y}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`
+    const { lo, queryHi, col } = filter.range
 
     const { data, error: err } = await supabase
       .from('outflow_transactions')
       .select('actual_amount, amount_disbursed, outflow_type_id')
-      .gte('date', lo)
-      .lte('date', hi)
+      .gte(col, lo)
+      .lte(col, queryHi)
 
     if (err) { setError(err.message); setLoading(false); return }
 
@@ -535,16 +493,16 @@ function OutflowTypeBreakdownPanel() {
     result.sort((a, b) => b.amount - a.amount)
     setRows(result)
     setLoading(false)
-  }, [year, month, outflowTypes])
+  }, [filter.range, outflowTypes])
 
   useEffect(() => { load() }, [load])
 
   const grandTotal  = rows.reduce((s, r) => s + r.amount, 0)
-  const periodLabel = month === 0 ? String(year) : `${MONTH_NAMES[month - 1]} ${year}`
+  const periodLabel = filter.periodLabel
 
   const handleExport = () =>
     exportCSV(
-      `outflow_type_breakdown_${periodLabel.replace(' ', '_')}`,
+      `outflow_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
       ['Outflow Type', 'Total (₦)', 'Count', '% of Total'],
       rows.map(r => [
         r.name,
@@ -558,25 +516,7 @@ function OutflowTypeBreakdownPanel() {
     <ReportSection
       title="Outflow Type Breakdown"
       onExport={rows.length > 0 ? handleExport : undefined}
-      extra={
-        <div className="flex items-center gap-2">
-          <select
-            value={month}
-            onChange={e => setMonth(Number(e.target.value))}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <option value={0}>All months</option>
-            {MONTH_NAMES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
-          <select
-            value={year}
-            onChange={e => setYear(Number(e.target.value))}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-      }
+      extra={<ReportDateFilter hook={filter} />}
     >
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
