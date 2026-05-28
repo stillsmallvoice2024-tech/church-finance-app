@@ -292,6 +292,14 @@ Section order: Profile → Password → **Theme** → **Data Management** → Ap
 - Both modals use **`TypeColorPicker`** (`src/components/ui/TypeColorPicker.tsx`): 14 unified preset swatches (`TYPE_PRESET_COLORS`), native `<input type="color">` (Pipette icon trigger), hex text input, live preview swatch, `disabled` prop. Use for any future type-management UI with color selection.
 - **Currencies** — add/remove currencies (code, name, symbol, flag emoji); shows migration SQL
 
+**Search + sort controls** — Banks, Allocation Configs, Special Configs, Income Types, and Outflow Types tabs each have compact inline search + sort controls. Currency tab is excluded.
+- `SetupSearchSort` component (inline in `Setup.tsx`) — search input with Search icon + clear X, plus a sort `<select>`; stacks vertically below `sm`
+- `applySetupSort<T>(data, sort)` helper (inline in `Setup.tsx`) — `sort` encoded as `"field|dir"` (e.g. `"name|asc"`, `"created_at|desc"`); uses `localeCompare` (works for text and ISO date strings)
+- Each tab holds local `search` + `sort` state; `visible` derived via `useMemo`; sort options defined as module-level `*_SORT_OPTS` constants
+- Count footer shows `"X of Y items"` when filtered, normal count when unfiltered
+- No-results state: plain centered text, not the empty-state illustration
+- Do **not** apply `DataControlsBar` / `useDataViewState` to Setup tabs — the lightweight inline pattern is correct for these small config lists
+
 **Database tab removed from primary nav.** Migration SQL is now inside the **Developer Tools** collapsible section below the tab content (collapsed by default). `devToolsOpen` state controls visibility. Do not re-add Database as a primary tab — it is infrastructure tooling, not operational config.
 
 ## Developer Tools Pattern (Setup page)
