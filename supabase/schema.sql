@@ -908,3 +908,119 @@ create policy "drs_select" on public.dynamic_report_snapshots for select using (
 create policy "drs_write"  on public.dynamic_report_snapshots for insert with check (public.is_finance_user());
 create policy "drs_delete" on public.dynamic_report_snapshots for delete using (public.is_admin());
 create index if not exists idx_drs_report_at on public.dynamic_report_snapshots(report_id, snapshot_at desc);
+
+-- ============================================================
+-- ORGANIZATIONS & MULTI-TENANT FOUNDATION (Phase 1)
+-- ============================================================
+create table if not exists public.organizations (
+  id         uuid        primary key default gen_random_uuid(),
+  name       text        not null,
+  slug       text        not null unique,
+  created_by uuid        references public.profiles(id) on delete set null,
+  metadata   jsonb       not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.organizations enable row level security;
+
+create index if not exists idx_organizations_slug       on public.organizations(slug);
+create index if not exists idx_organizations_created_by on public.organizations(created_by);
+
+create policy "orgs_select" on public.organizations for select using (auth.uid() is not null);
+create policy "orgs_insert" on public.organizations for insert with check (auth.uid() is not null);
+create policy "orgs_update" on public.organizations for update using (auth.uid() is not null);
+create policy "orgs_delete" on public.organizations for delete using (public.is_admin());
+
+-- ── Org Members ───────────────────────────────────────────────
+create table if not exists public.org_members (
+  id         uuid        primary key default gen_random_uuid(),
+  org_id     uuid        not null references public.organizations(id) on delete cascade,
+  user_id    uuid        not null references public.profiles(id)      on delete cascade,
+  role       text        not null default 'viewer'
+                         check (role in ('admin', 'accountant', 'viewer')),
+  joined_at  timestamptz not null default now(),
+  invited_by uuid        references public.profiles(id) on delete set null,
+  status     text        not null default 'active'
+                         check (status in ('active', 'invited', 'suspended')),
+  unique (org_id, user_id)
+);
+
+alter table public.org_members enable row level security;
+
+create index if not exists idx_org_members_org_id  on public.org_members(org_id);
+create index if not exists idx_org_members_user_id on public.org_members(user_id);
+
+create policy "org_members_select" on public.org_members for select using (auth.uid() is not null);
+create policy "org_members_insert" on public.org_members for insert with check (auth.uid() is not null);
+create policy "org_members_update" on public.org_members for update using (auth.uid() is not null);
+create policy "org_members_delete" on public.org_members for delete using (public.is_admin());
+
+-- ── Nullable org_id on all business tables ────────────────────
+-- Nullable only; no NOT NULL; no query rewrites; no RLS changes.
+
+alter table public.category_groups           add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.categories                add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.banks                     add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.allocation_configs        add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.income_types              add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.income_type_rules         add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.inflow_transactions       add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.outflow_transactions      add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.intra_flows               add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.bank_deposits             add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.intrabank_transfers       add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.accounts                  add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.ledger_entries            add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.fx_transactions           add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.special_projects          add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.project_entries           add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.receipts                  add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.invitations               add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.report_templates          add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.special_config_groups     add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.transaction_allocation_snapshots add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.recalculation_logs        add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.dynamic_reports           add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.outflow_types             add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.category_outflow_type_map add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.category_opening_balances add column if not exists org_id uuid references public.organizations(id) on delete set null;
+
+-- Indexes for high-volume tables
+create index if not exists idx_inflow_org        on public.inflow_transactions(org_id);
+create index if not exists idx_outflow_org       on public.outflow_transactions(org_id);
+create index if not exists idx_intra_flows_org   on public.intra_flows(org_id);
+create index if not exists idx_banks_org         on public.banks(org_id);
+create index if not exists idx_categories_org    on public.categories(org_id);
+create index if not exists idx_alloc_configs_org on public.allocation_configs(org_id);
+create index if not exists idx_fx_org            on public.fx_transactions(org_id);
+create index if not exists idx_bank_deposits_org on public.bank_deposits(org_id);
+
+-- ── Org-aware helper functions (Phase 1 stubs) ────────────────
+
+create or replace function public.get_current_org_id()
+returns uuid language sql security definer stable as $$
+  select null::uuid;
+$$;
+
+create or replace function public.is_org_admin(p_org_id uuid)
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.org_members
+    where org_id  = p_org_id
+      and user_id = auth.uid()
+      and role    = 'admin'
+      and status  = 'active'
+  );
+$$;
+
+create or replace function public.is_org_finance_user(p_org_id uuid)
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.org_members
+    where org_id  = p_org_id
+      and user_id = auth.uid()
+      and role    in ('admin', 'accountant')
+      and status  = 'active'
+  );
+$$;
