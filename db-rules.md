@@ -30,14 +30,14 @@
 | `fx_conversions` | Links FX withdrawal → NGN inflow; `is_partial`, `exchange_rate` |
 | `special_projects` | Named fundraising projects |
 | `project_entries` | Entries per project |
-| `receipts` | File attachments; `entity_type`, `entity_id`; RLS: SELECT=any auth user, INSERT/DELETE=any auth user (migration) |
-| `invitations` | Token-based invites; `token` UUID, `expires_at` |
+| `receipts` | File attachments; `entity_type`, `entity_id`; RLS: SELECT=any auth, INSERT/DELETE=`is_finance_user()` |
+| `invitations` | Token-based invites; `token` UUID, `expires_at`; no direct SELECT for non-admins — use `get_invitation_by_token()` RPC |
 | `audit_log` | Whole-record snapshots on INSERT/UPDATE/DELETE |
 | `field_changes` | Per-field old/new on UPDATE; `user_id` FK → `profiles(id)` |
 | `report_templates` | Saved report layouts; `layout` JSONB, `created_by` FK → `profiles(id)` |
 | `dynamic_reports` | Report shells; `title`, `created_by` FK → `profiles(id)` |
 | `dynamic_report_blocks` | Blocks per report; `report_id` FK, `block_type` (text/metric/table/formula), `position int`, `config_json jsonb` |
-| `dynamic_report_snapshots` | Frozen resolved values; `report_id` FK, `label`, `snapshot_at timestamptz`, `data jsonb` (`SnapshotData`: `resolvedAt`, `resolved: Record<string,number>`, `tableData: Record<string, TableRow[]>`); RLS: auth users read+write; index on `(report_id, snapshot_at DESC)` |
+| `dynamic_report_snapshots` | Frozen resolved values; `report_id` FK, `label`, `snapshot_at timestamptz`, `data jsonb` (`SnapshotData`: `resolvedAt`, `resolved: Record<string,number>`, `tableData: Record<string, TableRow[]>`); RLS: read=any auth, write=`is_finance_user()`, delete=`is_admin()`; index on `(report_id, snapshot_at DESC)` |
 | `bank_schema_check` | Helper view; `SELECT column_name::text FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'banks'`; queried by `checkBankStartingBalanceMigration()` to bypass PostgREST column cache |
 | `schema_discovery_view` | Optional helper view; `SELECT table_name::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`; queried by `discoverSchemaTables()` in `backupRestore.ts` to detect unmanaged tables; install via `SCHEMA_DISCOVERY_MIGRATION_SQL` exported from that module |
 
@@ -50,7 +50,8 @@
 - New column or table → update **both** `schema.sql` AND `Setup.tsx`
 - **Receipts feature** has its own separate `MIGRATION_SQL` displayed inline on the Receipts page and in the ReceiptBadge error panel — it is **not** in `Setup.tsx`. Includes: table creation, RLS enable + policies, storage bucket, and `storage.objects` INSERT/SELECT/DELETE policies.
   - Policy blocks use `DROP POLICY IF EXISTS` + `CREATE POLICY` (not `DO $$ EXCEPTION duplicate_object`) — re-running the migration replaces any pre-existing wrong policies
-  - If receipts INSERT is rejected with an RLS error, re-run the full receipts migration SQL; older schema installs had `is_finance_user()` / `is_admin()` on those policies
+  - Correct receipts INSERT/DELETE policy: `is_finance_user()` — re-run full receipts migration if older `auth.uid() IS NOT NULL` policies are present
+- **Security hardening migration**: `supabase/migrations/20260519000000_security_hardening.sql` — apply once in Supabase SQL editor; idempotent (`DROP IF EXISTS` before every `CREATE`)
 
 ### Live-DB Migration Notes
 
@@ -194,10 +195,10 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 ## Supabase RLS
 
 - All tables in `public` schema with RLS enabled
-- Helper functions: `is_admin()`, `is_finance_user()` (defined in schema)
-- DELETE policies must use `auth.uid() IS NOT NULL` — see `auth-rules.md` and `miscellaneous.md`
+- Helper functions: `is_admin()`, `is_finance_user()` — both `SECURITY DEFINER STABLE`; safe to use in any policy including `profiles` (no recursion — they bypass RLS internally)
+- **DELETE policy rule**: transaction/receipt tables use `is_finance_user()`; config/setup/profile tables use `is_admin()`. Do NOT use bare `auth.uid() IS NOT NULL` for destructive ops.
 - `useDeleteTransaction(table)` passes `count: 'exact'` and throws if `count === 0` — catches silent RLS denials
-- `profiles` table: uses three separate non-recursive policies (`profiles_insert`, `profiles_update`, `profiles_delete`) — all `auth.uid() IS NOT NULL`. The old `profiles_admin_all` policy called `is_admin()` which re-queried `profiles`, causing infinite recursion — do not re-introduce helper-function-based policies on `profiles`
+- `outflow_types` and `category_outflow_type_map`: RLS enabled (added in security hardening); read=any auth, write=`is_finance_user()`, delete=`is_admin()` / `is_finance_user()`
 
 ---
 

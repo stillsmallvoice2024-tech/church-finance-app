@@ -6,16 +6,18 @@
 
 ## Role System
 
-- Three roles: `admin`, `accountant`, `viewer` — stored in `profiles.role`; displayed as UI badges only
-- **All authenticated users have full read/write/delete access** — roles are not feature-restrictive
-- `useRole()` → `isAdmin()`, `canWrite()`, `canDelete()` all return `!!user` (not `!!role`)
-- `<AdminOnly>` and `<CanWrite>` components always pass through when user is signed in
+- Three roles: `admin`, `accountant`, `viewer` — stored in `profiles.role`
+- Roles are enforced at **both** the frontend (`useRole`) and database (RLS) layers
+- `useRole()` returns actual role-based booleans — checks `profile.role`, guards on `loading`
+- `isAdmin()` → `role === 'admin'`; `canWrite()` → `role === 'admin' || role === 'accountant'`; `canDelete()` same as `canWrite()`
+- `<AdminOnly>` hides children when role ≠ `admin`; `<CanWrite>` hides when role is `viewer`
+- During profile hydration (`loading === true`), all permission methods return `false` — prevents flash
 
-## Critical: Gate on `!!user`, not `!!role`
+## Critical: Loading guard replaces the old `!!user` gate
 
-`user` is set synchronously at the start of every auth event.
-`role` requires a `fetchProfile` network round-trip that can fail or return null.
-Using `!!role` causes edit/delete UI to disappear when profile fetch fails. Always use `!!user`.
+`useRole()` uses `!loading && !!user` as the base (`resolved`), then checks `role` on top.
+Old pattern `isAdmin: () => !!user` has been removed — it bypassed all role checks.
+`role` is safe to use because it is set atomically with `profile` in `setProfile()` in authStore.
 
 ---
 
@@ -26,8 +28,10 @@ Using `!!role` causes edit/delete UI to disappear when profile fetch fails. Alwa
 - `resolveEmail()` in `LoginPage.tsx` maps username → email via `profiles` table lookup before calling Supabase auth
 
 ### Invite (`/invite/:token`)
-- `AcceptInvite.tsx` validates token against `invitations` table (checks `token` UUID + `expires_at`)
-- On valid token: calls Supabase `signUp` with email/password, then sets `profiles` row (full_name, username)
+- `AcceptInvite.tsx` validates token via `get_invitation_by_token(p_token)` RPC — security-definer, anon-safe, returns only pending non-expired rows
+- On valid token: calls Supabase `signUp`, updates profile display fields (name, username — NOT role), then calls `accept_invitation(p_token, p_user_id)` RPC
+- `accept_invitation` atomically sets `profiles.role` from the invite and marks it accepted; enforces `p_user_id = auth.uid()` to block impersonation
+- Role is never set via a direct `profiles` UPDATE from the client — always through the RPC
 - Invite tokens are single-use UUIDs
 
 ### Password Reset (`/reset-password`)
@@ -54,14 +58,19 @@ Using `!!role` causes edit/delete UI to disappear when profile fetch fails. Alwa
 ## RLS Patterns
 
 - All tables: `public` schema, RLS enabled
-- Helper DB functions: `is_admin()`, `is_finance_user()`
-- DELETE policies must check `auth.uid() IS NOT NULL`, not `is_admin()`
-  - Legacy deployments may have admin-only DELETE policies that silently fail — migration SQL in `miscellaneous.md`
-- `intraflow_update` policy on `intra_flows` may be absent on existing DBs — it was not included in `add_intraflow_traceability.sql`; symptom: update returns 0 rows with no error → fix: run `supabase/fix_intraflow_update_policy.sql`
-- **`receipts` policies** must use `auth.uid() IS NOT NULL` for SELECT/INSERT/DELETE — never `is_finance_user()` or `is_admin()` (all authenticated users can upload/view/delete receipts)
-- **`profiles` policies must never call `is_admin()` or `is_finance_user()`** — both functions query `public.profiles`, causing infinite recursion
-  - `profiles` policy set: all four operations use `auth.uid() IS NOT NULL` directly
-  - Policies: `profiles_select`, `profiles_insert`, `profiles_update`, `profiles_delete`
+- Helper DB functions: `is_admin()`, `is_finance_user()` — both are `SECURITY DEFINER STABLE`; they query `profiles` without triggering RLS (no recursion risk)
+- **DELETE policies**: use `is_finance_user()` for transaction data; `is_admin()` for config/setup data
+  - `inflow_transactions`, `outflow_transactions`, `intra_flows`, `receipts` DELETE → `is_finance_user()`
+  - `profiles`, config tables, report tables DELETE → `is_admin()`
+- **`receipts` policies**: SELECT = any auth user; INSERT/DELETE = `is_finance_user()`
+- **`profiles` policies** (post-security-hardening):
+  - `profiles_select` — `auth.uid() IS NOT NULL`
+  - `profiles_insert` — `auth.uid() IS NOT NULL` (trigger handles most profile creation)
+  - `profiles_update_self` — `USING (id = auth.uid())` + `WITH CHECK (role = old.role)` — blocks self-role-escalation
+  - `profiles_update_admin` — `USING (is_admin())` — allows admins to change any user's role
+  - `profiles_delete` — `USING (is_admin())`
+- `is_admin()` is safe to use in `profiles` policies — it runs as `SECURITY DEFINER` and bypasses RLS on `profiles` internally; no infinite recursion
+- `intraflow_update` policy may be absent on older DBs — symptom: update returns 0 rows silently → fix: run `supabase/fix_intraflow_update_policy.sql`
 
 ---
 
@@ -69,7 +78,19 @@ Using `!!role` causes edit/delete UI to disappear when profile fetch fails. Alwa
 
 | Column | Type | Notes |
 |---|---|---|
-| `token` | uuid | PK, single-use |
+| `token` | uuid | Single-use UUID; indexed |
 | `email` | text | Invited email address |
-| `expires_at` | timestamptz | Token expiry |
+| `expires_at` | timestamptz | Token expiry (7 days default) |
 | `role` | text | Role to assign on accept |
+| `status` | text | `pending` / `accepted` / `expired` |
+
+**RLS:** Admins manage via `invitations_admin_all`. No direct SELECT for non-admins.
+Use `get_invitation_by_token(uuid)` RPC to validate a token (anon-safe).
+Use `accept_invitation(token, user_id)` RPC to consume and apply role.
+
+## Security-Definer RPCs
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `get_invitation_by_token(p_token uuid)` | anon / new user | Returns pending non-expired invite row; never exposes accepted/expired rows |
+| `accept_invitation(p_token uuid, p_user_id uuid)` | newly registered user | Sets role from invite, marks invite accepted; enforces `p_user_id = auth.uid()` |
