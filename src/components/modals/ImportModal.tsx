@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useBlocker } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, ChevronRight, ChevronLeft, ChevronDown,
@@ -70,6 +71,8 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
 }
 
 const SKIP = '__skip__'
+
+const SESSION_KEY = 'church-import-session'
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
 
@@ -403,6 +406,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [dupStats,        setDupStats]        = useState<{ total: number; newCount: number; dupCount: number } | null>(null)
   const [dupSkipOpen,     setDupSkipOpen]     = useState(false)
 
+  // ── Dismiss-guard state ────────────────────────────────────────────────────
+  const [confirmingReset, setConfirmingReset] = useState(false)
+
+  // Processing = any async operation in flight — blocks ALL close paths
+  const isProcessing = importing || parsing || dupCheckLoading
+  // Dirty = meaningful progress exists that would be lost on close
+  const isDirty = !result && (step > 1 || fileName !== '' || sheets.length > 0)
+
   // In-wizard dup check
 
   // Derived from the already-loaded allocConfigs store — no separate query needed.
@@ -437,6 +448,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   // ── Reset on open/close ──────────────────────────────────────────────────
 
   const reset = useCallback(() => {
+    try { sessionStorage.removeItem(SESSION_KEY) } catch {}
+    setConfirmingReset(false)
     setStep(1)
     setSheets([])
     setParseErr(null)
@@ -483,6 +496,95 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   }, [])
 
   const handleClose = () => { reset(); onClose() }
+
+  // ── Session autosave ───────────────────────────────────────────────────────
+  // Saves progress to sessionStorage so accidental closes can be recovered.
+  // Only runs when dirty and no preloaded file (preloaded file re-parses on open).
+  useEffect(() => {
+    if (!isDirty || preloadedFile) return
+    const state = {
+      step, fileName,
+      sheets,
+      selectedSheet, targetTable, mapping, dateFormat, fxCurrency,
+      bankId:   internalBank?.id   ?? null,
+      bankName: internalBank?.name ?? null,
+      rowConfigs,
+      rowStageCodes,
+      rowTxnTypes,
+      rowOrigTxnIds,
+      rowOutflowTypes,
+      rowIncomeTypes,
+      rowManualOverrides,
+      rowPendingDeductions: [...rowPendingDeductions],
+      processedRows:         step >= 4 ? processedRows        : null,
+      precomputedInflowIds:  step >= 4 ? precomputedInflowIds : {},
+      precomputedOutflowIds: step >= 4 ? precomputedOutflowIds : {},
+      duplicateRis:          [...duplicateRis],
+      dupStats,
+      bsConfigTab,
+    }
+    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(state)) } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, step, fileName, sheets, selectedSheet, targetTable, mapping, dateFormat,
+      fxCurrency, internalBank, rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
+      rowOutflowTypes, rowIncomeTypes, rowManualOverrides, rowPendingDeductions,
+      processedRows, precomputedInflowIds, precomputedOutflowIds, duplicateRis,
+      dupStats, bsConfigTab, preloadedFile])
+
+  // ── Session restore ────────────────────────────────────────────────────────
+  // Runs once per false→true open transition.
+  // Restores previously interrupted import sessions automatically.
+  const prevOpenRef = useRef(false)
+  useEffect(() => {
+    const wasOpen = prevOpenRef.current
+    prevOpenRef.current = open
+    if (!open || wasOpen || preloadedFile) return
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY)
+      if (!saved) return
+      const s = JSON.parse(saved)
+      if (!s.sheets?.length || s.step < 2) return
+      // JSON.parse converts numeric object keys to strings; restore them as numbers
+      const toNumRec = <T,>(obj: Record<string, T>): Record<number, T> =>
+        Object.fromEntries(Object.entries(obj ?? {}).map(([k, v]) => [Number(k), v]))
+      setStep(s.step)
+      setFileName(s.fileName ?? '')
+      setSheets(s.sheets)
+      setSelectedSheet(s.selectedSheet ?? '')
+      setTargetTable(s.targetTable ?? '')
+      setMapping(s.mapping ?? {})
+      setDateFormat(s.dateFormat ?? 'DD/MM/YYYY')
+      setFxCurrency(s.fxCurrency ?? '')
+      if (s.bankId && s.bankName) setInternalBank({ id: s.bankId, name: s.bankName })
+      setRowConfigs(toNumRec(s.rowConfigs ?? {}))
+      setRowStageCodes(toNumRec(s.rowStageCodes ?? {}))
+      setRowTxnTypes(toNumRec(s.rowTxnTypes ?? {}))
+      setRowOrigTxnIds(toNumRec(s.rowOrigTxnIds ?? {}))
+      setRowOutflowTypes(toNumRec(s.rowOutflowTypes ?? {}))
+      setRowIncomeTypes(toNumRec(s.rowIncomeTypes ?? {}))
+      setRowManualOverrides(toNumRec(s.rowManualOverrides ?? {}))
+      setRowPendingDeductions(new Set<number>(s.rowPendingDeductions ?? []))
+      if (s.processedRows) setProcessedRows(s.processedRows)
+      setPrecomputedInflowIds(toNumRec(s.precomputedInflowIds ?? {}))
+      setPrecomputedOutflowIds(toNumRec(s.precomputedOutflowIds ?? {}))
+      setDuplicateRis(new Set<number>(s.duplicateRis ?? []))
+      if (s.dupStats) setDupStats(s.dupStats)
+      if (s.bsConfigTab) setBsConfigTab(s.bsConfigTab)
+    } catch {}
+  }, [open, preloadedFile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── beforeunload guard ─────────────────────────────────────────────────────
+  // Prompts browser "Leave site?" on page refresh or tab close when dirty.
+  useEffect(() => {
+    if (!isDirty || isProcessing) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty, isProcessing])
+
+  // ── Route change blocker ──────────────────────────────────────────────────
+  // Intercepts React Router navigation attempts when the user has dirty state.
+  const blocker = useBlocker(open && isDirty && !isProcessing && !result)
 
   // ── File parsing ─────────────────────────────────────────────────────────
 
@@ -1047,14 +1149,26 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   return (
     <>
-    <Modal open={open} onClose={handleClose} title="Import Transactions" size="max-w-3xl"
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Import Transactions"
+      size="max-w-3xl"
+      isDirty={isDirty}
+      disableClose={isProcessing}
+      disableBackdropClose
+      confirmTitle="Discard import progress?"
+      confirmMessage="Current import setup and unsaved work will be lost."
+      confirmKeepLabel="Continue Import"
+      confirmDiscardLabel="Discard Changes"
       headerExtra={step > 1 ? (
         <button
           type="button"
-          onClick={reset}
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+          onClick={() => isDirty ? setConfirmingReset(true) : reset()}
+          disabled={isProcessing}
+          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <RefreshCw className="w-3 h-3" /> Clear
+          <RefreshCw className="w-3 h-3" /> Reset
         </button>
       ) : undefined}
     >
@@ -2693,6 +2807,60 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         setCreateConfigOpen(false)
       }}
     />
+
+    {/* Reset-import confirm dialog */}
+    {confirmingReset && createPortal(
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 text-center">
+          <p className="font-semibold text-gray-900 text-base">Discard import progress?</p>
+          <p className="text-sm text-gray-500">Current import setup and unsaved work will be lost.</p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setConfirmingReset(false)}
+              className="flex-1 px-4 min-h-[44px] text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Continue Import
+            </button>
+            <button
+              type="button"
+              onClick={() => { setConfirmingReset(false); reset() }}
+              className="flex-1 px-4 min-h-[44px] text-sm font-medium text-white bg-danger rounded-lg hover:opacity-90 transition-colors"
+            >
+              Discard Changes
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+
+    {/* Route-change blocker confirm dialog */}
+    {blocker.state === 'blocked' && createPortal(
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 text-center">
+          <p className="font-semibold text-gray-900 text-base">Discard import progress?</p>
+          <p className="text-sm text-gray-500">Current import setup and unsaved work will be lost.</p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => blocker.reset?.()}
+              className="flex-1 px-4 min-h-[44px] text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Continue Import
+            </button>
+            <button
+              type="button"
+              onClick={() => { try { sessionStorage.removeItem(SESSION_KEY) } catch {}; blocker.proceed?.() }}
+              className="flex-1 px-4 min-h-[44px] text-sm font-medium text-white bg-danger rounded-lg hover:opacity-90 transition-colors"
+            >
+              Discard Changes
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
     </>
   )
 }
