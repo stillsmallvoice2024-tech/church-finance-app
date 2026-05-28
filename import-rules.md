@@ -28,7 +28,7 @@ Also contains `ManualEntryForm` for single-transaction entry.
 - **Dirty state:** `isDirty = !result && (step > 1 || fileName !== '' || sheets.length > 0)`. When dirty and not processing, X / ESC / Reset all show a confirm dialog.
 - **Confirm dialog copy:** "Discard import progress?" / "Current import setup and unsaved work will be lost." / "Continue Import" / "Discard Changes".
 - **Reset button** (header, visible at step > 1): guarded by `confirmingReset` state when dirty; calls `reset()` after confirmation.
-- **Route change:** `useBlocker(open && isDirty && !isProcessing && !result)` — blocks React Router navigation; renders a portal confirm dialog at `z-[60]`.
+- **Route change:** capture-phase `click` listener on `document` intercepts `<a href>` clicks (how React Router `<Link>` renders) when dirty. Prevents default, shows portal confirm at `z-[60]`. On discard, calls `navigate(path)`. (`useBlocker` was removed — it requires the Data Router API and throws with `<BrowserRouter>`.)
 - **Page refresh / tab close:** `beforeunload` handler added when `isDirty && !isProcessing`; removed on cleanup.
 
 ### Session autosave
