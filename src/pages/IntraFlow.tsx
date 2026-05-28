@@ -26,8 +26,12 @@ import { useCategories }  from '../hooks/useCategories'
 import { useYearRange }   from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
-import { filterInputCls } from '../components/ui/FormField'
+import { filterInputCls }         from '../components/ui/FormField'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+import { BulkActionBar }          from '../components/ui/BulkActionBar'
+import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowModal'
+import { useBulkSelection }       from '../hooks/useBulkSelection'
+import { useBulkDeleteAction }    from '../hooks/useBulkActions'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -113,6 +117,7 @@ export default function IntraFlow() {
   })
 
   const displayed = data
+  const { selectedIds, toggleRow, clearAll, selectAllRows, headerRef } = useBulkSelection(displayed)
 
   // Summary
   const total   = data.reduce((s, r) => s + Number(r.total_amount), 0)
@@ -125,6 +130,8 @@ export default function IntraFlow() {
   const [deleteId,     setDeleteId]     = useState<string | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
 
   function intraFlowDetailItems(row: IntraFlowRow): DetailItem[] {
     return [
@@ -139,6 +146,7 @@ export default function IntraFlow() {
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
   const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('intra_flows')
+  const { execute: bulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
   const { categories } = useCategories()
 
   usePageTitle('Intra Accounts')
@@ -162,6 +170,19 @@ export default function IntraFlow() {
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Delete failed', 'error')
     }
+  }
+
+  // Clear selection on filter, sort, page, or tab change
+  useEffect(() => { clearAll() }, [iflState.page, iflState.sortKey, iflState.sortDir, dateFrom, dateTo, accountFrom, accountTo, debouncedSearch, tab, clearAll]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds)
+    const { failed, total } = await bulkDelete(ids)
+    if (failed === 0) toast(`Deleted ${total} transfer${total !== 1 ? 's' : ''}`, 'success')
+    else              toast(`${total - failed} deleted, ${failed} failed`, 'error')
+    clearAll()
+    setBulkDeleteConfirmOpen(false)
+    refetch()
   }
 
   const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
@@ -389,10 +410,42 @@ export default function IntraFlow() {
               )}
             </div>
           ) : (
+            <>
+              <BulkActionBar
+                count={selectedIds.size}
+                onClear={clearAll}
+                actions={[
+                  {
+                    key: 'edit',
+                    label: 'Edit selected',
+                    icon: <Pencil className="w-3.5 h-3.5" />,
+                    onClick: () => setBulkEditOpen(true),
+                    show: canWrite(),
+                  },
+                  {
+                    key: 'delete',
+                    label: 'Delete selected',
+                    icon: <Trash2 className="w-3.5 h-3.5" />,
+                    variant: 'danger',
+                    onClick: () => setBulkDeleteConfirmOpen(true),
+                    loading: bulkDeleting,
+                    show: canDelete(),
+                  },
+                ]}
+              />
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
+                    <th className="w-10 pl-4 pr-2">
+                      <input
+                        type="checkbox"
+                        ref={headerRef}
+                        onChange={e => e.target.checked ? selectAllRows() : clearAll()}
+                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+                        aria-label="Select all"
+                      />
+                    </th>
                     <th className="w-8" />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[0]}
@@ -441,7 +494,7 @@ export default function IntraFlow() {
                   {loading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>
-                        {Array.from({ length: 8 }).map((_, j) => (
+                        {Array.from({ length: 9 }).map((_, j) => (
                           <td key={j} className="px-4 py-3">
                             <div className="h-4 bg-gray-200 rounded animate-pulse" />
                           </td>
@@ -450,7 +503,7 @@ export default function IntraFlow() {
                     ))
                   ) : displayed.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center">
+                      <td colSpan={9} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-gray-400">
                           <ArrowLeftRight className="w-10 h-10 text-gray-200" />
                           <p className="text-sm">No internal transfers match your filters.</p>
@@ -462,7 +515,16 @@ export default function IntraFlow() {
                       const isExpanded = expandedId === row.id
                       return (
                         <Fragment key={row.id}>
-                          <tr className="hover:bg-gray-50 transition-colors">
+                          <tr className={`transition-colors ${selectedIds.has(row.id) ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-gray-50'}`}>
+                            <td className="w-10 pl-4 pr-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(row.id)}
+                                onChange={() => toggleRow(row.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
+                                aria-label="Select row"
+                              />
+                            </td>
                             <td className="w-8 pl-2">
                               <button
                                 onClick={() => setExpandedId(isExpanded ? null : row.id)}
@@ -497,7 +559,7 @@ export default function IntraFlow() {
                               </div>
                             </td>
                           </tr>
-                          {isExpanded && <RowDetailPanel items={intraFlowDetailItems(row)} colSpan={8} />}
+                          {isExpanded && <RowDetailPanel items={intraFlowDetailItems(row)} colSpan={9} />}
                         </Fragment>
                       )
                     })
@@ -505,6 +567,7 @@ export default function IntraFlow() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
           <PaginationBar
             page={iflState.page}
@@ -529,6 +592,19 @@ export default function IntraFlow() {
         onConfirm={handleDelete}
         loading={deleting}
         label="this internal transfer"
+      />
+      <BulkEditIntraFlowModal
+        open={bulkEditOpen}
+        onClose={() => setBulkEditOpen(false)}
+        ids={Array.from(selectedIds)}
+        onSuccess={() => { clearAll(); refetch() }}
+      />
+      <DeleteDialog
+        open={bulkDeleteConfirmOpen}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        loading={bulkDeleting}
+        label={`${selectedIds.size} internal transfer${selectedIds.size !== 1 ? 's' : ''}`}
       />
       <DescriptionTooltip tooltip={descTooltip} />
     </>
