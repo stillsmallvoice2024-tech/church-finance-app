@@ -937,7 +937,7 @@ function ManualEntryForm() {
           {/* Foreign Currency */}
           <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Foreign Currency (optional)</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Currency">
                 <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
               </Field>
@@ -1085,7 +1085,7 @@ function ManualEntryForm() {
           {/* Foreign Currency */}
           <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Foreign Currency (optional)</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Currency">
                 <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
               </Field>

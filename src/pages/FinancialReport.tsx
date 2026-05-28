@@ -196,7 +196,7 @@ function SortableItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm ${!item.visible ? 'opacity-50' : ''}`}
+      className={`flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm ${!item.visible ? 'opacity-50' : ''}`}
     >
       {editing && (
         <button
@@ -744,7 +744,7 @@ function SortableTableBlock({
       className={`rounded-2xl border-2 border-primary/20 dark:border-primary/30 bg-white dark:bg-gray-900 overflow-hidden ${!table.visible ? 'opacity-60' : ''}`}
     >
       {/* Table title bar */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-primary/5 dark:bg-primary/10 border-b border-primary/10">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-primary/5 dark:bg-primary/10 border-b border-primary/10">
         {editing && (
           <button
             {...attributes}
@@ -1661,6 +1661,7 @@ export default function FinancialReport() {
                 <h3 className="text-sm font-bold text-primary dark:text-blue-300 uppercase tracking-wide">{table.title}</h3>
               </div>
             )}
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500 dark:text-gray-400">
@@ -1742,6 +1743,7 @@ export default function FinancialReport() {
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         ))}
 
