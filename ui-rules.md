@@ -145,6 +145,8 @@ Tables must be inside an `overflow-x-auto` container. Two patterns:
 - **Tab nav bars** (e.g. Setup): the border-b wrapper must include `overflow-x-auto` when tabs are `whitespace-nowrap` and may exceed viewport on mobile. Pattern: `<div className="border-b border-gray-200 overflow-x-auto"><nav className="-mb-px flex gap-x">`.
 - **Segmented controls / pill tab bars** using `w-fit overflow-x-auto`: always pair with `max-w-full` so the viewport constraint is respected and scroll can engage. Pattern: `className="flex ... w-fit max-w-full overflow-x-auto"`.
 - **`-mx-N px-N` negative-margin tab rows**: safe only when `<main>`'s `overflow-x-hidden` backstop is in place — do not pair with a parent that has `overflow: visible`.
+- **Fixed-width filter dropdowns** in filter bars: never use bare `min-w-[Npx]` on the container div — use `w-full sm:w-auto sm:min-w-[Npx]` so the control fills the full width on mobile and is min-width constrained on larger screens. Pattern applies to bank selectors, category dropdowns, and similar filter-bar selects.
+- **Report tables** (FinancialReport view mode): the outer card `div` carries `overflow-hidden` for border-radius; the inner `<table>` must be wrapped in a separate `<div className="overflow-x-auto">` to allow horizontal scroll without clipping.
 
 ---
 

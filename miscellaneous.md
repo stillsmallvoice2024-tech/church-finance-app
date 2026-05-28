@@ -82,6 +82,16 @@ Using `!!role` (instead of `!!user`) in `canWrite`/`canDelete`/`isAdmin` caused 
 
 ---
 
+## Mobile Responsiveness — Remaining Edge Cases (Unpatched)
+
+Identified in global mobile audit (PR #171). Not fixed due to complexity or acceptable on-screen behaviour:
+
+- **Outflows card footer**: Conditional `grid-cols-3` (Disbursed + Net + Actions) when `netDiffers`. On phones <375px the mono amounts can clip at column boundary. Contained by `overflow-x-hidden` on `<main>`. Fix requires 2-row restructuring when `netDiffers`.
+- **ImportModal step 3 summary** (`ImportModal.tsx`): `grid-cols-3` (Rows / Columns / Target) inside full-screen modal. Numbers are short; acceptable.
+- **DynamicReportEditor toolbar**: Dense `flex` row of controls on narrow mobile. Not a primary mobile use case.
+
+---
+
 ## Known Propagation Gaps (Not Yet Fixed)
 
 Full table lives in `ledger-rules.md`. Summary of what is NOT wired:
