@@ -457,7 +457,7 @@ import { CollapsibleSection } from '../ui/CollapsibleSection'
 
 ### `ViewToggle` + `useViewToggle` (`src/components/ui/ViewToggle.tsx`)
 
-Wired on Inflows (`inflows-view`) and Outflows (`outflows-view`). Use the same pattern for any new list page.
+Wired on Inflows (`inflows-view`), Outflows (`outflows-view`), and ImportModal Step 4 (`import-step4-view`). Use the same pattern for any new list page.
 
 ```tsx
 import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
@@ -887,6 +887,18 @@ Row-level checkboxes in the Configure Rows step of `ImportModal.tsx`:
 - **Debit Pending column:** 7th column (52px) contains a per-row checkbox (`text-amber-500`); header label "Pending"; positioned between Stage Code 2 and Type
 - **Bulk pending actions:** "Mark Pending" (amber) and "Clear Pending" (gray) buttons in the outflow apply bar, separated from the Apply button by a vertical divider; operate on `outflowTargetRis` (selected or all filtered); always enabled when target rows exist — no field selection required
 - **`rowPendingDeductions: Set<number>`** — keyed by `ri`; reset in `reset()`; `runImport` reads `rowPendingDeductions.has(ri)` to set `is_pending_deduction = true` per row
+
+### Step 4 Card / Table View Toggle
+
+- **View state:** `useViewToggle('import-step4-view')` — localStorage key; mobile default = cards, desktop = table; rendered in the Credit/Debit tab header row (right side)
+- **Expand state:** `expandedInflowCardRis: Set<number>` and `expandedOutflowCardRis: Set<number>` — reset in `reset()`
+- **Card structure:**
+  - Section 1 (header body `px-4 pt-3.5 pb-3`): checkbox + `#ri` + date + ₦amount; `line-clamp-2` description below
+  - Section 2 (meta/controls): collapsed = one-line summary (`Config · Income Type · Type` or stage codes) + `▶` expand trigger; expanded = labelled dropdowns for all fields + "Less" collapse button
+  - Selected card: `border-primary/40` + `bg-primary/5` (inflow wraps both in template literal; outflow uses combined class string)
+- **Select All bar:** `<input type="checkbox">` + label above the scrollable card list; reuses `allInflowFilteredSelected` / `someInflowFilteredSelected` (computed in the IIFE before the ternary); callback ref for indeterminate; label: `Select all N` → `X of N selected` → `All N selected`
+- **Row data helpers:** `buildInflowRowData(ri, raw)` and `buildOutflowRowData(ri, raw)` — local functions inside the IIFE, shared between table and card renders to avoid duplication
+- Table view, apply bar, filter bar, and selection state are all shared — card view is purely a render branch
 
 ## Schema Cache Error — Inline Display (Inflows / Outflows modals)
 
