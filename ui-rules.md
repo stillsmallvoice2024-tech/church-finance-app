@@ -1085,11 +1085,47 @@ disabled={loading || checkingSchema || schemaStatus !== 'ok' || schemaStuck || (
 
 Tab-based report page. `ReportTab` type: `'summary' | 'income_types' | 'outflow_types' | ...`
 
+### ReportDateFilter (`src/components/ui/ReportDateFilter.tsx`)
+
+Reusable date filter for report panels. Exports:
+- **`useReportDateFilter(initialYear)`** hook — owns all filter state; returns `range` + `periodLabel`
+- **`ReportDateFilter`** component — renders compact inline controls; takes `{ hook }` prop
+
+**`range` shape:**
+```ts
+interface DateFilterRange {
+  lo:      string   // YYYY-MM-DD lower bound
+  hi:      string   // YYYY-MM-DD upper bound (display / labels)
+  queryHi: string   // hi + 'T23:59:59' when col='recorded_at'; same as hi for 'date'
+  col:     'date' | 'recorded_at'
+}
+```
+
+**Filter modes:**
+- **Preset** (default): year dropdown + month selector (0 = All months) — backward-compatible with prior behaviour
+- **Custom**: free `From` / `To` date pickers; auto-populated from current preset on first switch
+
+**Date field toggle:** `Txn Date` (`date` column, default) | `Recorded` (`recorded_at` timestamptz; `queryHi` gets `T23:59:59` suffix)
+
+**Usage pattern:**
+```tsx
+const filter = useReportDateFilter(activeYear)
+// in query: .gte(filter.range.col, filter.range.lo).lte(filter.range.col, filter.range.queryHi)
+// in header: extra={<ReportDateFilter hook={filter} />}
+// periodLabel for footer label + CSV filename: filter.periodLabel
+```
+
+### Income Type Breakdown tab (`IncomeTypeBreakdownPanel`)
+- Queries `inflow_transactions` grouped by `income_type_id`
+- Uses `useReportDateFilter` — date field and range are fully dynamic
+- "Unclassified" row for null `income_type_id`; color swatch + name + count + total (₦) + % share + progress bar
+- CSV export filename uses `filter.periodLabel.replace(/ /g, '_')`
+
 ### Outflow Type Breakdown tab (`OutflowTypeBreakdownPanel`)
 - Mirrors `IncomeTypeBreakdownPanel` exactly; uses `text-danger` (red) for amounts
 - Queries `outflow_transactions` grouped by `outflow_type_id`; uses `actual_amount || amount_disbursed`
 - "Unclassified" row shown for null `outflow_type_id`
-- Year + month selectors; CSV export; color swatch + name + count + total (₦) + % share + progress bar
+- Uses `useReportDateFilter` — same dynamic date field + range pattern as Income Type tab
 - Hook: `useOutflowTypes()` from `src/hooks/useOutflowTypes.ts`
 
 ---
