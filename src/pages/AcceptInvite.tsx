@@ -49,26 +49,17 @@ export default function AcceptInvite() {
       return
     }
     const fetchInvite = async () => {
+      // Security-definer RPC: only returns pending non-expired rows, safe for anon.
       const { data, error: err } = await supabase
-        .from('invitations')
-        .select('id, email, role, status, expires_at')
-        .eq('token', token)
-        .maybeSingle()
+        .rpc('get_invitation_by_token', { p_token: token })
 
       setLoadingInvite(false)
-      if (err || !data) {
+      const invite = Array.isArray(data) ? data[0] : null
+      if (err || !invite) {
         setInviteError('This invite link is invalid or has expired.')
         return
       }
-      if (data.status === 'accepted') {
-        setInviteError('This invite has already been used.')
-        return
-      }
-      if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        setInviteError('This invite link has expired. Ask an admin to send a new one.')
-        return
-      }
-      setInvitation(data)
+      setInvitation(invite)
     }
     fetchInvite()
   }, [token])
@@ -98,20 +89,22 @@ export default function AcceptInvite() {
 
     const userId = signUpData.user?.id
     if (userId) {
-      // Update the profile created by the DB trigger with full details + role
+      // Update display fields only — role excluded; self-role-change is blocked by RLS.
       await supabase.from('profiles').update({
         full_name:  fullName.trim(),
         username:   username.trim().toLowerCase() || null,
-        role:       invitation.role,
         updated_at: new Date().toISOString(),
       }).eq('id', userId)
-    }
 
-    // Mark invitation as accepted
-    await supabase.from('invitations').update({
-      status:      'accepted',
-      accepted_at: new Date().toISOString(),
-    }).eq('id', invitation.id)
+      // Security-definer RPC: sets role from invite and consumes the token atomically.
+      const { error: acceptErr } = await supabase
+        .rpc('accept_invitation', { p_token: token, p_user_id: userId })
+      if (acceptErr) {
+        setLoading(false)
+        setError('Failed to activate your account. The invite may have already been used.')
+        return
+      }
+    }
 
     setLoading(false)
     setDone(true)

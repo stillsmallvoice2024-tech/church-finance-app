@@ -407,10 +407,12 @@ alter table public.ledger_entries     enable row level security;
 alter table public.fx_transactions    enable row level security;
 alter table public.special_projects   enable row level security;
 alter table public.project_entries    enable row level security;
-alter table public.receipts           enable row level security;
-alter table public.invitations        enable row level security;
-alter table public.audit_log          enable row level security;
-alter table public.field_changes      enable row level security;
+alter table public.receipts              enable row level security;
+alter table public.invitations           enable row level security;
+alter table public.audit_log             enable row level security;
+alter table public.field_changes         enable row level security;
+alter table public.outflow_types         enable row level security;
+alter table public.category_outflow_type_map enable row level security;
 
 -- ── Helper functions ───────────────────────────────────────────────────────────
 
@@ -438,11 +440,22 @@ create policy "profiles_select" on public.profiles
 create policy "profiles_insert" on public.profiles
   for insert with check (auth.uid() is not null);
 
-create policy "profiles_update" on public.profiles
-  for update using (auth.uid() is not null);
+-- Self-update: own row only; role is immutable via this path (WITH CHECK subquery
+-- ensures the new role value equals the user's current role, blocking escalation).
+create policy "profiles_update_self" on public.profiles
+  for update
+  using  (id = auth.uid())
+  with check (
+    id   = auth.uid()
+    and  role = (select p.role from public.profiles p where p.id = auth.uid())
+  );
+
+-- Admins may update any profile, including role changes (e.g. UserManagement page).
+create policy "profiles_update_admin" on public.profiles
+  for update using (public.is_admin());
 
 create policy "profiles_delete" on public.profiles
-  for delete using (auth.uid() is not null);
+  for delete using (public.is_admin());
 
 -- ── Category Groups ────────────────────────────────────────────────────────────
 
@@ -488,6 +501,26 @@ create policy "income_type_rules_read" on public.income_type_rules
 create policy "income_type_rules_write" on public.income_type_rules
   for all using (public.is_admin());
 
+-- ── Outflow Types ──────────────────────────────────────────────────────────────
+
+create policy "outflow_types_read" on public.outflow_types
+  for select using (auth.uid() is not null);
+create policy "outflow_types_write" on public.outflow_types
+  for insert with check (public.is_finance_user());
+create policy "outflow_types_update" on public.outflow_types
+  for update using (public.is_finance_user());
+create policy "outflow_types_delete" on public.outflow_types
+  for delete using (public.is_admin());
+
+-- ── Category-Outflow Type Map ──────────────────────────────────────────────────
+
+create policy "cotm_read" on public.category_outflow_type_map
+  for select using (auth.uid() is not null);
+create policy "cotm_write" on public.category_outflow_type_map
+  for insert with check (public.is_finance_user());
+create policy "cotm_delete" on public.category_outflow_type_map
+  for delete using (public.is_finance_user());
+
 -- ── Inflow Transactions ────────────────────────────────────────────────────────
 
 create policy "inflow_read" on public.inflow_transactions
@@ -497,7 +530,7 @@ create policy "inflow_write" on public.inflow_transactions
 create policy "inflow_update" on public.inflow_transactions
   for update using (public.is_finance_user());
 create policy "inflow_delete" on public.inflow_transactions
-  for delete using (auth.uid() is not null);
+  for delete using (public.is_finance_user());
 
 -- ── Outflow Transactions ───────────────────────────────────────────────────────
 
@@ -508,7 +541,7 @@ create policy "outflow_write" on public.outflow_transactions
 create policy "outflow_update" on public.outflow_transactions
   for update using (public.is_finance_user());
 create policy "outflow_delete" on public.outflow_transactions
-  for delete using (auth.uid() is not null);
+  for delete using (public.is_finance_user());
 
 -- ── Intra Flows ────────────────────────────────────────────────────────────────
 
@@ -519,7 +552,7 @@ create policy "intraflow_write" on public.intra_flows
 create policy "intraflow_update" on public.intra_flows
   for update using (public.is_finance_user());
 create policy "intraflow_delete" on public.intra_flows
-  for delete using (auth.uid() is not null);
+  for delete using (public.is_finance_user());
 
 -- ── Bank Deposits ──────────────────────────────────────────────────────────────
 
@@ -595,19 +628,72 @@ create policy "project_entries_delete" on public.project_entries
 create policy "receipts_read" on public.receipts
   for select using (auth.uid() is not null);
 create policy "receipts_write" on public.receipts
-  for insert with check (auth.uid() is not null);
+  for insert with check (public.is_finance_user());
 create policy "receipts_delete" on public.receipts
-  for delete using (auth.uid() is not null);
+  for delete using (public.is_finance_user());
 
 -- ── Invitations ────────────────────────────────────────────────────────────────
 
--- Admins manage invitations; anyone with a valid token can read their own invite
+-- Admins manage invitations. Token reads are handled via the
+-- get_invitation_by_token() security-definer RPC below (no direct SELECT allowed).
 create policy "invitations_admin_all" on public.invitations
   using  (public.is_admin())
   with check (public.is_admin());
 
-create policy "invitations_read_by_token" on public.invitations
-  for select using (true);
+-- ── Invitation security-definer helpers ────────────────────────────────────────
+
+-- Returns minimal invite data for a PENDING, non-expired token.
+-- Safe for anonymous callers; never exposes accepted/expired rows or other invites.
+create or replace function public.get_invitation_by_token(p_token uuid)
+returns table(id uuid, email text, role text, status text, expires_at timestamptz)
+language plpgsql security definer stable
+as $$
+begin
+  return query
+    select i.id, i.email, i.role, i.status, i.expires_at
+    from   public.invitations i
+    where  i.token      = p_token
+      and  i.status     = 'pending'
+      and  i.expires_at > now();
+end;
+$$;
+
+-- Atomically sets the role from the invite and marks it consumed.
+-- p_user_id must equal auth.uid() to block accepting on behalf of others.
+create or replace function public.accept_invitation(p_token uuid, p_user_id uuid)
+returns void
+language plpgsql security definer
+as $$
+declare
+  v_invite public.invitations;
+begin
+  if p_user_id != auth.uid() then
+    raise exception 'Unauthorized';
+  end if;
+
+  select * into v_invite
+  from   public.invitations
+  where  token      = p_token
+    and  status     = 'pending'
+    and  expires_at > now()
+  for update;
+
+  if not found then
+    raise exception 'Invalid or expired invitation';
+  end if;
+
+  -- Bypasses the self-role-change lock on profiles_update_self.
+  update public.profiles
+    set role       = v_invite.role,
+        updated_at = now()
+  where id = p_user_id;
+
+  update public.invitations
+    set status      = 'accepted',
+        accepted_at = now()
+  where token = p_token;
+end;
+$$;
 
 -- ── Audit Log ──────────────────────────────────────────────────────────────────
 
@@ -658,8 +744,12 @@ alter table public.category_opening_balances enable row level security;
 
 create policy "cob_read" on public.category_opening_balances
   for select using (auth.uid() is not null);
-create policy "cob_write" on public.category_opening_balances
-  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "cob_insert" on public.category_opening_balances
+  for insert with check (public.is_finance_user());
+create policy "cob_update" on public.category_opening_balances
+  for update using (public.is_finance_user());
+create policy "cob_delete" on public.category_opening_balances
+  for delete using (public.is_admin());
 
 create index if not exists idx_cob_category on public.category_opening_balances(category_id);
 
@@ -680,8 +770,12 @@ alter table public.report_templates enable row level security;
 
 create policy "report_templates_select" on public.report_templates
   for select using (auth.uid() is not null);
-create policy "report_templates_all" on public.report_templates
-  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "report_templates_write" on public.report_templates
+  for insert with check (public.is_finance_user());
+create policy "report_templates_update" on public.report_templates
+  for update using (public.is_finance_user());
+create policy "report_templates_delete" on public.report_templates
+  for delete using (public.is_admin());
 
 -- ============================================================
 -- SPECIAL CONFIG GROUPS (versioned special allocation configs)
@@ -697,7 +791,7 @@ alter table public.special_config_groups enable row level security;
 create policy "scg_read" on public.special_config_groups
   for select using (auth.uid() is not null);
 create policy "scg_write" on public.special_config_groups
-  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+  for all using (public.is_admin()) with check (public.is_admin());
 
 alter table public.allocation_configs
   add column if not exists config_group_id uuid references public.special_config_groups(id) on delete cascade,
@@ -730,8 +824,12 @@ alter table public.transaction_allocation_snapshots enable row level security;
 
 create policy "tas_read" on public.transaction_allocation_snapshots
   for select using (auth.uid() is not null);
-create policy "tas_write" on public.transaction_allocation_snapshots
-  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "tas_insert" on public.transaction_allocation_snapshots
+  for insert with check (public.is_finance_user());
+create policy "tas_update" on public.transaction_allocation_snapshots
+  for update using (public.is_finance_user());
+create policy "tas_delete" on public.transaction_allocation_snapshots
+  for delete using (public.is_admin());
 
 -- ============================================================
 -- RECALCULATION LOGS
@@ -751,8 +849,9 @@ alter table public.recalculation_logs enable row level security;
 
 create policy "rl_read" on public.recalculation_logs
   for select using (auth.uid() is not null);
-create policy "rl_write" on public.recalculation_logs
-  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+-- Append-only: no update/delete policy intentionally (immutable audit trail).
+create policy "rl_insert" on public.recalculation_logs
+  for insert with check (public.is_finance_user());
 
 create index if not exists idx_report_templates_user on public.report_templates(created_by);
 
@@ -775,7 +874,9 @@ create table if not exists public.dynamic_reports (
 );
 alter table public.dynamic_reports enable row level security;
 create policy "dr_select" on public.dynamic_reports for select using (auth.uid() is not null);
-create policy "dr_all"    on public.dynamic_reports for all    using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "dr_write"  on public.dynamic_reports for insert with check (public.is_finance_user());
+create policy "dr_update" on public.dynamic_reports for update using (public.is_finance_user());
+create policy "dr_delete" on public.dynamic_reports for delete using (public.is_admin());
 
 -- Dynamic Report Blocks
 create table if not exists public.dynamic_report_blocks (
@@ -788,7 +889,9 @@ create table if not exists public.dynamic_report_blocks (
 );
 alter table public.dynamic_report_blocks enable row level security;
 create policy "drb_select" on public.dynamic_report_blocks for select using (auth.uid() is not null);
-create policy "drb_all"    on public.dynamic_report_blocks for all    using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "drb_write"  on public.dynamic_report_blocks for insert with check (public.is_finance_user());
+create policy "drb_update" on public.dynamic_report_blocks for update using (public.is_finance_user());
+create policy "drb_delete" on public.dynamic_report_blocks for delete using (public.is_admin());
 create index if not exists idx_drb_report_position on public.dynamic_report_blocks(report_id, position);
 
 -- ── Dynamic Report Snapshots ──────────────────────────────────────────────────
@@ -802,5 +905,6 @@ create table if not exists public.dynamic_report_snapshots (
 );
 alter table public.dynamic_report_snapshots enable row level security;
 create policy "drs_select" on public.dynamic_report_snapshots for select using (auth.uid() is not null);
-create policy "drs_all"    on public.dynamic_report_snapshots for all    using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "drs_write"  on public.dynamic_report_snapshots for insert with check (public.is_finance_user());
+create policy "drs_delete" on public.dynamic_report_snapshots for delete using (public.is_admin());
 create index if not exists idx_drs_report_at on public.dynamic_report_snapshots(report_id, snapshot_at desc);
