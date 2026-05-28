@@ -132,11 +132,33 @@ All functions: `SECURITY DEFINER STABLE`. They do NOT replace `is_admin()` / `is
 
 ---
 
-## Future Blockers / Phase 2 Notes
+## Phase 2 — Org Backfill (applied: 2026-05-28)
 
-1. `get_current_org_id()` must be replaced with session-variable resolution (e.g. `current_setting('app.org_id', true)::uuid`) before RLS enforcement begins.
-2. RLS policies on all business tables will need an `org_id = get_current_org_id()` predicate — this is a breaking change for existing single-tenant users until a default org is created and back-filled.
-3. Back-fill script required: create a default org per existing tenant, set `org_id` on all existing rows, then add `NOT NULL` constraint.
-4. `backupRestore.ts` `MANAGED_TABLES` registry will need `organizations` and `org_members` entries added.
-5. `invitations.org_id` — `accept_invitation` RPC must be updated to assign membership to the correct org.
-6. `updated_at` on `organizations` must be maintained by the app (no DB trigger exists yet).
+**File:** `20260528000001_org_backfill.sql`
+**Rollback:** `20260528000001_org_backfill_rollback.sql`
+
+### What Phase 2 did
+
+1. Inserted the primary organization (`slug = 'primary'`, name = `My Church`).
+2. Created `org_members` rows for every existing `profiles` row, mapping `profiles.role → org_members.role`, status = `active`.
+3. Backfilled `org_id` on all 26 business tables (`WHERE org_id IS NULL`).
+4. Updated `get_current_org_id()` to `SELECT id FROM organizations WHERE slug = 'primary' LIMIT 1` (was returning `NULL`).
+5. Added `DEFAULT get_current_org_id()` + `NOT NULL` to all 26 `org_id` columns — preserves current app behavior (frontend inserts that omit `org_id` receive the primary org automatically).
+6. Added composite `(org_id, date)` indexes on `inflow_transactions`, `outflow_transactions`, `intra_flows`, `bank_deposits`, `intrabank_transfers`, `fx_transactions`, `project_entries`, `ledger_entries`.
+7. Added standalone `org_id` indexes on all remaining business tables not indexed in Phase 1.
+
+### Key safety properties
+
+- Idempotent: safe to re-run (`ON CONFLICT DO NOTHING`, `WHERE org_id IS NULL`, `IF NOT EXISTS`).
+- Abort-on-failure: Step 5 pre-validates all 26 tables before setting `NOT NULL`; `RAISE EXCEPTION` prevents partial enforcement.
+- No RLS changes, no frontend changes, no hook/store changes.
+- `DEFAULT get_current_org_id()` ensures new inserts continue to work without any frontend modification.
+
+### Phase 3 notes (remaining work)
+
+1. `get_current_org_id()` should eventually resolve from a session variable (`current_setting('app.org_id', true)::uuid`) for true multi-org isolation.
+2. RLS policies on all business tables need `org_id = get_current_org_id()` predicates (breaking change — defer until Phase 3).
+3. `handle_new_user()` trigger should also insert into `org_members` for newly registered users.
+4. `accept_invitation` RPC should assign membership to the correct org.
+5. `backupRestore.ts` `MANAGED_TABLES` registry should add `organizations` and `org_members` entries.
+6. `updated_at` on `organizations` must be maintained by the app (no DB trigger yet).

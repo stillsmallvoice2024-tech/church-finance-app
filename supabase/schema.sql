@@ -932,6 +932,13 @@ create policy "orgs_insert" on public.organizations for insert with check (auth.
 create policy "orgs_update" on public.organizations for update using (auth.uid() is not null);
 create policy "orgs_delete" on public.organizations for delete using (public.is_admin());
 
+-- Seed the primary (bootstrap) organization.
+-- On a fresh install all business tables are empty, so the NOT NULL defaults below
+-- are satisfied by this row existing before any data is inserted.
+insert into public.organizations (name, slug, metadata)
+values ('My Church', 'primary', '{"bootstrap": true}'::jsonb)
+on conflict (slug) do nothing;
+
 -- ── Org Members ───────────────────────────────────────────────
 create table if not exists public.org_members (
   id         uuid        primary key default gen_random_uuid(),
@@ -956,37 +963,38 @@ create policy "org_members_insert" on public.org_members for insert with check (
 create policy "org_members_update" on public.org_members for update using (auth.uid() is not null);
 create policy "org_members_delete" on public.org_members for delete using (public.is_admin());
 
--- ── Nullable org_id on all business tables ────────────────────
--- Nullable only; no NOT NULL; no query rewrites; no RLS changes.
+-- ── org_id on all business tables (NOT NULL + DEFAULT after Phase 2 backfill) ─
+-- Fresh installs: tables are empty when these run, so NOT NULL + DEFAULT is safe.
+-- Existing installs: run 20260528000001_org_backfill.sql instead of re-applying this.
 
-alter table public.category_groups           add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.categories                add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.banks                     add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.allocation_configs        add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.income_types              add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.income_type_rules         add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.inflow_transactions       add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.outflow_transactions      add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.intra_flows               add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.bank_deposits             add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.intrabank_transfers       add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.accounts                  add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.ledger_entries            add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.fx_transactions           add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.special_projects          add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.project_entries           add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.receipts                  add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.invitations               add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.report_templates          add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.special_config_groups     add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.transaction_allocation_snapshots add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.recalculation_logs        add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.dynamic_reports           add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.outflow_types             add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.category_outflow_type_map add column if not exists org_id uuid references public.organizations(id) on delete set null;
-alter table public.category_opening_balances add column if not exists org_id uuid references public.organizations(id) on delete set null;
+alter table public.category_groups           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.categories                add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.banks                     add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.allocation_configs        add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.income_types              add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.income_type_rules         add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.inflow_transactions       add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.outflow_transactions      add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.intra_flows               add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.bank_deposits             add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.intrabank_transfers       add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.accounts                  add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.ledger_entries            add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.fx_transactions           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.special_projects          add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.project_entries           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.receipts                  add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.invitations               add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.report_templates          add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.special_config_groups     add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.transaction_allocation_snapshots add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.recalculation_logs        add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.dynamic_reports           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.outflow_types             add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.category_outflow_type_map add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+alter table public.category_opening_balances add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
 
--- Indexes for high-volume tables
+-- Standalone org_id indexes (high-volume tables — Phase 1)
 create index if not exists idx_inflow_org        on public.inflow_transactions(org_id);
 create index if not exists idx_outflow_org       on public.outflow_transactions(org_id);
 create index if not exists idx_intra_flows_org   on public.intra_flows(org_id);
@@ -996,11 +1004,41 @@ create index if not exists idx_alloc_configs_org on public.allocation_configs(or
 create index if not exists idx_fx_org            on public.fx_transactions(org_id);
 create index if not exists idx_bank_deposits_org on public.bank_deposits(org_id);
 
+-- Composite (org_id, date) indexes for org-scoped date-range queries (Phase 2)
+create index if not exists idx_inflow_org_date       on public.inflow_transactions(org_id, date);
+create index if not exists idx_outflow_org_date      on public.outflow_transactions(org_id, date);
+create index if not exists idx_intra_org_date        on public.intra_flows(org_id, date);
+create index if not exists idx_bank_dep_org_date     on public.bank_deposits(org_id, date);
+create index if not exists idx_intrabank_org_date    on public.intrabank_transfers(org_id, date);
+create index if not exists idx_fx_org_date           on public.fx_transactions(org_id, date);
+create index if not exists idx_proj_entries_org_date on public.project_entries(org_id, date);
+create index if not exists idx_ledger_org_date       on public.ledger_entries(org_id, date);
+
+-- Standalone org_id indexes (remaining tables — Phase 2)
+create index if not exists idx_category_groups_org    on public.category_groups(org_id);
+create index if not exists idx_income_types_org       on public.income_types(org_id);
+create index if not exists idx_income_type_rules_org  on public.income_type_rules(org_id);
+create index if not exists idx_intrabank_org          on public.intrabank_transfers(org_id);
+create index if not exists idx_accounts_org           on public.accounts(org_id);
+create index if not exists idx_ledger_entries_org     on public.ledger_entries(org_id);
+create index if not exists idx_special_projects_org   on public.special_projects(org_id);
+create index if not exists idx_project_entries_org    on public.project_entries(org_id);
+create index if not exists idx_receipts_org           on public.receipts(org_id);
+create index if not exists idx_invitations_org        on public.invitations(org_id);
+create index if not exists idx_report_templates_org   on public.report_templates(org_id);
+create index if not exists idx_special_config_groups_org on public.special_config_groups(org_id);
+create index if not exists idx_tas_org                on public.transaction_allocation_snapshots(org_id);
+create index if not exists idx_recalc_logs_org        on public.recalculation_logs(org_id);
+create index if not exists idx_dynamic_reports_org    on public.dynamic_reports(org_id);
+create index if not exists idx_outflow_types_org      on public.outflow_types(org_id);
+create index if not exists idx_cotm_org               on public.category_outflow_type_map(org_id);
+create index if not exists idx_cob_org                on public.category_opening_balances(org_id);
+
 -- ── Org-aware helper functions (Phase 1 stubs) ────────────────
 
 create or replace function public.get_current_org_id()
 returns uuid language sql security definer stable as $$
-  select null::uuid;
+  select id from public.organizations where slug = 'primary' limit 1;
 $$;
 
 create or replace function public.is_org_admin(p_org_id uuid)
