@@ -1,10 +1,11 @@
 import { Menu, LogOut, Sun, Moon } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useRole } from '../../hooks/useRole'
+import { useOrgStore } from '../../store/orgStore'
 import { useThemeStore } from '../../store/themeStore'
+import { OrgSwitcher } from '../ui/OrgSwitcher'
 import { getInitials } from '../../utils/formatters'
-import { ROLE_LABELS, ROLE_BADGE_CLASSES } from '../../utils/constants'
+import { ROLE_BADGE_CLASSES, ROLE_LABELS } from '../../utils/constants'
 
 interface TopBarProps {
   onMenuClick: () => void
@@ -13,17 +14,21 @@ interface TopBarProps {
 export function TopBar({ onMenuClick }: TopBarProps) {
   const { user, profile, signOut } = useAuth()
   const { role } = useRole()
+  const orgRole = useOrgStore(s => s.orgRole)
   const { theme, toggle: toggleTheme } = useThemeStore()
 
   const displayName = profile?.full_name || user?.email || 'User'
   const initials = getInitials(displayName)
-  const roleBadgeClass = role ? ROLE_BADGE_CLASSES[role] : 'bg-gray-100 text-gray-600'
-  const roleLabel = role ? ROLE_LABELS[role] : ''
+
+  // Show the org-scoped role (orgRole) in the badge — more accurate than profile.role
+  const badgeRole = orgRole ?? role
+  const roleBadgeClass = badgeRole ? ROLE_BADGE_CLASSES[badgeRole] : 'bg-gray-100 text-gray-600'
+  const roleLabel = badgeRole ? ROLE_LABELS[badgeRole] : ''
 
   return (
     <header className="topbar sticky top-0 z-10 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-4 shadow-sm lg:px-6 dark:bg-gray-800 dark:border-gray-700">
 
-      {/* Left: hamburger (mobile only) + app title */}
+      {/* Left: hamburger (mobile only) + org switcher */}
       <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}
@@ -32,12 +37,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <NavLink
-          to="/"
-          className="hidden text-base font-semibold text-gray-800 hover:text-primary transition-colors sm:block dark:text-gray-100 dark:hover:text-accent"
-        >
-          Church Finance
-        </NavLink>
+        <div className="hidden sm:block">
+          <OrgSwitcher />
+        </div>
       </div>
 
       {/* Right: role badge + user avatar + sign out */}
@@ -58,7 +60,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
           >
             {initials}
           </div>
-          <span className="hidden max-w-[160px] truncate text-sm font-medium text-gray-700 md:block">
+          <span className="hidden max-w-[160px] truncate text-sm font-medium text-gray-700 md:block dark:text-gray-200">
             {displayName}
           </span>
         </div>
