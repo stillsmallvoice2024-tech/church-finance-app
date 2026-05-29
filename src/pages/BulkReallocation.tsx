@@ -7,6 +7,7 @@ import { Card } from '../components/ui/Card'
 import { useCategories, type BudgetPortion } from '../hooks/useCategories'
 import { useReportEngine } from '../hooks/useReportEngine'
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore }  from '../store/orgStore'
 import { useToastStore } from '../store/toastStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { supabase } from '../lib/supabase'
@@ -55,6 +56,7 @@ async function executeBulkReallocation(params: {
   description:   string
 }): Promise<number> {
   const { user } = useAuthStore.getState()
+  const { orgId } = useOrgStore.getState()
   if (!user?.id) throw new Error('You must be signed in.')
 
   const batchId = crypto.randomUUID()
@@ -80,6 +82,7 @@ async function executeBulkReallocation(params: {
       to_category_id:      catMap.get(r.name) ?? null,
       description:         params.description,
       transfer_type:       'bulk_reallocation',
+      ...(orgId ? { org_id: orgId } : {}),
       batch_id:            batchId,
       status:              'active',
       created_by:          user.id,

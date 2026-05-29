@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -26,11 +27,14 @@ export interface IncomeType {
 // ── useIncomeTypes ─────────────────────────────────────────────────────────────
 
 export function useIncomeTypes() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [incomeTypes, setIncomeTypes] = useState<IncomeType[]>([])
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true); setError(null)
     const { data, error: err } = await supabase
       .from('income_types')
@@ -40,6 +44,7 @@ export function useIncomeTypes() {
         special_config_groups ( name ),
         income_type_rules ( id, income_type_id, rule_type, rule_value )
       `)
+      .eq('org_id', orgId)
       .order('name')
     if (err) {
       setError(err.message)
@@ -63,7 +68,7 @@ export function useIncomeTypes() {
       setIncomeTypes(mapped)
     }
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -81,21 +86,25 @@ export interface IncomeTypeOption {
 }
 
 export function useIncomeTypeOptions() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [options,  setOptions]  = useState<IncomeTypeOption[]>([])
   const [loading,  setLoading]  = useState(true)
 
-  const reload = () => {
+  const reload = useCallback(() => {
+    if (!orgId) { setLoading(false); return }
     supabase
       .from('income_types')
       .select('id, name, color, special_config_id')
+      .eq('org_id', orgId)
       .order('name')
       .then(({ data }) => {
         setOptions((data ?? []) as IncomeTypeOption[])
         setLoading(false)
       })
-  }
+  }, [orgId])
 
-  useEffect(() => { reload() }, [])
+  useEffect(() => { reload() }, [reload])
 
   return { options, loading, reload }
 }
@@ -136,22 +145,26 @@ export interface SpecialConfigOption {
 }
 
 export function useSpecialConfigOptions() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [options,  setOptions]  = useState<SpecialConfigOption[]>([])
   const [loading,  setLoading]  = useState(true)
 
-  const reload = () => {
+  const reload = useCallback(() => {
+    if (!orgId) { setLoading(false); return }
     supabase
       .from('allocation_configs')
       .select('id, name')
+      .eq('org_id', orgId)
       .eq('is_special', true)
       .order('name')
       .then(({ data }) => {
         setOptions((data ?? []) as SpecialConfigOption[])
         setLoading(false)
       })
-  }
+  }, [orgId])
 
-  useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { reload() }, [reload])
 
   return { options, loading, reload }
 }
@@ -164,21 +177,25 @@ export interface SpecialConfigGroupOption {
 }
 
 export function useSpecialConfigGroupOptions() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [options,  setOptions]  = useState<SpecialConfigGroupOption[]>([])
   const [loading,  setLoading]  = useState(true)
 
-  const reload = () => {
+  const reload = useCallback(() => {
+    if (!orgId) { setLoading(false); return }
     supabase
       .from('special_config_groups')
       .select('id, name')
+      .eq('org_id', orgId)
       .order('name')
       .then(({ data }) => {
         setOptions((data ?? []) as SpecialConfigGroupOption[])
         setLoading(false)
       })
-  }
+  }, [orgId])
 
-  useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { reload() }, [reload])
 
   return { options, loading, reload }
 }
@@ -195,6 +212,7 @@ export interface IncomeTypeInput {
 }
 
 export async function saveIncomeType(input: IncomeTypeInput, existingId?: string): Promise<string> {
+  const { orgId } = useOrgStore.getState()
   let id = existingId ?? ''
 
   if (existingId) {
@@ -220,6 +238,7 @@ export async function saveIncomeType(input: IncomeTypeInput, existingId?: string
         color:            input.color,
         special_config_id: input.special_config_id || null,
         ...(input.special_config_group_id !== undefined ? { special_config_group_id: input.special_config_group_id || null } : {}),
+        ...(orgId ? { org_id: orgId } : {}),
       })
       .select('id')
       .single()

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { normalizeNarration } from '../utils/normalizeNarration'
+import { useOrgStore } from '../store/orgStore'
 import type { AdvancedSortLevel } from '../utils/sortUtils'
 
 // ── DB row types (mirror the exact columns in schema.sql) ──────────────────────
@@ -133,18 +134,22 @@ export function useInflowTransactions(
 ): PaginatedResult<InflowTransaction> {
   const { dateFrom, dateTo, stageCode, search, searchCol, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
 
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [data, setData] = useState<InflowTransaction[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
     let query = supabase
       .from('inflow_transactions')
       .select('*', { count: 'exact' })
+      .eq('org_id', orgId)
 
     // Server-side sort
     if (advancedSort && advancedSort.length > 0) {
@@ -187,7 +192,7 @@ export function useInflowTransactions(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, stageCode, search, searchCol, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
+  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -204,18 +209,22 @@ export function useOutflowTransactions(
 ): PaginatedResult<OutflowTransaction> {
   const { dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
 
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [data, setData] = useState<OutflowTransaction[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
     let query = supabase
       .from('outflow_transactions')
       .select('*, outflow_types ( name )', { count: 'exact' })
+      .eq('org_id', orgId)
 
     // Server-side sort
     if (advancedSort && advancedSort.length > 0) {
@@ -274,7 +283,7 @@ export function useOutflowTransactions(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
+  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -291,12 +300,15 @@ export function useIntraFlows(
 ): PaginatedResult<IntraFlowRow> {
   const { dateFrom, dateTo, accountFrom, accountTo, search, searchCol, page = 0, pageSize = 50, sortColumn, sortAscending, advancedSort } = filters
 
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [data, setData] = useState<IntraFlowRow[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
@@ -306,6 +318,7 @@ export function useIntraFlows(
     let query = supabase
       .from('intra_flows')
       .select('*', { count: 'exact' })
+      .eq('org_id', orgId)
 
     // Server-side sort
     if (advancedSort && advancedSort.length > 0) {
@@ -344,7 +357,7 @@ export function useIntraFlows(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, accountFrom, accountTo, search, searchCol, page, pageSize, sortColumn, sortAscending, advancedSort])
+  }, [orgId, dateFrom, dateTo, accountFrom, accountTo, search, searchCol, page, pageSize, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 

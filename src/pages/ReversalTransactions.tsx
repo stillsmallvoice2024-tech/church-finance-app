@@ -97,7 +97,7 @@ export default function ReversalTransactions() {
   })
 
   const RV_CSV_HEADERS = ['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks']
-  const rvCsvRow = (r: TxnRow) => [r.date, r.direction === 'in' ? 'Inflow' : 'Outflow', r.amount, r.display_description || r.description || '', r.bank_name ?? '', r.original_transaction_id ?? '', r.remarks ?? '']
+  const rvCsvRow = (r: TxnRow) => [r.date, r.direction === 'in' ? 'Inflow' : 'Outflow', r.amount, r.description ?? '', r.bank_name ?? '', r.original_transaction_id ?? '', r.remarks ?? '']
   const RV_CSV_FILE = `reversal-transactions-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(RV_CSV_FILE, RV_CSV_HEADERS, filtered.map(rvCsvRow))
   const handleExportAll  = () => exportCSV(RV_CSV_FILE, RV_CSV_HEADERS, filtered.map(rvCsvRow))

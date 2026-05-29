@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 
 export interface StartingBalanceRow {
   category_name:      string
@@ -74,23 +75,27 @@ export async function checkBankStartingBalanceMigration(): Promise<SchemaStatus>
 }
 
 export function useBanks(): BanksResult {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [banks,   setBanks]   = useState<DbBank[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
     const { data, error: err } = await supabase
       .from('banks')
       .select('*')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     if (err) setError(err.message)
     else     setBanks((data ?? []) as DbBank[])
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 

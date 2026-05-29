@@ -186,7 +186,7 @@ export default function Inflows() {
   const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (Naira)', 'Transaction Type', 'Txn Ref', 'Remark']
   const inflowCsvRow = (r: InflowTransaction) => [
     r.date, r.description, r.amount,
-    TXN_TYPE_LABELS[r.transaction_type], r.transaction_ref, r.remark,
+    TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? '', r.transaction_ref, r.remark,
   ]
   const INF_CSV_FILE = `inflows-${new Date().toISOString().slice(0, 10)}.csv`
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { normalizeNarration } from '../utils/normalizeNarration'
+import { useOrgStore } from '../store/orgStore'
 
 // ── Output types ───────────────────────────────────────────────────────────────
 
@@ -88,6 +89,8 @@ function latestFXBalances(
 // ── useDashboardStats ──────────────────────────────────────────────────────────
 
 export function useDashboardStats(year: number = new Date().getFullYear()): DashboardStats {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [monthlyTotals, setMonthlyTotals]       = useState<MonthlyTotal[]>([])
   const [totalInflow,   setTotalInflow]          = useState(0)
   const [totalOutflow,  setTotalOutflow]          = useState(0)
@@ -97,6 +100,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
   const [error,         setError]                 = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
@@ -109,6 +113,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       supabase
         .from('inflow_transactions')
         .select('date, amount')
+        .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd),
 
@@ -116,6 +121,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       supabase
         .from('outflow_transactions')
         .select('date, amount_disbursed')
+        .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd),
 
@@ -123,6 +129,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       supabase
         .from('fx_transactions')
         .select('currency, running_balance')
+        .eq('org_id', orgId)
         .order('date',       { ascending: false })
         .order('created_at', { ascending: false }),
 
@@ -130,6 +137,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       supabase
         .from('inflow_transactions')
         .select('id, date, description, amount, stage_code_1')
+        .eq('org_id', orgId)
         .order('date', { ascending: false })
         .limit(10),
     ])
@@ -166,7 +174,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       })) as RecentInflowRow[]
     )
     setLoading(false)
-  }, [year])
+  }, [orgId, year])
 
   useEffect(() => { fetch() }, [fetch])
 

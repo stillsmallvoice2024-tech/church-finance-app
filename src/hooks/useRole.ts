@@ -1,30 +1,31 @@
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore }  from '../store/orgStore'
 
 export function useRole() {
-  const user    = useAuthStore((state) => state.user)
-  const role    = useAuthStore((state) => state.role)
-  const loading = useAuthStore((state) => state.loading)
+  const user    = useAuthStore((s) => s.user)
+  const loading = useAuthStore((s) => s.loading)
+  const orgRole = useOrgStore((s)  => s.orgRole)
 
-  // Guard on loading to avoid flash: no permissions until profile is hydrated.
+  // Guard on auth loading — setLoading(false) is deferred until org membership is
+  // also resolved, so this single flag covers both profile and org readiness.
   const resolved = !loading && !!user
 
-  if (resolved && role === null) {
-    console.warn('[role] resolved=true but role=null — profile may not have loaded correctly')
+  if (resolved && orgRole === null) {
+    console.warn('[role] resolved=true but orgRole=null — org membership may not have loaded correctly')
   }
+
+  const role = orgRole
 
   return {
     role,
-    // Role predicates
-    isAdmin:      (): boolean => resolved && role === 'admin',
-    isAccountant: (): boolean => resolved && role === 'accountant',
-    isViewer:     (): boolean => resolved && role === 'viewer',
-    isReadOnly:   (): boolean => resolved && role === 'viewer',
-    // Action predicates — admin + accountant
-    canWrite:                (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canDelete:               (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canEditTransactions:     (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canImportTransactions:   (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    // Admin-only
-    canManageConfigs:        (): boolean => resolved && role === 'admin',
+    isAdmin:               (): boolean => resolved && role === 'admin',
+    isAccountant:          (): boolean => resolved && role === 'accountant',
+    isViewer:              (): boolean => resolved && role === 'viewer',
+    isReadOnly:            (): boolean => resolved && role === 'viewer',
+    canWrite:              (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    canDelete:             (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    canEditTransactions:   (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    canImportTransactions: (): boolean => resolved && (role === 'admin' || role === 'accountant'),
+    canManageConfigs:      (): boolean => resolved && role === 'admin',
   }
 }

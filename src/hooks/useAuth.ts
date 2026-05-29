@@ -1,13 +1,59 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore } from '../store/orgStore'
+import { useAllocationStore } from '../store/allocationStore'
+import { useAccountCodesStore } from '../store/accountCodesStore'
 import { useReportTemplateStore } from '../store/reportTemplateStore'
-import type { UserProfile } from '../types'
+import type { UserProfile, UserRole } from '../types'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 const PROFILE_FETCH_TIMEOUT_MS = 10_000
 
 type AuthEvent = AuthChangeEvent | 'FOCUS_REVALIDATE'
+
+// ── fetchOrgMembership ─────────────────────────────────────────────────────────
+// Fetches the user's first active org membership via raw REST (same CORS rationale
+// as fetchProfile — no credentials:include).
+async function fetchOrgMembership(
+  userId:      string,
+  accessToken: string,
+  signal:      AbortSignal,
+): Promise<{ org_id: string; org_name: string; role: UserRole } | null> {
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL as string
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+
+  const res = await fetch(
+    `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations(name)&limit=1`,
+    {
+      signal,
+      headers: {
+        apikey:        anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        Accept:        'application/json',
+      },
+    },
+  )
+
+  if (!res.ok) {
+    console.warn(`[auth] fetchOrgMembership HTTP ${res.status}`)
+    return null
+  }
+
+  const rows = await res.json() as Array<{
+    org_id:        string
+    role:          UserRole
+    organizations: { name: string } | null
+  }>
+
+  if (!rows[0]) return null
+  const row = rows[0]
+  return {
+    org_id:   row.org_id,
+    org_name: row.organizations?.name ?? 'My Church',
+    role:     row.role,
+  }
+}
 
 // ── fetchProfile ───────────────────────────────────────────────────────────────
 // Raw fetch with AbortSignal for precise cancellation control.
@@ -143,9 +189,30 @@ export function useAuthListener(): void {
           if (profile) {
             useAuthStore.getState().setProfile(profile)
             console.log(`[auth:${requestId}] profile loaded  role=${profile.role}`)
+
+            // Load org membership — setLoading(false) is deferred until this resolves
+            // so that useRole.resolved is not true until both profile and org are ready.
+            try {
+              const membership = await fetchOrgMembership(session.user.id, session.access_token, signal)
+              if (signal.aborted || requestIdRef.current !== requestId || !mounted) return
+              if (membership) {
+                useOrgStore.getState().setOrg(membership)
+                console.log(`[auth:${requestId}] org loaded  org=${membership.org_id}  orgRole=${membership.role}`)
+              } else {
+                console.warn(`[auth:${requestId}] no active org membership found`)
+                useOrgStore.getState().clearOrg()
+              }
+            } catch (orgErr) {
+              if (orgErr instanceof Error && orgErr.name === 'AbortError') return
+              console.error(`[auth:${requestId}] org membership fetch failed:`, orgErr)
+              if (requestIdRef.current === requestId && mounted && !signal.aborted) {
+                useOrgStore.getState().clearOrg()
+              }
+            }
           } else {
             console.warn(`[auth:${requestId}] profile fetch failed after retries — user authenticated but role unresolved`)
             useAuthStore.getState().setProfileFetchFailed(true)
+            useOrgStore.getState().clearOrg()
           }
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {
@@ -172,6 +239,9 @@ export function useAuthListener(): void {
         if (requestIdRef.current === requestId && mounted && !signal.aborted) {
           console.log(`[auth:${requestId}] clearAuth`)
           useAuthStore.getState().clearAuth()
+          useOrgStore.getState().clearOrg()
+          useAllocationStore.getState().reset()
+          useAccountCodesStore.getState().reset()
           if (event === 'SIGNED_OUT') {
             useReportTemplateStore.getState().clearPin()
           }
@@ -212,6 +282,9 @@ export function useAuth() {
 
   const signOut = async (): Promise<void> => {
     useAuthStore.getState().clearAuth()
+    useOrgStore.getState().clearOrg()
+    useAllocationStore.getState().reset()
+    useAccountCodesStore.getState().reset()
     await supabase.auth.signOut().catch(() => {})
   }
 

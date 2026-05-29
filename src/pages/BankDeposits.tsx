@@ -21,6 +21,7 @@ import { useBanks }     from '../hooks/useBanks'
 import { useRole }      from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { useAuthStore }  from '../store/authStore'
+import { useOrgStore }   from '../store/orgStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -122,7 +123,8 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
         const { error } = await supabase.from('bank_deposits').update(payload).eq('id', editRecord.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('bank_deposits').insert(payload)
+        const { orgId } = useOrgStore.getState()
+        const { error } = await supabase.from('bank_deposits').insert({ ...payload, ...(orgId ? { org_id: orgId } : {}) })
         if (error) throw error
       }
       onSaved()

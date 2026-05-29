@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
+import { useOrgStore } from '../store/orgStore'
 import { useCategories } from './useCategories'
 import type { ReportCategoryBalance, ReportBasis, OperationalBalanceMap } from '../types'
 
@@ -19,13 +20,14 @@ export function useReportEngine(
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 
+  const orgId = useOrgStore((s) => s.orgId)
   const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
   const { categories } = useCategories()
 
   useEffect(() => { if (!loaded) fetchConfigs() }, [loaded, fetchConfigs])
 
   const compute = useCallback(async () => {
-    if (!reportDate) {
+    if (!reportDate || !orgId) {
       setBalances(new Map())
       setOperationalBalances(new Map())
       return
@@ -50,30 +52,36 @@ export function useReportEngine(
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
+        .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
         .lte(dateField, dateValue),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, actual_amount, amount_disbursed')
+        .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
         .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
+        .eq('org_id', orgId)
         .eq('stage_code_2', 'Savings')
         .lte(dateField, dateValue),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, actual_amount, amount_disbursed')
+        .eq('org_id', orgId)
         .eq('stage_code_2', 'Savings')
         .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
       supabase
         .from('inflow_transactions')
         .select('date, amount, stage_code_2, allocation_config_id, transaction_type')
+        .eq('org_id', orgId)
         .lte(dateField, dateValue),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, actual_amount, amount_disbursed, stage_code_2')
+        .eq('org_id', orgId)
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')
         .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
@@ -84,6 +92,7 @@ export function useReportEngine(
       supabase
         .from('inflow_transactions')
         .select('income_type_id, amount')
+        .eq('org_id', orgId)
         .gte('recorded_at', dayStart)
         .lte('recorded_at', endOfDay)
         .not('income_type_id', 'is', null),
@@ -91,6 +100,7 @@ export function useReportEngine(
       supabase
         .from('inflow_transactions')
         .select('transaction_type, amount')
+        .eq('org_id', orgId)
         .gte('recorded_at', dayStart)
         .lte('recorded_at', endOfDay)
         .not('transaction_type', 'is', null),
@@ -98,6 +108,7 @@ export function useReportEngine(
       supabase
         .from('inflow_transactions')
         .select('amount')
+        .eq('org_id', orgId)
         .gte('recorded_at', dayStart)
         .lte('recorded_at', endOfDay)
         .is('transaction_type', null),
@@ -105,6 +116,7 @@ export function useReportEngine(
       supabase
         .from('intra_flows')
         .select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
+        .eq('org_id', orgId)
         .eq('status', 'active')
         .lte('date', reportDate),
     ])
@@ -255,7 +267,7 @@ export function useReportEngine(
 
     setOperationalBalances(opMap)
     setLoading(false)
-  }, [reportDate, reportBasis, configs, categories])
+  }, [orgId, reportDate, reportBasis, configs, categories])
 
   useEffect(() => { compute() }, [compute])
 

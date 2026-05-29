@@ -112,7 +112,7 @@ export default function RefundTransactions() {
   })
 
   const RF_CSV_HEADERS = ['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks']
-  const rfCsvRow = (r: TxnRow) => [r.date, r.direction === 'in' ? 'Inflow' : 'Outflow', r.amount, r.display_description || r.description || '', r.bank_name ?? '', r.original_transaction_id ?? '', r.remarks ?? '']
+  const rfCsvRow = (r: TxnRow) => [r.date, r.direction === 'in' ? 'Inflow' : 'Outflow', r.amount, r.description ?? '', r.bank_name ?? '', r.original_transaction_id ?? '', r.remarks ?? '']
   const RF_CSV_FILE = `refund-transactions-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(RF_CSV_FILE, RF_CSV_HEADERS, filtered.map(rfCsvRow))
   const handleExportAll  = () => exportCSV(RF_CSV_FILE, RF_CSV_HEADERS, filtered.map(rfCsvRow))

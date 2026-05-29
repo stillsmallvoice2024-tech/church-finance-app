@@ -18,6 +18,7 @@ import { useBanks }     from '../hooks/useBanks'
 import { useRole }      from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { useAuthStore }  from '../store/authStore'
+import { useOrgStore }   from '../store/orgStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
@@ -108,7 +109,8 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
         const { error } = await supabase.from('intrabank_transfers').update(payload).eq('id', editRecord.id)
         if (error) throw error
       } else {
-        const row = user?.id ? { ...payload, created_by: user.id } : payload
+        const { orgId } = useOrgStore.getState()
+        const row = { ...payload, ...(user?.id ? { created_by: user.id } : {}), ...(orgId ? { org_id: orgId } : {}) }
         const { error } = await supabase.from('intrabank_transfers').insert(row)
         if (error) throw error
       }
@@ -236,7 +238,7 @@ export default function IntraBankTransfers() {
   const IBT_CSV_HEADERS = ['Date', 'From Bank', 'To Bank', 'Amount (₦)', 'Description', 'Ref', 'Remarks']
   const ibtCsvRow = (r: TransferRow) => [
     r.date, r.from_bank_name ?? '', r.to_bank_name ?? '', r.amount,
-    r.display_description, r.transaction_ref ?? '', r.remarks ?? '',
+    r.description ?? '', r.transaction_ref ?? '', r.remarks ?? '',
   ]
   const IBT_CSV_FILE = `intrabank-transfers-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(IBT_CSV_FILE, IBT_CSV_HEADERS, filtered.map(ibtCsvRow))

@@ -16,6 +16,7 @@ import { useRole }      from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { supabase }     from '../lib/supabase'
+import { useOrgStore }  from '../store/orgStore'
 import type { UserProfile, UserRole } from '../types'
 
 // ── Role display config ────────────────────────────────────────────────────────
@@ -84,6 +85,7 @@ function InviteUserModal({
     const token      = crypto.randomUUID()
     const expiresAt  = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
 
+    const { orgId } = useOrgStore.getState()
     const { error } = await supabase.from('invitations').insert({
       email:      values.email,
       role:       values.role,
@@ -91,6 +93,7 @@ function InviteUserModal({
       status:     'pending',
       token,
       expires_at: expiresAt,
+      ...(orgId ? { org_id: orgId } : {}),
     })
     setLoading(false)
     if (error) {

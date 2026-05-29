@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 
 // ── DB row types ───────────────────────────────────────────────────────────────
 
@@ -44,24 +45,28 @@ export interface AccountsResult {
 }
 
 export function useAccounts(): AccountsResult {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [accounts, setAccounts] = useState<DbAccount[]>([])
   const [loading, setLoading]   = useState(true)
   const [error,   setError]     = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
     const { data, error: err } = await supabase
       .from('accounts')
       .select('*')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .order('code', { ascending: true })
 
     if (err) setError(err.message)
     else     setAccounts((data ?? []) as DbAccount[])
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -75,16 +80,20 @@ export function useAccountLatestBalances(refetchToken = 0): {
   balances: Map<string, number>
   loading:  boolean
 } {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [balances, setBalances] = useState<Map<string, number>>(new Map())
   const [loading,  setLoading]  = useState(true)
 
   useEffect(() => {
+    if (!orgId) { setLoading(false); return }
     let cancelled = false
     setLoading(true)
 
     supabase
       .from('ledger_entries')
       .select('account_id, balance')
+      .eq('org_id', orgId)
       .order('date',       { ascending: false })
       .order('created_at', { ascending: false })
       .then(({ data }) => {
@@ -98,7 +107,7 @@ export function useAccountLatestBalances(refetchToken = 0): {
       })
 
     return () => { cancelled = true }
-  }, [refetchToken])
+  }, [orgId, refetchToken])
 
   return { balances, loading }
 }
@@ -114,6 +123,8 @@ export interface LedgerResult {
 }
 
 export function useLedgerEntries(accountId: string, dateRange?: DateRange): LedgerResult {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [entries, setEntries] = useState<LedgerEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -122,7 +133,7 @@ export function useLedgerEntries(accountId: string, dateRange?: DateRange): Ledg
   const dateTo   = dateRange?.dateTo
 
   const fetch = useCallback(async () => {
-    if (!accountId) {
+    if (!accountId || !orgId) {
       setEntries([])
       setLoading(false)
       return
@@ -134,6 +145,7 @@ export function useLedgerEntries(accountId: string, dateRange?: DateRange): Ledg
     let query = supabase
       .from('ledger_entries')
       .select('*')
+      .eq('org_id', orgId)
       .eq('account_id', accountId)
       .order('date',       { ascending: true })
       .order('created_at', { ascending: true })
@@ -146,7 +158,7 @@ export function useLedgerEntries(accountId: string, dateRange?: DateRange): Ledg
     if (err) setError(err.message)
     else     setEntries((data ?? []) as LedgerEntry[])
     setLoading(false)
-  }, [accountId, dateFrom, dateTo])
+  }, [orgId, accountId, dateFrom, dateTo])
 
   useEffect(() => { fetch() }, [fetch])
 

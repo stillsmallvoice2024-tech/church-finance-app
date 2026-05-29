@@ -210,7 +210,7 @@ export default function BankLedger() {
 
   const BL_CSV_HEADERS = ['Date', 'Description', 'Type', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
   const blCsvRow = (r: LedgerRow) => [
-    r.date, r.display_description,
+    r.date, r.description ?? '',
     TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '',
     r.inflow || '', r.outflow || '', r.balance,
   ]
