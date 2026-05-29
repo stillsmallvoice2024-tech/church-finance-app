@@ -104,17 +104,34 @@ export default function AcceptInvite() {
 
     const userId = signUpData.user?.id
     if (userId) {
-      await supabase.from('profiles').update({
+      const trimmedUsername = username.trim().toLowerCase() || null
+      const { error: profileErr } = await supabase.from('profiles').update({
         full_name:  fullName.trim(),
-        username:   username.trim().toLowerCase() || null,
+        username:   trimmedUsername,
         updated_at: new Date().toISOString(),
       }).eq('id', userId)
+
+      if (profileErr) {
+        console.error('[invite] profile update failed:', profileErr)
+        // 23505 = unique_violation (username taken). Non-fatal — profile exists;
+        // user can set a different username from their account settings.
+        if (profileErr.code !== '23505') {
+          setLoading(false)
+          setError('Account created but profile update failed. Please contact support.')
+          return
+        }
+      }
 
       const { error: acceptErr } = await supabase
         .rpc('accept_invitation', { p_token: token, p_user_id: userId })
       if (acceptErr) {
+        console.error('[invite] accept_invitation failed:', acceptErr)
         setLoading(false)
-        setError('Failed to activate your account. The invite may have already been used.')
+        setError(
+          acceptErr.message.includes('Unauthorized')
+            ? 'Session error — please refresh and try again.'
+            : 'Failed to activate your account. The invite may have already been used.',
+        )
         return
       }
     }
@@ -150,8 +167,13 @@ export default function AcceptInvite() {
     const { error: acceptErr } = await supabase
       .rpc('accept_invitation', { p_token: token, p_user_id: userId })
     if (acceptErr) {
+      console.error('[invite] accept_invitation (signin flow) failed:', acceptErr)
       setLoading(false)
-      setError('Failed to accept invitation. It may have already been used.')
+      setError(
+        acceptErr.message.includes('Unauthorized')
+          ? 'Session error — please refresh and try again.'
+          : 'Failed to accept invitation. It may have already been used.',
+      )
       return
     }
     setLoading(false)
