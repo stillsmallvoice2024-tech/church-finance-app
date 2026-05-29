@@ -16,19 +16,28 @@ create table public.profiles (
 );
 
 -- Auto-create profile on signup and enroll in primary org as viewer.
+-- Inner exception block prevents username UNIQUE conflicts from aborting
+-- auth user creation ("Database error saving new user").
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
   v_org_id uuid;
 begin
-  insert into public.profiles (id, email, full_name, username)
-  values (
-    new.id,
-    new.email,
-    new.raw_user_meta_data->>'full_name',
-    new.raw_user_meta_data->>'username'
-  )
-  on conflict (id) do nothing;
+  begin
+    insert into public.profiles (id, email, full_name, username)
+    values (
+      new.id,
+      new.email,
+      new.raw_user_meta_data->>'full_name',
+      new.raw_user_meta_data->>'username'
+    )
+    on conflict (id) do nothing;
+  exception when unique_violation then
+    raise notice '[handle_new_user] username conflict for user %; inserting with NULL username', new.id;
+    insert into public.profiles (id, email, full_name, username)
+    values (new.id, new.email, new.raw_user_meta_data->>'full_name', null)
+    on conflict (id) do nothing;
+  end;
 
   select id into v_org_id from public.organizations where slug = 'primary' limit 1;
   if v_org_id is not null then
