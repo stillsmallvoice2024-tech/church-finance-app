@@ -52,6 +52,9 @@
   - Policy blocks use `DROP POLICY IF EXISTS` + `CREATE POLICY` (not `DO $$ EXCEPTION duplicate_object`) — re-running the migration replaces any pre-existing wrong policies
   - Correct receipts INSERT/DELETE policy: `is_finance_user()` — re-run full receipts migration if older `auth.uid() IS NOT NULL` policies are present
 - **Security hardening migration**: `supabase/migrations/20260519000000_security_hardening.sql` — apply once in Supabase SQL editor; idempotent (`DROP IF EXISTS` before every `CREATE`)
+- **Multi-tenant foundation (Phase 1)**: `supabase/migrations/20260528000000_multi_tenant_foundation.sql` — adds `organizations`, `org_members`, nullable `org_id` on all tables
+- **Org backfill (Phase 2)**: `supabase/migrations/20260528000001_org_backfill.sql` — backfills `org_id`, makes NOT NULL, adds `org_members` rows for all existing profiles
+- **Tenant isolation RLS (Phase 3)**: `supabase/migrations/20260529000000_phase3_rls_tenant_isolation.sql` — rewrites all RLS policies to org-scoped helpers; updates `is_admin()`/`is_finance_user()` to use `org_members`; updates `handle_new_user` and `accept_invitation` RPCs. Run after Phase 2. `dynamic_report_blocks`/`dynamic_report_snapshots` sections wrapped in `EXCEPTION WHEN undefined_table` — safe to skip if those tables don't exist yet.
 
 ### Live-DB Migration Notes
 
@@ -195,10 +198,16 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 ## Supabase RLS
 
 - All tables in `public` schema with RLS enabled
-- Helper functions: `is_admin()`, `is_finance_user()` — both `SECURITY DEFINER STABLE`; safe to use in any policy including `profiles` (no recursion — they bypass RLS internally)
-- **DELETE policy rule**: transaction/receipt tables use `is_finance_user()`; config/setup/profile tables use `is_admin()`. Do NOT use bare `auth.uid() IS NOT NULL` for destructive ops.
+- **Phase 3 org-scoped pattern** (active migration: `20260529000000_phase3_rls_tenant_isolation.sql`):
+  - SELECT: `is_org_member(org_id)` — data isolated to the row's own org
+  - Transaction writes: `is_org_finance_user(org_id)`; config/reference writes: `is_org_admin(org_id)`
+  - `auth.uid() IS NOT NULL` **not used** for any business table SELECT — replaced entirely
+- `is_admin()` and `is_finance_user()` now read `org_members` (not `profiles`) — suspended users lose access immediately
+- `is_org_member(p_org_id)` — new Phase 3 helper; any active role; SECURITY DEFINER STABLE
+- **DELETE policy rule**: transaction/receipt tables use `is_org_finance_user(org_id)`; config/setup/profile tables use `is_org_admin(org_id)`. Do NOT use bare `auth.uid() IS NOT NULL` for destructive ops.
 - `useDeleteTransaction(table)` passes `count: 'exact'` and throws if `count === 0` — catches silent RLS denials
-- `outflow_types` and `category_outflow_type_map`: RLS enabled (added in security hardening); read=any auth, write=`is_finance_user()`, delete=`is_admin()` / `is_finance_user()`
+- `outflow_types` and `category_outflow_type_map`: Phase 3 policies applied — select=`is_org_member`, write=`is_org_finance_user`, delete=`is_org_admin`
+- **Policy naming convention** (Phase 3): `_select` / `_insert` / `_update` / `_delete` — old `_read` / `_write` names are dropped and replaced
 
 ---
 
