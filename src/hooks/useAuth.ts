@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
-import { useOrgStore } from '../store/orgStore'
+import { useOrgStore, type OrgMembership } from '../store/orgStore'
 import { useAllocationStore } from '../store/allocationStore'
 import { useAccountCodesStore } from '../store/accountCodesStore'
 import { useReportTemplateStore } from '../store/reportTemplateStore'
@@ -12,70 +12,63 @@ const PROFILE_FETCH_TIMEOUT_MS = 10_000
 
 type AuthEvent = AuthChangeEvent | 'FOCUS_REVALIDATE'
 
-// ── fetchOrgMembership ─────────────────────────────────────────────────────────
-// Fetches the user's first active org membership via raw REST (same CORS rationale
-// as fetchProfile — no credentials:include).
-async function fetchOrgMembership(
+// ── fetchAllOrgMemberships ─────────────────────────────────────────────────────
+// Fetches all active org memberships for the user.
+async function fetchAllOrgMemberships(
   userId:      string,
   accessToken: string,
   signal:      AbortSignal,
-): Promise<{ org_id: string; org_name: string; role: UserRole } | null> {
+): Promise<OrgMembership[]> {
   const baseUrl = import.meta.env.VITE_SUPABASE_URL as string
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-  const url = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations(name)&limit=1`
-  console.log('[DIAG] fetchOrgMembership URL:', url)
-  console.log('[DIAG] orgStore BEFORE fetch:', JSON.stringify(useOrgStore.getState()))
-
-  const res = await fetch(url, {
-    signal,
-    headers: {
-      apikey:        anonKey,
-      Authorization: `Bearer ${accessToken}`,
-      Accept:        'application/json',
+  const res = await fetch(
+    `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations(name)`,
+    {
+      signal,
+      headers: {
+        apikey:        anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        Accept:        'application/json',
+      },
     },
-  })
-
-  console.log('[DIAG] fetchOrgMembership HTTP status:', res.status, res.statusText)
+  )
 
   if (!res.ok) {
-    const errText = await res.text().catch(() => '(unreadable)')
-    console.error('[DIAG] fetchOrgMembership FAILED — body:', errText)
-    return null
+    console.warn(`[auth] fetchAllOrgMemberships HTTP ${res.status}`)
+    return []
   }
 
-  const rawText = await res.text()
-  console.log('[DIAG] fetchOrgMembership raw response:', rawText)
+  const rows = await res.json() as Array<{
+    org_id:        string
+    role:          UserRole
+    organizations: { name: string } | null
+  }>
 
-  let rows: Array<{ org_id: string; role: UserRole; organizations: { name: string } | null }>
-  try {
-    rows = JSON.parse(rawText)
-  } catch (e) {
-    console.error('[DIAG] fetchOrgMembership JSON parse error:', e)
-    return null
-  }
-
-  console.log('[DIAG] fetchOrgMembership rows.length:', rows.length, '| rows[0]:', JSON.stringify(rows[0]))
-
-  if (!rows[0]) {
-    console.error('[DIAG] fetchOrgMembership → EMPTY ARRAY — user has no active org_members row visible via RLS')
-    return null
-  }
-  const row = rows[0]
-  const result = {
+  return rows.map(row => ({
     org_id:   row.org_id,
-    org_name: row.organizations?.name ?? 'My Church',
+    org_name: row.organizations?.name ?? 'My Organization',
     role:     row.role,
+  }))
+}
+
+// ── selectActiveOrg ────────────────────────────────────────────────────────────
+// Picks the active org from a list of memberships.
+// Prefers the org persisted in localStorage for this user; falls back to first.
+function selectActiveOrg(
+  memberships: OrgMembership[],
+  userId: string,
+): OrgMembership | null {
+  if (memberships.length === 0) return null
+  const persisted = useOrgStore.getState().getPersistedOrgId(userId)
+  if (persisted) {
+    const match = memberships.find(m => m.org_id === persisted)
+    if (match) return match
   }
-  console.log('[DIAG] fetchOrgMembership → returning:', JSON.stringify(result))
-  return result
+  return memberships[0]
 }
 
 // ── fetchProfile ───────────────────────────────────────────────────────────────
-// Raw fetch with AbortSignal for precise cancellation control.
-// No `credentials: 'include'` — Supabase REST uses Bearer tokens, not cookies.
-// Using credentials:include with Supabase's default CORS (Allow-Origin: *) causes
-// browsers to block the response, leaving profile null and role unresolved.
 async function fetchProfile(
   userId: string,
   accessToken: string,
@@ -106,8 +99,6 @@ async function fetchProfile(
 }
 
 // ── fetchProfileWithRetry ──────────────────────────────────────────────────────
-// Retries up to MAX_ATTEMPTS times with exponential backoff on null returns.
-// AbortError propagates immediately (caller owns cancellation).
 const RETRY_DELAYS_MS = [0, 500, 1000]
 
 async function fetchProfileWithRetry(
@@ -124,7 +115,6 @@ async function fetchProfileWithRetry(
       console.log(`[auth] fetchProfile retry attempt ${attempt + 1}`)
     }
 
-    // fetchProfile throws AbortError if aborted — propagate immediately
     const profile = await fetchProfile(userId, accessToken, signal)
     if (profile) return profile
   }
@@ -132,17 +122,6 @@ async function fetchProfileWithRetry(
 }
 
 // ── useAuthListener ────────────────────────────────────────────────────────────
-// Call ONCE at the root of the app (App.tsx).
-//
-// Structural guarantees:
-//   - requestIdRef  monotonically increments per event; only the matching
-//     request may write state or clear loading.
-//   - controllerRef holds the AbortController for the in-flight fetch;
-//     aborted on every new event and on unmount.
-//   - AbortError is caught explicitly and never updates state.
-//   - setLoading(false) is in a finally block, guarded by requestId + signal.
-//   - A 10 s timeout aborts the controller and forces loading false.
-//   - A window 'focus' listener re-validates the session after tab blur.
 export function useAuthListener(): void {
   const requestIdRef  = useRef(0)
   const controllerRef = useRef<AbortController | null>(null)
@@ -151,13 +130,11 @@ export function useAuthListener(): void {
     let mounted = true
 
     async function processAuthEvent(event: AuthEvent, session: Session | null): Promise<void> {
-      // ── Cancel previous in-flight request ─────────────────────────────────
       controllerRef.current?.abort()
       const controller      = new AbortController()
       controllerRef.current = controller
       const { signal }      = controller
 
-      // ── Capture request ownership ──────────────────────────────────────────
       const requestId = ++requestIdRef.current
       console.log(`[auth:${requestId}] start  event=${event}  user=${session?.user?.id ?? 'none'}`)
 
@@ -172,7 +149,6 @@ export function useAuthListener(): void {
       if (isAuthenticatedEvent && session?.user) {
         useAuthStore.getState().setUser(session.user)
 
-        // ── Timeout: abort + force loading false if fetch hangs ──────────────
         const timeoutId = setTimeout(() => {
           if (requestIdRef.current === requestId) {
             console.warn(`[auth:${requestId}] timeout after ${PROFILE_FETCH_TIMEOUT_MS}ms — aborting`)
@@ -191,7 +167,6 @@ export function useAuthListener(): void {
 
           const profile = await fetchProfileWithRetry(session.user.id, session.access_token, signal)
 
-          // ── Re-verify ownership after every await ──────────────────────────
           if (signal.aborted) {
             console.warn(`[auth:${requestId}] abort — result discarded`)
             return
@@ -206,25 +181,24 @@ export function useAuthListener(): void {
             useAuthStore.getState().setProfile(profile)
             console.log(`[auth:${requestId}] profile loaded  role=${profile.role}`)
 
-            // Load org membership — setLoading(false) is deferred until this resolves
-            // so that useRole.resolved is not true until both profile and org are ready.
             try {
-              const membership = await fetchOrgMembership(session.user.id, session.access_token, signal)
+              const memberships = await fetchAllOrgMemberships(session.user.id, session.access_token, signal)
               if (signal.aborted || requestIdRef.current !== requestId || !mounted) return
-              if (membership) {
-                useOrgStore.getState().setOrg(membership)
-                console.log(`[auth:${requestId}] org loaded  org=${membership.org_id}  orgRole=${membership.role}`)
-                console.log('[DIAG] orgStore AFTER setOrg:', JSON.stringify(useOrgStore.getState()))
+
+              if (memberships.length > 0) {
+                const active = selectActiveOrg(memberships, session.user.id)
+                useOrgStore.getState().setMemberships(memberships)
+                if (active) {
+                  useOrgStore.getState().setOrg(active)
+                  console.log(`[auth:${requestId}] org loaded  org=${active.org_id}  orgRole=${active.role}  total=${memberships.length}`)
+                }
               } else {
-                console.warn(`[auth:${requestId}] no active org membership found`)
-                console.warn('[DIAG] clearOrg() called — trigger: fetchOrgMembership returned null')
+                console.warn(`[auth:${requestId}] no active org memberships found`)
                 useOrgStore.getState().clearOrg()
-                console.warn('[DIAG] orgStore AFTER clearOrg:', JSON.stringify(useOrgStore.getState()))
               }
             } catch (orgErr) {
               if (orgErr instanceof Error && orgErr.name === 'AbortError') return
               console.error(`[auth:${requestId}] org membership fetch failed:`, orgErr)
-              console.error('[DIAG] clearOrg() called — trigger: org fetch threw error:', orgErr)
               if (requestIdRef.current === requestId && mounted && !signal.aborted) {
                 useOrgStore.getState().clearOrg()
               }
@@ -242,7 +216,6 @@ export function useAuthListener(): void {
           console.error(`[auth:${requestId}] unexpected error:`, err)
         } finally {
           clearTimeout(timeoutId)
-          // ── Only the current, live, non-aborted request clears loading ──────
           if (requestIdRef.current === requestId && mounted && !signal.aborted) {
             console.log(`[auth:${requestId}] setLoading(false)`)
             useAuthStore.getState().setLoading(false)
@@ -275,9 +248,6 @@ export function useAuthListener(): void {
       processAuthEvent(event, session)
     })
 
-    // ── Focus revalidation ─────────────────────────────────────────────────────
-    // Re-fetches the session when the tab regains focus. Any in-flight request
-    // is cancelled by processAuthEvent's abort logic before the new one starts.
     async function handleFocus(): Promise<void> {
       console.log('[auth] window focus — revalidating session')
       const { data: { session } } = await supabase.auth.getSession()
@@ -316,4 +286,25 @@ export function useAuth() {
     signOut,
     isAuthenticated: !!user,
   }
+}
+
+// ── useOrgSwitch ───────────────────────────────────────────────────────────────
+// Switches the active org: resets all org-scoped caches, persists the choice,
+// and activates the new membership. Call from UI — do NOT use inside a store.
+export function useOrgSwitch() {
+  const user = useAuthStore(s => s.user)
+
+  const switchOrg = (membership: OrgMembership): void => {
+    const { setOrg, setSwitching, persistActive } = useOrgStore.getState()
+    setSwitching(true)
+    // Reset all org-scoped caches so stale data from the previous org is cleared
+    useAllocationStore.getState().reset()
+    useAccountCodesStore.getState().reset()
+    // Persist selection so page reloads restore the same org
+    if (user?.id) persistActive(user.id, membership.org_id)
+    setOrg(membership)
+    setSwitching(false)
+  }
+
+  return { switchOrg }
 }

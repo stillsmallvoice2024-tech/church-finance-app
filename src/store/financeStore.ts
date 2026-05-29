@@ -14,6 +14,7 @@ interface FinanceState {
   setForeignHoldings: (holdings: ForeignCurrencyHolding[]) => void
   setIntraFlows: (flows: IntraFlowTransaction[]) => void
   setLoading: (loading: boolean) => void
+  reset: () => void
 }
 
 export const useFinanceStore = create<FinanceState>((set) => ({
@@ -29,4 +30,5 @@ export const useFinanceStore = create<FinanceState>((set) => ({
   setForeignHoldings: (foreignHoldings) => set({ foreignHoldings }),
   setIntraFlows: (intraFlows) => set({ intraFlows }),
   setLoading: (isLoading) => set({ isLoading }),
+  reset: () => set({ transactions: [], accounts: [], projects: [], foreignHoldings: [], intraFlows: [], isLoading: false }),
 }))

@@ -10,14 +10,16 @@ import {
   ChevronDown, X,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
+import { useOrgStore } from '../../store/orgStore'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
+import { ROLE_LABELS } from '../../utils/constants'
 
 interface NavItem {
   label: string
   path: string
   icon: React.ElementType
   adminOnly?: boolean
-  canWriteOnly?: boolean  // hidden for viewer role
+  canWriteOnly?: boolean
 }
 
 interface NavGroupDef {
@@ -119,7 +121,7 @@ function useGroupOpenState() {
   return { openState: state, toggle }
 }
 
-function ChurchCross() {
+function AppIcon() {
   return (
     <svg viewBox="0 0 32 32" className="w-7 h-7" fill="currentColor" aria-hidden="true">
       <rect x="13" y="2" width="6" height="28" rx="2" />
@@ -139,6 +141,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const showWrite = canWrite()
   const activeYear = useAccountingYearStore(s => s.year)
   const { openState, toggle } = useGroupOpenState()
+  const orgName = useOrgStore(s => s.orgName)
+  const orgRole = useOrgStore(s => s.orgRole)
+
+  const displayName = orgName ?? 'Finance'
+  const roleLabel   = orgRole ? ROLE_LABELS[orgRole] : null
 
   return (
     <>
@@ -161,24 +168,31 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           lg:translate-x-0
         `}
       >
-        {/* Logo */}
+        {/* Logo / org header */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0">
-              <ChurchCross />
+              <AppIcon />
             </div>
             <div className="min-w-0">
-              <p className="text-white font-semibold text-sm leading-tight break-words">
-                The Standing Church International
+              <p className="text-white font-semibold text-sm leading-tight truncate" title={displayName}>
+                {displayName}
               </p>
-              <p className="text-accent text-xs font-semibold tracking-widest uppercase mt-0.5">
-                Finance {activeYear}
-              </p>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <p className="text-accent text-xs font-semibold tracking-widest uppercase">
+                  Finance {activeYear}
+                </p>
+                {roleLabel && (
+                  <span className="text-[10px] text-white/50 font-medium">
+                    · {roleLabel}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="lg:hidden p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            className="lg:hidden p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors shrink-0"
             aria-label="Close sidebar"
           >
             <X className="w-5 h-5" />
@@ -244,7 +258,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-white/10">
           <p className="text-[10px] text-white/30 text-center">
-            © {new Date().getFullYear()} TSCI Finance
+            © {new Date().getFullYear()} {displayName}
           </p>
         </div>
       </aside>

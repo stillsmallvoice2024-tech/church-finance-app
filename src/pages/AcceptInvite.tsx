@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-function ChurchCross() {
+function AppIcon() {
   return (
     <svg viewBox="0 0 32 32" className="h-10 w-10" fill="currentColor" aria-hidden="true">
       <rect x="13" y="2" width="6" height="28" rx="2" />
@@ -17,10 +17,11 @@ const inputCls =
   'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors'
 
 interface Invitation {
-  id:        string
-  email:     string
-  role:      string
-  status:    string
+  id:         string
+  email:      string
+  role:       string
+  org_name?:  string
+  status:     string
   expires_at: string | null
 }
 
@@ -28,7 +29,7 @@ export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>()
   const navigate  = useNavigate()
 
-  const [invitation, setInvitation] = useState<Invitation | null>(null)
+  const [invitation,    setInvitation]    = useState<Invitation | null>(null)
   const [loadingInvite, setLoadingInvite] = useState(true)
   const [inviteError,   setInviteError]   = useState<string | null>(null)
 
@@ -51,7 +52,6 @@ export default function AcceptInvite() {
       return
     }
     const fetchInvite = async () => {
-      // Security-definer RPC: only returns pending non-expired rows, safe for anon.
       const { data, error: err } = await supabase
         .rpc('get_invitation_by_token', { p_token: token })
 
@@ -159,16 +159,18 @@ export default function AcceptInvite() {
     setTimeout(() => navigate('/', { replace: true }), 3000)
   }
 
+  const orgDisplay = invitation?.org_name ?? 'Finance Manager'
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
 
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
-            <ChurchCross />
+            <AppIcon />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">
-            The Standing Church International
+            {orgDisplay}
           </h1>
           <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-accent">
             Financial Management System
@@ -355,12 +357,6 @@ export default function AcceptInvite() {
               </form>
             </>
           )}
-        </div>
-
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-400">
-            © {new Date().getFullYear()} The Standing Church International
-          </p>
         </div>
       </div>
     </div>

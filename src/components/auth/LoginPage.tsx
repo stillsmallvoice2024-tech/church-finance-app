@@ -4,7 +4,7 @@ import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 
-function ChurchCross() {
+function AppIcon() {
   return (
     <svg viewBox="0 0 32 32" className="h-10 w-10" fill="currentColor" aria-hidden="true">
       <rect x="13" y="2" width="6" height="28" rx="2" />
@@ -35,7 +35,6 @@ export default function LoginPage() {
 
   const resolveEmail = async (input: string): Promise<string | null> => {
     if (input.includes('@')) return input
-    // Look up email by username in profiles table
     const { data } = await supabase
       .from('profiles')
       .select('email')
@@ -84,10 +83,10 @@ export default function LoginPage() {
         {/* Logo & title */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
-            <ChurchCross />
+            <AppIcon />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">
-            The Standing Church International
+            Finance Manager
           </h1>
           <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-accent">
             Financial Management System
@@ -100,7 +99,7 @@ export default function LoginPage() {
           {mode === 'signin' ? (
             <>
               <p className="mb-6 text-center text-sm font-medium text-gray-600">
-                Sign in to your church finance account
+                Sign in to your account
               </p>
 
               {error && (
@@ -111,21 +110,19 @@ export default function LoginPage() {
               )}
 
               <form onSubmit={handleSignIn} className="space-y-4">
-                {/* Email or Username */}
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-600">Email or Username</label>
                   <input
                     type="text"
                     value={identifier}
                     onChange={e => setIdentifier(e.target.value)}
-                    placeholder="you@standingchurch.org or username"
+                    placeholder="you@example.com or username"
                     required
                     autoComplete="username"
                     className={inputCls}
                   />
                 </div>
 
-                {/* Password with show/hide toggle */}
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-600">Password</label>
                   <div className="relative">
@@ -198,7 +195,7 @@ export default function LoginPage() {
                       type="text"
                       value={identifier}
                       onChange={e => setIdentifier(e.target.value)}
-                      placeholder="you@standingchurch.org or username"
+                      placeholder="you@example.com or username"
                       required
                       autoComplete="username"
                       className={inputCls}
@@ -232,9 +229,6 @@ export default function LoginPage() {
             <span className="font-medium text-primary">
               Contact your administrator to request an account.
             </span>
-          </p>
-          <p className="text-xs text-gray-400">
-            © {new Date().getFullYear()} The Standing Church International
           </p>
         </div>
       </div>
