@@ -23,52 +23,38 @@ async function fetchOrgMembership(
   const baseUrl = import.meta.env.VITE_SUPABASE_URL as string
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-  const url = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations(name)&limit=1`
-  console.log('[DIAG] fetchOrgMembership URL:', url)
-  console.log('[DIAG] orgStore BEFORE fetch:', JSON.stringify(useOrgStore.getState()))
-
-  const res = await fetch(url, {
-    signal,
-    headers: {
-      apikey:        anonKey,
-      Authorization: `Bearer ${accessToken}`,
-      Accept:        'application/json',
+  // organizations.slug=eq.primary ensures we always resolve the canonical org,
+  // not a test/secondary org the user may also be a member of.
+  const res = await fetch(
+    `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations(name)&organizations.slug=eq.primary&limit=1`,
+    {
+      signal,
+      headers: {
+        apikey:        anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        Accept:        'application/json',
+      },
     },
-  })
-
-  console.log('[DIAG] fetchOrgMembership HTTP status:', res.status, res.statusText)
+  )
 
   if (!res.ok) {
-    const errText = await res.text().catch(() => '(unreadable)')
-    console.error('[DIAG] fetchOrgMembership FAILED — body:', errText)
+    console.warn(`[auth] fetchOrgMembership HTTP ${res.status}`)
     return null
   }
 
-  const rawText = await res.text()
-  console.log('[DIAG] fetchOrgMembership raw response:', rawText)
+  const rows = await res.json() as Array<{
+    org_id:        string
+    role:          UserRole
+    organizations: { name: string } | null
+  }>
 
-  let rows: Array<{ org_id: string; role: UserRole; organizations: { name: string } | null }>
-  try {
-    rows = JSON.parse(rawText)
-  } catch (e) {
-    console.error('[DIAG] fetchOrgMembership JSON parse error:', e)
-    return null
-  }
-
-  console.log('[DIAG] fetchOrgMembership rows.length:', rows.length, '| rows[0]:', JSON.stringify(rows[0]))
-
-  if (!rows[0]) {
-    console.error('[DIAG] fetchOrgMembership → EMPTY ARRAY — user has no active org_members row visible via RLS')
-    return null
-  }
+  if (!rows[0]) return null
   const row = rows[0]
-  const result = {
+  return {
     org_id:   row.org_id,
     org_name: row.organizations?.name ?? 'My Church',
     role:     row.role,
   }
-  console.log('[DIAG] fetchOrgMembership → returning:', JSON.stringify(result))
-  return result
 }
 
 // ── fetchProfile ───────────────────────────────────────────────────────────────
@@ -214,17 +200,13 @@ export function useAuthListener(): void {
               if (membership) {
                 useOrgStore.getState().setOrg(membership)
                 console.log(`[auth:${requestId}] org loaded  org=${membership.org_id}  orgRole=${membership.role}`)
-                console.log('[DIAG] orgStore AFTER setOrg:', JSON.stringify(useOrgStore.getState()))
               } else {
                 console.warn(`[auth:${requestId}] no active org membership found`)
-                console.warn('[DIAG] clearOrg() called — trigger: fetchOrgMembership returned null')
                 useOrgStore.getState().clearOrg()
-                console.warn('[DIAG] orgStore AFTER clearOrg:', JSON.stringify(useOrgStore.getState()))
               }
             } catch (orgErr) {
               if (orgErr instanceof Error && orgErr.name === 'AbortError') return
               console.error(`[auth:${requestId}] org membership fetch failed:`, orgErr)
-              console.error('[DIAG] clearOrg() called — trigger: org fetch threw error:', orgErr)
               if (requestIdRef.current === requestId && mounted && !signal.aborted) {
                 useOrgStore.getState().clearOrg()
               }
