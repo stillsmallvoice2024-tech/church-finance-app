@@ -213,6 +213,7 @@ export interface IncomeTypeInput {
 
 export async function saveIncomeType(input: IncomeTypeInput, existingId?: string): Promise<string> {
   const { orgId } = useOrgStore.getState()
+  if (!existingId && !orgId) throw new Error('No active organisation.')
   let id = existingId ?? ''
 
   if (existingId) {
@@ -238,7 +239,7 @@ export async function saveIncomeType(input: IncomeTypeInput, existingId?: string
         color:            input.color,
         special_config_id: input.special_config_id || null,
         ...(input.special_config_group_id !== undefined ? { special_config_group_id: input.special_config_group_id || null } : {}),
-        ...(orgId ? { org_id: orgId } : {}),
+        org_id: orgId!,
       })
       .select('id')
       .single()

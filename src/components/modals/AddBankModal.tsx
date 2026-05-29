@@ -256,17 +256,11 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       starting_balance_allocations: hasBalance ? allocations : undefined,
     }
 
-    console.log('[bank-modal] onSubmit', { isEdit, hasBalance, allocType, payload })
-
     try {
       if (isEdit && editRecord) {
-        console.log('[bank-modal] updating bank', editRecord.id)
         await update({ id: editRecord.id, ...payload })
-        console.log('[bank-modal] bank update succeeded')
       } else {
-        console.log('[bank-modal] inserting bank')
         await add(payload)
-        console.log('[bank-modal] bank insert succeeded')
       }
 
       // ── Propagate Balance Brought Forward into bank ledger ────────────────────
@@ -298,7 +292,6 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             if (curr && curr.apply_to_category === false) {
               const cat = categories.find(c => c.name === prev.category_name)
               if (cat) {
-                console.log('[bank-modal] removing stale category opening balance', prev.category_name, prev.budget_portion)
                 try {
                   await deleteCategoryOpeningBalance(cat.id, prev.budget_portion as BudgetPortion)
                 } catch (e) {
@@ -322,7 +315,6 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             ? Math.round(((row.percentage ?? 0) / 100) * totalBalance * 100) / 100
             : (row.amount ?? 0)
           if (amount <= 0) continue
-          console.log('[bank-modal] upserting category opening balance', { catId: cat.id, portion: row.budget_portion, amount })
           try {
             await upsertCategoryOpeningBalance(cat.id, row.budget_portion as BudgetPortion, amount)
           } catch (e: unknown) {

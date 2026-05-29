@@ -5,14 +5,11 @@ import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import type { StartingBalanceRow } from './useBanks'
 
-// Returns { org_id } payload fragment if an active org is set; empty object otherwise.
-// Mutations proceed even without org_id — the DB default (get_current_org_id()) handles it.
-function orgPayload(): { org_id: string } | Record<string, never> {
+// Returns { org_id } fragment. Throws if no active org is set — all mutations require
+// an explicit org_id because the DB column default (get_current_org_id()) returns NULL.
+function orgPayload(): { org_id: string } {
   const { orgId } = useOrgStore.getState()
-  if (!orgId) {
-    console.warn('[mutation] no active org — falling back to DB default org_id')
-    return {}
-  }
+  if (!orgId) throw new Error('No active organisation — please reload the page.')
   return { org_id: orgId }
 }
 
@@ -353,8 +350,6 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         ? { ...updates, updated_at: new Date().toISOString() }
         : updates
 
-      console.log('[useUpdateTransaction] payload', { table, id, updates: withTimestamp })
-
       // Use .select('id') without head:true — head:true changes the method to HEAD
       // which reads without writing, causing silent no-ops that appear successful.
       const { data: updatedRows, error: err } = await supabase
@@ -363,18 +358,10 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         .eq('id', id)
         .select('id')
 
-      console.log('[useUpdateTransaction] response', { updatedRows, err })
-
-      if (err) {
-        console.error('[useUpdateTransaction] error', { table, id, err })
-        throw err
-      }
+      if (err) throw err
       if (!updatedRows?.length) {
-        console.warn('[useUpdateTransaction] 0 rows updated — RLS or stale ID?', { table, id })
         throw new Error('Record not found or update blocked by permissions.')
       }
-
-      console.log('[useUpdateTransaction] success', { table, id, updatedIds: updatedRows.map((r: { id: string }) => r.id) })
 
       logAudit({
         userId:    user.id,
@@ -645,18 +632,13 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
         group_id:    input.group_id ?? null,
         ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
       }
-      console.log('[useUpdateCategory] payload', { id: input.id, updates })
       const { data: updatedRows, error: err } = await supabase
         .from('categories')
         .update(updates)
         .eq('id', input.id)
         .select('id')
-      console.log('[useUpdateCategory] response', { updatedRows, err })
       if (err) throw err
-      if (!updatedRows?.length) {
-        console.warn('[useUpdateCategory] 0 rows updated — RLS or stale ID?', { id: input.id })
-        throw new Error('Category not found or update was denied.')
-      }
+      if (!updatedRows?.length) throw new Error('Category not found or update was denied.')
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })
       if (oldData) logFieldChanges(user.id, 'categories', input.id, oldData as Record<string, unknown>, updates as Record<string, unknown>)
     } catch (err) {

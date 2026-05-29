@@ -20,16 +20,20 @@ export interface FXConversion {
 }
 
 export function useFXConversions(currency?: string) {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [conversions, setConversions] = useState<FXConversion[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     let q = supabase
       .from('fx_conversions')
       .select('*')
+      .eq('org_id', orgId)
       .order('date',       { ascending: false })
       .order('created_at', { ascending: false })
     if (currency) q = q.eq('fx_currency', currency.toUpperCase())
@@ -37,7 +41,7 @@ export function useFXConversions(currency?: string) {
     if (err) setError(err.message)
     else     setConversions((data ?? []) as FXConversion[])
     setLoading(false)
-  }, [currency])
+  }, [orgId, currency])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -67,6 +71,7 @@ export function useAddFXConversion() {
     const { user } = useAuthStore.getState()
     const { orgId } = useOrgStore.getState()
     if (!user?.id) throw new Error('You must be signed in.')
+    if (!orgId) throw new Error('No active organisation.')
     setLoading(true); setError(null)
 
     try {
@@ -93,7 +98,7 @@ export function useAddFXConversion() {
           running_balance: newBalance,
           narration:       input.notes ?? `Converted to NGN @ ₦${input.exchange_rate}`,
           created_by:      user.id,
-          ...(orgId ? { org_id: orgId } : {}),
+          org_id:          orgId,
         })
         .select('id')
         .single()
@@ -114,7 +119,7 @@ export function useAddFXConversion() {
           fx_rate:              input.exchange_rate,
           transaction_type:     'fx_conversion',
           created_by:           user.id,
-          ...(orgId ? { org_id: orgId } : {}),
+          org_id:               orgId,
         })
         .select('id')
         .single()
@@ -133,6 +138,7 @@ export function useAddFXConversion() {
         allocation_config_id: input.allocation_config_id ?? null,
         is_partial:           input.is_partial ?? (input.fx_amount < prevBalance),
         created_by:           user.id,
+        org_id:               orgId,
       })
       if (convErr) throw convErr
 

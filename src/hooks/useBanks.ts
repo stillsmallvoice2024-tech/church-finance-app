@@ -82,8 +82,7 @@ export function useBanks(): BanksResult {
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
-    console.log('[DIAG] useBanks: orgId=', orgId)
-    if (!orgId) { console.warn('[DIAG] useBanks: guard triggered — orgId is null, skipping query'); setLoading(false); return }
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 

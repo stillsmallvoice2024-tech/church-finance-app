@@ -62,9 +62,7 @@ export function DataControlsBar({
 
   const searchColumns = useMemo(() => {
     if (columns && columns.length > 0) {
-      const derived = deriveSearchCols(columns)
-      console.log('[SEARCHABLE_COLUMNS]', derived)
-      return derived
+      return deriveSearchCols(columns)
     }
     return searchColumnsProp
   }, [columns, searchColumnsProp])

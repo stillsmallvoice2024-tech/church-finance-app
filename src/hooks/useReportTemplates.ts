@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore } from '../store/orgStore'
 import type { ReportLayout, ReportTemplate } from '../types'
 
 export function useReportTemplates(): {
@@ -9,20 +10,24 @@ export function useReportTemplates(): {
   error: string | null
   refetch: () => void
 } {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [templates, setTemplates] = useState<ReportTemplate[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     const { data, error: err } = await supabase
       .from('report_templates')
       .select('*')
+      .eq('org_id', orgId)
       .order('name')
     if (err) { setError(err.message) } else { setTemplates((data ?? []) as ReportTemplate[]) }
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -47,9 +52,11 @@ export function useAddReportTemplate(): {
     setLoading(true)
     setError(null)
     const user = useAuthStore.getState().user
+    const { orgId } = useOrgStore.getState()
+    if (!orgId) { setLoading(false); throw new Error('No active organisation.') }
     const { data, error: err } = await supabase
       .from('report_templates')
-      .insert({ ...input, created_by: user?.id ?? null })
+      .insert({ ...input, created_by: user?.id ?? null, org_id: orgId })
       .select()
       .single()
     setLoading(false)

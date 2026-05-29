@@ -3,9 +3,10 @@ import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
 import type { AllocationConfig } from '../store/allocationStore'
 
-function orgPayload(): { org_id: string } | Record<string, never> {
+function orgPayload(): { org_id: string } {
   const { orgId } = useOrgStore.getState()
-  return orgId ? { org_id: orgId } : {}
+  if (!orgId) throw new Error('No active organisation.')
+  return { org_id: orgId }
 }
 
 export interface SpecialConfigGroupWithVersions {
