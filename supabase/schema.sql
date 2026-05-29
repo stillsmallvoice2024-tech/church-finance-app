@@ -15,9 +15,11 @@ create table public.profiles (
   updated_at timestamptz default now()
 );
 
--- Auto-create profile on signup (also used by AcceptInvite flow)
+-- Auto-create profile on signup and enroll in primary org as viewer.
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  v_org_id uuid;
 begin
   insert into public.profiles (id, email, full_name, username)
   values (
@@ -27,6 +29,14 @@ begin
     new.raw_user_meta_data->>'username'
   )
   on conflict (id) do nothing;
+
+  select id into v_org_id from public.organizations where slug = 'primary' limit 1;
+  if v_org_id is not null then
+    insert into public.org_members (org_id, user_id, role, status)
+    values (v_org_id, new.id, 'viewer', 'active')
+    on conflict (org_id, user_id) do nothing;
+  end if;
+
   return new;
 end;
 $$ language plpgsql security definer;
@@ -415,24 +425,41 @@ alter table public.outflow_types         enable row level security;
 alter table public.category_outflow_type_map enable row level security;
 
 -- ── Helper functions ───────────────────────────────────────────────────────────
+-- is_admin / is_finance_user use org_members so suspended users lose access
+-- immediately; used for tables without a direct org_id column.
 
 create or replace function public.is_finance_user()
 returns boolean as $$
   select exists (
-    select 1 from public.profiles
-    where id = auth.uid() and role in ('admin', 'accountant')
+    select 1 from public.org_members
+    where user_id = auth.uid()
+      and role    in ('admin', 'accountant')
+      and status  = 'active'
   );
 $$ language sql security definer stable;
 
 create or replace function public.is_admin()
 returns boolean as $$
   select exists (
-    select 1 from public.profiles
-    where id = auth.uid() and role = 'admin'
+    select 1 from public.org_members
+    where user_id = auth.uid()
+      and role    = 'admin'
+      and status  = 'active'
   );
 $$ language sql security definer stable;
 
--- ── Profiles ───────────────────────────────────────────────────────────────────
+-- is_org_member: any active role in p_org_id — used by SELECT policies.
+create or replace function public.is_org_member(p_org_id uuid)
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.org_members
+    where org_id  = p_org_id
+      and user_id = auth.uid()
+      and status  = 'active'
+  );
+$$;
+
+-- ── Profiles (no org_id — global user registry) ───────────────────────────────
 
 create policy "profiles_select" on public.profiles
   for select using (auth.uid() is not null);
@@ -440,8 +467,6 @@ create policy "profiles_select" on public.profiles
 create policy "profiles_insert" on public.profiles
   for insert with check (auth.uid() is not null);
 
--- Self-update: own row only; role is immutable via this path (WITH CHECK subquery
--- ensures the new role value equals the user's current role, blocking escalation).
 create policy "profiles_update_self" on public.profiles
   for update
   using  (id = auth.uid())
@@ -450,7 +475,6 @@ create policy "profiles_update_self" on public.profiles
     and  role = (select p.role from public.profiles p where p.id = auth.uid())
   );
 
--- Admins may update any profile, including role changes (e.g. UserManagement page).
 create policy "profiles_update_admin" on public.profiles
   for update using (public.is_admin());
 
@@ -459,186 +483,218 @@ create policy "profiles_delete" on public.profiles
 
 -- ── Category Groups ────────────────────────────────────────────────────────────
 
-create policy "category_groups_read" on public.category_groups
-  for select using (auth.uid() is not null);
-create policy "category_groups_write" on public.category_groups
-  for all using (public.is_admin());
+create policy "category_groups_select" on public.category_groups
+  for select using (public.is_org_member(org_id));
+create policy "category_groups_insert" on public.category_groups
+  for insert with check (public.is_org_admin(org_id));
+create policy "category_groups_update" on public.category_groups
+  for update using (public.is_org_admin(org_id));
+create policy "category_groups_delete" on public.category_groups
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Categories ─────────────────────────────────────────────────────────────────
 
-create policy "categories_read" on public.categories
-  for select using (auth.uid() is not null);
-create policy "categories_write" on public.categories
-  for all using (public.is_finance_user());
+create policy "categories_select" on public.categories
+  for select using (public.is_org_member(org_id));
+create policy "categories_insert" on public.categories
+  for insert with check (public.is_org_finance_user(org_id));
+create policy "categories_update" on public.categories
+  for update using (public.is_org_finance_user(org_id));
 create policy "categories_delete" on public.categories
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Banks ──────────────────────────────────────────────────────────────────────
 
-create policy "banks_read" on public.banks
-  for select using (auth.uid() is not null);
-create policy "banks_write" on public.banks
-  for all using (public.is_admin());
+create policy "banks_select" on public.banks
+  for select using (public.is_org_member(org_id));
+create policy "banks_insert" on public.banks
+  for insert with check (public.is_org_admin(org_id));
+create policy "banks_update" on public.banks
+  for update using (public.is_org_admin(org_id));
+create policy "banks_delete" on public.banks
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Allocation Configs ─────────────────────────────────────────────────────────
 
-create policy "allocation_configs_read" on public.allocation_configs
-  for select using (auth.uid() is not null);
-create policy "allocation_configs_write" on public.allocation_configs
-  for all using (public.is_finance_user());
+create policy "allocation_configs_select" on public.allocation_configs
+  for select using (public.is_org_member(org_id));
+create policy "allocation_configs_insert" on public.allocation_configs
+  for insert with check (public.is_org_finance_user(org_id));
+create policy "allocation_configs_update" on public.allocation_configs
+  for update using (public.is_org_finance_user(org_id));
 create policy "allocation_configs_delete" on public.allocation_configs
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Income Types ───────────────────────────────────────────────────────────────
 
-create policy "income_types_read" on public.income_types
-  for select using (auth.uid() is not null);
-create policy "income_types_write" on public.income_types
-  for all using (public.is_admin());
+create policy "income_types_select" on public.income_types
+  for select using (public.is_org_member(org_id));
+create policy "income_types_insert" on public.income_types
+  for insert with check (public.is_org_admin(org_id));
+create policy "income_types_update" on public.income_types
+  for update using (public.is_org_admin(org_id));
+create policy "income_types_delete" on public.income_types
+  for delete using (public.is_org_admin(org_id));
 
-create policy "income_type_rules_read" on public.income_type_rules
-  for select using (auth.uid() is not null);
-create policy "income_type_rules_write" on public.income_type_rules
-  for all using (public.is_admin());
+create policy "income_type_rules_select" on public.income_type_rules
+  for select using (public.is_org_member(org_id));
+create policy "income_type_rules_insert" on public.income_type_rules
+  for insert with check (public.is_org_admin(org_id));
+create policy "income_type_rules_update" on public.income_type_rules
+  for update using (public.is_org_admin(org_id));
+create policy "income_type_rules_delete" on public.income_type_rules
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Outflow Types ──────────────────────────────────────────────────────────────
 
-create policy "outflow_types_read" on public.outflow_types
-  for select using (auth.uid() is not null);
-create policy "outflow_types_write" on public.outflow_types
-  for insert with check (public.is_finance_user());
+create policy "outflow_types_select" on public.outflow_types
+  for select using (public.is_org_member(org_id));
+create policy "outflow_types_insert" on public.outflow_types
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "outflow_types_update" on public.outflow_types
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "outflow_types_delete" on public.outflow_types
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Category-Outflow Type Map ──────────────────────────────────────────────────
 
-create policy "cotm_read" on public.category_outflow_type_map
-  for select using (auth.uid() is not null);
-create policy "cotm_write" on public.category_outflow_type_map
-  for insert with check (public.is_finance_user());
+create policy "cotm_select" on public.category_outflow_type_map
+  for select using (public.is_org_member(org_id));
+create policy "cotm_insert" on public.category_outflow_type_map
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "cotm_delete" on public.category_outflow_type_map
-  for delete using (public.is_finance_user());
+  for delete using (public.is_org_finance_user(org_id));
 
 -- ── Inflow Transactions ────────────────────────────────────────────────────────
 
-create policy "inflow_read" on public.inflow_transactions
-  for select using (auth.uid() is not null);
-create policy "inflow_write" on public.inflow_transactions
-  for insert with check (public.is_finance_user());
+create policy "inflow_select" on public.inflow_transactions
+  for select using (public.is_org_member(org_id));
+create policy "inflow_insert" on public.inflow_transactions
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "inflow_update" on public.inflow_transactions
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "inflow_delete" on public.inflow_transactions
-  for delete using (public.is_finance_user());
+  for delete using (public.is_org_finance_user(org_id));
 
 -- ── Outflow Transactions ───────────────────────────────────────────────────────
 
-create policy "outflow_read" on public.outflow_transactions
-  for select using (auth.uid() is not null);
-create policy "outflow_write" on public.outflow_transactions
-  for insert with check (public.is_finance_user());
+create policy "outflow_select" on public.outflow_transactions
+  for select using (public.is_org_member(org_id));
+create policy "outflow_insert" on public.outflow_transactions
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "outflow_update" on public.outflow_transactions
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "outflow_delete" on public.outflow_transactions
-  for delete using (public.is_finance_user());
+  for delete using (public.is_org_finance_user(org_id));
 
 -- ── Intra Flows ────────────────────────────────────────────────────────────────
 
-create policy "intraflow_read" on public.intra_flows
-  for select using (auth.uid() is not null);
-create policy "intraflow_write" on public.intra_flows
-  for insert with check (public.is_finance_user());
+create policy "intraflow_select" on public.intra_flows
+  for select using (public.is_org_member(org_id));
+create policy "intraflow_insert" on public.intra_flows
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "intraflow_update" on public.intra_flows
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "intraflow_delete" on public.intra_flows
-  for delete using (public.is_finance_user());
+  for delete using (public.is_org_finance_user(org_id));
 
 -- ── Bank Deposits ──────────────────────────────────────────────────────────────
 
-create policy "bank_deposits_read" on public.bank_deposits
-  for select using (auth.uid() is not null);
-create policy "bank_deposits_write" on public.bank_deposits
-  for insert with check (public.is_finance_user());
+create policy "bank_deposits_select" on public.bank_deposits
+  for select using (public.is_org_member(org_id));
+create policy "bank_deposits_insert" on public.bank_deposits
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "bank_deposits_update" on public.bank_deposits
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "bank_deposits_delete" on public.bank_deposits
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Intrabank Transfers ────────────────────────────────────────────────────────
 
-create policy "intrabank_read" on public.intrabank_transfers
-  for select using (auth.uid() is not null);
-create policy "intrabank_write" on public.intrabank_transfers
-  for insert with check (public.is_finance_user());
+create policy "intrabank_select" on public.intrabank_transfers
+  for select using (public.is_org_member(org_id));
+create policy "intrabank_insert" on public.intrabank_transfers
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "intrabank_update" on public.intrabank_transfers
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "intrabank_delete" on public.intrabank_transfers
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Accounts ───────────────────────────────────────────────────────────────────
 
-create policy "accounts_read" on public.accounts
-  for select using (auth.uid() is not null);
-create policy "accounts_write" on public.accounts
-  for all using (public.is_admin());
+create policy "accounts_select" on public.accounts
+  for select using (public.is_org_member(org_id));
+create policy "accounts_insert" on public.accounts
+  for insert with check (public.is_org_admin(org_id));
+create policy "accounts_update" on public.accounts
+  for update using (public.is_org_admin(org_id));
+create policy "accounts_delete" on public.accounts
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Ledger Entries ─────────────────────────────────────────────────────────────
 
-create policy "ledger_read" on public.ledger_entries
-  for select using (auth.uid() is not null);
-create policy "ledger_write" on public.ledger_entries
-  for insert with check (public.is_finance_user());
+create policy "ledger_select" on public.ledger_entries
+  for select using (public.is_org_member(org_id));
+create policy "ledger_insert" on public.ledger_entries
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "ledger_update" on public.ledger_entries
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "ledger_delete" on public.ledger_entries
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── FX Transactions ────────────────────────────────────────────────────────────
 
-create policy "fx_read" on public.fx_transactions
-  for select using (auth.uid() is not null);
-create policy "fx_write" on public.fx_transactions
-  for insert with check (public.is_finance_user());
+create policy "fx_select" on public.fx_transactions
+  for select using (public.is_org_member(org_id));
+create policy "fx_insert" on public.fx_transactions
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "fx_update" on public.fx_transactions
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "fx_delete" on public.fx_transactions
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Special Projects ───────────────────────────────────────────────────────────
 
-create policy "projects_read" on public.special_projects
-  for select using (auth.uid() is not null);
-create policy "projects_write" on public.special_projects
-  for all using (public.is_admin());
+create policy "projects_select" on public.special_projects
+  for select using (public.is_org_member(org_id));
+create policy "projects_insert" on public.special_projects
+  for insert with check (public.is_org_admin(org_id));
+create policy "projects_update" on public.special_projects
+  for update using (public.is_org_admin(org_id));
+create policy "projects_delete" on public.special_projects
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Project Entries ────────────────────────────────────────────────────────────
 
-create policy "project_entries_read" on public.project_entries
-  for select using (auth.uid() is not null);
-create policy "project_entries_write" on public.project_entries
-  for insert with check (public.is_finance_user());
+create policy "project_entries_select" on public.project_entries
+  for select using (public.is_org_member(org_id));
+create policy "project_entries_insert" on public.project_entries
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "project_entries_update" on public.project_entries
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "project_entries_delete" on public.project_entries
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Receipts ───────────────────────────────────────────────────────────────────
 
-create policy "receipts_read" on public.receipts
-  for select using (auth.uid() is not null);
-create policy "receipts_write" on public.receipts
-  for insert with check (public.is_finance_user());
+create policy "receipts_select" on public.receipts
+  for select using (public.is_org_member(org_id));
+create policy "receipts_insert" on public.receipts
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "receipts_delete" on public.receipts
-  for delete using (public.is_finance_user());
+  for delete using (public.is_org_finance_user(org_id));
 
 -- ── Invitations ────────────────────────────────────────────────────────────────
+-- Token reads via get_invitation_by_token() SECURITY DEFINER RPC only.
 
--- Admins manage invitations. Token reads are handled via the
--- get_invitation_by_token() security-definer RPC below (no direct SELECT allowed).
-create policy "invitations_admin_all" on public.invitations
-  using  (public.is_admin())
-  with check (public.is_admin());
+create policy "invitations_select" on public.invitations
+  for select using (public.is_org_admin(org_id));
+create policy "invitations_insert" on public.invitations
+  for insert with check (public.is_org_admin(org_id));
+create policy "invitations_update" on public.invitations
+  for update using (public.is_org_admin(org_id));
+create policy "invitations_delete" on public.invitations
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Invitation security-definer helpers ────────────────────────────────────────
 
@@ -658,7 +714,7 @@ begin
 end;
 $$;
 
--- Atomically sets the role from the invite and marks it consumed.
+-- Atomically sets the role from the invite, syncs org_members, marks consumed.
 -- p_user_id must equal auth.uid() to block accepting on behalf of others.
 create or replace function public.accept_invitation(p_token uuid, p_user_id uuid)
 returns void
@@ -682,11 +738,18 @@ begin
     raise exception 'Invalid or expired invitation';
   end if;
 
-  -- Bypasses the self-role-change lock on profiles_update_self.
+  -- Keep profiles.role in sync for frontend useRole() hook
   update public.profiles
     set role       = v_invite.role,
         updated_at = now()
   where id = p_user_id;
+
+  -- Upsert org_members.role (authoritative for Phase 3 RLS helpers)
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_invite.org_id, p_user_id, v_invite.role, 'active')
+  on conflict (org_id, user_id) do update
+    set role   = excluded.role,
+        status = 'active';
 
   update public.invitations
     set status      = 'accepted',
@@ -695,19 +758,23 @@ begin
 end;
 $$;
 
--- ── Audit Log ──────────────────────────────────────────────────────────────────
+-- ── Audit Log (no org_id) ──────────────────────────────────────────────────────
 
 create policy "audit_admin_read" on public.audit_log
   for select using (public.is_admin());
-create policy "audit_write" on public.audit_log
-  for insert with check (auth.uid() is not null);
+create policy "audit_insert" on public.audit_log
+  for insert with check (
+    exists (select 1 from public.org_members where user_id = auth.uid() and status = 'active')
+  );
 
--- ── Field Changes ──────────────────────────────────────────────────────────────
+-- ── Field Changes (no org_id) ──────────────────────────────────────────────────
 
 create policy "field_changes_admin_read" on public.field_changes
   for select using (public.is_admin());
-create policy "field_changes_write" on public.field_changes
-  for insert with check (auth.uid() is not null);
+create policy "field_changes_insert" on public.field_changes
+  for insert with check (
+    exists (select 1 from public.org_members where user_id = auth.uid() and status = 'active')
+  );
 
 -- ============================================================
 -- USEFUL INDEXES
@@ -742,14 +809,14 @@ create table if not exists public.category_opening_balances (
 
 alter table public.category_opening_balances enable row level security;
 
-create policy "cob_read" on public.category_opening_balances
-  for select using (auth.uid() is not null);
+create policy "cob_select" on public.category_opening_balances
+  for select using (public.is_org_member(org_id));
 create policy "cob_insert" on public.category_opening_balances
-  for insert with check (public.is_finance_user());
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "cob_update" on public.category_opening_balances
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "cob_delete" on public.category_opening_balances
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 create index if not exists idx_cob_category on public.category_opening_balances(category_id);
 
@@ -769,13 +836,13 @@ create table if not exists public.report_templates (
 alter table public.report_templates enable row level security;
 
 create policy "report_templates_select" on public.report_templates
-  for select using (auth.uid() is not null);
-create policy "report_templates_write" on public.report_templates
-  for insert with check (public.is_finance_user());
+  for select using (public.is_org_member(org_id));
+create policy "report_templates_insert" on public.report_templates
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "report_templates_update" on public.report_templates
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "report_templates_delete" on public.report_templates
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ============================================================
 -- SPECIAL CONFIG GROUPS (versioned special allocation configs)
@@ -788,10 +855,14 @@ create table if not exists public.special_config_groups (
 
 alter table public.special_config_groups enable row level security;
 
-create policy "scg_read" on public.special_config_groups
-  for select using (auth.uid() is not null);
-create policy "scg_write" on public.special_config_groups
-  for all using (public.is_admin()) with check (public.is_admin());
+create policy "scg_select" on public.special_config_groups
+  for select using (public.is_org_member(org_id));
+create policy "scg_insert" on public.special_config_groups
+  for insert with check (public.is_org_admin(org_id));
+create policy "scg_update" on public.special_config_groups
+  for update using (public.is_org_admin(org_id));
+create policy "scg_delete" on public.special_config_groups
+  for delete using (public.is_org_admin(org_id));
 
 alter table public.allocation_configs
   add column if not exists config_group_id uuid references public.special_config_groups(id) on delete cascade,
@@ -822,14 +893,14 @@ create table if not exists public.transaction_allocation_snapshots (
 
 alter table public.transaction_allocation_snapshots enable row level security;
 
-create policy "tas_read" on public.transaction_allocation_snapshots
-  for select using (auth.uid() is not null);
+create policy "tas_select" on public.transaction_allocation_snapshots
+  for select using (public.is_org_member(org_id));
 create policy "tas_insert" on public.transaction_allocation_snapshots
-  for insert with check (public.is_finance_user());
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "tas_update" on public.transaction_allocation_snapshots
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "tas_delete" on public.transaction_allocation_snapshots
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ============================================================
 -- RECALCULATION LOGS
@@ -847,11 +918,11 @@ create table if not exists public.recalculation_logs (
 
 alter table public.recalculation_logs enable row level security;
 
-create policy "rl_read" on public.recalculation_logs
-  for select using (auth.uid() is not null);
+create policy "rl_select" on public.recalculation_logs
+  for select using (public.is_org_member(org_id));
 -- Append-only: no update/delete policy intentionally (immutable audit trail).
 create policy "rl_insert" on public.recalculation_logs
-  for insert with check (public.is_finance_user());
+  for insert with check (public.is_org_finance_user(org_id));
 
 create index if not exists idx_report_templates_user on public.report_templates(created_by);
 
@@ -873,10 +944,10 @@ create table if not exists public.dynamic_reports (
   updated_at timestamptz default now()
 );
 alter table public.dynamic_reports enable row level security;
-create policy "dr_select" on public.dynamic_reports for select using (auth.uid() is not null);
-create policy "dr_write"  on public.dynamic_reports for insert with check (public.is_finance_user());
-create policy "dr_update" on public.dynamic_reports for update using (public.is_finance_user());
-create policy "dr_delete" on public.dynamic_reports for delete using (public.is_admin());
+create policy "dr_select" on public.dynamic_reports for select using (public.is_org_member(org_id));
+create policy "dr_insert" on public.dynamic_reports for insert with check (public.is_org_finance_user(org_id));
+create policy "dr_update" on public.dynamic_reports for update using (public.is_org_finance_user(org_id));
+create policy "dr_delete" on public.dynamic_reports for delete using (public.is_org_admin(org_id));
 
 -- Dynamic Report Blocks
 create table if not exists public.dynamic_report_blocks (
@@ -888,10 +959,38 @@ create table if not exists public.dynamic_report_blocks (
   created_at  timestamptz default now()
 );
 alter table public.dynamic_report_blocks enable row level security;
-create policy "drb_select" on public.dynamic_report_blocks for select using (auth.uid() is not null);
-create policy "drb_write"  on public.dynamic_report_blocks for insert with check (public.is_finance_user());
-create policy "drb_update" on public.dynamic_report_blocks for update using (public.is_finance_user());
-create policy "drb_delete" on public.dynamic_report_blocks for delete using (public.is_admin());
+-- dynamic_report_blocks has no org_id — isolate via parent dynamic_reports
+create policy "drb_select" on public.dynamic_report_blocks for select using (
+  exists (
+    select 1 from public.dynamic_reports dr
+    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid() and m.status = 'active'
+    where dr.id = report_id
+  )
+);
+create policy "drb_insert" on public.dynamic_report_blocks for insert with check (
+  exists (
+    select 1 from public.dynamic_reports dr
+    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
+      and m.role in ('admin', 'accountant') and m.status = 'active'
+    where dr.id = report_id
+  )
+);
+create policy "drb_update" on public.dynamic_report_blocks for update using (
+  exists (
+    select 1 from public.dynamic_reports dr
+    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
+      and m.role in ('admin', 'accountant') and m.status = 'active'
+    where dr.id = report_id
+  )
+);
+create policy "drb_delete" on public.dynamic_report_blocks for delete using (
+  exists (
+    select 1 from public.dynamic_reports dr
+    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
+      and m.role = 'admin' and m.status = 'active'
+    where dr.id = report_id
+  )
+);
 create index if not exists idx_drb_report_position on public.dynamic_report_blocks(report_id, position);
 
 -- ── Dynamic Report Snapshots ──────────────────────────────────────────────────
@@ -904,9 +1003,30 @@ create table if not exists public.dynamic_report_snapshots (
   created_at  timestamptz default now()
 );
 alter table public.dynamic_report_snapshots enable row level security;
-create policy "drs_select" on public.dynamic_report_snapshots for select using (auth.uid() is not null);
-create policy "drs_write"  on public.dynamic_report_snapshots for insert with check (public.is_finance_user());
-create policy "drs_delete" on public.dynamic_report_snapshots for delete using (public.is_admin());
+-- dynamic_report_snapshots has no org_id — isolate via parent dynamic_reports
+create policy "drs_select" on public.dynamic_report_snapshots for select using (
+  exists (
+    select 1 from public.dynamic_reports dr
+    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid() and m.status = 'active'
+    where dr.id = report_id
+  )
+);
+create policy "drs_insert" on public.dynamic_report_snapshots for insert with check (
+  exists (
+    select 1 from public.dynamic_reports dr
+    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
+      and m.role in ('admin', 'accountant') and m.status = 'active'
+    where dr.id = report_id
+  )
+);
+create policy "drs_delete" on public.dynamic_report_snapshots for delete using (
+  exists (
+    select 1 from public.dynamic_reports dr
+    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
+      and m.role = 'admin' and m.status = 'active'
+    where dr.id = report_id
+  )
+);
 create index if not exists idx_drs_report_at on public.dynamic_report_snapshots(report_id, snapshot_at desc);
 
 -- ============================================================
@@ -927,10 +1047,10 @@ alter table public.organizations enable row level security;
 create index if not exists idx_organizations_slug       on public.organizations(slug);
 create index if not exists idx_organizations_created_by on public.organizations(created_by);
 
-create policy "orgs_select" on public.organizations for select using (auth.uid() is not null);
-create policy "orgs_insert" on public.organizations for insert with check (auth.uid() is not null);
-create policy "orgs_update" on public.organizations for update using (auth.uid() is not null);
-create policy "orgs_delete" on public.organizations for delete using (public.is_admin());
+create policy "orgs_select" on public.organizations for select using (public.is_org_member(id));
+create policy "orgs_insert" on public.organizations for insert with check (public.is_admin());
+create policy "orgs_update" on public.organizations for update using (public.is_org_admin(id));
+create policy "orgs_delete" on public.organizations for delete using (public.is_org_admin(id));
 
 -- Seed the primary (bootstrap) organization.
 -- On a fresh install all business tables are empty, so the NOT NULL defaults below
@@ -958,10 +1078,10 @@ alter table public.org_members enable row level security;
 create index if not exists idx_org_members_org_id  on public.org_members(org_id);
 create index if not exists idx_org_members_user_id on public.org_members(user_id);
 
-create policy "org_members_select" on public.org_members for select using (auth.uid() is not null);
-create policy "org_members_insert" on public.org_members for insert with check (auth.uid() is not null);
-create policy "org_members_update" on public.org_members for update using (auth.uid() is not null);
-create policy "org_members_delete" on public.org_members for delete using (public.is_admin());
+create policy "org_members_select" on public.org_members for select using (public.is_org_member(org_id));
+create policy "org_members_insert" on public.org_members for insert with check (public.is_org_admin(org_id));
+create policy "org_members_update" on public.org_members for update using (public.is_org_admin(org_id));
+create policy "org_members_delete" on public.org_members for delete using (public.is_org_admin(org_id));
 
 -- ── org_id on all business tables (NOT NULL + DEFAULT after Phase 2 backfill) ─
 -- Fresh installs: tables are empty when these run, so NOT NULL + DEFAULT is safe.
@@ -1034,7 +1154,7 @@ create index if not exists idx_outflow_types_org      on public.outflow_types(or
 create index if not exists idx_cotm_org               on public.category_outflow_type_map(org_id);
 create index if not exists idx_cob_org                on public.category_opening_balances(org_id);
 
--- ── Org-aware helper functions (Phase 1 stubs) ────────────────
+-- ── Org-aware helper functions ────────────────────────────────
 
 create or replace function public.get_current_org_id()
 returns uuid language sql security definer stable as $$
@@ -1059,6 +1179,16 @@ returns boolean language sql security definer stable as $$
     where org_id  = p_org_id
       and user_id = auth.uid()
       and role    in ('admin', 'accountant')
+      and status  = 'active'
+  );
+$$;
+
+create or replace function public.is_org_member(p_org_id uuid)
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.org_members
+    where org_id  = p_org_id
+      and user_id = auth.uid()
       and status  = 'active'
   );
 $$;
