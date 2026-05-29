@@ -32,6 +32,8 @@ export default function AcceptInvite() {
   const [loadingInvite, setLoadingInvite] = useState(true)
   const [inviteError,   setInviteError]   = useState<string | null>(null)
 
+  // 'register' = new user sign-up; 'signin' = existing account detected
+  const [flow,      setFlow]      = useState<'register' | 'signin'>('register')
   const [fullName,  setFullName]  = useState('')
   const [username,  setUsername]  = useState('')
   const [password,  setPassword]  = useState('')
@@ -74,12 +76,25 @@ export default function AcceptInvite() {
 
     setLoading(true)
 
-    // Sign up the user
     const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
       email:    invitation.email,
       password,
       options:  { data: { full_name: fullName.trim(), username: username.trim().toLowerCase() || null } },
     })
+
+    // Supabase signals "already registered" either via an error message or by
+    // returning no user (when email confirmation is required for existing accounts).
+    const alreadyRegistered =
+      (signUpErr && /already.*(registered|exists)|user.*exist/i.test(signUpErr.message)) ||
+      (!signUpErr && !signUpData.user)
+
+    if (alreadyRegistered) {
+      setLoading(false)
+      setFlow('signin')
+      setPassword('')
+      setConfirm('')
+      return
+    }
 
     if (signUpErr) {
       setLoading(false)
@@ -89,14 +104,12 @@ export default function AcceptInvite() {
 
     const userId = signUpData.user?.id
     if (userId) {
-      // Update display fields only — role excluded; self-role-change is blocked by RLS.
       await supabase.from('profiles').update({
         full_name:  fullName.trim(),
         username:   username.trim().toLowerCase() || null,
         updated_at: new Date().toISOString(),
       }).eq('id', userId)
 
-      // Security-definer RPC: sets role from invite and consumes the token atomically.
       const { error: acceptErr } = await supabase
         .rpc('accept_invitation', { p_token: token, p_user_id: userId })
       if (acceptErr) {
@@ -106,6 +119,41 @@ export default function AcceptInvite() {
       }
     }
 
+    setLoading(false)
+    setDone(true)
+    setTimeout(() => navigate('/', { replace: true }), 3000)
+  }
+
+  // Existing account: sign in then accept the invitation under this org.
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (!invitation) return
+
+    setLoading(true)
+    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+      email:    invitation.email,
+      password,
+    })
+    if (signInErr) {
+      setLoading(false)
+      setError(signInErr.message)
+      return
+    }
+    const userId = signInData.user?.id
+    if (!userId) {
+      setLoading(false)
+      setError('Sign in failed. Please try again.')
+      return
+    }
+    const { error: acceptErr } = await supabase
+      .rpc('accept_invitation', { p_token: token, p_user_id: userId })
+    if (acceptErr) {
+      setLoading(false)
+      setError('Failed to accept invitation. It may have already been used.')
+      return
+    }
     setLoading(false)
     setDone(true)
     setTimeout(() => navigate('/', { replace: true }), 3000)
@@ -152,6 +200,66 @@ export default function AcceptInvite() {
                 Redirecting to the dashboard…
               </p>
             </div>
+          ) : flow === 'signin' ? (
+            <>
+              <p className="mb-2 text-center text-sm font-semibold text-gray-700">
+                Account already exists
+              </p>
+              <p className="mb-4 text-center text-xs text-gray-500">
+                An account for <strong>{invitation?.email}</strong> already exists.
+                Sign in to accept this invitation and join the organisation.
+              </p>
+
+              <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2.5 text-xs text-blue-700">
+                Joining as <strong>{invitation?.email}</strong> with{' '}
+                <strong className="capitalize">{invitation?.role}</strong> role.
+              </div>
+
+              {error && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-danger">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Password *</label>
+                  <div className="relative">
+                    <input
+                      type={showPw ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Your existing password"
+                      required
+                      autoFocus
+                      autoComplete="current-password"
+                      className={`${inputCls} pr-10`}
+                    />
+                    <button type="button" onClick={() => setShowPw(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !password}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {loading ? 'Signing in…' : 'Sign in & accept invitation'}
+                </button>
+              </form>
+
+              <button
+                onClick={() => { setFlow('register'); setError(null) }}
+                className="mt-3 w-full text-xs text-gray-400 hover:text-gray-600 hover:underline"
+              >
+                ← Back
+              </button>
+            </>
           ) : (
             <>
               <p className="mb-2 text-center text-sm font-semibold text-gray-700">

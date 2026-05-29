@@ -1404,6 +1404,98 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   );
 $$;
 
+-- Phase 5: Org-based invite system
+-- Updated invitations RLS — gate on org admin instead of global is_admin().
+DROP POLICY IF EXISTS "invitations_admin_all" ON public.invitations;
+DROP POLICY IF EXISTS "invitations_select"    ON public.invitations;
+DROP POLICY IF EXISTS "invitations_insert"    ON public.invitations;
+DROP POLICY IF EXISTS "invitations_update"    ON public.invitations;
+DROP POLICY IF EXISTS "invitations_delete"    ON public.invitations;
+
+DO $$ BEGIN
+  CREATE POLICY "invitations_select" ON public.invitations
+    FOR SELECT USING (public.is_org_admin(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "invitations_insert" ON public.invitations
+    FOR INSERT WITH CHECK (public.is_org_admin(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "invitations_update" ON public.invitations
+    FOR UPDATE USING (public.is_org_admin(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "invitations_delete" ON public.invitations
+    FOR DELETE USING (public.is_org_admin(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Updated get_invitation_by_token — idempotent via CREATE OR REPLACE.
+CREATE OR REPLACE FUNCTION public.get_invitation_by_token(p_token uuid)
+RETURNS TABLE(id uuid, email text, role text, status text, expires_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER STABLE AS $$
+BEGIN
+  RETURN QUERY
+    SELECT i.id, i.email, i.role, i.status, i.expires_at
+    FROM   public.invitations i
+    WHERE  i.token      = p_token
+      AND  i.status     = 'pending'
+      AND  i.expires_at > now();
+END;
+$$;
+
+-- Updated accept_invitation — falls back to primary org when org_id is NULL
+-- (backward compat for invites created before Phase 5).
+CREATE OR REPLACE FUNCTION public.accept_invitation(p_token uuid, p_user_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_invite public.invitations;
+  v_org_id uuid;
+BEGIN
+  IF p_user_id != auth.uid() THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  SELECT * INTO v_invite
+  FROM   public.invitations
+  WHERE  token      = p_token
+    AND  status     = 'pending'
+    AND  expires_at > now()
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invalid or expired invitation';
+  END IF;
+
+  -- Keep profiles.role in sync (backward compat — Phase 6 will remove this).
+  UPDATE public.profiles
+    SET role       = v_invite.role,
+        updated_at = now()
+  WHERE id = p_user_id;
+
+  -- Resolve org_id — fall back to primary org for pre-Phase 5 invites.
+  v_org_id := v_invite.org_id;
+  IF v_org_id IS NULL THEN
+    SELECT id INTO v_org_id FROM public.organizations WHERE slug = 'primary' LIMIT 1;
+  END IF;
+
+  -- Upsert org_members — authoritative role source for all RLS checks.
+  IF v_org_id IS NOT NULL THEN
+    INSERT INTO public.org_members (org_id, user_id, role, status)
+    VALUES (v_org_id, p_user_id, v_invite.role, 'active')
+    ON CONFLICT (org_id, user_id) DO UPDATE
+      SET role   = EXCLUDED.role,
+          status = 'active';
+  END IF;
+
+  UPDATE public.invitations
+    SET status      = 'accepted',
+        accepted_at = now()
+  WHERE token = p_token;
+END;
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_invitations_org ON public.invitations(org_id);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
