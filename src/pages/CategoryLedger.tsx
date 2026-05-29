@@ -640,7 +640,7 @@ export default function CategoryLedger() {
   const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', '₦ Allocation', 'Specific Seed', 'Savings Net']
   const summaryCsvRow = (r: CategoryRow) => [r.name, r.percentage ?? '', r.percentageAllocated, r.specificSeed, r.savingsIn - r.savingsOut]
   const LEDGER_CSV_HEADERS = ['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
-  const ledgerCsvRow = (r: LedgerRow) => [r.date, r.display_description, r.inflow || '', r.outflow || '', r.balance]
+  const ledgerCsvRow = (r: LedgerRow) => [r.date, r.description ?? '', r.inflow || '', r.outflow || '', r.balance]
   const handleExportView = () => {
     if (viewMode === 'summary') exportCSV(CL_CSV_FILE, SUMMARY_CSV_HEADERS, summaryPage.map(summaryCsvRow))
     else exportCSV(CL_CSV_FILE, LEDGER_CSV_HEADERS, ledgerPagedRows.filter(r => r.id !== 'bal-bf').map(ledgerCsvRow))

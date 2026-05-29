@@ -238,7 +238,7 @@ export default function IntraBankTransfers() {
   const IBT_CSV_HEADERS = ['Date', 'From Bank', 'To Bank', 'Amount (₦)', 'Description', 'Ref', 'Remarks']
   const ibtCsvRow = (r: TransferRow) => [
     r.date, r.from_bank_name ?? '', r.to_bank_name ?? '', r.amount,
-    r.display_description, r.transaction_ref ?? '', r.remarks ?? '',
+    r.description ?? '', r.transaction_ref ?? '', r.remarks ?? '',
   ]
   const IBT_CSV_FILE = `intrabank-transfers-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(IBT_CSV_FILE, IBT_CSV_HEADERS, filtered.map(ibtCsvRow))
