@@ -732,88 +732,96 @@ CREATE POLICY "dr_delete" ON public.dynamic_reports
 
 
 -- ── dynamic_report_blocks (no org_id — isolate via parent dynamic_reports) ────
-DROP POLICY IF EXISTS "drb_select" ON public.dynamic_report_blocks;
-DROP POLICY IF EXISTS "drb_write"  ON public.dynamic_report_blocks;
-DROP POLICY IF EXISTS "drb_update" ON public.dynamic_report_blocks;
-DROP POLICY IF EXISTS "drb_delete" ON public.dynamic_report_blocks;
-DROP POLICY IF EXISTS "drb_insert" ON public.dynamic_report_blocks;
+-- Skipped silently if the table does not exist on this database.
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "drb_select" ON public.dynamic_report_blocks;
+  DROP POLICY IF EXISTS "drb_write"  ON public.dynamic_report_blocks;
+  DROP POLICY IF EXISTS "drb_update" ON public.dynamic_report_blocks;
+  DROP POLICY IF EXISTS "drb_delete" ON public.dynamic_report_blocks;
+  DROP POLICY IF EXISTS "drb_insert" ON public.dynamic_report_blocks;
 
-CREATE POLICY "drb_select" ON public.dynamic_report_blocks
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.dynamic_reports dr
-      JOIN public.org_members m
-        ON m.org_id = dr.org_id AND m.user_id = auth.uid() AND m.status = 'active'
-      WHERE dr.id = report_id
-    )
-  );
-CREATE POLICY "drb_insert" ON public.dynamic_report_blocks
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.dynamic_reports dr
-      JOIN public.org_members m
-        ON m.org_id = dr.org_id AND m.user_id = auth.uid()
-        AND m.role IN ('admin', 'accountant') AND m.status = 'active'
-      WHERE dr.id = report_id
-    )
-  );
-CREATE POLICY "drb_update" ON public.dynamic_report_blocks
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM public.dynamic_reports dr
-      JOIN public.org_members m
-        ON m.org_id = dr.org_id AND m.user_id = auth.uid()
-        AND m.role IN ('admin', 'accountant') AND m.status = 'active'
-      WHERE dr.id = report_id
-    )
-  );
-CREATE POLICY "drb_delete" ON public.dynamic_report_blocks
-  FOR DELETE USING (
-    EXISTS (
-      SELECT 1 FROM public.dynamic_reports dr
-      JOIN public.org_members m
-        ON m.org_id = dr.org_id AND m.user_id = auth.uid()
-        AND m.role = 'admin' AND m.status = 'active'
-      WHERE dr.id = report_id
-    )
-  );
+  CREATE POLICY "drb_select" ON public.dynamic_report_blocks
+    FOR SELECT USING (
+      EXISTS (
+        SELECT 1 FROM public.dynamic_reports dr
+        JOIN public.org_members m
+          ON m.org_id = dr.org_id AND m.user_id = auth.uid() AND m.status = 'active'
+        WHERE dr.id = report_id
+      )
+    );
+  CREATE POLICY "drb_insert" ON public.dynamic_report_blocks
+    FOR INSERT WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM public.dynamic_reports dr
+        JOIN public.org_members m
+          ON m.org_id = dr.org_id AND m.user_id = auth.uid()
+          AND m.role IN ('admin', 'accountant') AND m.status = 'active'
+        WHERE dr.id = report_id
+      )
+    );
+  CREATE POLICY "drb_update" ON public.dynamic_report_blocks
+    FOR UPDATE USING (
+      EXISTS (
+        SELECT 1 FROM public.dynamic_reports dr
+        JOIN public.org_members m
+          ON m.org_id = dr.org_id AND m.user_id = auth.uid()
+          AND m.role IN ('admin', 'accountant') AND m.status = 'active'
+        WHERE dr.id = report_id
+      )
+    );
+  CREATE POLICY "drb_delete" ON public.dynamic_report_blocks
+    FOR DELETE USING (
+      EXISTS (
+        SELECT 1 FROM public.dynamic_reports dr
+        JOIN public.org_members m
+          ON m.org_id = dr.org_id AND m.user_id = auth.uid()
+          AND m.role = 'admin' AND m.status = 'active'
+        WHERE dr.id = report_id
+      )
+    );
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 
 -- ── dynamic_report_snapshots (no org_id — isolate via parent dynamic_reports) ─
-DROP POLICY IF EXISTS "drs_select" ON public.dynamic_report_snapshots;
-DROP POLICY IF EXISTS "drs_write"  ON public.dynamic_report_snapshots;
-DROP POLICY IF EXISTS "drs_delete" ON public.dynamic_report_snapshots;
-DROP POLICY IF EXISTS "drs_insert" ON public.dynamic_report_snapshots;
+-- Skipped silently if the table does not exist on this database.
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "drs_select" ON public.dynamic_report_snapshots;
+  DROP POLICY IF EXISTS "drs_write"  ON public.dynamic_report_snapshots;
+  DROP POLICY IF EXISTS "drs_delete" ON public.dynamic_report_snapshots;
+  DROP POLICY IF EXISTS "drs_insert" ON public.dynamic_report_snapshots;
 
-CREATE POLICY "drs_select" ON public.dynamic_report_snapshots
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.dynamic_reports dr
-      JOIN public.org_members m
-        ON m.org_id = dr.org_id AND m.user_id = auth.uid() AND m.status = 'active'
-      WHERE dr.id = report_id
-    )
-  );
-CREATE POLICY "drs_insert" ON public.dynamic_report_snapshots
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.dynamic_reports dr
-      JOIN public.org_members m
-        ON m.org_id = dr.org_id AND m.user_id = auth.uid()
-        AND m.role IN ('admin', 'accountant') AND m.status = 'active'
-      WHERE dr.id = report_id
-    )
-  );
-CREATE POLICY "drs_delete" ON public.dynamic_report_snapshots
-  FOR DELETE USING (
-    EXISTS (
-      SELECT 1 FROM public.dynamic_reports dr
-      JOIN public.org_members m
-        ON m.org_id = dr.org_id AND m.user_id = auth.uid()
-        AND m.role = 'admin' AND m.status = 'active'
-      WHERE dr.id = report_id
-    )
-  );
+  CREATE POLICY "drs_select" ON public.dynamic_report_snapshots
+    FOR SELECT USING (
+      EXISTS (
+        SELECT 1 FROM public.dynamic_reports dr
+        JOIN public.org_members m
+          ON m.org_id = dr.org_id AND m.user_id = auth.uid() AND m.status = 'active'
+        WHERE dr.id = report_id
+      )
+    );
+  CREATE POLICY "drs_insert" ON public.dynamic_report_snapshots
+    FOR INSERT WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM public.dynamic_reports dr
+        JOIN public.org_members m
+          ON m.org_id = dr.org_id AND m.user_id = auth.uid()
+          AND m.role IN ('admin', 'accountant') AND m.status = 'active'
+        WHERE dr.id = report_id
+      )
+    );
+  CREATE POLICY "drs_delete" ON public.dynamic_report_snapshots
+    FOR DELETE USING (
+      EXISTS (
+        SELECT 1 FROM public.dynamic_reports dr
+        JOIN public.org_members m
+          ON m.org_id = dr.org_id AND m.user_id = auth.uid()
+          AND m.role = 'admin' AND m.status = 'active'
+        WHERE dr.id = report_id
+      )
+    );
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 
 NOTIFY pgrst, 'reload schema';
