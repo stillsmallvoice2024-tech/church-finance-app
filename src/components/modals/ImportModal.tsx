@@ -1026,15 +1026,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
 
-      // ── DIAGNOSTIC: log actual objects before DB insert ─────────────────────
-      console.log('[ImportModal:runImport] PRE-INSERT inflow rows:', inflowToInsert.map(r => ({
-        ri: '(row)',
-        income_type_id:       r.income_type_id   ?? null,
-        allocation_config_id: r.allocation_config_id ?? null,
-        desc: String(r.description ?? '').slice(0, 40),
-      })))
-      // ── END DIAGNOSTIC ───────────────────────────────────────────────────────
-
       const total = inflowToInsert.length + outflowToInsert.length
       const BATCH = 100
 

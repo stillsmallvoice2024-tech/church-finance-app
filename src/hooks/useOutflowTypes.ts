@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -31,15 +32,19 @@ const OT_SELECT = 'id, name, color, created_at, is_system, is_locked, auto_creat
 // ── useOutflowTypes ────────────────────────────────────────────────────────────
 
 export function useOutflowTypes() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [outflowTypes, setOutflowTypes] = useState<OutflowType[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true); setError(null)
     const { data, error: err } = await supabase
       .from('outflow_types')
       .select(OT_SELECT)
+      .eq('org_id', orgId)
       .order('name')
     if (err) {
       if (/relation.*does not exist/i.test(err.message)) {
@@ -51,7 +56,7 @@ export function useOutflowTypes() {
       setOutflowTypes((data ?? []) as OutflowType[])
     }
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -61,19 +66,23 @@ export function useOutflowTypes() {
 // ── Lightweight option list ────────────────────────────────────────────────────
 
 export function useOutflowTypeOptions() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [options,  setOptions]  = useState<OutflowType[]>([])
   const [loading,  setLoading]  = useState(true)
 
   const reload = useCallback(() => {
+    if (!orgId) { setLoading(false); return }
     supabase
       .from('outflow_types')
       .select(OT_SELECT)
+      .eq('org_id', orgId)
       .order('name')
       .then(({ data }) => {
         setOptions((data ?? []) as OutflowType[])
         setLoading(false)
       })
-  }, [])
+  }, [orgId])
 
   useEffect(() => { reload() }, [reload])
 
@@ -83,17 +92,21 @@ export function useOutflowTypeOptions() {
 // ── useCategoryOutflowTypeMaps ─────────────────────────────────────────────────
 
 export function useCategoryOutflowTypeMaps() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [maps,    setMaps]    = useState<CategoryOutflowTypeMap[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     const { data } = await supabase
       .from('category_outflow_type_map')
       .select('id, category_id, outflow_type_id, created_at')
+      .eq('org_id', orgId)
     setMaps((data ?? []) as CategoryOutflowTypeMap[])
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -138,9 +151,11 @@ export async function saveOutflowType(
     if (error) throw new Error(error.message)
     return existingId
   } else {
+    const { orgId } = useOrgStore.getState()
+    if (!orgId) throw new Error('No active organisation.')
     const { data, error } = await supabase
       .from('outflow_types')
-      .insert({ name: input.name, color: input.color })
+      .insert({ name: input.name, color: input.color, org_id: orgId })
       .select('id')
       .single()
     if (error) throw new Error(error.message)
@@ -167,9 +182,11 @@ export async function linkOutflowTypeToCategory(
   categoryId: string,
   outflowTypeId: string
 ): Promise<void> {
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) throw new Error('No active organisation.')
   const { error } = await supabase
     .from('category_outflow_type_map')
-    .insert({ category_id: categoryId, outflow_type_id: outflowTypeId })
+    .insert({ category_id: categoryId, outflow_type_id: outflowTypeId, org_id: orgId })
   if (error && !/duplicate key|unique/i.test(error.message)) throw new Error(error.message)
 }
 
@@ -203,9 +220,11 @@ export async function autoCreateLinkedOutflowType(
     if (existing && existing.length > 0) {
       outflowTypeId = (existing[0] as { id: string }).id
     } else {
+      const { orgId: innerOrgId } = useOrgStore.getState()
+      if (!innerOrgId) throw new Error('No active organisation.')
       const { data, error } = await supabase
         .from('outflow_types')
-        .insert({ name: categoryName, color: '#64748b', auto_created: true })
+        .insert({ name: categoryName, color: '#64748b', auto_created: true, org_id: innerOrgId })
         .select('id')
         .single()
       if (error) throw error

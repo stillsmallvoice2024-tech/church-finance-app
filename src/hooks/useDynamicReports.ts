@@ -1,23 +1,28 @@
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 import type { DynamicReport, DynamicReportBlock, DynamicReportSnapshot, SnapshotData } from '../types'
 
 export function useDynamicReports() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [reports, setReports] = useState<DynamicReport[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     const { data, error: err } = await supabase
       .from('dynamic_reports')
       .select('*')
+      .eq('org_id', orgId)
       .order('updated_at', { ascending: false })
     if (err) { setError(err.message); setLoading(false); return }
     setReports((data ?? []) as DynamicReport[])
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -31,9 +36,11 @@ export function useAddDynamicReport() {
   const mutate = useCallback(async (title: string): Promise<DynamicReport | null> => {
     setLoading(true)
     setError(null)
+    const { orgId } = useOrgStore.getState()
+    if (!orgId) { setLoading(false); setError('No active organisation.'); return null }
     const { data, error: err } = await supabase
       .from('dynamic_reports')
-      .insert({ title })
+      .insert({ title, org_id: orgId })
       .select('*')
       .single()
     setLoading(false)

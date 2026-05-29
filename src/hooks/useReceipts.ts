@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore } from '../store/orgStore'
 
 export type ReceiptEntityType = 'outflow' | 'inflow' | 'bank_deposit'
 
@@ -42,16 +43,11 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
     const ext  = file.name.split('.').pop() ?? 'bin'
     const path = `${entityType}/${entityId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
-    console.log('[receipts] upload start', { entityType, entityId, fileName: file.name, size: file.size, path })
-
     const { error: storageErr } = await supabase.storage
       .from('receipts').upload(path, file)
-    if (storageErr) {
-      console.error('[receipts] storage upload failed:', storageErr)
-      throw new Error(storageErr.message)
-    }
-    console.log('[receipts] storage upload ok, writing db row')
+    if (storageErr) throw new Error(storageErr.message)
 
+    const { orgId } = useOrgStore.getState()
     const { error: dbErr } = await supabase.from('receipts').insert({
       entity_type: entityType,
       entity_id:   entityId,
@@ -60,14 +56,13 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
       file_size:   file.size,
       mime_type:   file.type || null,
       uploaded_by: user?.id ?? null,
+      ...(orgId ? { org_id: orgId } : {}),
     })
     if (dbErr) {
       console.error('[receipts] db insert failed:', dbErr)
-      const { error: cleanupErr } = await supabase.storage.from('receipts').remove([path])
-      if (cleanupErr) console.warn('[receipts] orphan storage cleanup failed:', cleanupErr)
+      await supabase.storage.from('receipts').remove([path]).catch(() => {})
       throw new Error(dbErr.message)
     }
-    console.log('[receipts] db row ok, refreshing list')
     await fetch()
   }, [entityType, entityId, fetch])
 
@@ -87,19 +82,22 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
 }
 
 export function useAllReceipts(entityType?: ReceiptEntityType) {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [receipts, setReceipts] = useState<Receipt[]>([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true); setError(null)
-    let q = supabase.from('receipts').select('*').order('created_at', { ascending: false })
+    let q = supabase.from('receipts').select('*').eq('org_id', orgId).order('created_at', { ascending: false })
     if (entityType) q = q.eq('entity_type', entityType)
     const { data, error: err } = await q
     if (err) setError(err.message)
     else setReceipts((data ?? []) as Receipt[])
     setLoading(false)
-  }, [entityType])
+  }, [orgId, entityType])
 
   useEffect(() => { fetch() }, [fetch])
 
