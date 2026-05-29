@@ -505,7 +505,7 @@ export default function UserManagement() {
 
     const { data, error } = await supabase
       .from('org_members')
-      .select('id, user_id, role, status, joined_at, profiles!inner(id, email, full_name, username, created_at, updated_at)')
+      .select('id, user_id, role, status, joined_at, user_profile:profiles!org_members_user_id_fkey(id, email, full_name, username, created_at, updated_at)')
       .eq('org_id', orgId)
       .eq('status', 'active')
       .order('joined_at', { ascending: true })
@@ -518,7 +518,7 @@ export default function UserManagement() {
 
     type ProfileJoin = { id: string; email: string; full_name: string; username: string | null; created_at: string; updated_at: string }
     const flattened: OrgMember[] = (data ?? []).map(m => {
-      const p = (m.profiles as unknown as ProfileJoin) ?? { id: '', email: '', full_name: '', username: null, created_at: '', updated_at: '' }
+      const p = (m.user_profile as unknown as ProfileJoin) ?? { id: '', email: '', full_name: '', username: null, created_at: '', updated_at: '' }
       return {
         id:         m.id,
         user_id:    m.user_id,
