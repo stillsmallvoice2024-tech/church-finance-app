@@ -609,36 +609,53 @@ const BL_COLUMNS: TableColumnDef<LedgerRow>[] = [
 
 ### Search filter implementation rules
 
-**Inflows / Outflows — fetch-all pattern (global search):**
-When `debouncedSearch` is non-empty (`isSearching = true`), call hook with `fetchAll: true`:
-- Server returns all rows up to 10 000 matching active date/stageCode filters; no text filter applied
-- Client sorts then filters via `searchRows(sorted, INF_COLUMNS, debouncedSearch, state.searchCol)`
-- Client re-paginates results; `PaginationBar` total + summary strip count use `allMatching.length`
-- When search is cleared, hook reverts to normal server-side paginated fetch (no `fetchAll`)
+**Server-paginated pages (Inflows, Outflows, IntraFlow, ChangeLog, PendingDeductions):**
+- Sort and search params passed directly to the data hook; server applies `.order()` + `.ilike()` / `.or()` before `.range()`
+- `count` reflects the filtered total; `PaginationBar` and summary strips use `count` directly
+- `displayed = data` — no client-side sort/filter memos needed
+- 400ms `debouncedSearch` prevents excessive fetches while typing
+- `page` resets to 0 on sort/search changes — Inflows/Outflows use local `page` state with a `useEffect` on `[infState.sortKey, infState.sortDir, infState.searchCol, infState.advancedSort, infState.pageSize]`
+- No `fetchAll`, no `isSearching`, no `allMatching` — these patterns are removed
 
+**Allowed-column Sets (security + correctness):**
+Module-level `Set<string>` constants gate which DB column names reach `.order()` / `.ilike()` — prevents arbitrary user-controlled strings in queries:
 ```ts
-const isSearching = debouncedSearch.trim() !== ''
-// hook call — never pass search param; fetchAll handles it
-{ page: isSearching ? 0 : page, pageSize: isSearching ? undefined : state.pageSize, fetchAll: isSearching }
-// allMatching = searchRows(sorted, PAGE_COLUMNS, debouncedSearch, state.searchCol)
-// displayed: isSearching ? allMatching.slice(page*pageSize, ...) : sorted
-// PaginationBar total / SummaryStrip count: isSearching ? allMatching.length : count
+const INFLOW_SORT_COLS   = new Set(['date', 'amount', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1'])
+const INFLOW_SEARCH_COLS = new Set(['description', 'bank_name', 'transaction_ref', 'transaction_type', 'stage_code_1'])
 ```
 
-**`fetchAll` flag in `useInflowTransactions` / `useOutflowTransactions`:** skips `.range()`, applies `.limit(10000)`, ignores `search` param. Falls back to paginated `.range()` when `fetchAll` is false.
+**Sort application (server-paginated hooks):**
+```ts
+if (advancedSort && advancedSort.length > 0) {
+  for (const l of advancedSort) {
+    if (SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
+  }
+} else if (sortColumn && SORT_COLS.has(sortColumn)) {
+  query = query.order(sortColumn, { ascending: sortAscending ?? false })
+  if (sortColumn !== 'recorded_at') query = query.order('recorded_at', { ascending: false }) // tie-break
+} else {
+  query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+}
+```
+
+**Search application (server-paginated hooks):**
+```ts
+if (search) {
+  const safeSearch = search.replace(/[(),]/g, '')   // strip PostgREST separator chars before .or()
+  if (!searchCol || searchCol === 'all') {
+    query = query.or(`col1.ilike.%${safeSearch}%,col2.ilike.%${safeSearch}%,...`)
+  } else if (SEARCH_COLS.has(searchCol)) {
+    query = query.ilike(searchCol, `%${search}%`)   // raw term safe for single-column .ilike()
+  }
+}
+```
+Outflow `description` column exception: `display_description` is computed from `description ?? bank_description`, so searching the `description` column must cover both: `.or('description.ilike.%q%,bank_description.ilike.%q%')`.
 
 **Client-side pages (all others):**
 - Use `searchRows(data, PAGE_COLUMNS, state.search, state.searchCol)` inside a `useMemo`
 - Include `state.search` and `state.searchCol` in the dependency array
 - **CategoryLedger B/F row exception**: the balance-brought-forward row (`id === 'bal-bf'`) must always be visible regardless of search — guard it explicitly: `r.id === 'bal-bf' || searchRows([r], LEDGER_COLUMNS, q, col).length > 0`
 - **CategoryLedger running balance**: computed in **date-ascending order** after filtering (not display sort order), so the most recent row always carries the current cumulative balance. Pattern: sort `ledgerFiltered` by date asc into a temp array, accumulate running total into a `Map<id, balance>`, then re-map `ledgerFiltered` with updated balance values → `ledgerFilteredWithBalance`. `ledgerSorted` and `ledgerPagedRows` derive from this. `closingBalance` (the final accumulated value) is used in the tfoot. When sorted newest-first, the top row correctly shows the total balance.
-- **IntraFlow `col='all'` exception**: server handles description ilike for `col='all'`; only fire client `searchRows` for specific-column selection
-
-**PostgREST `or()` search sanitization:** Before interpolating a search term into a `.or()` filter string, strip characters that PostgREST treats as query separators: `,`, `(`, `)`. Use a `safeSearch` variable for the `or()` string only; single-column `.ilike()` paths receive the raw term (PostgREST handles values there correctly).
-```ts
-const safeSearch = debouncedSearch.replace(/[(),]/g, '')
-query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%`)
-```
 
 **Per-page column definitions:**
 | Page | Key | Columns (key → label, noSearch cols) |
@@ -680,9 +697,9 @@ query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearc
 
 Inflows (`inf`), Outflows (`out`), BankLedger (`bl`), BankDeposits (`bd`), ForeignCurrency (`fx`), Categories (`cat`), CategoryLedger summary (`cl-sum`) + ledger (`cl-led`), AllocationConfigs (`pca`), PercentageAllocation (`pa`), SpecificGivings (`sg`), SavingsPortions (`svp`), Receipts (`rcp`), IntraFlow (`ifl`), ChangeLog (`cl`), PendingDeductions (`pd`).
 
-**IntraFlow** — server search (description ilike) fires only for `col='all'`; domain filters (date, accountFrom, accountTo) stay in filter card above DataControlsBar; view toggle managed via DataControlsBar `view` prop.
-**ChangeLog** — client-side sort + search only (server supplies current page by table+date filter); defaultPageSize 50, pageSizeOptions `[25, 50, 100, 200]`.
-**PendingDeductions** — client-side sort + search only (server supplies pending outflows).
+**IntraFlow** — server-side sort + search; `all` search covers description + account_from + account_to via `.or()`; domain filters (date, accountFrom, accountTo) stay in filter card above DataControlsBar; view toggle managed via DataControlsBar `view` prop.
+**ChangeLog** — server-side sort + search; table + date range filters via `useFieldChanges`; `all` search covers field_name + table_name + old_value + new_value; defaultPageSize 50, pageSizeOptions `[25, 50, 100, 200]`.
+**PendingDeductions** — client-side sort + search only (server supplies all pending outflows in one fetch).
 
 ---
 
