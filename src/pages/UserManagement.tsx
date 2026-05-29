@@ -17,7 +17,22 @@ import { useToastStore } from '../store/toastStore'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { supabase }     from '../lib/supabase'
 import { useOrgStore }  from '../store/orgStore'
-import type { UserProfile, UserRole } from '../types'
+import type { UserRole } from '../types'
+
+// Org-member row — flattened from org_members + profiles join.
+// Role and identity are sourced from org_members (not profiles.role).
+interface OrgMember {
+  id:         string   // org_members.id — used for UPDATE operations
+  user_id:    string   // profiles.id  — used for isSelf comparison
+  role:       UserRole
+  status:     string
+  joined_at:  string
+  email:      string
+  full_name:  string
+  username:   string | null
+  created_at: string   // profiles.created_at (registration date)
+  updated_at: string
+}
 
 // ── Role display config ────────────────────────────────────────────────────────
 
@@ -81,11 +96,28 @@ function InviteUserModal({
 
   const onSubmit = async (values: InviteForm) => {
     setLoading(true)
-    // Generate a UUID token for the invite link
-    const token      = crypto.randomUUID()
-    const expiresAt  = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-
     const { orgId } = useOrgStore.getState()
+
+    // Check for an existing pending invite for this email+org to avoid duplicates.
+    let existingQuery = supabase
+      .from('invitations')
+      .select('token')
+      .eq('email', values.email)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+    if (orgId) existingQuery = existingQuery.eq('org_id', orgId)
+    const { data: existing } = await existingQuery.maybeSingle()
+
+    if (existing) {
+      setLoading(false)
+      setInviteUrl(`${window.location.origin}/invite/${existing.token}`)
+      onSuccess()
+      return
+    }
+
+    const token      = crypto.randomUUID()
+    const expiresAt  = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
     const { error } = await supabase.from('invitations').insert({
       email:      values.email,
       role:       values.role,
@@ -99,8 +131,7 @@ function InviteUserModal({
     if (error) {
       toast(error.message, 'error')
     } else {
-      const url = `${window.location.origin}/invite/${token}`
-      setInviteUrl(url)
+      setInviteUrl(`${window.location.origin}/invite/${token}`)
       onSuccess()
     }
   }
@@ -441,10 +472,11 @@ export default function UserManagement() {
   const { user, profile } = useAuth()
   const { isAdmin }       = useRole()
   const { push: toast }   = useToastStore()
+  const { orgId }         = useOrgStore()
 
   usePageTitle('User Management')
 
-  const [users,            setUsers]            = useState<UserProfile[]>([])
+  const [members,          setMembers]          = useState<OrgMember[]>([])
   const [loading,          setLoading]          = useState(true)
   const [inviteOpen,       setInviteOpen]       = useState(false)
   const [editProfileOpen,  setEditProfileOpen]  = useState(false)
@@ -457,41 +489,69 @@ export default function UserManagement() {
     username:  profile?.username  ?? null as string | null,
   })
 
-  // Sync currentProfile when auth profile loads
   useEffect(() => {
     if (profile) {
       setCurrentProfile({
         full_name: profile.full_name ?? '',
-        username:  (profile as UserProfile & { username?: string | null }).username ?? null,
+        username:  profile.username ?? null,
       })
     }
   }, [profile?.full_name])
 
+  // Query org_members joined with profiles — role is sourced from org_members.
   const fetchUsers = useCallback(async () => {
     setLoading(true)
+    if (!orgId) { setLoading(false); return }
+
     const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: true })
-    if (error) toast(error.message, 'error')
-    else setUsers((data ?? []) as UserProfile[])
+      .from('org_members')
+      .select('id, user_id, role, status, joined_at, profiles!inner(id, email, full_name, username, created_at, updated_at)')
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .order('joined_at', { ascending: true })
+
+    if (error) {
+      toast(error.message, 'error')
+      setLoading(false)
+      return
+    }
+
+    type ProfileJoin = { id: string; email: string; full_name: string; username: string | null; created_at: string; updated_at: string }
+    const flattened: OrgMember[] = (data ?? []).map(m => {
+      const p = (m.profiles as unknown as ProfileJoin) ?? { id: '', email: '', full_name: '', username: null, created_at: '', updated_at: '' }
+      return {
+        id:         m.id,
+        user_id:    m.user_id,
+        role:       m.role as UserRole,
+        status:     m.status,
+        joined_at:  m.joined_at,
+        email:      p.email ?? '',
+        full_name:  p.full_name ?? '',
+        username:   p.username ?? null,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+      }
+    })
+
+    setMembers(flattened)
     setLoading(false)
-  }, [toast])
+  }, [toast, orgId])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
-  const handleRoleChange = async (userId: string, newRole: UserRole) => {
-    setSavingId(userId)
+  // Updates org_members.role — authoritative role source for all permission checks.
+  const handleRoleChange = async (memberId: string, newRole: UserRole) => {
+    setSavingId(memberId)
     const { error } = await supabase
-      .from('profiles')
-      .update({ role: newRole, updated_at: new Date().toISOString() })
-      .eq('id', userId)
+      .from('org_members')
+      .update({ role: newRole })
+      .eq('id', memberId)
     setSavingId(null)
     if (error) {
       toast(error.message, 'error')
     } else {
       toast('Role updated', 'success')
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m))
     }
   }
 
@@ -499,30 +559,30 @@ export default function UserManagement() {
     if (!revokeId) return
     setRevoking(true)
     const { error } = await supabase
-      .from('profiles')
-      .update({ role: 'viewer', updated_at: new Date().toISOString() })
+      .from('org_members')
+      .update({ role: 'viewer' })
       .eq('id', revokeId)
     setRevoking(false)
     if (error) {
       toast(error.message, 'error')
     } else {
       toast('Access restricted to view-only', 'success')
-      setUsers(prev => prev.map(u => u.id === revokeId ? { ...u, role: 'viewer' } : u))
+      setMembers(prev => prev.map(m => m.id === revokeId ? { ...m, role: 'viewer' } : m))
       setRevokeId(null)
     }
   }
 
-  const revokeTarget = users.find(u => u.id === revokeId)
+  const revokeTarget = members.find(m => m.id === revokeId)
 
   const UM_CSV_HEADERS = ['Email', 'Full Name', 'Role', 'Joined']
-  const umCsvRow = (u: UserProfile) => [u.email ?? '', u.full_name ?? '', u.role, u.created_at ? new Date(u.created_at).toLocaleDateString() : '']
+  const umCsvRow = (m: OrgMember) => [m.email, m.full_name, m.role, m.created_at ? new Date(m.created_at).toLocaleDateString() : '']
   const UM_CSV_FILE = `users-${new Date().toISOString().slice(0, 10)}.csv`
-  const handleExportView = () => exportCSV(UM_CSV_FILE, UM_CSV_HEADERS, users.map(umCsvRow))
-  const handleExportAll  = () => exportCSV(UM_CSV_FILE, UM_CSV_HEADERS, users.map(umCsvRow))
+  const handleExportView = () => exportCSV(UM_CSV_FILE, UM_CSV_HEADERS, members.map(umCsvRow))
+  const handleExportAll  = () => exportCSV(UM_CSV_FILE, UM_CSV_HEADERS, members.map(umCsvRow))
 
-  const totalCount      = users.length
-  const adminCount      = users.filter(u => u.role === 'admin').length
-  const accountantCount = users.filter(u => u.role === 'accountant').length
+  const totalCount      = members.length
+  const adminCount      = members.filter(m => m.role === 'admin').length
+  const accountantCount = members.filter(m => m.role === 'accountant').length
 
   // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
   if (!isAdmin()) return <Navigate to="/" replace />
@@ -536,7 +596,7 @@ export default function UserManagement() {
           <p className="text-sm text-gray-500 mt-0.5">Control who can access the finance system</p>
         </div>
         <div className="flex items-center gap-2">
-          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={users.length === 0} />
+          <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={members.length === 0} />
           <button
             onClick={() => setInviteOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light"
@@ -605,7 +665,7 @@ export default function UserManagement() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">All Members</h2>
-          <span className="text-xs text-gray-400">{totalCount} users</span>
+          <span className="text-xs text-gray-400">{totalCount} member{totalCount !== 1 ? 's' : ''}</span>
         </div>
 
         {loading ? (
@@ -614,8 +674,10 @@ export default function UserManagement() {
               <div key={i} className="h-14 rounded-xl bg-gray-100 animate-pulse" />
             ))}
           </div>
-        ) : users.length === 0 ? (
-          <div className="py-16 text-center text-sm text-gray-400">No users found.</div>
+        ) : !orgId ? (
+          <div className="py-16 text-center text-sm text-gray-400">No organisation loaded. Please refresh.</div>
+        ) : members.length === 0 ? (
+          <div className="py-16 text-center text-sm text-gray-400">No members found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -624,28 +686,28 @@ export default function UserManagement() {
                   <th className="px-5 py-3 text-left font-medium">Name</th>
                   <th className="px-5 py-3 text-left font-medium">Email</th>
                   <th className="px-5 py-3 text-left font-medium">Role</th>
-                  <th className="px-5 py-3 text-left font-medium">Joined</th>
-                  <th className="px-5 py-3 text-left font-medium">Last Updated</th>
+                  <th className="px-5 py-3 text-left font-medium">Registered</th>
+                  <th className="px-5 py-3 text-left font-medium">Joined Org</th>
                   <th className="px-5 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {users.map(u => {
-                  const isSelf    = u.id === user?.id
-                  const saving    = savingId === u.id
-                  const isViewer  = u.role === 'viewer'
+                {members.map(m => {
+                  const isSelf   = m.user_id === user?.id
+                  const saving   = savingId === m.id
+                  const isViewer = m.role === 'viewer'
 
                   return (
-                    <tr key={u.id} className={`hover:bg-gray-50 ${isSelf ? 'bg-blue-50/30' : ''}`}>
+                    <tr key={m.id} className={`hover:bg-gray-50 ${isSelf ? 'bg-blue-50/30' : ''}`}>
                       {/* Name */}
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                            {initials(u.full_name || u.email)}
+                            {initials(m.full_name || m.email)}
                           </div>
                           <div>
                             <div className="font-medium text-gray-900">
-                              {u.full_name || '—'}
+                              {m.full_name || '—'}
                               {isSelf && <span className="ml-1.5 text-xs text-gray-400">(you)</span>}
                             </div>
                           </div>
@@ -653,17 +715,17 @@ export default function UserManagement() {
                       </td>
 
                       {/* Email */}
-                      <td className="px-5 py-3 text-gray-500">{u.email}</td>
+                      <td className="px-5 py-3 text-gray-500">{m.email}</td>
 
-                      {/* Role — editable dropdown */}
+                      {/* Role — editable dropdown, writes to org_members.role */}
                       <td className="px-5 py-3">
                         <div className="relative inline-block">
                           <select
-                            value={u.role}
+                            value={m.role}
                             disabled={isSelf || saving}
-                            onChange={e => handleRoleChange(u.id, e.target.value as UserRole)}
-                            className={`appearance-none pr-6 pl-2.5 py-1 text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[u.role].pill} ${isSelf ? 'opacity-60' : ''}`}
-                            title={isSelf ? "You cannot change your own role" : undefined}
+                            onChange={e => handleRoleChange(m.id, e.target.value as UserRole)}
+                            className={`appearance-none pr-6 pl-2.5 py-1 text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[m.role].pill} ${isSelf ? 'opacity-60' : ''}`}
+                            title={isSelf ? 'You cannot change your own role' : undefined}
                           >
                             <option value="admin">Admin</option>
                             <option value="accountant">Accountant</option>
@@ -678,21 +740,21 @@ export default function UserManagement() {
                         </div>
                       </td>
 
-                      {/* Joined */}
+                      {/* Registered */}
                       <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
-                        {new Date(u.created_at).toLocaleDateString()}
+                        {m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}
                       </td>
 
-                      {/* Last updated */}
+                      {/* Joined org */}
                       <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
-                        {new Date(u.updated_at).toLocaleDateString()}
+                        {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
                       </td>
 
                       {/* Actions */}
                       <td className="px-5 py-3 text-right">
                         {!isSelf && !isViewer && (
                           <button
-                            onClick={() => setRevokeId(u.id)}
+                            onClick={() => setRevokeId(m.id)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                             title="Restrict to viewer"
                           >
@@ -738,7 +800,7 @@ export default function UserManagement() {
         onClose={() => setRevokeId(null)}
         onConfirm={handleRevoke}
         loading={revoking}
-        label={revokeTarget?.full_name || revokeTarget?.email || 'this user'}
+        label={revokeTarget?.full_name || revokeTarget?.email || 'this member'}
       />
     </div>
   )
