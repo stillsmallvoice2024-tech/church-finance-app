@@ -40,6 +40,8 @@
 | `dynamic_report_snapshots` | Frozen resolved values; `report_id` FK, `label`, `snapshot_at timestamptz`, `data jsonb` (`SnapshotData`: `resolvedAt`, `resolved: Record<string,number>`, `tableData: Record<string, TableRow[]>`); RLS: read=any auth, write=`is_finance_user()`, delete=`is_admin()`; index on `(report_id, snapshot_at DESC)` |
 | `bank_schema_check` | Helper view; `SELECT column_name::text FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'banks'`; queried by `checkBankStartingBalanceMigration()` to bypass PostgREST column cache |
 | `schema_discovery_view` | Optional helper view; `SELECT table_name::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`; queried by `discoverSchemaTables()` in `backupRestore.ts` to detect unmanaged tables; install via `SCHEMA_DISCOVERY_MIGRATION_SQL` exported from that module |
+| `organizations` | Tenant registry; `name`, `slug` UNIQUE, `created_by`, `metadata jsonb`; Phase 1 — bootstrap org `slug='primary'` created by Phase 2 migration |
+| `org_members` | Maps users to orgs; `org_id`, `user_id`, `role` (admin/accountant/viewer), `status` (active/invited/suspended); UNIQUE `(org_id, user_id)`; backfilled from `profiles.role` by Phase 2 migration |
 
 ---
 
@@ -52,6 +54,9 @@
   - Policy blocks use `DROP POLICY IF EXISTS` + `CREATE POLICY` (not `DO $$ EXCEPTION duplicate_object`) — re-running the migration replaces any pre-existing wrong policies
   - Correct receipts INSERT/DELETE policy: `is_finance_user()` — re-run full receipts migration if older `auth.uid() IS NOT NULL` policies are present
 - **Security hardening migration**: `supabase/migrations/20260519000000_security_hardening.sql` — apply once in Supabase SQL editor; idempotent (`DROP IF EXISTS` before every `CREATE`)
+- **Multi-tenant Phase 1**: `supabase/migrations/20260528000000_multi_tenant_foundation.sql` — creates `organizations`, `org_members`; adds nullable `org_id` to 26 business tables; stubs `get_current_org_id()` returning NULL
+- **Multi-tenant Phase 2**: `supabase/migrations/20260528000001_org_backfill.sql` — run against existing DB (**not** `schema.sql`); idempotent; see [Org Backfill State](#org-backfill-state) below
+  - Rollback: `supabase/migrations/20260528000001_org_backfill_rollback.sql`
 
 ### Live-DB Migration Notes
 
@@ -128,6 +133,18 @@ Check flow:
 > **`schemaStuck` banner**: when the retry limit is exceeded, the modal now shows the actual raw DB error string + full migration SQL so the user has actionable information. The `cache_stale` banner also shows the raw error for diagnosis.
 
 This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no DDL), while `migration_needed` requires a full `ALTER TABLE`. Showing the wrong SQL wastes a DDL operation on an already-migrated DB.
+
+---
+
+### Org Backfill State (Phase 2 — applied 2026-05-28)
+
+- **Primary org**: `organizations` row with `slug = 'primary'`, name `My Church`
+- **`org_id` on 26 business tables**: `NOT NULL DEFAULT public.get_current_org_id()` — all rows backfilled; new inserts get org_id automatically without frontend changes
+- **`get_current_org_id()`**: resolves `SELECT id FROM organizations WHERE slug = 'primary' LIMIT 1` (was NULL stub in Phase 1)
+- **`org_members`**: one row per `profiles` row, `role` copied from `profiles.role`, `status = 'active'`
+- **Composite indexes added**: `(org_id, date)` on `inflow_transactions`, `outflow_transactions`, `intra_flows`, `bank_deposits`, `intrabank_transfers`, `fx_transactions`, `project_entries`, `ledger_entries`
+- **Phase 3 remaining**: RLS `org_id = get_current_org_id()` predicates; `handle_new_user()` trigger to insert `org_members`; `accept_invitation` RPC update; `backupRestore.ts` registry additions
+- **Tables without `org_id`**: `profiles`, `audit_log`, `field_changes`, `dynamic_report_blocks`, `dynamic_report_snapshots`, `currencies`
 
 ---
 
