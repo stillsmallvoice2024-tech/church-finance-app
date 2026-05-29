@@ -142,7 +142,8 @@ export function useInflowTransactions(
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
-    if (!orgId) { setLoading(false); return }
+    console.log('[DIAG] useTransactions: orgId=', orgId)
+    if (!orgId) { console.warn('[DIAG] useTransactions: guard triggered — orgId is null, skipping query'); setLoading(false); return }
     setLoading(true)
     setError(null)
 
