@@ -35,7 +35,8 @@ export function useCategories() {
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
-    if (!orgId) { setLoading(false); return }
+    console.log('[DIAG] useCategories: orgId=', orgId)
+    if (!orgId) { console.warn('[DIAG] useCategories: guard triggered — orgId is null, skipping query'); setLoading(false); return }
     setLoading(true)
     setError(null)
     const { data, error: err } = await supabase
@@ -43,6 +44,7 @@ export function useCategories() {
       .select('*')
       .eq('org_id', orgId)
       .order('name')
+    console.log('[DIAG] useCategories: query executed, rows=', data?.length ?? 0, 'error=', err?.message)
     if (err) setError(err.message)
     else setCategories((data ?? []) as Category[])
     setLoading(false)
