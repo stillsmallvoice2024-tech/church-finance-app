@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
@@ -68,10 +68,11 @@ const BL_SORT_FIELDS = deriveSortFields(BL_COLUMNS)
 export default function BankLedger() {
   usePageTitle('Bank Ledger')
 
-  const { banks } = useBanks()
+  const { banks, loading: banksLoading, error: banksError } = useBanks()
   const { canWrite } = useRole()
 
   const [selectedBank, setSelectedBank] = useState('')
+  const didAutoSelect = useRef(false)
   const blState = useDataViewState({ storageKey: 'bl', defaultSortKey: 'date', defaultSortDir: 'asc' })
   const [ledgerRows,   setLedgerRows]   = useState<LedgerRow[]>([])
   const [loading,      setLoading]      = useState(false)
@@ -162,6 +163,13 @@ export default function BankLedger() {
     load(bank?.name ?? '', bank?.starting_balance ?? 0)
   }, [selectedBank, banks, load])
 
+  // Auto-select first bank on initial load (fires once when banks become available)
+  useEffect(() => {
+    if (didAutoSelect.current || banksLoading || banks.length === 0) return
+    didAutoSelect.current = true
+    setSelectedBank(banks[0].id)
+  }, [banks, banksLoading])
+
   // Reset page when bank or date changes
   useEffect(() => { blState.setPage(0) }, [selectedBank, dateFrom, dateTo, blState.setPage])
 
@@ -240,10 +248,17 @@ export default function BankLedger() {
             <label className="text-xs font-medium text-gray-500">Bank</label>
             <select
               value={selectedBank}
-              onChange={e => setSelectedBank(e.target.value)}
+              onChange={e => { didAutoSelect.current = true; setSelectedBank(e.target.value) }}
               className={filterInputCls}
+              disabled={banksLoading}
             >
-              <option value="">— Select a bank —</option>
+              <option value="">
+                {banksLoading
+                  ? '— Loading banks… —'
+                  : banks.length === 0
+                  ? '— No banks configured —'
+                  : '— Select a bank —'}
+              </option>
               {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
@@ -282,6 +297,22 @@ export default function BankLedger() {
         </div>
       )}
 
+      {/* Banks load error */}
+      {banksError && (
+        <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
+          <AlertCircle className="w-10 h-10 text-danger" />
+          <p className="font-semibold text-gray-800">Failed to load banks</p>
+          <p className="text-sm text-gray-500">{banksError}</p>
+        </div>
+      )}
+
+      {/* Empty — no banks configured */}
+      {!banksLoading && !banksError && banks.length === 0 && (
+        <Card>
+          <EmptyState icon={BookOpen} title="No banks configured" message="Add a bank in Setup to get started." compact />
+        </Card>
+      )}
+
       {/* Error state */}
       {error && (
         <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
@@ -296,7 +327,7 @@ export default function BankLedger() {
       )}
 
       {/* Empty — no bank selected */}
-      {!selectedBank && !error && (
+      {!selectedBank && !error && !banksError && banks.length > 0 && (
         <Card>
           <div className="py-16 flex flex-col items-center gap-3 text-gray-400">
             <BookOpen className="w-12 h-12 text-gray-200" />
