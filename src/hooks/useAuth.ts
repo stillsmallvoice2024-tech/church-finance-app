@@ -23,10 +23,12 @@ async function fetchOrgMembership(
   const baseUrl = import.meta.env.VITE_SUPABASE_URL as string
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-  // organizations.slug=eq.primary ensures we always resolve the canonical org,
-  // not a test/secondary org the user may also be a member of.
+  // organizations!inner pins resolution to the canonical 'primary' org.
+  // !inner = INNER JOIN: org_members rows with no matching org are excluded,
+  // so the slug filter actually removes secondary-org rows rather than being
+  // silently ignored (which happens with the default LEFT JOIN).
   const res = await fetch(
-    `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations(name)&organizations.slug=eq.primary&limit=1`,
+    `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations!inner(name)&organizations.slug=eq.primary&limit=1`,
     {
       signal,
       headers: {
