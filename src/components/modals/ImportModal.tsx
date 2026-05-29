@@ -493,10 +493,22 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setDupCheckLoading(false)
     setDupStats(null)
     setDupSkipOpen(false)
+    // Clear back-button sentinel ref so a fresh open can push a new one
+    sentinelPushedRef.current = false
+    pendingNavIsBackRef.current = false
     // NOTE: intentionally do NOT reset internalBank — persists across "Import Another"
   }, [])
 
-  const handleClose = () => { reset(); onClose() }
+  const handleClose = () => {
+    // Neutralise the history sentinel pushed by the back-button guard so the user
+    // doesn't get a phantom extra back-step after a normal close.
+    if (sentinelPushedRef.current) {
+      sentinelPushedRef.current = false
+      history.replaceState({}, '')
+    }
+    reset()
+    onClose()
+  }
 
   // ── Session autosave ───────────────────────────────────────────────────────
   // Saves progress to sessionStorage so accidental closes can be recovered.
@@ -590,6 +602,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const navigate = useNavigate()
   const [navBlockShowing, setNavBlockShowing] = useState(false)
   const pendingNavPathRef = useRef('')
+  // When true the pending "navigation" is actually a browser back/swipe-back gesture.
+  // The discard action must close the modal rather than call navigate().
+  const pendingNavIsBackRef = useRef(false)
+  // True once a history sentinel has been pushed; ensures we push at most one.
+  const sentinelPushedRef = useRef(false)
 
   useEffect(() => {
     if (!open || !isDirty || isProcessing || !!result) return
@@ -603,12 +620,37 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         e.preventDefault()
         e.stopPropagation()
         pendingNavPathRef.current = url.pathname + url.search
+        pendingNavIsBackRef.current = false
         setNavBlockShowing(true)
       } catch {}
     }
     document.addEventListener('click', handler, true)
     return () => document.removeEventListener('click', handler, true)
   }, [open, isDirty, isProcessing, result])
+
+  // ── Back-button / swipe-back guard ────────────────────────────────────────
+  // Push a history sentinel so the first back-press pops our entry rather than
+  // leaving the page. Intercept popstate to show the discard confirmation dialog.
+  // Works for Android hardware back, iOS edge-swipe, and desktop browser back.
+  useEffect(() => {
+    if (!open || !isDirty || isProcessing) {
+      return
+    }
+    if (!sentinelPushedRef.current) {
+      sentinelPushedRef.current = true
+      history.pushState({ importModalGuard: true }, '')
+    }
+    const handlePopState = () => {
+      if (navBlockShowing) return // dialog already visible
+      // Re-push sentinel so repeated back presses keep hitting the guard
+      history.pushState({ importModalGuard: true }, '')
+      pendingNavIsBackRef.current = true
+      setNavBlockShowing(true)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isDirty, isProcessing, navBlockShowing])
 
   // ── File parsing ─────────────────────────────────────────────────────────
 
@@ -1170,7 +1212,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       title="Import Transactions"
       size="max-w-3xl"
       isDirty={isDirty}
-      disableClose={isProcessing}
+      disableClose={isProcessing || navBlockShowing || confirmingReset}
       disableBackdropClose
       confirmTitle="Discard import progress?"
       confirmMessage="Current import setup and unsaved work will be lost."
@@ -2850,7 +2892,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       document.body
     )}
 
-    {/* Route-change confirm dialog */}
+    {/* Route-change / back-button confirm dialog */}
     {navBlockShowing && createPortal(
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 text-center">
@@ -2859,7 +2901,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => setNavBlockShowing(false)}
+              onClick={() => {
+                pendingNavIsBackRef.current = false
+                setNavBlockShowing(false)
+              }}
               className="flex-1 px-4 min-h-[44px] text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Continue Import
@@ -2868,12 +2913,23 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               type="button"
               onClick={() => {
                 try { sessionStorage.removeItem(SESSION_KEY) } catch {}
-                setNavBlockShowing(false)
-                navigate(pendingNavPathRef.current)
+                if (pendingNavIsBackRef.current) {
+                  // Triggered by browser back / swipe-back: close modal, stay on page.
+                  // Neutralise the re-pushed sentinel to avoid a phantom back-step.
+                  sentinelPushedRef.current = false
+                  history.replaceState({}, '')
+                  pendingNavIsBackRef.current = false
+                  setNavBlockShowing(false)
+                  reset()
+                  onClose()
+                } else {
+                  setNavBlockShowing(false)
+                  navigate(pendingNavPathRef.current)
+                }
               }}
               className="flex-1 px-4 min-h-[44px] text-sm font-medium text-white bg-danger rounded-lg hover:opacity-90 transition-colors"
             >
-              Discard Changes
+              Discard & Close
             </button>
           </div>
         </div>

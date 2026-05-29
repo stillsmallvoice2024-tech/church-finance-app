@@ -153,10 +153,12 @@ export function Modal({
       role="dialog"
       aria-labelledby="modal-title"
     >
-      {/* Backdrop — disabled when disableClose or disableBackdropClose */}
+      {/* Backdrop — pointer-events-none when close is disabled (prevents mobile tap-through) */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={disableClose || disableBackdropClose ? undefined : requestClose}
+        className={`absolute inset-0 bg-black/50 backdrop-blur-sm ${
+          disableClose || disableBackdropClose ? 'pointer-events-none' : ''
+        }`}
+        onClick={requestClose}
         aria-hidden="true"
       />
 
@@ -187,8 +189,8 @@ export function Modal({
           </div>
         </div>
 
-        {/* Body — scrollable */}
-        <div className="overflow-y-auto flex-1 px-6 py-5">
+        {/* Body — scrollable; overscroll-contain prevents iOS scroll chaining */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 overscroll-contain">
           {children}
         </div>
 
