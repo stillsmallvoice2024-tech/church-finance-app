@@ -4,12 +4,22 @@
 
 ---
 
+## Org Context (`src/store/orgStore.ts`)
+
+- New Zustand store (Phase 4); holds the active org session for the signed-in user
+- Fields: `orgId: string | null`, `orgName: string | null`, `orgRole: UserRole | null`
+- Actions: `setOrg(OrgMembership)`, `clearOrg()`
+- `OrgMembership`: `{ org_id, org_name, role }`
+- Populated by `useAuth.ts` after every successful auth event; cleared on sign-out
+
+---
+
 ## Role System
 
-- Three roles: `admin`, `accountant`, `viewer` — stored in `profiles.role`
+- Three roles: `admin`, `accountant`, `viewer` — stored in **`org_members.role`** (not `profiles.role`)
 - Roles are enforced at **both** the frontend (`useRole`) and database (RLS) layers
-- `useRole()` returns actual role-based booleans — checks `profile.role`, guards on `loading`
-- During profile hydration (`loading === true`), all permission methods return `false` — prevents flash
+- `useRole()` reads `orgRole` from `useOrgStore` — safe because `setLoading(false)` is deferred until org membership loads
+- During loading (`loading === true`), all permission methods return `false` — prevents flash
 
 ### `useRole()` helpers
 
@@ -46,11 +56,10 @@
 - `adminOnly: true` → hidden for non-admins (User Management, Change Log)
 - Import tab removed from primary bottom bar for viewers
 
-## Critical: Loading guard replaces the old `!!user` gate
+## Critical: Loading guard
 
-`useRole()` uses `!loading && !!user` as the base (`resolved`), then checks `role` on top.
-Old pattern `isAdmin: () => !!user` has been removed — it bypassed all role checks.
-`role` is safe to use because it is set atomically with `profile` in `setProfile()` in authStore.
+`useRole()` uses `!loading && !!user` as `resolved`, then checks `orgRole` from `orgStore`.
+`orgRole` is safe to access when `resolved = true` because `setLoading(false)` in `useAuth.ts` is deferred until BOTH profile AND org membership have been fetched — no race window.
 
 ---
 
@@ -85,8 +94,21 @@ Old pattern `isAdmin: () => !!user` has been removed — it bypassed all role ch
 - `src/store/authStore.ts` — Zustand: `user`, `profile`, `role`, `loading`, `profileFetchFailed`
   - `setProfile()` atomically sets `profile` + `role` + resets `profileFetchFailed`
   - `clearAuth()` resets all fields including `profileFetchFailed`
-- `src/hooks/useAuth.ts` — manages Supabase auth event listeners + `fetchProfile` call
+- `src/hooks/useAuth.ts` — manages Supabase auth event listeners + `fetchProfile` + `fetchOrgMembership`
 - Uses request ownership model (monotonic `requestIdRef` + `AbortController`) for background-tab resilience — see `miscellaneous.md`
+
+### Auth event sequence (Phase 4)
+
+1. Supabase auth event fires
+2. `fetchProfile` — raw fetch, up to 3 retries → sets `authStore` (`profile`, `role`)
+3. `fetchOrgMembership` — raw fetch on `org_members?user_id=eq.{uid}&status=eq.active&select=org_id,role,organizations(name)&limit=1`
+   - On success: `orgStore.setOrg({ org_id, org_name, role })`
+   - On failure / no row: `orgStore.clearOrg()`
+4. **`setLoading(false)` called only after step 3 completes** — ensures `useRole().resolved` is never `true` before org role is known
+
+### On sign-out / no session
+
+`useAuth.ts` calls all three in order: `authStore.clearAuth()`, `orgStore.clearOrg()`, `allocationStore.reset()`, `accountCodesStore.reset()`
 
 ### fetchProfile rules (critical)
 - Uses raw `fetch` with **no** `credentials: 'include'` — Supabase REST authenticates via `Authorization: Bearer <token>`; adding `credentials: 'include'` causes browsers to apply the credentialed-CORS check, which fails against Supabase's default `Access-Control-Allow-Origin: *`, silently dropping the response

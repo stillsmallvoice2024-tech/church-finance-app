@@ -4,11 +4,35 @@
 
 ---
 
+## Multi-Tenant Schema (Phase 1 / Phase 4)
+
+- **`organizations`** — `id uuid PK`, `name text`, `created_at`
+- **`org_members`** — `id uuid PK`, `org_id uuid FK → organizations(id)`, `user_id uuid FK → auth.users(id)`, `role text CHECK IN ('admin','accountant','viewer')`, `status text DEFAULT 'active'`; unique on `(org_id, user_id)`
+- **`org_id` column** — all business tables (`inflow_transactions`, `outflow_transactions`, `intra_flows`, `banks`, `categories`, `category_groups`, `allocation_configs`, `special_config_groups`, `income_types`, `fx_transactions`, `ledger_entries`, `bank_deposits`, `intrabank_transfers`, `invitations`) have `org_id uuid NOT NULL DEFAULT get_current_org_id()`
+- **Tables without `org_id`**: `category_opening_balances`, `currencies`, `outflow_types`, `category_outflow_type_map`, `fx_conversions` — intentionally global
+
+### Org-scoped RLS functions
+
+| Function | Usage |
+|---|---|
+| `is_org_member(org_id uuid)` | SELECT policies on business tables |
+| `is_org_admin(org_id uuid)` | DELETE/write policies for config tables |
+| `is_org_finance_user(org_id uuid)` | INSERT/UPDATE/DELETE on transaction tables |
+| `get_current_org_id()` | DB DEFAULT for `org_id` columns — resolves via `org_members` for the current session user |
+
+### Frontend org_id injection pattern
+
+- **Reads**: every hook calls `const orgId = useOrgStore((s) => s.orgId)`, guards `if (!orgId) { setLoading(false); return }`, then `.eq('org_id', orgId)`
+- **Writes**: `orgPayload()` in `useMutations.ts` reads `useOrgStore.getState().orgId`; spreads `{ org_id }` (or `{}` to fall back to DB DEFAULT) on every INSERT
+- `orgId` must be in `useCallback` dependency arrays for all read hooks
+
+---
+
 ## Key Tables
 
 | Table | Purpose |
 |---|---|
-| `profiles` | Extends auth.users; `full_name`, `username`, `role` |
+| `profiles` | Extends auth.users; `full_name`, `username`, `role` (legacy — org role now in `org_members.role`) |
 | `categories` | Budget categories; `group_id`, `is_hidden` — `starting_balance` and `starting_balance_budget_portion` columns dropped (see migration script) |
 | `category_groups` | Groups categories for ledger display |
 | `category_opening_balances` | Multi-portion opening balances; **sole source of truth** for category opening balances |

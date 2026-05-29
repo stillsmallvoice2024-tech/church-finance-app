@@ -89,4 +89,6 @@ supabase/
 - **Import is sole transaction entry point.** Inflows/Outflows pages are display-only (edit/delete only).
 - **Special configs** (`is_special = true`) applied only via explicit `allocation_config_id`, never by date lookup.
 - **Dynamic currencies** fall back to 5 defaults (NGN, USD, GBP, EUR, CNY) if `currencies` table is missing.
-- **Gate on `!!user`, not `!!role`** — `user` is synchronous; `role` requires a round-trip fetch that can fail.
+- **All reads are org-scoped**: hooks guard on `orgId` (from `useOrgStore`) and inject `.eq('org_id', orgId)`; return empty when `orgId` is null.
+- **All writes inject `org_id`**: `useMutations.ts` spreads `orgPayload()` on every INSERT; page-level inserts do the same. `orgPayload()` reads from `useOrgStore.getState()`.
+- **Gate on `resolved`** — `useRole()` uses `!loading && !!user` as `resolved`; `loading` stays `true` until both profile AND org membership are fetched, so `resolved = true` guarantees `orgRole` is already set.
