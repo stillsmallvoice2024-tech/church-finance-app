@@ -1,8 +1,20 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import type { StartingBalanceRow } from './useBanks'
+
+// Returns { org_id } payload fragment if an active org is set; empty object otherwise.
+// Mutations proceed even without org_id — the DB default (get_current_org_id()) handles it.
+function orgPayload(): { org_id: string } | Record<string, never> {
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) {
+    console.warn('[mutation] no active org — falling back to DB default org_id')
+    return {}
+  }
+  return { org_id: orgId }
+}
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
 
@@ -171,7 +183,7 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('inflow_transactions')
-        .insert({ ...input, created_by: user.id })
+        .insert({ ...input, created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -215,7 +227,7 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('outflow_transactions')
-        .insert({ ...input, is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id })
+        .insert({ ...input, is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -282,6 +294,7 @@ export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {
           to_category_id:   toId,
           status:           'active',
           created_by:       user.id,
+          ...orgPayload(),
         })
         .select('id')
         .single()
@@ -467,7 +480,7 @@ export function useAddLedgerEntry(): MutationHook<AddLedgerEntryInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('ledger_entries')
-        .insert({ ...input, created_by: user.id })
+        .insert({ ...input, created_by: user.id, ...orgPayload() })
         .select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
@@ -501,7 +514,7 @@ export function useAddAccount(): MutationHook<AddAccountInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('accounts')
-        .insert({ ...input, is_active: true })
+        .insert({ ...input, is_active: true, ...orgPayload() })
         .select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
@@ -592,6 +605,7 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
           name:        input.name,
           description: input.description ?? null,
           group_id:    input.group_id ?? null,
+          ...orgPayload(),
         }).select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
@@ -685,7 +699,7 @@ export function useAddCategoryGroup(): MutationHook<{ name: string }, string> {
     setLoading(true); setError(null)
     try {
       const { data, error: err } = await supabase
-        .from('category_groups').insert({ name: input.name }).select('id').single()
+        .from('category_groups').insert({ name: input.name, ...orgPayload() }).select('id').single()
       if (err) throw err
       return data!.id as string
     } catch (err) {
@@ -756,7 +770,7 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
     try {
       const { data, error: err } = await supabase
         .from('fx_transactions')
-        .insert({ ...input, created_by: user.id })
+        .insert({ ...input, created_by: user.id, ...orgPayload() })
         .select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
@@ -830,7 +844,7 @@ export function useAddBank(): MutationHook<AddBankInput, string> {
     setLoading(true); setError(null)
     try {
       const { data, error: err } = await supabase
-        .from('banks').insert(input).select('id').single()
+        .from('banks').insert({ ...input, ...orgPayload() }).select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'banks', recordId: data.id, newData: input as unknown as Record<string, unknown> })
@@ -945,7 +959,7 @@ export function useAddAllocationConfig(): MutationHook<AddAllocationConfigInput,
     try {
       const { data, error: err } = await supabase
         .from('allocation_configs')
-        .insert({ name: input.name, start_date: input.start_date, status: 'draft', rows: input.rows })
+        .insert({ name: input.name, start_date: input.start_date, status: 'draft', rows: input.rows, ...orgPayload() })
         .select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')

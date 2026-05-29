@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from './orgStore'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,8 @@ interface AllocationState {
   fetch:    () => Promise<void>
   /** Force a fresh fetch even if already loaded. */
   reload:   () => Promise<void>
+  /** Clear cached data — call on org switch or logout. */
+  reset:    () => void
   /** Convenience wrapper around the exported getConfigForDate helper. */
   forDate:  (date: string) => AllocationConfig | null
 }
@@ -90,12 +93,14 @@ export const useAllocationStore = create<AllocationState>((set, get) => ({
   loaded:  false,
 
   fetch: async () => {
-    if (get().loading) return
+    const orgId = useOrgStore.getState().orgId
+    if (!orgId || get().loading) return
     set({ loading: true, error: null })
 
     const { data, error } = await supabase
       .from('allocation_configs')
       .select('*')
+      .eq('org_id', orgId)
       .order('start_date', { ascending: true })
 
     if (error) {
@@ -109,6 +114,8 @@ export const useAllocationStore = create<AllocationState>((set, get) => ({
     set({ loaded: false })
     await get().fetch()
   },
+
+  reset: () => set({ configs: [], loading: false, error: null, loaded: false }),
 
   forDate: (date) => getConfigForDate(get().configs, date),
 }))

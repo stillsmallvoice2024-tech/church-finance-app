@@ -1,12 +1,15 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import { ACCOUNT_NAMES, type AccountEntry } from '../utils/accountNames'
+import { useOrgStore } from './orgStore'
 
 interface AccountCodesState {
   codes: AccountEntry[]
   loaded: boolean
   loading: boolean
   fetch: () => Promise<void>
+  /** Clear cached codes — call on org switch or logout. */
+  reset: () => void
   getLabel: (code: string | null | undefined) => string
 }
 
@@ -16,20 +19,23 @@ export const useAccountCodesStore = create<AccountCodesState>((set, get) => ({
   loading: false,
 
   fetch: async () => {
-    if (get().loaded || get().loading) return
+    const orgId = useOrgStore.getState().orgId
+    if (!orgId || get().loaded || get().loading) return
     set({ loading: true })
     const { data, error } = await supabase
       .from('accounts')
       .select('code, name, category')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .order('code', { ascending: true })
     if (!error && data && data.length > 0) {
       set({ codes: data as AccountEntry[], loaded: true, loading: false })
     } else {
-      // keep fallback on error, still mark loaded so we don't retry on every render
       set({ loaded: true, loading: false })
     }
   },
+
+  reset: () => set({ codes: ACCOUNT_NAMES, loaded: false, loading: false }),
 
   getLabel: (code) => {
     if (!code) return '—'

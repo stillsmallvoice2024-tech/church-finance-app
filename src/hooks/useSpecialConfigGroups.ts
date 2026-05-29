@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 import type { AllocationConfig } from '../store/allocationStore'
+
+function orgPayload(): { org_id: string } | Record<string, never> {
+  const { orgId } = useOrgStore.getState()
+  return orgId ? { org_id: orgId } : {}
+}
 
 export interface SpecialConfigGroupWithVersions {
   id:                        string
@@ -13,21 +19,26 @@ export interface SpecialConfigGroupWithVersions {
 }
 
 export function useSpecialConfigGroups() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [groups,  setGroups]  = useState<SpecialConfigGroupWithVersions[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true); setError(null)
     const { data: groupRows, error: gErr } = await supabase
       .from('special_config_groups')
       .select('id, name, created_at')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
     if (gErr) { setError(gErr.message); setLoading(false); return }
 
     const { data: versions, error: vErr } = await supabase
       .from('allocation_configs')
       .select('*')
+      .eq('org_id', orgId)
       .not('config_group_id', 'is', null)
       .order('effective_from', { ascending: false })
     if (vErr) { setError(vErr.message); setLoading(false); return }
@@ -35,6 +46,7 @@ export function useSpecialConfigGroups() {
     const { data: itRows } = await supabase
       .from('income_types')
       .select('id, name, special_config_group_id')
+      .eq('org_id', orgId)
       .not('special_config_group_id', 'is', null)
 
     const itMap = new Map<string, { id: string; name: string }>()
@@ -67,7 +79,7 @@ export function useSpecialConfigGroups() {
     })
     setGroups(built)
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { load() }, [load])
 
@@ -86,9 +98,10 @@ export async function createGroupWithFirstVersion(params: {
   income_type_id?: string | null
   prev_income_type_id?: string | null
 }): Promise<{ groupId: string; config: AllocationConfig }> {
+  const org = orgPayload()
   const { data: grp, error: gErr } = await supabase
     .from('special_config_groups')
-    .insert({ name: params.name })
+    .insert({ name: params.name, ...org })
     .select('id')
     .single()
   if (gErr) throw new Error(gErr.message)
@@ -108,6 +121,7 @@ export async function createGroupWithFirstVersion(params: {
       config_group_id: groupId,
       start_date:      params.effective_from,
       status:          params.status,
+      ...org,
     })
     .select('*')
     .single()
@@ -170,6 +184,7 @@ export async function createNewVersion(params: {
       config_group_id: group.id,
       start_date:      effective_from,
       status:          params.status,
+      ...orgPayload(),
     })
     .select('id')
     .single()

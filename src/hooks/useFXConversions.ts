@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore } from '../store/orgStore'
 
 export interface FXConversion {
   id:                   string
@@ -64,6 +65,7 @@ export function useAddFXConversion() {
 
   const mutate = useCallback(async (input: AddFXConversionInput): Promise<void> => {
     const { user } = useAuthStore.getState()
+    const { orgId } = useOrgStore.getState()
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
 
@@ -91,6 +93,7 @@ export function useAddFXConversion() {
           running_balance: newBalance,
           narration:       input.notes ?? `Converted to NGN @ ₦${input.exchange_rate}`,
           created_by:      user.id,
+          ...(orgId ? { org_id: orgId } : {}),
         })
         .select('id')
         .single()
@@ -111,6 +114,7 @@ export function useAddFXConversion() {
           fx_rate:              input.exchange_rate,
           transaction_type:     'fx_conversion',
           created_by:           user.id,
+          ...(orgId ? { org_id: orgId } : {}),
         })
         .select('id')
         .single()

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 
 export type BudgetPortion = 'Percentage Allocation' | 'Specific Seed' | 'Savings'
 
@@ -27,21 +28,25 @@ export interface Category {
 }
 
 export function useCategories() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     const { data, error: err } = await supabase
       .from('categories')
       .select('*')
+      .eq('org_id', orgId)
       .order('name')
     if (err) setError(err.message)
     else setCategories((data ?? []) as Category[])
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -106,22 +111,26 @@ export async function fetchCategoryOpeningBalances(categoryId: string): Promise<
 }
 
 export function useCategoryGroups() {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     const { data, error: err } = await supabase
       .from('category_groups')
       .select('*')
+      .eq('org_id', orgId)
       .order('sort_order')
       .order('name')
     if (err) setError(err.message)
     else setGroups((data ?? []) as CategoryGroup[])
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetch() }, [fetch])
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 // ── DB row type ────────────────────────────────────────────────────────────────
 
 export interface FXTransaction {
@@ -62,18 +63,22 @@ export interface FXResult {
 }
 
 export function useFXTransactions(currency?: string): FXResult {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [transactions, setTransactions] = useState<FXTransaction[]>([])
   const [summaries,    setSummaries]    = useState<FXCurrencySummary[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
     let query = supabase
       .from('fx_transactions')
       .select('*')
+      .eq('org_id', orgId)
       .order('date',       { ascending: false })
       .order('created_at', { ascending: false }) // stable tiebreaker within same date
 
@@ -89,7 +94,7 @@ export function useFXTransactions(currency?: string): FXResult {
       setSummaries(computeSummaries(rows))
     }
     setLoading(false)
-  }, [currency])
+  }, [orgId, currency])
 
   useEffect(() => { fetch() }, [fetch])
 
