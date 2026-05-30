@@ -82,11 +82,21 @@ export default function Onboarding() {
     if (!localOrgId) {
       // No org yet — user arrived via NoOrgScreen without going through signup
       setLoading(true)
-      const { data, error: rpcErr } = await supabase.rpc('create_organization', {
-        p_name: name.trim(),
-      })
+      const rpcParams = { p_name: name.trim() }
+      const { data, error: rpcErr } = await supabase.rpc('create_organization', rpcParams)
       setLoading(false)
-      if (rpcErr) { setError(rpcErr.message); return }
+      if (rpcErr) {
+        console.error('[onboarding] create_organization failed', {
+          rpc:     'create_organization',
+          params:  rpcParams,
+          code:    (rpcErr as { code?: string }).code,
+          details: (rpcErr as { details?: string }).details,
+          hint:    (rpcErr as { hint?: string }).hint,
+          message: rpcErr.message,
+        })
+        setError(rpcErr.message)
+        return
+      }
 
       const newOrgId = data as string
       setLocalOrgId(newOrgId)
