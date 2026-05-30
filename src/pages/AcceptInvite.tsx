@@ -104,24 +104,9 @@ export default function AcceptInvite() {
 
     const userId = signUpData.user?.id
     if (userId) {
-      const trimmedUsername = username.trim().toLowerCase() || null
-      const { error: profileErr } = await supabase.from('profiles').update({
-        full_name:  fullName.trim(),
-        username:   trimmedUsername,
-        updated_at: new Date().toISOString(),
-      }).eq('id', userId)
-
-      if (profileErr) {
-        console.error('[invite] profile update failed:', profileErr)
-        // 23505 = unique_violation (username taken). Non-fatal — profile exists;
-        // user can set a different username from their account settings.
-        if (profileErr.code !== '23505') {
-          setLoading(false)
-          setError('Account created but profile update failed. Please contact support.')
-          return
-        }
-      }
-
+      // accept_invitation MUST run first — it guarantees the profile row exists
+      // (INSERT from auth.users if handle_new_user trigger failed silently) and
+      // sets up org_members. Only after this is the profile safe to UPDATE.
       const { error: acceptErr } = await supabase
         .rpc('accept_invitation', { p_token: token, p_user_id: userId })
       if (acceptErr) {
@@ -133,6 +118,20 @@ export default function AcceptInvite() {
             : 'Failed to activate your account. The invite may have already been used.',
         )
         return
+      }
+
+      // Non-fatal: profile was created (and full_name seeded) by accept_invitation.
+      // This update just overlays the user-entered display name and username.
+      const { error: profileErr } = await supabase.from('profiles').update({
+        full_name:  fullName.trim(),
+        username:   username.trim().toLowerCase() || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', userId)
+
+      if (profileErr) {
+        console.error('[invite] profile display-name update failed (non-fatal):', profileErr)
+        // Not blocking — accept_invitation already created the profile with the
+        // correct role and full_name from metadata. User can update via settings.
       }
     }
 

@@ -125,10 +125,11 @@ BEGIN
   END IF;
 
   -- Guarantee profile row exists before we UPDATE it and before org_members
-  -- tries to reference it via FK.  No-ops if the profile was already created
-  -- by handle_new_user.
-  INSERT INTO public.profiles (id, email)
-  SELECT p_user_id, u.email
+  -- tries to reference it via FK.  Pulls email + full_name from auth.users
+  -- (accessible via SECURITY DEFINER / postgres role).  ON CONFLICT DO NOTHING
+  -- so this is a no-op when handle_new_user already created the profile.
+  INSERT INTO public.profiles (id, email, full_name)
+  SELECT p_user_id, u.email, u.raw_user_meta_data->>'full_name'
   FROM   auth.users u
   WHERE  u.id = p_user_id
   ON CONFLICT (id) DO NOTHING;
