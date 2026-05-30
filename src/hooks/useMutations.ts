@@ -870,7 +870,7 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
         name:           input.name,
         account_number: input.account_number ?? null,
         account_type:   input.account_type   ?? null,
-        currency:       input.currency        ?? 'NGN',
+        currency:       input.currency        ?? useOrgStore.getState().defaultCurrency ?? '',
         starting_balance:                input.starting_balance               ?? null,
         starting_balance_category:       input.starting_balance_category      ?? null,
         starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,

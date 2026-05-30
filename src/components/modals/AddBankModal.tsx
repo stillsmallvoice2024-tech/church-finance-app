@@ -10,6 +10,7 @@ import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
+import { useOrgStore } from '../../store/orgStore'
 import type { DbBank, StartingBalanceRow, SchemaStatus } from '../../hooks/useBanks'
 import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
@@ -63,6 +64,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
   const { categories, refetch: refetchCategories } = useCategories()
   const { currencies } = useCurrencies()
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency)
   const { push: toast } = useToastStore()
 
   const addMutation    = useAddBank()
@@ -123,7 +125,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         name:             editRecord.name,
         account_number:   editRecord.account_number ?? '',
         account_type:     editRecord.account_type   ?? '',
-        currency:         editRecord.currency       ?? 'NGN',
+        currency:         editRecord.currency       ?? defaultCurrency ?? '',
         starting_balance: editRecord.starting_balance ?? undefined,
       })
       const allocs = editRecord.starting_balance_allocations ?? []
@@ -250,7 +252,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       name:           values.name,
       account_number: values.account_number || undefined,
       account_type:   values.account_type   || undefined,
-      currency:       values.currency       || 'NGN',
+      currency:       values.currency       || defaultCurrency || '',
       starting_balance:             values.starting_balance || undefined,
       starting_balance_alloc_type:  hasBalance ? allocType : undefined,
       starting_balance_allocations: hasBalance ? allocations : undefined,

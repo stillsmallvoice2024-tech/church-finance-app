@@ -1113,7 +1113,7 @@ create table if not exists public.organizations (
   slug                 text        not null unique,
   created_by           uuid        references public.profiles(id) on delete set null,
   metadata             jsonb       not null default '{}',
-  default_currency     text        not null default 'NGN',
+  default_currency     text,
   fiscal_year_start    int         not null default 1 check (fiscal_year_start between 1 and 12),
   timezone             text        not null default 'Africa/Lagos',
   onboarding_complete  boolean     not null default true,
@@ -1328,7 +1328,7 @@ grant execute on function public.create_organization(text) to authenticated;
 create or replace function public.complete_org_onboarding(
   p_org_id            uuid,
   p_name              text,
-  p_default_currency  text default 'NGN',
+  p_default_currency  text,
   p_fiscal_year_start int  default 1,
   p_timezone          text default 'Africa/Lagos'
 )

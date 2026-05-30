@@ -6,6 +6,7 @@ export interface OrgMembership {
   org_name:             string
   role:                 UserRole
   onboarding_complete?: boolean | null
+  default_currency?:    string | null
 }
 
 const activeOrgKey = (userId: string) => `org-active-${userId}`
@@ -15,6 +16,7 @@ interface OrgState {
   orgName:             string | null
   orgRole:             UserRole | null
   onboardingComplete:  boolean | null
+  defaultCurrency:     string | null
   memberships:         OrgMembership[]
   switching:           boolean
 
@@ -32,6 +34,7 @@ export const useOrgStore = create<OrgState>((set) => ({
   orgName:            null,
   orgRole:            null,
   onboardingComplete: null,
+  defaultCurrency:    null,
   memberships:        [],
   switching:          false,
 
@@ -40,6 +43,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     orgName:            m.org_name,
     orgRole:            m.role,
     onboardingComplete: m.onboarding_complete !== undefined ? (m.onboarding_complete ?? null) : null,
+    defaultCurrency:    m.default_currency !== undefined ? (m.default_currency ?? null) : null,
   }),
 
   setMemberships: (ms) => set({ memberships: ms }),
@@ -48,7 +52,7 @@ export const useOrgStore = create<OrgState>((set) => ({
 
   setSwitching: (v) => set({ switching: v }),
 
-  clearOrg: () => set({ orgId: null, orgName: null, orgRole: null, onboardingComplete: null, memberships: [], switching: false }),
+  clearOrg: () => set({ orgId: null, orgName: null, orgRole: null, onboardingComplete: null, defaultCurrency: null, memberships: [], switching: false }),
 
   persistActive: (userId, orgId) => {
     try { localStorage.setItem(activeOrgKey(userId), orgId) } catch { /* storage unavailable */ }

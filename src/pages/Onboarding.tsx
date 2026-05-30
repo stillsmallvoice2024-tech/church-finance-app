@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Building2, Settings, CheckCircle2, ChevronRight, ChevronLeft, Loader2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
+import { useCurrencies } from '../hooks/useCurrencies'
 import type { UserRole } from '../types'
 
 const TIMEZONES = [
@@ -28,8 +29,6 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-const CURRENCIES = ['NGN', 'USD', 'GBP', 'EUR', 'CNY']
-
 function AppIcon() {
   return (
     <svg viewBox="0 0 32 32" className="h-8 w-8" fill="currentColor" aria-hidden="true">
@@ -53,11 +52,12 @@ export default function Onboarding() {
   const navigate    = useNavigate()
   const storeOrgId  = useOrgStore(s => s.orgId)
   const storeOrgName = useOrgStore(s => s.orgName)
+  const { currencies } = useCurrencies()
 
   const [step,        setStep]        = useState(1)
   const [localOrgId,  setLocalOrgId]  = useState<string | null>(storeOrgId)
   const [name,        setName]        = useState(storeOrgName ?? '')
-  const [currency,    setCurrency]    = useState('NGN')
+  const [currency,    setCurrency]    = useState('')
   const [yearStart,   setYearStart]   = useState(1)
   const [timezone,    setTimezone]    = useState('Africa/Lagos')
   const [loading,     setLoading]     = useState(false)
@@ -68,6 +68,11 @@ export default function Onboarding() {
     if (storeOrgId && !localOrgId) setLocalOrgId(storeOrgId)
     if (storeOrgName && !name)     setName(storeOrgName)
   }, [storeOrgId, storeOrgName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Default currency to the first option once currencies load
+  useEffect(() => {
+    if (!currency && currencies.length > 0) setCurrency(currencies[0].code)
+  }, [currencies]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
   const handleNextStep1 = async () => {
@@ -121,6 +126,7 @@ export default function Onboarding() {
       org_name:            name.trim(),
       role:                'admin' as UserRole,
       onboarding_complete: true,
+      default_currency:    currency,
     })
     useOrgStore.getState().setOnboardingComplete(true)
 
@@ -231,8 +237,8 @@ export default function Onboarding() {
                   onChange={e => setCurrency(e.target.value)}
                   className={inputCls}
                 >
-                  {CURRENCIES.map(c => (
-                    <option key={c} value={c}>{c}</option>
+                  {currencies.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
                   ))}
                 </select>
               </div>

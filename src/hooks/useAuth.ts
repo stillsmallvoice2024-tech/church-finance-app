@@ -31,9 +31,9 @@ async function fetchAllOrgMemberships(
   }
   const base = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active`
 
-  // Attempt 1: with onboarding_complete (requires migration 20260530000000)
+  // Attempt 1: with onboarding_complete + default_currency (requires migration 20260530000000)
   const res1 = await fetch(
-    `${base}&select=org_id,role,organizations(name,onboarding_complete)`,
+    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency)`,
     { signal, headers },
   )
 
@@ -41,13 +41,14 @@ async function fetchAllOrgMemberships(
     const rows = await res1.json() as Array<{
       org_id:        string
       role:          UserRole
-      organizations: { name: string; onboarding_complete: boolean | null } | null
+      organizations: { name: string; onboarding_complete: boolean | null; default_currency: string | null } | null
     }>
     return rows.map(row => ({
       org_id:              row.org_id,
       org_name:            row.organizations?.name ?? 'My Organization',
       role:                row.role,
       onboarding_complete: row.organizations?.onboarding_complete ?? null,
+      default_currency:    row.organizations?.default_currency ?? null,
     }))
   }
 
@@ -71,6 +72,7 @@ async function fetchAllOrgMemberships(
       org_name:            row.organizations?.name ?? 'My Organization',
       role:                row.role,
       onboarding_complete: null, // pre-migration: treat as already onboarded
+      default_currency:    null,
     }))
   }
 

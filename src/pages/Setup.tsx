@@ -1504,7 +1504,7 @@ NOTIFY pgrst, 'reload schema';
 -- ============================================================
 
 ALTER TABLE public.organizations
-  ADD COLUMN IF NOT EXISTS default_currency    text    NOT NULL DEFAULT 'NGN',
+  ADD COLUMN IF NOT EXISTS default_currency    text,
   ADD COLUMN IF NOT EXISTS fiscal_year_start   int     NOT NULL DEFAULT 1
     CHECK (fiscal_year_start BETWEEN 1 AND 12),
   ADD COLUMN IF NOT EXISTS timezone            text    NOT NULL DEFAULT 'Africa/Lagos',
@@ -1549,7 +1549,7 @@ GRANT EXECUTE ON FUNCTION public.create_organization(text) TO authenticated;
 
 -- complete_org_onboarding(): save settings + seed defaults + mark done
 CREATE OR REPLACE FUNCTION public.complete_org_onboarding(
-  p_org_id uuid, p_name text, p_default_currency text DEFAULT 'NGN',
+  p_org_id uuid, p_name text, p_default_currency text,
   p_fiscal_year_start int DEFAULT 1, p_timezone text DEFAULT 'Africa/Lagos'
 )
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
