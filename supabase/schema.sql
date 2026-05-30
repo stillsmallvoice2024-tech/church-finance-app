@@ -767,15 +767,33 @@ begin
     raise exception 'Invalid or expired invitation';
   end if;
 
-  -- Ensure profile row exists before updating it and before org_members
-  -- references it via FK.  Pulls email + full_name from auth.users
-  -- (accessible via SECURITY DEFINER / postgres role).  No-ops if
-  -- handle_new_user already created the profile.
-  insert into public.profiles (id, email, full_name)
-  select p_user_id, u.email, u.raw_user_meta_data->>'full_name'
-  from   auth.users u
-  where  u.id = p_user_id
-  on conflict (id) do nothing;
+  -- Guarantee profile row exists; include username from metadata.
+  -- ON CONFLICT DO UPDATE fills only NULL columns (COALESCE) so a profile
+  -- already created by handle_new_user is not clobbered.
+  -- Falls back to omitting username if it conflicts with another account.
+  begin
+    insert into public.profiles (id, email, full_name, username)
+    select p_user_id,
+           u.email,
+           u.raw_user_meta_data->>'full_name',
+           u.raw_user_meta_data->>'username'
+    from   auth.users u
+    where  u.id = p_user_id
+    on conflict (id) do update
+      set full_name = coalesce(excluded.full_name, profiles.full_name),
+          username  = coalesce(excluded.username,  profiles.username);
+  exception
+    when unique_violation then
+      raise warning
+        '[accept_invitation] username conflict for user=% — upserting without username',
+        p_user_id;
+      insert into public.profiles (id, email, full_name)
+      select p_user_id, u.email, u.raw_user_meta_data->>'full_name'
+      from   auth.users u
+      where  u.id = p_user_id
+      on conflict (id) do update
+        set full_name = coalesce(excluded.full_name, profiles.full_name);
+  end;
 
   -- Keep profiles.role in sync for frontend useRole() hook
   update public.profiles
@@ -783,10 +801,16 @@ begin
         updated_at = now()
   where id = p_user_id;
 
-  -- Resolve org_id — fall back to primary org for pre-Phase 5 invites.
+  -- Resolve org_id:
+  --   1. org_id from the invite (Phase 5+ invites)
+  --   2. org with slug = 'primary' (legacy fallback)
+  --   3. any organization (last-resort for single-org churches without primary slug)
   v_org_id := v_invite.org_id;
   if v_org_id is null then
     select id into v_org_id from public.organizations where slug = 'primary' limit 1;
+  end if;
+  if v_org_id is null then
+    select id into v_org_id from public.organizations limit 1;
   end if;
 
   -- Upsert org_members.role (authoritative for Phase 3 RLS helpers)
@@ -796,6 +820,10 @@ begin
     on conflict (org_id, user_id) do update
       set role   = excluded.role,
           status = 'active';
+  else
+    raise warning
+      '[accept_invitation] no organization found — org_members skipped for user=% token=%',
+      p_user_id, p_token;
   end if;
 
   update public.invitations
