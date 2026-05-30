@@ -11,6 +11,7 @@ import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../..
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../../hooks/useOutflowTypes'
+import { useDepartmentOptions } from '../../hooks/useDepartments'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 
@@ -41,6 +42,7 @@ const schema = z.object({
   stage_code_1:            z.string().optional(),
   stage_code_2:            z.string().optional(),
   outflow_type_id:         z.string().optional(),
+  department_id:           z.string().optional(),
   remarks:                 z.string().optional(),
   fx_currency:             z.string().optional(),
   fx_amount:               optNum,
@@ -64,7 +66,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { categories }    = useCategories()
   const { banks }         = useBanks()
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
-  const { maps: categoryOutflowMaps } = useCategoryOutflowTypeMaps()
+  const { maps: categoryOutflowMaps }  = useCategoryOutflowTypeMaps()
+  const { options: departmentOptions } = useDepartmentOptions()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
 
@@ -107,6 +110,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         stage_code_1:            editRecord.stage_code_1            ?? '',
         stage_code_2:            editRecord.stage_code_2            ?? '',
         outflow_type_id:         editRecord.outflow_type_id         ?? '',
+        department_id:           editRecord.department_id           ?? '',
         remarks:                 editRecord.remarks                 ?? '',
         fx_currency:             editRecord.fx_currency             ?? '',
         fx_amount:               editRecord.fx_amount               ?? undefined,
@@ -148,6 +152,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             stage_code_1:            values.stage_code_1            || null,
             stage_code_2:            values.stage_code_2            || null,
             outflow_type_id:         values.outflow_type_id         || null,
+            department_id:           values.department_id           || null,
             remarks:                 values.remarks                 || null,
             is_pending_deduction:    isPending,
             fx_currency:             values.fx_currency             || null,
@@ -171,6 +176,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           stage_code_1:            values.stage_code_1            || undefined,
           stage_code_2:            values.stage_code_2            || undefined,
           outflow_type_id:         values.outflow_type_id         || null,
+          department_id:           values.department_id           || null,
           remarks:                 values.remarks                 || undefined,
           fx_currency:             values.fx_currency             || undefined,
           fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
@@ -331,15 +337,25 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           </Field>
         </div>
 
-        {/* Outflow Type — reporting/classification only, does not affect balances */}
-        <Field label="Outflow Type (reporting)" error={errors.outflow_type_id?.message}>
-          <select {...register('outflow_type_id')} className={inputCls(!!errors.outflow_type_id)}>
-            <option value="">— Unclassified —</option>
-            {outflowTypeOptions.map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        </Field>
+        {/* Outflow Type + Department — reporting/classification only, do not affect balances */}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Outflow Type (reporting)" error={errors.outflow_type_id?.message}>
+            <select {...register('outflow_type_id')} className={inputCls(!!errors.outflow_type_id)}>
+              <option value="">— Unclassified —</option>
+              {outflowTypeOptions.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Department / Unit" error={errors.department_id?.message}>
+            <select {...register('department_id')} className={inputCls(!!errors.department_id)}>
+              <option value="">— None —</option>
+              {departmentOptions.map(d => (
+                <option key={d.id} value={d.id}>{d.code ? `[${d.code}] ${d.name}` : d.name}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
 
         {/* Pending Deduction */}
         <label className="flex items-center gap-3 cursor-pointer select-none">

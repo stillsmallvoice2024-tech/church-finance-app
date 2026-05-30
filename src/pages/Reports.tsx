@@ -9,9 +9,10 @@ import { exportCSV } from '../utils/csvExport'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { useOutflowTypes } from '../hooks/useOutflowTypes'
+import { useDepartments } from '../hooks/useDepartments'
 import { ReportDateFilter, useReportDateFilter } from '../components/ui/ReportDateFilter'
 
-type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'fx' | 'audit'
+type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'departments' | 'fx' | 'audit'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS        = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i)
@@ -586,6 +587,398 @@ function OutflowTypeBreakdownPanel() {
   )
 }
 
+// ── Department Breakdown ───────────────────────────────────────────────────────
+
+interface DeptRow {
+  id:     string | null
+  name:   string
+  code:   string | null
+  amount: number
+  count:  number
+}
+
+interface DrillTxn {
+  id:               string
+  date:             string
+  description:      string | null
+  bank_description: string | null
+  amount_disbursed: number
+  actual_amount:    number
+  outflow_type_id:  string | null
+  department_id:    string | null
+}
+
+function DepartmentBreakdownPanel() {
+  const activeYear = useAccountingYearStore(s => s.year)
+  const { departments } = useDepartments()
+  const { outflowTypes } = useOutflowTypes()
+
+  const filter  = useReportDateFilter(activeYear)
+  const [rows,    setRows]    = useState<DeptRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+
+  // Drill-down state
+  const [drillDeptId,    setDrillDeptId]    = useState<string | null | undefined>(undefined) // undefined = none selected
+  const [drillTypeId,    setDrillTypeId]    = useState<string | null>('')  // '' = all
+  const [drillTxns,      setDrillTxns]      = useState<DrillTxn[]>([])
+  const [drillLoading,   setDrillLoading]   = useState(false)
+
+  // Cross-filter state (independent of drill-down)
+  const [filterDeptId, setFilterDeptId]   = useState('')
+  const [filterTypeId, setFilterTypeId]   = useState('')
+  const [crossTxns,    setCrossTxns]      = useState<DrillTxn[]>([])
+  const [crossLoading, setCrossLoading]   = useState(false)
+  const [crossError,   setCrossError]     = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    const { lo, queryHi, col } = filter.range
+
+    const { data, error: err } = await supabase
+      .from('outflow_transactions')
+      .select('actual_amount, amount_disbursed, department_id')
+      .gte(col, lo)
+      .lte(col, queryHi)
+
+    if (err) { setError(err.message); setLoading(false); return }
+
+    const agg = new Map<string | null, { amount: number; count: number }>()
+    for (const r of data ?? []) {
+      const id  = (r as { department_id: string | null }).department_id ?? null
+      const amt = Number((r as { actual_amount?: number }).actual_amount || r.amount_disbursed || 0)
+      const cur = agg.get(id) ?? { amount: 0, count: 0 }
+      cur.amount += amt
+      cur.count  += 1
+      agg.set(id, cur)
+    }
+
+    const result: DeptRow[] = []
+    for (const d of departments) {
+      const agged = agg.get(d.id)
+      if (!agged) continue
+      result.push({ id: d.id, name: d.name, code: d.code, ...agged })
+    }
+    const unassigned = agg.get(null)
+    if (unassigned) {
+      result.push({ id: null, name: 'Unassigned', code: null, ...unassigned })
+    }
+    result.sort((a, b) => b.amount - a.amount)
+    setRows(result)
+    setLoading(false)
+  }, [filter.range, departments])
+
+  useEffect(() => { load() }, [load])
+
+  // Drill-down: load transactions for selected department (+ optional outflow type filter)
+  const loadDrill = useCallback(async (deptId: string | null, typeId: string | null) => {
+    setDrillLoading(true)
+    const { lo, queryHi, col } = filter.range
+    let q = supabase
+      .from('outflow_transactions')
+      .select('id, date, description, bank_description, amount_disbursed, actual_amount, outflow_type_id, department_id')
+      .gte(col, lo)
+      .lte(col, queryHi)
+      .order('date', { ascending: false })
+      .limit(200)
+
+    if (deptId === null) {
+      q = q.is('department_id', null)
+    } else {
+      q = q.eq('department_id', deptId)
+    }
+    if (typeId) q = q.eq('outflow_type_id', typeId)
+
+    const { data } = await q
+    setDrillTxns((data ?? []) as DrillTxn[])
+    setDrillLoading(false)
+  }, [filter.range])
+
+  const handleRowClick = (deptId: string | null) => {
+    if (drillDeptId === deptId) {
+      setDrillDeptId(undefined); setDrillTxns([]); setDrillTypeId('')
+    } else {
+      setDrillDeptId(deptId); setDrillTypeId('')
+      loadDrill(deptId, null)
+    }
+  }
+
+  // Re-load drill when type filter changes
+  useEffect(() => {
+    if (drillDeptId === undefined) return
+    loadDrill(drillDeptId ?? null, drillTypeId || null)
+  }, [drillTypeId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-filter load
+  const loadCross = useCallback(async () => {
+    if (!filterDeptId && !filterTypeId) { setCrossTxns([]); return }
+    setCrossLoading(true); setCrossError(null)
+    const { lo, queryHi, col } = filter.range
+    let q = supabase
+      .from('outflow_transactions')
+      .select('id, date, description, bank_description, amount_disbursed, actual_amount, outflow_type_id, department_id')
+      .gte(col, lo)
+      .lte(col, queryHi)
+      .order('date', { ascending: false })
+      .limit(500)
+
+    if (filterDeptId) q = q.eq('department_id', filterDeptId)
+    if (filterTypeId) q = q.eq('outflow_type_id', filterTypeId)
+
+    const { data, error: err } = await q
+    if (err) setCrossError(err.message)
+    else setCrossTxns((data ?? []) as DrillTxn[])
+    setCrossLoading(false)
+  }, [filterDeptId, filterTypeId, filter.range])
+
+  useEffect(() => { loadCross() }, [loadCross])
+
+  const grandTotal  = rows.reduce((s, r) => s + r.amount, 0)
+  const periodLabel = filter.periodLabel
+
+  const getDeptName = (id: string | null) =>
+    id ? (departments.find(d => d.id === id)?.name ?? id) : 'Unassigned'
+  const getTypeName = (id: string | null) =>
+    id ? (outflowTypes.find(t => t.id === id)?.name ?? id) : 'Unclassified'
+
+  const handleExport = () =>
+    exportCSV(
+      `department_breakdown_${periodLabel.replace(/ /g, '_')}`,
+      ['Department', 'Code', 'Total (₦)', 'Count', '% of Total'],
+      rows.map(r => [
+        r.name,
+        r.code ?? '',
+        r.amount,
+        r.count,
+        grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
+      ]),
+    )
+
+  const txnRow = (t: DrillTxn) => (
+    <tr key={t.id} className="hover:bg-gray-50 text-xs">
+      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{t.date}</td>
+      <td className="px-4 py-2 text-gray-700 max-w-[200px] truncate">{t.description ?? t.bank_description ?? '—'}</td>
+      <td className="px-4 py-2 text-gray-500">{getTypeName(t.outflow_type_id)}</td>
+      <td className="px-4 py-2 text-gray-500">{getDeptName(t.department_id)}</td>
+      <td className="px-4 py-2 text-right font-medium text-danger">₦{fmtNGN(t.actual_amount || t.amount_disbursed)}</td>
+    </tr>
+  )
+
+  return (
+    <div className="space-y-6">
+      <ReportSection
+        title="Department / Unit Breakdown"
+        onExport={rows.length > 0 ? handleExport : undefined}
+        extra={<ReportDateFilter hook={filter} />}
+      >
+        {error   && <ErrBox msg={error} />}
+        {loading && <Skeleton />}
+        {!loading && rows.length === 0 && (
+          <div className="py-16 text-center space-y-2">
+            <p className="text-sm text-gray-400">No department-tagged transactions for {periodLabel}.</p>
+            {departments.length === 0 && (
+              <p className="text-xs text-gray-400">
+                Set up departments in <span className="font-medium">Setup → Departments</span>, then tag transactions when adding.
+              </p>
+            )}
+          </div>
+        )}
+        {!loading && rows.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <th className="px-5 py-3 text-left font-medium">Department</th>
+                  <th className="px-5 py-3 text-right font-medium">Transactions</th>
+                  <th className="px-5 py-3 text-right font-medium">Total (₦)</th>
+                  <th className="px-5 py-3 text-right font-medium">% Share</th>
+                  <th className="px-5 py-3 w-40" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {rows.map(r => {
+                  const pct       = grandTotal > 0 ? (r.amount / grandTotal) * 100 : 0
+                  const isExpanded = drillDeptId === r.id
+                  return (
+                    <>
+                      <tr
+                        key={r.id ?? '__unassigned__'}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => handleRowClick(r.id)}
+                      >
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${r.id ? 'text-gray-800' : 'text-gray-400 italic'}`}>
+                              {r.name}
+                            </span>
+                            {r.code && (
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">{r.code}</span>
+                            )}
+                            <span className="text-xs text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-danger">₦{fmtNGN(r.amount)}</td>
+                        <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
+                        <td className="px-5 py-3">
+                          <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${r.id ?? '__unassigned__'}-drill`}>
+                          <td colSpan={5} className="px-5 pb-4 pt-0">
+                            <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                              <div className="px-4 py-2 flex items-center gap-3 border-b border-gray-100 bg-white">
+                                <span className="text-xs text-gray-500 font-medium">Filter by Outflow Type:</span>
+                                <select
+                                  value={drillTypeId ?? ''}
+                                  onChange={e => setDrillTypeId(e.target.value || null)}
+                                  className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                                >
+                                  <option value="">All Types</option>
+                                  {outflowTypes.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              {drillLoading ? (
+                                <div className="py-6 text-center text-xs text-gray-400">Loading…</div>
+                              ) : drillTxns.length === 0 ? (
+                                <div className="py-6 text-center text-xs text-gray-400">No transactions found.</div>
+                              ) : (
+                                <table className="w-full">
+                                  <thead>
+                                    <tr className="text-[10px] text-gray-400 uppercase border-b border-gray-100">
+                                      <th className="px-4 py-2 text-left">Date</th>
+                                      <th className="px-4 py-2 text-left">Description</th>
+                                      <th className="px-4 py-2 text-left">Outflow Type</th>
+                                      <th className="px-4 py-2 text-left">Department</th>
+                                      <th className="px-4 py-2 text-right">Amount</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-50">
+                                    {drillTxns.map(t => txnRow(t))}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr className="bg-gray-50 text-xs font-semibold border-t border-gray-200">
+                                      <td colSpan={4} className="px-4 py-2 text-gray-600">
+                                        {drillTxns.length} transaction{drillTxns.length !== 1 ? 's' : ''}
+                                        {drillTxns.length === 200 && ' (capped at 200)'}
+                                      </td>
+                                      <td className="px-4 py-2 text-right text-danger">
+                                        ₦{fmtNGN(drillTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0))}
+                                      </td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                })}
+                <tr className="bg-gray-50 font-bold border-t border-gray-200">
+                  <td className="px-5 py-3 text-gray-700">Total — {periodLabel}</td>
+                  <td className="px-5 py-3 text-right text-gray-500">
+                    {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 text-right text-danger">₦{fmtNGN(grandTotal)}</td>
+                  <td className="px-5 py-3 text-right text-gray-400">100%</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ReportSection>
+
+      {/* Cross-filter: Department × Outflow Type */}
+      <ReportSection title="Cross-Filter: Department × Outflow Type">
+        <div className="px-5 pb-4 space-y-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-500">Department</p>
+              <select
+                value={filterDeptId}
+                onChange={e => setFilterDeptId(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/30 min-w-[180px]"
+              >
+                <option value="">All Departments</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-500">Outflow Type</p>
+              <select
+                value={filterTypeId}
+                onChange={e => setFilterTypeId(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/30 min-w-[180px]"
+              >
+                <option value="">All Outflow Types</option>
+                {outflowTypes.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            {(filterDeptId || filterTypeId) && (
+              <button
+                onClick={() => { setFilterDeptId(''); setFilterTypeId('') }}
+                className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded border border-gray-200 hover:border-gray-300 transition-colors"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          {!filterDeptId && !filterTypeId && (
+            <p className="text-sm text-gray-400 py-6 text-center">Select at least one filter above to see matching transactions.</p>
+          )}
+          {crossError && <ErrBox msg={crossError} />}
+          {crossLoading && <Skeleton />}
+          {!crossLoading && (filterDeptId || filterTypeId) && crossTxns.length === 0 && (
+            <p className="text-sm text-gray-400 py-6 text-center">No transactions match the selected filters for {periodLabel}.</p>
+          )}
+          {!crossLoading && crossTxns.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-gray-100">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                    <th className="px-4 py-3 text-left font-medium">Date</th>
+                    <th className="px-4 py-3 text-left font-medium">Description</th>
+                    <th className="px-4 py-3 text-left font-medium">Outflow Type</th>
+                    <th className="px-4 py-3 text-left font-medium">Department</th>
+                    <th className="px-4 py-3 text-right font-medium">Amount (₦)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {crossTxns.map(t => txnRow(t))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 text-xs font-bold border-t border-gray-200">
+                    <td colSpan={4} className="px-4 py-3 text-gray-600">
+                      {crossTxns.length} transaction{crossTxns.length !== 1 ? 's' : ''}
+                      {crossTxns.length === 500 && ' (capped at 500)'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-danger">
+                      ₦{fmtNGN(crossTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      </ReportSection>
+    </div>
+  )
+}
+
 // ── FX Holdings ────────────────────────────────────────────────────────────────
 
 const FX_META = [
@@ -750,6 +1143,7 @@ export default function Reports() {
     { id: 'monthly',       label: 'Monthly Breakdown'      },
     { id: 'income_types',  label: 'Income Type Breakdown'  },
     { id: 'outflow_types', label: 'Outflow Type Breakdown' },
+    { id: 'departments',   label: 'Departments'            },
     { id: 'fx',            label: 'FX Holdings'            },
     { id: 'audit',         label: 'Audit Log', adminOnly: true },
   ]
@@ -799,6 +1193,7 @@ export default function Reports() {
         {tab === 'monthly'       && <MonthlyBreakdownPanel />}
         {tab === 'income_types'  && <IncomeTypeBreakdownPanel />}
         {tab === 'outflow_types' && <OutflowTypeBreakdownPanel />}
+        {tab === 'departments'   && <DepartmentBreakdownPanel />}
         {tab === 'fx'            && <FXHoldingsPanel />}
         {tab === 'audit'         && isAdmin() && <AuditLogPanel />}
       </div>

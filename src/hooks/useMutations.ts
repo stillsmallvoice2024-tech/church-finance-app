@@ -128,6 +128,7 @@ export interface AddOutflowInput {
   transaction_type?: string
   original_transaction_id?: string
   outflow_type_id?: string | null
+  department_id?: string | null
   bank_name?: string
   recorded_at?: string
 }
