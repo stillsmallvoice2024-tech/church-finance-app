@@ -10,6 +10,7 @@ import { useRole } from './hooks/useRole'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import LoginPage from './components/auth/LoginPage'
+import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Inflows from './pages/Inflows'
 import Outflows from './pages/Outflows'
@@ -55,6 +56,18 @@ function AdminOnlyGuard() {
   return <Outlet />
 }
 
+// Redirects to /onboarding when the active org has not completed onboarding.
+// Runs inside AuthGuard (loading=false, org resolved).
+function OnboardingGuard() {
+  const orgId              = useOrgStore(s => s.orgId)
+  const onboardingComplete = useOrgStore(s => s.onboardingComplete)
+
+  if (orgId && onboardingComplete === false) {
+    return <Navigate to="/onboarding" replace />
+  }
+  return <Outlet />
+}
+
 export default function App() {
   useAuthListener()
   const fetchCodes = useAccountCodesStore(s => s.fetch)
@@ -93,6 +106,12 @@ export default function App() {
 
         {/* Protected — AuthGuard checks auth + provides RoleContext */}
         <Route element={<AuthGuard />}>
+
+          {/* Onboarding wizard — accessible without a completed org */}
+          <Route path="onboarding" element={<Onboarding />} />
+
+          {/* App routes — OnboardingGuard redirects to /onboarding if setup incomplete */}
+          <Route element={<OnboardingGuard />}>
           <Route element={<Layout />}>
             <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
             <Route path="inflows" element={<ErrorBoundary><Inflows /></ErrorBoundary>} />
@@ -128,7 +147,8 @@ export default function App() {
             <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
             <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
           </Route>
-        </Route>
+          </Route> {/* OnboardingGuard */}
+        </Route> {/* AuthGuard */}
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />

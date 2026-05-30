@@ -14,6 +14,8 @@ type AuthEvent = AuthChangeEvent | 'FOCUS_REVALIDATE'
 
 // ── fetchAllOrgMemberships ─────────────────────────────────────────────────────
 // Fetches all active org memberships for the user.
+// Tries to include onboarding_complete (added in migration 20260530000000).
+// Falls back to a simpler query on pre-migration DBs (400 = unknown column).
 async function fetchAllOrgMemberships(
   userId:      string,
   accessToken: string,
@@ -22,34 +24,58 @@ async function fetchAllOrgMemberships(
   const baseUrl = import.meta.env.VITE_SUPABASE_URL as string
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-  const res = await fetch(
-    `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=org_id,role,organizations(name)`,
-    {
-      signal,
-      headers: {
-        apikey:        anonKey,
-        Authorization: `Bearer ${accessToken}`,
-        Accept:        'application/json',
-      },
-    },
+  const headers = {
+    apikey:        anonKey,
+    Authorization: `Bearer ${accessToken}`,
+    Accept:        'application/json',
+  }
+  const base = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active`
+
+  // Attempt 1: with onboarding_complete (requires migration 20260530000000)
+  const res1 = await fetch(
+    `${base}&select=org_id,role,organizations(name,onboarding_complete)`,
+    { signal, headers },
   )
 
-  if (!res.ok) {
-    console.warn(`[auth] fetchAllOrgMemberships HTTP ${res.status}`)
-    return []
+  if (res1.ok) {
+    const rows = await res1.json() as Array<{
+      org_id:        string
+      role:          UserRole
+      organizations: { name: string; onboarding_complete: boolean | null } | null
+    }>
+    return rows.map(row => ({
+      org_id:              row.org_id,
+      org_name:            row.organizations?.name ?? 'My Organization',
+      role:                row.role,
+      onboarding_complete: row.organizations?.onboarding_complete ?? null,
+    }))
   }
 
-  const rows = await res.json() as Array<{
-    org_id:        string
-    role:          UserRole
-    organizations: { name: string } | null
-  }>
+  // Attempt 2: fallback for pre-migration DBs (onboarding_complete column absent → 400)
+  if (res1.status === 400) {
+    const res2 = await fetch(
+      `${base}&select=org_id,role,organizations(name)`,
+      { signal, headers },
+    )
+    if (!res2.ok) {
+      console.warn(`[auth] fetchAllOrgMemberships fallback HTTP ${res2.status}`)
+      return []
+    }
+    const rows = await res2.json() as Array<{
+      org_id:        string
+      role:          UserRole
+      organizations: { name: string } | null
+    }>
+    return rows.map(row => ({
+      org_id:              row.org_id,
+      org_name:            row.organizations?.name ?? 'My Organization',
+      role:                row.role,
+      onboarding_complete: null, // pre-migration: treat as already onboarded
+    }))
+  }
 
-  return rows.map(row => ({
-    org_id:   row.org_id,
-    org_name: row.organizations?.name ?? 'My Organization',
-    role:     row.role,
-  }))
+  console.warn(`[auth] fetchAllOrgMemberships HTTP ${res1.status}`)
+  return []
 }
 
 // ── selectActiveOrg ────────────────────────────────────────────────────────────

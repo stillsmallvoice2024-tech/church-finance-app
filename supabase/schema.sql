@@ -178,7 +178,7 @@ create table public.inflow_transactions (
 -- ============================================================
 create table public.outflow_types (
   id               uuid default gen_random_uuid() primary key,
-  name             text not null unique,
+  name             text not null,
   color            text not null default '#64748b',
   is_system        boolean not null default false,
   is_locked        boolean not null default false,
@@ -1108,13 +1108,17 @@ create index if not exists idx_drs_report_at on public.dynamic_report_snapshots(
 -- ORGANIZATIONS & MULTI-TENANT FOUNDATION (Phase 1)
 -- ============================================================
 create table if not exists public.organizations (
-  id         uuid        primary key default gen_random_uuid(),
-  name       text        not null,
-  slug       text        not null unique,
-  created_by uuid        references public.profiles(id) on delete set null,
-  metadata   jsonb       not null default '{}',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  id                   uuid        primary key default gen_random_uuid(),
+  name                 text        not null,
+  slug                 text        not null unique,
+  created_by           uuid        references public.profiles(id) on delete set null,
+  metadata             jsonb       not null default '{}',
+  default_currency     text        not null default 'NGN',
+  fiscal_year_start    int         not null default 1 check (fiscal_year_start between 1 and 12),
+  timezone             text        not null default 'Africa/Lagos',
+  onboarding_complete  boolean     not null default true,
+  created_at           timestamptz not null default now(),
+  updated_at           timestamptz not null default now()
 );
 
 alter table public.organizations enable row level security;
@@ -1186,6 +1190,12 @@ alter table public.transaction_allocation_snapshots add column if not exists org
 alter table public.recalculation_logs        add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
 alter table public.dynamic_reports           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
 alter table public.outflow_types             add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
+
+-- Multi-tenant outflow_types: scope uniqueness to (org_id, name) instead of global name.
+do $$ begin
+  alter table public.outflow_types add constraint outflow_types_org_name_unique unique (org_id, name);
+exception when duplicate_object then null;
+end $$;
 alter table public.category_outflow_type_map add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
 alter table public.category_opening_balances add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
 
@@ -1267,3 +1277,91 @@ returns boolean language sql security definer stable as $$
       and status  = 'active'
   );
 $$;
+
+-- ── Onboarding RPCs (20260530000000) ─────────────────────────────────────────
+
+-- create_organization: atomically creates a new org + admin membership.
+-- SECURITY DEFINER bypasses is_admin() RLS on organizations for new users.
+create or replace function public.create_organization(p_name text)
+returns uuid language plpgsql security definer as $$
+declare
+  v_user_id  uuid := auth.uid();
+  v_org_id   uuid;
+  v_slug     text;
+  v_attempt  int  := 0;
+begin
+  if v_user_id is null then raise exception 'Not authenticated'; end if;
+  if length(trim(p_name)) = 0 then raise exception 'Organisation name cannot be empty'; end if;
+
+  v_slug := lower(regexp_replace(trim(p_name), '[^a-z0-9]+', '-', 'g'));
+  v_slug := trim(both '-' from v_slug);
+  if v_slug = '' or v_slug = 'primary' then v_slug := 'org'; end if;
+
+  loop
+    begin
+      insert into public.organizations (name, slug, created_by, onboarding_complete)
+      values (trim(p_name), case when v_attempt = 0 then v_slug else v_slug || '-' || v_attempt end, v_user_id, false)
+      returning id into v_org_id;
+      exit;
+    exception when unique_violation then
+      v_attempt := v_attempt + 1;
+      if v_attempt > 9 then raise exception 'Could not generate a unique slug for: %', p_name; end if;
+    end;
+  end loop;
+
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org_id, v_user_id, 'admin', 'active')
+  on conflict (org_id, user_id) do update set role = 'admin', status = 'active';
+
+  delete from public.org_members
+  where  org_id  = (select id from public.organizations where slug = 'primary' limit 1)
+    and  user_id = v_user_id
+    and  role    = 'viewer';
+
+  return v_org_id;
+end;
+$$;
+
+grant execute on function public.create_organization(text) to authenticated;
+
+-- complete_org_onboarding: saves settings + seeds defaults + marks wizard done.
+create or replace function public.complete_org_onboarding(
+  p_org_id            uuid,
+  p_name              text,
+  p_default_currency  text default 'NGN',
+  p_fiscal_year_start int  default 1,
+  p_timezone          text default 'Africa/Lagos'
+)
+returns void language plpgsql security definer as $$
+declare v_user_id uuid := auth.uid();
+begin
+  if not exists (
+    select 1 from public.org_members
+    where org_id = p_org_id and user_id = v_user_id and role = 'admin' and status = 'active'
+  ) then
+    raise exception 'Unauthorized: only org admins can complete onboarding';
+  end if;
+
+  update public.organizations
+  set name = trim(p_name), default_currency = p_default_currency,
+      fiscal_year_start = p_fiscal_year_start, timezone = p_timezone,
+      onboarding_complete = true, updated_at = now()
+  where id = p_org_id;
+
+  if not exists (select 1 from public.income_types where org_id = p_org_id limit 1) then
+    insert into public.income_types (org_id, name, color) values
+      (p_org_id, 'Tithe',          '#6366f1'),
+      (p_org_id, 'Offering',       '#10b981'),
+      (p_org_id, 'Donation',       '#f59e0b'),
+      (p_org_id, 'Special Giving', '#ec4899'),
+      (p_org_id, 'Thanksgiving',   '#3b82f6'),
+      (p_org_id, 'Project',        '#8b5cf6');
+  end if;
+
+  insert into public.outflow_types (org_id, name, color, is_system, is_locked)
+  values (p_org_id, 'General', '#64748b', true, true)
+  on conflict (org_id, name) do nothing;
+end;
+$$;
+
+grant execute on function public.complete_org_onboarding(uuid, text, text, int, text) to authenticated;

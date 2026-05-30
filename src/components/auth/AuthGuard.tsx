@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useAuthStore } from '../../store/authStore'
 import { useOrgStore } from '../../store/orgStore'
@@ -62,7 +62,7 @@ function ProfileErrorScreen({ onSignOut }: { onSignOut: () => void }) {
 
 // ── NoOrgScreen ───────────────────────────────────────────────────────────────
 // Shown when the user is authenticated but belongs to no active org.
-function NoOrgScreen({ onSignOut }: { onSignOut: () => void }) {
+function NoOrgScreen({ onSignOut, onCreateOrg }: { onSignOut: () => void; onCreateOrg: () => void }) {
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background px-4">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-100 text-amber-500 shadow-md">
@@ -72,18 +72,26 @@ function NoOrgScreen({ onSignOut }: { onSignOut: () => void }) {
         </svg>
       </div>
       <div className="text-center max-w-sm">
-        <p className="text-base font-semibold text-gray-800">No organization access</p>
+        <p className="text-base font-semibold text-gray-800">No organisation access</p>
         <p className="mt-1 text-sm text-gray-500">
-          Your account isn't linked to any organization yet.
-          Contact your administrator to be added to an organization.
+          Your account isn't linked to any organisation yet.
+          You can create a new organisation or contact your administrator.
         </p>
       </div>
-      <button
-        onClick={onSignOut}
-        className="mt-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary-light"
-      >
-        Sign out
-      </button>
+      <div className="flex gap-3 mt-2">
+        <button
+          onClick={onCreateOrg}
+          className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary-light"
+        >
+          Create Organisation
+        </button>
+        <button
+          onClick={onSignOut}
+          className="rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+        >
+          Sign out
+        </button>
+      </div>
     </div>
   )
 }
@@ -94,17 +102,30 @@ export function AuthGuard() {
   const profileFetchFailed = useAuthStore((s) => s.profileFetchFailed)
   const orgId      = useOrgStore((s) => s.orgId)
   const switching  = useOrgStore((s) => s.switching)
+  const location   = useLocation()
+  const navigate   = useNavigate()
+
+  // /onboarding is accessible without an org (user may be creating one)
+  const isOnboarding = location.pathname === '/onboarding'
 
   if (loading) return <FullPageSpinner />
 
-  if (switching) return <FullPageSpinner label="Switching organization…" />
+  if (switching) return <FullPageSpinner label="Switching organisation…" />
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
 
   if (!profile && profileFetchFailed) return <ProfileErrorScreen onSignOut={signOut} />
 
-  // Authenticated + profile loaded but no org membership resolved
-  if (profile && !orgId) return <NoOrgScreen onSignOut={signOut} />
+  // Authenticated + profile loaded but no org membership — allow /onboarding so
+  // the user can create their first org there.
+  if (profile && !orgId && !isOnboarding) {
+    return (
+      <NoOrgScreen
+        onSignOut={signOut}
+        onCreateOrg={() => navigate('/onboarding')}
+      />
+    )
+  }
 
   return (
     <RoleContext.Provider value={role}>
