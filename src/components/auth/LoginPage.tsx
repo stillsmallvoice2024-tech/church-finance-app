@@ -39,6 +39,7 @@ export default function LoginPage() {
   const [signupConfirm,  setSignupConfirm]  = useState('')
   const [showSignupPw,   setShowSignupPw]   = useState(false)
   const [showSignupConf, setShowSignupConf] = useState(false)
+  const [signupPending,  setSignupPending]  = useState(false)
 
   useEffect(() => {
     if (isAuthenticated) navigate('/', { replace: true })
@@ -98,6 +99,17 @@ export default function LoginPage() {
     if (!signUpData.user) {
       setLoading(false)
       setError('An account with this email already exists. Please sign in instead.')
+      return
+    }
+
+    // Email confirmation is enabled — no session yet.
+    // The user must confirm their email before auth.uid() is valid, so calling
+    // create_organization() now would fail with "Not authenticated".
+    // After confirmation the auth listener fires SIGNED_IN, profile loads, and
+    // NoOrgScreen → /onboarding handles org creation.
+    if (!signUpData.session) {
+      setLoading(false)
+      setSignupPending(true)
       return
     }
 
@@ -189,6 +201,16 @@ export default function LoginPage() {
                 </div>
               )}
 
+              {signupPending ? (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <CheckCircle2 className="w-10 h-10 text-success" />
+                  <p className="text-sm font-medium text-gray-700">Check your email!</p>
+                  <p className="text-xs text-gray-500 text-center">
+                    We sent a confirmation link to <span className="font-medium">{signupEmail}</span>.
+                    Click it to activate your account — you'll then be guided to set up your organisation.
+                  </p>
+                </div>
+              ) : (
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-600">Organisation Name *</label>
@@ -287,9 +309,10 @@ export default function LoginPage() {
                   {loading ? 'Creating account…' : 'Create account & organisation'}
                 </button>
               </form>
+              )}
 
               <button
-                onClick={() => { setMode('signin'); setError(null) }}
+                onClick={() => { setMode('signin'); setError(null); setSignupPending(false) }}
                 className="mt-4 w-full text-center text-xs text-primary hover:underline"
               >
                 ← Back to sign in
