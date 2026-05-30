@@ -15,18 +15,14 @@ create table public.profiles (
   updated_at timestamptz default now()
 );
 
--- Auto-create profile on signup and enroll in primary org as viewer.
--- Both the profiles INSERT and the org_members INSERT are wrapped in
--- independent WHEN OTHERS handlers so ANY constraint or schema error is
--- logged (RAISE WARNING → Supabase Postgres logs) but never re-raised.
--- Auth user creation therefore ALWAYS succeeds.
--- accept_invitation() guarantees profile + org_members are created
--- atomically when the invited user accepts, so a trigger failure here
--- is always recoverable.
+-- Auto-create profile on signup.
+-- Only creates the profile row — org membership is set explicitly by:
+--   • create_organization()  for self-signups
+--   • accept_invitation()    for invited users
+-- Auto-assigning to 'primary' caused self-signups to inherit the existing
+-- primary org instead of creating their own (see migration 20260530000003).
 create or replace function public.handle_new_user()
 returns trigger as $$
-declare
-  v_org_id uuid;
 begin
   -- Profile insert: attempt with username; fall back to NULL on unique conflict.
   begin
@@ -50,18 +46,6 @@ begin
       end;
     when others then
       raise warning '[handle_new_user] profile insert failed user=% sqlstate=% err=%', new.id, sqlstate, sqlerrm;
-  end;
-
-  -- Org-members insert: errors logged but not re-raised.
-  begin
-    select id into v_org_id from public.organizations where slug = 'primary' limit 1;
-    if v_org_id is not null then
-      insert into public.org_members (org_id, user_id, role, status)
-      values (v_org_id, new.id, 'viewer', 'active')
-      on conflict (org_id, user_id) do nothing;
-    end if;
-  exception when others then
-    raise warning '[handle_new_user] org_members insert failed user=% sqlstate=% err=%', new.id, sqlstate, sqlerrm;
   end;
 
   return new;

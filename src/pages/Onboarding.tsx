@@ -49,25 +49,33 @@ const STEPS = [
 ]
 
 export default function Onboarding() {
-  const navigate    = useNavigate()
-  const storeOrgId  = useOrgStore(s => s.orgId)
+  const navigate     = useNavigate()
+  const storeOrgId   = useOrgStore(s => s.orgId)
   const storeOrgName = useOrgStore(s => s.orgName)
+  const storeOrgRole = useOrgStore(s => s.orgRole)
   const { currencies } = useCurrencies()
 
-  const [step,        setStep]        = useState(1)
-  const [localOrgId,  setLocalOrgId]  = useState<string | null>(storeOrgId)
-  const [name,        setName]        = useState(storeOrgName ?? '')
-  const [currency,    setCurrency]    = useState('')
-  const [yearStart,   setYearStart]   = useState(1)
-  const [timezone,    setTimezone]    = useState('Africa/Lagos')
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState<string | null>(null)
+  // Only inherit an existing org when the user is already its admin (i.e. the
+  // org was just created by create_organization() in LoginPage for the
+  // email-confirmation-disabled flow).  A viewer membership means the user was
+  // auto-attached to an existing org by the DB trigger — never adopt that org.
+  const isAdminOfStoredOrg = storeOrgRole === 'admin'
 
-  // Sync when the store loads (handles case where auth resolves after mount)
+  const [step,       setStep]       = useState(1)
+  const [localOrgId, setLocalOrgId] = useState<string | null>(isAdminOfStoredOrg ? storeOrgId : null)
+  const [name,       setName]       = useState(isAdminOfStoredOrg ? (storeOrgName ?? '') : '')
+  const [currency,   setCurrency]   = useState('')
+  const [yearStart,  setYearStart]  = useState(1)
+  const [timezone,   setTimezone]   = useState('Africa/Lagos')
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState<string | null>(null)
+
+  // Sync when the store loads — only if the user is admin of the stored org.
   useEffect(() => {
+    if (!isAdminOfStoredOrg) return
     if (storeOrgId && !localOrgId) setLocalOrgId(storeOrgId)
     if (storeOrgName && !name)     setName(storeOrgName)
-  }, [storeOrgId, storeOrgName]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [storeOrgId, storeOrgName, isAdminOfStoredOrg]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Default currency to the first option once currencies load
   useEffect(() => {
