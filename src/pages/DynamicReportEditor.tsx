@@ -19,6 +19,7 @@ import {
 } from '../hooks/useDynamicReports'
 import { useCategories } from '../hooks/useCategories'
 import { useToastStore } from '../store/toastStore'
+import { useOrgStore } from '../store/orgStore'
 import {
   parseTokens,
   resolveTokens,
@@ -108,6 +109,7 @@ function InsertBlockModal({
   onInsertMetric: (token: string) => void
   onInsertEmbed: (id: string, type: 'formula' | 'table', config: Record<string, unknown>) => void
 }) {
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency)
   const [tab, setTab] = useState<InsertTab>('metric')
 
   // Metric state
@@ -123,7 +125,7 @@ function InsertBlockModal({
   const [fDateFrom, setFDateFrom] = useState('')
   const [fDateTo,   setFDateTo]   = useState('')
   const [fDateField, setFDateField] = useState('date')
-  const [fCurrency, setFCurrency] = useState('NGN')
+  const [fCurrency, setFCurrency] = useState(defaultCurrency ?? '')
   const [fLabel,    setFLabel]    = useState('')
 
   // Table state
@@ -133,7 +135,7 @@ function InsertBlockModal({
   const [tDateFrom, setTDateFrom] = useState('')
   const [tDateTo,   setTDateTo]   = useState('')
   const [tDateField, setTDateField] = useState('date')
-  const [tCurrency, setTCurrency] = useState('NGN')
+  const [tCurrency, setTCurrency] = useState(defaultCurrency ?? '')
   const [tLabel,    setTLabel]    = useState('')
 
   // Reset on open
@@ -142,9 +144,9 @@ function InsertBlockModal({
     setTab('metric')
     setMFn('BALANCE'); setMCategory(categoryNames[0] ?? ''); setMPortion('all')
     setMDateFrom(''); setMDateTo(''); setMDateField('date')
-    setFTerms([]); setFDateFrom(''); setFDateTo(''); setFDateField('date'); setFCurrency('NGN'); setFLabel('')
+    setFTerms([]); setFDateFrom(''); setFDateTo(''); setFDateField('date'); setFCurrency(defaultCurrency ?? ''); setFLabel('')
     setTCats([]); setTCols(['inflows', 'outflows', 'balance']); setTPortion('all')
-    setTDateFrom(''); setTDateTo(''); setTDateField('date'); setTCurrency('NGN'); setTLabel('')
+    setTDateFrom(''); setTDateTo(''); setTDateField('date'); setTCurrency(defaultCurrency ?? ''); setTLabel('')
   }, [open, categoryNames])
 
   const insertDisabled =
@@ -1597,6 +1599,7 @@ export default function DynamicReportEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { push: pushToast } = useToastStore()
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency)
 
   const { reports, loading: reportsLoading } = useDynamicReports()
   const report: DynamicReport | undefined = reports.find(r => r.id === id)
