@@ -1,9 +1,14 @@
 -- ============================================================
--- FIX v3: accept_invitation — username persistence + org fallback
+-- FIX v3: add profiles.username column + accept_invitation fixes
 -- Idempotent — safe to re-run.
 -- Prerequisites: Phases 1–5 + migration 000003 applied.
 --
 -- WHY THIS IS NEEDED
+--
+--   0) profiles.username column missing: schema.sql defines the column but no
+--      migration ever ran ALTER TABLE to add it to the live database.  All
+--      downstream fixes (username login, invite signup) fail until this column
+--      exists.
 --
 --   a) Username never saved: migration 000003's accept_invitation inserts the
 --      profile with only (id, email, full_name).  username is omitted, so if the
@@ -18,6 +23,8 @@
 --      access" after signup.
 --
 -- THIS MIGRATION
+-- 0. Adds profiles.username (text, unique, nullable) if it doesn't already exist.
+--
 -- 1. Updates accept_invitation to include username in the profile INSERT.
 --    ON CONFLICT (id) DO UPDATE sets full_name + username only if currently NULL
 --    (COALESCE), so existing non-null values from handle_new_user are preserved.
@@ -28,6 +35,23 @@
 --    organization in the database.  A RAISE WARNING is emitted when org_id is
 --    still NULL after all fallbacks (visible in Supabase Logs → Postgres).
 -- ============================================================
+
+
+-- ── 0. Add profiles.username column if missing ────────────────────────────────
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS username text;
+
+-- Add the unique index only if it doesn't already exist.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE tablename = 'profiles' AND indexname = 'profiles_username_key'
+  ) THEN
+    CREATE UNIQUE INDEX profiles_username_key ON public.profiles (username);
+  END IF;
+END
+$$;
 
 
 CREATE OR REPLACE FUNCTION public.accept_invitation(p_token uuid, p_user_id uuid)
