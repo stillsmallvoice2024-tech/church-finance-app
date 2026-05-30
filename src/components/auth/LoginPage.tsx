@@ -107,11 +107,18 @@ export default function LoginPage() {
       updated_at: new Date().toISOString(),
     }).eq('id', signUpData.user.id)
 
-    const { data: orgId, error: orgErr } = await supabase.rpc('create_organization', {
-      p_name: signupOrgName.trim(),
-    })
+    const rpcParams = { p_name: signupOrgName.trim() }
+    const { data: orgId, error: orgErr } = await supabase.rpc('create_organization', rpcParams)
 
     if (orgErr) {
+      console.error('[signup] create_organization failed', {
+        rpc:    'create_organization',
+        params: rpcParams,
+        code:   (orgErr as { code?: string }).code,
+        details:(orgErr as { details?: string }).details,
+        hint:   (orgErr as { hint?: string }).hint,
+        message: orgErr.message,
+      })
       setLoading(false)
       setError(`Account created but organisation setup failed: ${orgErr.message}`)
       return
