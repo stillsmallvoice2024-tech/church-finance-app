@@ -35,17 +35,16 @@ export default function LoginPage() {
 
   const resolveEmail = async (input: string): Promise<string | null> => {
     if (input.includes('@')) return input
+    // Direct table query is blocked by RLS for unauthenticated users, so we
+    // use a SECURITY DEFINER RPC that can bypass RLS safely.
     const { data, error } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('username', input.trim().toLowerCase())
-      .maybeSingle()
+      .rpc('resolve_username', { p_username: input.trim().toLowerCase() })
     if (error) {
       console.error('[login] username lookup error:', error)
       setError('Sign-in error — please try again using your email address.')
       return null
     }
-    return data?.email ?? null
+    return (data as string | null) ?? null
   }
 
   const handleSignIn = async (e: React.FormEvent) => {
