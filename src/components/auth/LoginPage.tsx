@@ -35,11 +35,16 @@ export default function LoginPage() {
 
   const resolveEmail = async (input: string): Promise<string | null> => {
     if (input.includes('@')) return input
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('email')
       .eq('username', input.trim().toLowerCase())
       .maybeSingle()
+    if (error) {
+      console.error('[login] username lookup error:', error)
+      setError('Sign-in error — please try again using your email address.')
+      return null
+    }
     return data?.email ?? null
   }
 
@@ -50,7 +55,7 @@ export default function LoginPage() {
     const email = await resolveEmail(identifier)
     if (!email) {
       setLoading(false)
-      setError('No account found for that username.')
+      if (!error) setError('No account found for that username. Try signing in with your email address instead.')
       return
     }
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
@@ -65,7 +70,7 @@ export default function LoginPage() {
     const email = await resolveEmail(identifier)
     if (!email) {
       setLoading(false)
-      setError('No account found for that username or email.')
+      if (!error) setError('No account found for that username or email.')
       return
     }
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
