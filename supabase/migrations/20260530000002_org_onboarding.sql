@@ -27,9 +27,14 @@ ALTER TABLE public.organizations
 ALTER TABLE public.outflow_types DROP CONSTRAINT IF EXISTS outflow_types_name_key;
 
 DO $$ BEGIN
-  ALTER TABLE public.outflow_types
-    ADD CONSTRAINT outflow_types_org_name_unique UNIQUE (org_id, name);
-EXCEPTION WHEN duplicate_object THEN NULL;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'outflow_types_org_name_unique'
+      AND conrelid = 'public.outflow_types'::regclass
+  ) THEN
+    ALTER TABLE public.outflow_types
+      ADD CONSTRAINT outflow_types_org_name_unique UNIQUE (org_id, name);
+  END IF;
 END $$;
 
 -- ── 3. create_organization() ───────────────────────────────────────────────────
