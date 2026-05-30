@@ -16,13 +16,19 @@ create table public.profiles (
 );
 
 -- Auto-create profile on signup and enroll in primary org as viewer.
--- Inner exception block prevents username UNIQUE conflicts from aborting
--- auth user creation ("Database error saving new user").
+-- Both the profiles INSERT and the org_members INSERT are wrapped in
+-- independent WHEN OTHERS handlers so ANY constraint or schema error is
+-- logged (RAISE WARNING → Supabase Postgres logs) but never re-raised.
+-- Auth user creation therefore ALWAYS succeeds.
+-- accept_invitation() guarantees profile + org_members are created
+-- atomically when the invited user accepts, so a trigger failure here
+-- is always recoverable.
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
   v_org_id uuid;
 begin
+  -- Profile insert: attempt with username; fall back to NULL on unique conflict.
   begin
     insert into public.profiles (id, email, full_name, username)
     values (
@@ -32,19 +38,31 @@ begin
       new.raw_user_meta_data->>'username'
     )
     on conflict (id) do nothing;
-  exception when unique_violation then
-    raise notice '[handle_new_user] username conflict for user %; inserting with NULL username', new.id;
-    insert into public.profiles (id, email, full_name, username)
-    values (new.id, new.email, new.raw_user_meta_data->>'full_name', null)
-    on conflict (id) do nothing;
+  exception
+    when unique_violation then
+      raise warning '[handle_new_user] username conflict user=% — retrying with NULL username', new.id;
+      begin
+        insert into public.profiles (id, email, full_name, username)
+        values (new.id, new.email, new.raw_user_meta_data->>'full_name', null)
+        on conflict (id) do nothing;
+      exception when others then
+        raise warning '[handle_new_user] profile fallback insert failed user=% sqlstate=% err=%', new.id, sqlstate, sqlerrm;
+      end;
+    when others then
+      raise warning '[handle_new_user] profile insert failed user=% sqlstate=% err=%', new.id, sqlstate, sqlerrm;
   end;
 
-  select id into v_org_id from public.organizations where slug = 'primary' limit 1;
-  if v_org_id is not null then
-    insert into public.org_members (org_id, user_id, role, status)
-    values (v_org_id, new.id, 'viewer', 'active')
-    on conflict (org_id, user_id) do nothing;
-  end if;
+  -- Org-members insert: errors logged but not re-raised.
+  begin
+    select id into v_org_id from public.organizations where slug = 'primary' limit 1;
+    if v_org_id is not null then
+      insert into public.org_members (org_id, user_id, role, status)
+      values (v_org_id, new.id, 'viewer', 'active')
+      on conflict (org_id, user_id) do nothing;
+    end if;
+  exception when others then
+    raise warning '[handle_new_user] org_members insert failed user=% sqlstate=% err=%', new.id, sqlstate, sqlerrm;
+  end;
 
   return new;
 end;
@@ -725,12 +743,14 @@ $$;
 
 -- Atomically sets the role from the invite, syncs org_members, marks consumed.
 -- p_user_id must equal auth.uid() to block accepting on behalf of others.
+-- Guarantees profile row exists (fallback if handle_new_user trigger failed).
 create or replace function public.accept_invitation(p_token uuid, p_user_id uuid)
 returns void
 language plpgsql security definer
 as $$
 declare
   v_invite public.invitations;
+  v_org_id uuid;
 begin
   if p_user_id != auth.uid() then
     raise exception 'Unauthorized';
@@ -747,18 +767,34 @@ begin
     raise exception 'Invalid or expired invitation';
   end if;
 
+  -- Ensure profile row exists before updating it and before org_members
+  -- references it via FK.  No-ops if handle_new_user already created it.
+  insert into public.profiles (id, email)
+  select p_user_id, u.email
+  from   auth.users u
+  where  u.id = p_user_id
+  on conflict (id) do nothing;
+
   -- Keep profiles.role in sync for frontend useRole() hook
   update public.profiles
     set role       = v_invite.role,
         updated_at = now()
   where id = p_user_id;
 
+  -- Resolve org_id — fall back to primary org for pre-Phase 5 invites.
+  v_org_id := v_invite.org_id;
+  if v_org_id is null then
+    select id into v_org_id from public.organizations where slug = 'primary' limit 1;
+  end if;
+
   -- Upsert org_members.role (authoritative for Phase 3 RLS helpers)
-  insert into public.org_members (org_id, user_id, role, status)
-  values (v_invite.org_id, p_user_id, v_invite.role, 'active')
-  on conflict (org_id, user_id) do update
-    set role   = excluded.role,
-        status = 'active';
+  if v_org_id is not null then
+    insert into public.org_members (org_id, user_id, role, status)
+    values (v_org_id, p_user_id, v_invite.role, 'active')
+    on conflict (org_id, user_id) do update
+      set role   = excluded.role,
+          status = 'active';
+  end if;
 
   update public.invitations
     set status      = 'accepted',
