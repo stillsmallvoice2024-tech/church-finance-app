@@ -208,6 +208,23 @@ create index idx_cotm_category on public.category_outflow_type_map(category_id);
 create index idx_cotm_type     on public.category_outflow_type_map(outflow_type_id);
 
 -- ============================================================
+-- DEPARTMENTS / UNITS
+-- ============================================================
+create table public.departments (
+  id          uuid default gen_random_uuid() primary key,
+  name        text not null,
+  code        text,
+  description text,
+  active      boolean not null default true,
+  org_id      uuid references public.organizations(id) on delete set null,
+  created_by  uuid references public.profiles(id),
+  created_at  timestamptz default now(),
+  updated_at  timestamptz default now()
+);
+create unique index departments_org_name_unique on public.departments(org_id, name);
+create index idx_departments_org_active on public.departments(org_id, active);
+
+-- ============================================================
 -- TRANSACTIONS — OUTFLOWS
 -- ============================================================
 create table public.outflow_transactions (
@@ -232,6 +249,7 @@ create table public.outflow_transactions (
   original_transaction_id  text,
   allocation_config_id     uuid references public.allocation_configs(id) on delete set null,
   outflow_type_id          uuid references public.outflow_types(id) on delete set null,
+  department_id            uuid references public.departments(id) on delete set null,
   is_pending_deduction     boolean not null default false,
   created_by               uuid references public.profiles(id),
   recorded_at              timestamptz default now(),
@@ -450,6 +468,7 @@ alter table public.audit_log             enable row level security;
 alter table public.field_changes         enable row level security;
 alter table public.outflow_types         enable row level security;
 alter table public.category_outflow_type_map enable row level security;
+alter table public.departments           enable row level security;
 
 -- ── Helper functions ───────────────────────────────────────────────────────────
 -- is_admin / is_finance_user use org_members so suspended users lose access
@@ -591,6 +610,17 @@ create policy "cotm_insert" on public.category_outflow_type_map
   for insert with check (public.is_org_finance_user(org_id));
 create policy "cotm_delete" on public.category_outflow_type_map
   for delete using (public.is_org_finance_user(org_id));
+
+-- ── Departments ───────────────────────────────────────────────────────────────
+
+create policy "departments_select" on public.departments
+  for select using (public.is_org_member(org_id));
+create policy "departments_insert" on public.departments
+  for insert with check (public.is_org_finance_user(org_id));
+create policy "departments_update" on public.departments
+  for update using (public.is_org_finance_user(org_id));
+create policy "departments_delete" on public.departments
+  for delete using (public.is_org_admin(org_id));
 
 -- ── Inflow Transactions ────────────────────────────────────────────────────────
 
@@ -867,8 +897,9 @@ create index if not exists idx_income_type_rules on public.income_type_rules(inc
 create index if not exists idx_inflow_income_type   on public.inflow_transactions(income_type_id);
 create index if not exists idx_inflow_txn_type     on public.inflow_transactions(transaction_type);
 create index if not exists idx_outflow_txn_type    on public.outflow_transactions(transaction_type);
-create index if not exists idx_categories_group    on public.categories(group_id);
-create index if not exists idx_invitations_token on public.invitations(token);
+create index if not exists idx_categories_group        on public.categories(group_id);
+create index if not exists idx_invitations_token       on public.invitations(token);
+create index if not exists idx_outflow_department_id   on public.outflow_transactions(department_id);
 
 -- ============================================================
 -- CATEGORY OPENING BALANCES
@@ -1237,6 +1268,7 @@ create index if not exists idx_recalc_logs_org        on public.recalculation_lo
 create index if not exists idx_dynamic_reports_org    on public.dynamic_reports(org_id);
 create index if not exists idx_outflow_types_org      on public.outflow_types(org_id);
 create index if not exists idx_cotm_org               on public.category_outflow_type_map(org_id);
+create index if not exists idx_departments_org        on public.departments(org_id);
 create index if not exists idx_cob_org                on public.category_opening_balances(org_id);
 
 -- ── Org-aware helper functions ────────────────────────────────

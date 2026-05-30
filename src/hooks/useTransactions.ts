@@ -55,6 +55,8 @@ export interface OutflowTransaction {
   original_transaction_id: string | null
   outflow_type_id: string | null
   outflow_type_name: string | null  // joined from outflow_types; null when unset
+  department_id: string | null
+  department_name: string | null    // joined from departments; null when unset
   recorded_at: string | null
   created_by: string | null
   created_at: string
@@ -223,7 +225,7 @@ export function useOutflowTransactions(
 
     let query = supabase
       .from('outflow_transactions')
-      .select('*, outflow_types ( name )', { count: 'exact' })
+      .select('*, outflow_types ( name ), departments ( name )', { count: 'exact' })
       .eq('org_id', orgId)
 
     // Server-side sort
@@ -268,15 +270,17 @@ export function useOutflowTransactions(
     } else {
       setData(
         (rows ?? []).map(r => {
-          const raw = r as Record<string, unknown>
-          const ot  = raw.outflow_types as { name: string } | null
+          const raw  = r as Record<string, unknown>
+          const ot   = raw.outflow_types as { name: string } | null
+          const dept = raw.departments   as { name: string } | null
           return {
-            ...(r as Omit<OutflowTransaction, 'display_description' | 'outflow_type_name'>),
+            ...(r as Omit<OutflowTransaction, 'display_description' | 'outflow_type_name' | 'department_name'>),
             display_description: normalizeNarration(
               (raw.description as string | null) ??
               (raw.bank_description as string | null)
             ),
-            outflow_type_name: ot?.name ?? null,
+            outflow_type_name: ot?.name   ?? null,
+            department_name:   dept?.name ?? null,
           }
         }) as OutflowTransaction[]
       )

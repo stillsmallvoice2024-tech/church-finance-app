@@ -18,6 +18,8 @@ import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeMod
 import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
 import { AddOutflowTypeModal }       from '../components/modals/AddOutflowTypeModal'
 import { useOutflowTypes, useCategoryOutflowTypeMaps, deleteOutflowType, type OutflowType } from '../hooks/useOutflowTypes'
+import { AddDepartmentModal }        from '../components/modals/AddDepartmentModal'
+import { useDepartments, deleteDepartment, type Department } from '../hooks/useDepartments'
 import { useCategories } from '../hooks/useCategories'
 import { useCurrencies, useAddCurrency, useDeleteCurrency } from '../hooks/useCurrencies'
 import {
@@ -29,7 +31,7 @@ import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Currencies'] as const
+const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 // ── Compact shared search + sort bar for Setup tabs ──────────────────────────────
@@ -1574,6 +1576,57 @@ BEGIN
 END; $$;
 GRANT EXECUTE ON FUNCTION public.complete_org_onboarding(uuid,text,text,int,text) TO authenticated;
 
+-- ── Departments / Units ────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.departments (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text NOT NULL,
+  code        text,
+  description text,
+  active      boolean NOT NULL DEFAULT true,
+  org_id      uuid REFERENCES organizations(id) ON DELETE SET NULL,
+  created_by  uuid REFERENCES profiles(id),
+  created_at  timestamptz DEFAULT now(),
+  updated_at  timestamptz DEFAULT now()
+);
+
+DO $$ BEGIN
+  ALTER TABLE public.departments ADD CONSTRAINT departments_org_name_unique UNIQUE (org_id, name);
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_departments_org_active ON public.departments(org_id, active);
+
+ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "departments_select" ON public.departments
+    FOR SELECT TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "departments_insert" ON public.departments
+    FOR INSERT TO authenticated WITH CHECK (is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "departments_update" ON public.departments
+    FOR UPDATE TO authenticated USING (is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "departments_delete" ON public.departments
+    FOR DELETE TO authenticated USING (is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- FK on outflow_transactions
+ALTER TABLE public.outflow_transactions
+  ADD COLUMN IF NOT EXISTS department_id uuid REFERENCES departments(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_outflow_department_id ON public.outflow_transactions(department_id);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
@@ -1823,6 +1876,112 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
+// ── Departments tab ───────────────────────────────────────────────────────────────────
+
+function DepartmentsTab({ onAdd, onEdit, onDelete }: {
+  onAdd:    () => void
+  onEdit:   (d: Department) => void
+  onDelete: (d: Department) => void
+}) {
+  const { departments, loading, error } = useDepartments()
+  const [search, setSearch] = useState('')
+  const [sort,   setSort]   = useState('name|asc')
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = q
+      ? departments.filter(d => [d.name, d.code ?? '', d.description ?? ''].some(v => v.toLowerCase().includes(q)))
+      : departments
+    return applySetupSort(filtered, sort)
+  }, [departments, search, sort])
+
+  if (loading) return (
+    <div className="max-w-2xl space-y-2">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+      ))}
+    </div>
+  )
+
+  const isTableMissing = !!error && /relation.*does not exist|could not find the 'departments' relation/i.test(error)
+
+  if (error && !isTableMissing) return (
+    <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 max-w-2xl">
+      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+    </div>
+  )
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      {isTableMissing && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>The <code className="font-mono text-xs">departments</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-gray-500">Departments and units for outflow tracking. Does not affect balances or allocations.</p>
+        <button
+          onClick={onAdd}
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Department
+        </button>
+      </div>
+
+      {departments.length === 0 && !error ? (
+        <div className="py-12 flex flex-col items-center gap-3 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+          <Layers className="w-10 h-10 text-gray-200" />
+          <p className="text-sm">No departments yet. Add one to track spending by unit.</p>
+          <p className="text-xs text-center text-gray-300 max-w-xs">Examples: Finance, Administration, Welfare, Youth, Media</p>
+        </div>
+      ) : (
+        <>
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={TYPE_SORT_OPTS} placeholder="Search departments…" />
+          {visible.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">No departments match your search.</p>
+          ) : (
+            <div className="space-y-2">
+              {visible.map(d => (
+                <div key={d.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900">{d.name}</p>
+                      {d.code && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-mono">{d.code}</span>
+                      )}
+                      {!d.active && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+                      )}
+                    </div>
+                    {d.description && (
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{d.description}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => onEdit(d)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => onDelete(d)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-gray-400">
+            {visible.length !== departments.length
+              ? `${visible.length} of ${departments.length} departments`
+              : `${departments.length} department${departments.length !== 1 ? 's' : ''}`}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 function DatabaseTab() {
   const [copied, setCopied] = useState(false)
 
@@ -1901,6 +2060,10 @@ export default function SetupPage() {
   const [editOutflowType,        setEditOutflowType]        = useState<OutflowType | null>(null)
   const [deleteOutflowTypeTarget, setDeleteOutflowTypeTarget] = useState<OutflowType | null>(null)
   const [outflowTypeRefetch,     setOutflowTypeRefetch]     = useState(0)
+  const [departmentModalOpen,    setDepartmentModalOpen]    = useState(false)
+  const [editDepartment,         setEditDepartment]         = useState<Department | null>(null)
+  const [deleteDepartmentTarget, setDeleteDepartmentTarget] = useState<Department | null>(null)
+  const [departmentRefetch,      setDepartmentRefetch]      = useState(0)
   const [devToolsOpen,         setDevToolsOpen]         = useState(false)
   const { configs, reload: reloadAllocs } = useAllocationStore()
 
@@ -2061,6 +2224,14 @@ export default function SetupPage() {
               onAdd={() => { setEditOutflowType(null); setOutflowTypeModalOpen(true) }}
               onEdit={t => { setEditOutflowType(t); setOutflowTypeModalOpen(true) }}
               onDelete={t => setDeleteOutflowTypeTarget(t)}
+            />
+          )}
+          {activeTab === 'Departments' && (
+            <DepartmentsTab
+              key={departmentRefetch}
+              onAdd={() => { setEditDepartment(null); setDepartmentModalOpen(true) }}
+              onEdit={d => { setEditDepartment(d); setDepartmentModalOpen(true) }}
+              onDelete={d => setDeleteDepartmentTarget(d)}
             />
           )}
           {activeTab === 'Currencies'     && <CurrenciesTab />}
@@ -2268,6 +2439,29 @@ export default function SetupPage() {
         }}
         loading={false}
         label={deleteOutflowTypeTarget ? `"${deleteOutflowTypeTarget.name}"` : 'this outflow type'}
+      />
+      <AddDepartmentModal
+        open={departmentModalOpen}
+        onClose={() => { setDepartmentModalOpen(false); setEditDepartment(null) }}
+        onSaved={() => { setDepartmentModalOpen(false); setEditDepartment(null); setDepartmentRefetch(n => n + 1) }}
+        editRecord={editDepartment}
+      />
+      <DeleteDialog
+        open={!!deleteDepartmentTarget}
+        onClose={() => setDeleteDepartmentTarget(null)}
+        onConfirm={async () => {
+          if (!deleteDepartmentTarget) return
+          try {
+            await deleteDepartment(deleteDepartmentTarget.id)
+            setDeleteDepartmentTarget(null)
+            setDepartmentRefetch(n => n + 1)
+            toast('Department deleted', 'success')
+          } catch (e) {
+            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+          }
+        }}
+        loading={false}
+        label={deleteDepartmentTarget ? `"${deleteDepartmentTarget.name}"` : 'this department'}
       />
     </>
   )
