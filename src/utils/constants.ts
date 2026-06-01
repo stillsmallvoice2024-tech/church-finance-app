@@ -1,12 +1,14 @@
 import type { UserRole } from '../types'
 
 export const ROLE_LABELS: Record<UserRole, string> = {
+  owner: 'Owner',
   admin: 'Admin',
   accountant: 'Accountant',
   viewer: 'Viewer',
 }
 
 export const ROLE_BADGE_CLASSES: Record<UserRole, string> = {
+  owner: 'bg-purple-100 text-purple-700',
   admin: 'bg-primary-100 text-primary',
   accountant: 'bg-accent-light text-accent',
   viewer: 'bg-gray-100 text-gray-600',

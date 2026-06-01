@@ -17,11 +17,12 @@ const inputCls =
   'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors'
 
 interface Invitation {
-  id:         string
-  email:      string
-  role:       string
-  org_name?:  string
-  status:     string
+  id:        string
+  email:     string
+  role:      string
+  org_id?:   string | null
+  org_name?: string | null
+  status:    string
   expires_at: string | null
 }
 
@@ -33,8 +34,8 @@ export default function AcceptInvite() {
   const [loadingInvite, setLoadingInvite] = useState(true)
   const [inviteError,   setInviteError]   = useState<string | null>(null)
 
-  // 'register' = new user sign-up; 'signin' = existing account detected
-  const [flow,      setFlow]      = useState<'register' | 'signin'>('register')
+  // 'register' = new user; 'signin' = existing account; 'loggedin' = already authenticated
+  const [flow,      setFlow]      = useState<'register' | 'signin' | 'loggedin'>('register')
   const [fullName,  setFullName]  = useState('')
   const [username,  setUsername]  = useState('')
   const [password,  setPassword]  = useState('')
@@ -55,13 +56,27 @@ export default function AcceptInvite() {
       const { data, error: err } = await supabase
         .rpc('get_invitation_by_token', { p_token: token })
 
-      setLoadingInvite(false)
       const invite = Array.isArray(data) ? data[0] : null
       if (err || !invite) {
+        setLoadingInvite(false)
         setInviteError('This invite link is invalid or has expired.')
         return
       }
       setInvitation(invite)
+
+      // Detect if user is already signed in
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      setLoadingInvite(false)
+
+      if (currentUser) {
+        if (currentUser.email?.toLowerCase() === invite.email.toLowerCase()) {
+          setFlow('loggedin')
+        } else {
+          setInviteError(
+            `You are signed in as ${currentUser.email}. This invite is for ${invite.email}. Please sign out first.`
+          )
+        }
+      }
     }
     fetchInvite()
   }, [token])
@@ -180,6 +195,30 @@ export default function AcceptInvite() {
     setTimeout(() => navigate('/', { replace: true }), 3000)
   }
 
+  // Already signed in with matching email — just accept directly.
+  const handleAcceptLoggedIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!invitation) return
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    if (!currentUser) { setError('Session expired. Please sign in again.'); return }
+
+    setLoading(true)
+    const { error: acceptErr } = await supabase
+      .rpc('accept_invitation', { p_token: token, p_user_id: currentUser.id })
+    setLoading(false)
+    if (acceptErr) {
+      setError(
+        acceptErr.message.includes('Unauthorized')
+          ? 'Session error — please refresh and try again.'
+          : 'Failed to accept invitation. It may have already been used.',
+      )
+      return
+    }
+    setDone(true)
+    setTimeout(() => navigate('/', { replace: true }), 2000)
+  }
+
   const orgDisplay = invitation?.org_name ?? 'Finance Manager'
 
   return (
@@ -223,6 +262,39 @@ export default function AcceptInvite() {
                 Redirecting to the dashboard…
               </p>
             </div>
+          ) : flow === 'loggedin' ? (
+            <>
+              <p className="mb-2 text-center text-sm font-semibold text-gray-700">
+                Join organisation
+              </p>
+              <p className="mb-4 text-center text-xs text-gray-500">
+                You're already signed in as <strong>{invitation?.email}</strong>.
+              </p>
+
+              <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2.5 text-xs text-blue-700">
+                Joining as <strong>{invitation?.email}</strong> with{' '}
+                <strong className="capitalize">{invitation?.role}</strong> role
+                {invitation?.org_name ? ` in ${invitation.org_name}` : ''}.
+              </div>
+
+              {error && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-danger">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleAcceptLoggedIn}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {loading ? 'Accepting…' : 'Accept invitation'}
+                </button>
+              </form>
+            </>
           ) : flow === 'signin' ? (
             <>
               <p className="mb-2 text-center text-sm font-semibold text-gray-700">

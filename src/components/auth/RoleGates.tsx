@@ -7,7 +7,13 @@ interface GateProps {
   fallback?: ReactNode
 }
 
-/** Renders children only when the authenticated user has the 'admin' role. */
+/** Renders children only when the authenticated user is an owner. */
+export function OwnerOnly({ children, fallback = null }: GateProps) {
+  const { isOwner } = useRole()
+  return isOwner() ? <>{children}</> : <>{fallback}</>
+}
+
+/** Renders children when the authenticated user is an owner or admin. */
 export function AdminOnly({ children, fallback = null }: GateProps) {
   const { isAdmin } = useRole()
   return isAdmin() ? <>{children}</> : <>{fallback}</>

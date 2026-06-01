@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Building2, Settings, CheckCircle2, ChevronRight, ChevronLeft, Loader2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
@@ -49,7 +49,9 @@ const STEPS = [
 ]
 
 export default function Onboarding() {
-  const navigate     = useNavigate()
+  const navigate      = useNavigate()
+  const [searchParams] = useSearchParams()
+  const isNewOrg      = searchParams.get('new') === 'true'
   const storeOrgId   = useOrgStore(s => s.orgId)
   const storeOrgName = useOrgStore(s => s.orgName)
   const storeOrgRole = useOrgStore(s => s.orgRole)
@@ -163,8 +165,12 @@ export default function Onboarding() {
           <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
             <AppIcon />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome!</h1>
-          <p className="mt-1 text-sm text-gray-500">Let's get your organisation set up.</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isNewOrg ? 'New Organisation' : 'Welcome!'}
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {isNewOrg ? 'Set up your new organisation.' : 'Let\'s get your organisation set up.'}
+          </p>
         </div>
 
         {/* Step indicators */}

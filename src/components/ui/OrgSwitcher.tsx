@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { Building2, ChevronDown, Check, Loader2 } from 'lucide-react'
+import { Building2, ChevronDown, Check, Loader2, Plus } from 'lucide-react'
 import { useOrgStore, type OrgMembership } from '../../store/orgStore'
 import { useOrgSwitch } from '../../hooks/useAuth'
+import { CreateOrgModal } from './CreateOrgModal'
 import { ROLE_LABELS } from '../../utils/constants'
 
 export function OrgSwitcher() {
@@ -11,7 +12,8 @@ export function OrgSwitcher() {
   const switching   = useOrgStore(s => s.switching)
   const { switchOrg } = useOrgSwitch()
 
-  const [open, setOpen] = useState(false)
+  const [open,           setOpen]           = useState(false)
+  const [createOrgOpen,  setCreateOrgOpen]  = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -23,13 +25,33 @@ export function OrgSwitcher() {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  // Only render the switcher when the user belongs to multiple orgs
+  // Single-org: org name display + "New Organisation" dropdown
   if (memberships.length <= 1) {
     return (
-      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200">
-        <Building2 className="w-4 h-4 shrink-0 text-gray-400" />
-        <span className="max-w-[180px] truncate">{orgName ?? 'Finance'}</span>
-      </div>
+      <>
+        <div ref={ref} className="relative">
+          <button
+            onClick={() => setOpen(v => !v)}
+            className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-primary dark:text-gray-200 dark:hover:text-accent transition-colors rounded-lg px-1.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <Building2 className="w-4 h-4 shrink-0 text-gray-400" />
+            <span className="max-w-[180px] truncate">{orgName ?? 'Finance'}</span>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+          </button>
+          {open && (
+            <div className="absolute left-0 top-full mt-1 z-50 w-56 rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700">
+              <button
+                onClick={() => { setOpen(false); setCreateOrgOpen(true) }}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-primary hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New Organisation
+              </button>
+            </div>
+          )}
+        </div>
+        <CreateOrgModal open={createOrgOpen} onClose={() => setCreateOrgOpen(false)} />
+      </>
     )
   }
 
@@ -40,7 +62,8 @@ export function OrgSwitcher() {
   }
 
   return (
-    <div ref={ref} className="relative">
+    <>
+      <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
         disabled={switching}
@@ -62,7 +85,7 @@ export function OrgSwitcher() {
           className="absolute left-0 top-full mt-1 z-50 w-64 rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700"
         >
           <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-            Switch organization
+            Switch organisation
           </p>
           {memberships.map(m => (
             <button
@@ -83,8 +106,19 @@ export function OrgSwitcher() {
               )}
             </button>
           ))}
+          <div className="border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">
+            <button
+              onClick={() => { setOpen(false); setCreateOrgOpen(true) }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-primary hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Organisation
+            </button>
+          </div>
         </div>
       )}
-    </div>
+      </div>
+      <CreateOrgModal open={createOrgOpen} onClose={() => setCreateOrgOpen(false)} />
+    </>
   )
 }
