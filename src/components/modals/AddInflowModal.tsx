@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Sparkles } from 'lucide-react'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
@@ -17,6 +17,7 @@ import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { SearchableSelect } from '../ui/SearchableSelect'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const loading = adding || updating
   const error   = addError || updateError
+  const modalRef = useRef<ModalHandle>(null)
 
   const [selectedConfigId,  setSelectedConfigId]  = useState('')
   const [configManuallySet, setConfigManuallySet] = useState(false)
@@ -259,7 +261,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     <div className="flex justify-end gap-3">
       <button
         type="button"
-        onClick={onClose}
+        onClick={() => modalRef.current?.requestClose()}
         disabled={loading}
         className="px-4 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
       >
@@ -279,10 +281,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Inflow Transaction' : 'Add Inflow Transaction'}
       isDirty={isDirty}
+      disableClose={loading}
       footer={footerEl}
     >
       <form id="add-inflow-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -329,12 +333,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
         {/* Bank */}
         <Field label="Bank" error={errors.bank_name?.message}>
-          <select {...register('bank_name')} className={inputCls(!!errors.bank_name)}>
-            <option value="">— None —</option>
-            {banks.map(b => (
-              <option key={b.id} value={b.name}>{b.name}</option>
-            ))}
-          </select>
+          <Controller name="bank_name" control={control} render={({ field }) => (
+            <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+              options={banks.map(b => ({ value: b.name, label: b.name }))}
+              placeholder="— None —" className={inputCls(!!errors.bank_name)} />
+          )} />
         </Field>
 
         {/* Transaction Type */}
@@ -372,21 +375,19 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                   {selectedIncomeType && (
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: selectedIncomeType.color }} />
                   )}
-                  <select
-                    value={incomeTypeId}
-                    onChange={e => {
-                      setIncomeTypeId(e.target.value)
-                      setIncomeTypeAutoSet(false)
-                      // If user manually clears the type, let date-based config take over
-                      if (!e.target.value) setConfigManuallySet(false)
-                    }}
-                    className={`flex-1 ${inputCls(false)}`}
-                  >
-                    <option value="">— None —</option>
-                    {incomeTypes.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                  <div className="flex-1">
+                    <SearchableSelect
+                      value={incomeTypeId}
+                      onChange={v => {
+                        setIncomeTypeId(v)
+                        setIncomeTypeAutoSet(false)
+                        if (!v) setConfigManuallySet(false)
+                      }}
+                      options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
+                      placeholder="— None —"
+                      className={inputCls(false)}
+                    />
+                  </div>
                 </div>
                 {incomeTypeAutoSet && incomeTypeId && (
                   <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
@@ -441,12 +442,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
-            <select {...register('stage_code_1')} className={inputCls(!!errors.stage_code_1)}>
-              <option value="">— Select —</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
+            <Controller name="stage_code_1" control={control} render={({ field }) => (
+              <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                options={categories.map(c => ({ value: c.name, label: c.name }))}
+                placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
+            )} />
           </Field>
           <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}>
             <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>

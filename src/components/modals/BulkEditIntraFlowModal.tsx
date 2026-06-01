@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Modal }                  from '../ui/Modal'
+import { useState, useEffect, useRef } from 'react'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { filterInputCls }         from '../ui/FormField'
+import { SearchableSelect }       from '../ui/SearchableSelect'
 import { useBulkUpdateTransaction } from '../../hooks/useMutations'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
@@ -37,6 +38,7 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
   }, [open])
 
   const hasChanges = !!date || !!accountFrom || !!accountFromStage2 || !!accountTo || !!accountToStage2 || !!description || !!remark
+  const modalRef = useRef<ModalHandle>(null)
 
   const handleApply = async () => {
     if (!hasChanges) return
@@ -61,10 +63,13 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={`Bulk Edit ${ids.length} Transfer${ids.length !== 1 ? 's' : ''}`}
       size="max-w-md"
+      isDirty={hasChanges}
+      disableClose={saving}
     >
       <div className="space-y-4">
         <p className="text-sm text-gray-500">Only filled fields will be applied. Leave blank to keep existing values.</p>
@@ -76,10 +81,9 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">From Category</label>
-          <select value={accountFrom} onChange={e => setAccountFrom(e.target.value)} className={`${filterInputCls} bg-white`}>
-            <option value="">— Keep existing —</option>
-            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
+          <SearchableSelect value={accountFrom} onChange={setAccountFrom}
+            options={categories.map(c => ({ value: c.name, label: c.name }))}
+            placeholder="— Keep existing —" className={`${filterInputCls} bg-white`} />
         </div>
 
         <div className="space-y-1">
@@ -92,10 +96,9 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">To Category</label>
-          <select value={accountTo} onChange={e => setAccountTo(e.target.value)} className={`${filterInputCls} bg-white`}>
-            <option value="">— Keep existing —</option>
-            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
+          <SearchableSelect value={accountTo} onChange={setAccountTo}
+            options={categories.map(c => ({ value: c.name, label: c.name }))}
+            placeholder="— Keep existing —" className={`${filterInputCls} bg-white`} />
         </div>
 
         <div className="space-y-1">
@@ -131,7 +134,7 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => modalRef.current?.requestClose()}
             className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             Cancel

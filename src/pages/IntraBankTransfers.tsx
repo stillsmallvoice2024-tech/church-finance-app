@@ -4,7 +4,7 @@ import {
   LayoutGrid, LayoutList, AlertCircle, RefreshCw, X,
   ChevronRight, ChevronDown,
 } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Card }         from '../components/ui/Card'
@@ -22,6 +22,7 @@ import { useOrgStore }   from '../store/orgStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
+import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -67,7 +68,7 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
   const [err,    setErr]    = useState<string | null>(null)
   const { user } = useAuthStore.getState()
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormValues>({
+  const { register, handleSubmit, formState: { errors }, reset, control } = useForm<FormValues>({
     resolver: zodResolver(schema),
   })
 
@@ -138,16 +139,18 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <Field label="From Bank" error={errors.from_bank_id?.message}>
-            <select {...register('from_bank_id')} className={inputCls(false)}>
-              <option value="">— Select —</option>
-              {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <Controller name="from_bank_id" control={control} render={({ field }) => (
+              <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                options={banks.map(b => ({ value: b.id, label: b.name }))}
+                placeholder="— Select —" className={inputCls(false)} />
+            )} />
           </Field>
           <Field label="To Bank" error={errors.to_bank_id?.message}>
-            <select {...register('to_bank_id')} className={inputCls(false)}>
-              <option value="">— Select —</option>
-              {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <Controller name="to_bank_id" control={control} render={({ field }) => (
+              <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                options={banks.map(b => ({ value: b.id, label: b.name }))}
+                placeholder="— Select —" className={inputCls(false)} />
+            )} />
           </Field>
         </div>
         <Field label="Description" error={errors.description?.message}>
@@ -315,10 +318,9 @@ export default function IntraBankTransfers() {
             </div>
             <div className="flex flex-col gap-1 min-w-[160px]">
               <label className="text-xs font-medium text-gray-500">Bank</label>
-              <select value={bankFilter} onChange={e => setBankFilter(e.target.value)} className={filterInputCls}>
-                <option value="">All banks</option>
-                {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <SearchableSelect value={bankFilter} onChange={setBankFilter}
+                options={banks.map(b => ({ value: b.id, label: b.name }))}
+                placeholder="All banks" className={filterInputCls} />
             </div>
             {(dateFrom || dateTo || bankFilter) && (
               <button onClick={() => { setDateFrom(''); setDateTo(''); setBankFilter('') }}

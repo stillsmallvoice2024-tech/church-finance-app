@@ -27,6 +27,7 @@ import { useYearRange }   from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls }         from '../components/ui/FormField'
+import { SearchableSelect }       from '../components/ui/SearchableSelect'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { BulkActionBar }          from '../components/ui/BulkActionBar'
 import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowModal'
@@ -295,20 +296,14 @@ export default function IntraFlow() {
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="From Category" className="min-w-[180px]">
-              <select value={accountFrom} onChange={e => setAccountFrom(e.target.value)} className={`${filterInputCls} bg-white`}>
-                <option value="">All categories</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect value={accountFrom} onChange={setAccountFrom}
+                options={categories.map(c => ({ value: c.name, label: c.name }))}
+                placeholder="All categories" className={`${filterInputCls} bg-white`} />
             </FilterGroup>
             <FilterGroup label="To Category" className="min-w-[180px]">
-              <select value={accountTo} onChange={e => setAccountTo(e.target.value)} className={`${filterInputCls} bg-white`}>
-                <option value="">All categories</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect value={accountTo} onChange={setAccountTo}
+                options={categories.map(c => ({ value: c.name, label: c.name }))}
+                placeholder="All categories" className={`${filterInputCls} bg-white`} />
             </FilterGroup>
             {hasActiveFilters && (
               <button

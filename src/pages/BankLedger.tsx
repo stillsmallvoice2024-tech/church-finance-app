@@ -26,6 +26,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeningBalance'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
@@ -248,21 +249,14 @@ export default function BankLedger() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[200px]">
             <label className="text-xs font-medium text-gray-500">Bank</label>
-            <select
+            <SearchableSelect
               value={selectedBank}
-              onChange={e => { didAutoSelect.current = true; setSelectedBank(e.target.value) }}
-              className={filterInputCls}
+              onChange={v => { didAutoSelect.current = true; setSelectedBank(v) }}
+              options={banks.map(b => ({ value: b.id, label: b.name }))}
+              placeholder={banksLoading ? '— Loading banks… —' : banks.length === 0 ? '— No banks configured —' : '— Select a bank —'}
               disabled={banksLoading}
-            >
-              <option value="">
-                {banksLoading
-                  ? '— Loading banks… —'
-                  : banks.length === 0
-                  ? '— No banks configured —'
-                  : '— Select a bank —'}
-              </option>
-              {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+              className={filterInputCls}
+            />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-500">From</label>

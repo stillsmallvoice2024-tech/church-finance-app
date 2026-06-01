@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, AlertTriangle, Link2, Unlink } from 'lucide-react'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { InlineCategorySelect } from '../ui/InlineCategorySelect'
 import { supabase } from '../../lib/supabase'
 import { useCategories } from '../../hooks/useCategories'
@@ -70,6 +70,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
   const [savedEffFrom,   setSavedEffFrom]   = useState<string>('')
   const [savedEffTo,     setSavedEffTo]     = useState<string | null>(null)
   const [recalcDone,     setRecalcDone]     = useState(0)
+  const [wasModified,    setWasModified]    = useState(false)
+  const modalRef = useRef<ModalHandle>(null)
+
+  const isDirty = wasModified && impactPhase === 'idle' && !saving
 
   const selectedOption = incomeTypeOptions.find(o => o.id === selectedIncomeTypeId) ?? null
 
@@ -81,6 +85,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     setRecalcReason('')
     setSavedGroupId(null)
     setSavedVersionId(null)
+    setWasModified(false)
 
     const today = new Date().toISOString().slice(0, 10)
 
@@ -119,10 +124,12 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     }
   }, [open, mode, group, copyFromVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addRow    = () => setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '' }])
-  const removeRow = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i))
-  const setRowField = (i: number, field: keyof RowDraft, val: string) =>
+  const addRow    = () => { setWasModified(true); setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '' }]) }
+  const removeRow = (i: number) => { setWasModified(true); setRows(prev => prev.filter((_, idx) => idx !== i)) }
+  const setRowField = (i: number, field: keyof RowDraft, val: string) => {
+    setWasModified(true)
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  }
 
   const runningTotal = rows.reduce((s, r) => s + (parseFloat(r.value) || 0), 0)
   const target = allocType === 'percentage' ? 100 : (parseFloat(totalAmount) || 0)
@@ -255,7 +262,15 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     : `New Version — ${group?.name ?? ''}`
 
   return (
-    <Modal open={open} onClose={onClose} title={title} size="max-w-xl">
+    <Modal
+      ref={modalRef}
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="max-w-xl"
+      isDirty={isDirty}
+      disableClose={saving || impactPhase === 'recalculating'}
+    >
       <div className="space-y-4">
 
         {/* Name (new_group only) */}
@@ -265,7 +280,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
             <input
               type="text"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => { setName(e.target.value); setWasModified(true) }}
               placeholder="e.g. Easter Special Allocation"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
             />
@@ -278,7 +293,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <input
             type="date"
             value={effectiveFrom}
-            onChange={e => setEffectiveFrom(e.target.value)}
+            onChange={e => { setEffectiveFrom(e.target.value); setWasModified(true) }}
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
           />
         </div>
@@ -291,7 +306,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
               <button
                 key={t}
                 type="button"
-                onClick={() => setAllocType(t)}
+                onClick={() => { setAllocType(t); setWasModified(true) }}
                 className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
                   allocType === t
                     ? 'bg-primary text-white border-primary'
@@ -313,7 +328,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
               min="0"
               step="0.01"
               value={totalAmount}
-              onChange={e => setTotalAmount(e.target.value)}
+              onChange={e => { setTotalAmount(e.target.value); setWasModified(true) }}
               placeholder="0.00"
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
             />
@@ -415,7 +430,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                 )}
                 <select
                   value={selectedIncomeTypeId}
-                  onChange={e => setSelectedIncomeTypeId(e.target.value)}
+                  onChange={e => { setSelectedIncomeTypeId(e.target.value); setWasModified(true) }}
                   className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   <option value="">— None —</option>
@@ -425,7 +440,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                 </select>
                 <button
                   type="button"
-                  onClick={() => setSelectedIncomeTypeId('')}
+                  onClick={() => { setSelectedIncomeTypeId(''); setWasModified(true) }}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:border-danger hover:text-danger transition-colors"
                 >
                   <Unlink className="w-3 h-3" /> Disconnect
@@ -434,7 +449,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
             ) : (
               <select
                 value=""
-                onChange={e => setSelectedIncomeTypeId(e.target.value)}
+                onChange={e => { setSelectedIncomeTypeId(e.target.value); setWasModified(true) }}
                 className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">— None —</option>
@@ -554,7 +569,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <div className="flex justify-end gap-3 pt-1">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => modalRef.current?.requestClose()}
               className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel
@@ -584,7 +599,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <div className="flex justify-end pt-1">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => modalRef.current?.requestClose()}
               className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Close

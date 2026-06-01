@@ -1,8 +1,8 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddFXTransaction, useUpdateFXTransaction, type AddFXTransactionInput, type UpdateFXTransactionInput } from '../../hooks/useMutations'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import type { FXTransaction } from '../../hooks/useFX'
@@ -37,7 +37,9 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
 
   const defaultFxCurrency = foreignCurrencies[0]?.code ?? 'USD'
 
-  const { register, control, handleSubmit, watch, formState: { errors }, reset: resetForm } = useForm<FormValues>({
+  const modalRef = useRef<ModalHandle>(null)
+
+  const { register, control, handleSubmit, watch, formState: { errors, isDirty }, reset: resetForm } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { currency: defaultFxCurrency, type: 'deposit' },
   })
@@ -104,7 +106,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const sym = getCurrencySymbol(selectedCurrency)
 
   return (
-    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit FX Transaction' : 'Add FX Transaction'}>
+    <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Edit FX Transaction' : 'Add FX Transaction'} isDirty={isDirty} disableClose={loading}>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
 
@@ -162,7 +164,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} disabled={loading} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={() => modalRef.current?.requestClose()} disabled={loading} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel</button>
           <button type="submit" disabled={loading} className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2">
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             {loading ? 'Saving…' : isEdit ? 'Update Transaction' : 'Save Transaction'}

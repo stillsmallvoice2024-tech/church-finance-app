@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Modal }                  from '../ui/Modal'
+import { useState, useEffect, useRef } from 'react'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { filterInputCls }         from '../ui/FormField'
+import { SearchableSelect }       from '../ui/SearchableSelect'
 import { useBulkUpdateTransaction } from '../../hooks/useMutations'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
@@ -36,6 +37,7 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
   }, [open])
 
   const hasChanges = !!bankName || !!recordedAt || !!txnType || !!stageCode1 || !!stageCode2 || !!outflowTypeId
+  const modalRef = useRef<ModalHandle>(null)
 
   const handleApply = async () => {
     if (!hasChanges) return
@@ -58,16 +60,15 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Bulk Edit ${ids.length} Transaction${ids.length !== 1 ? 's' : ''}`} size="max-w-md">
+    <Modal ref={modalRef} open={open} onClose={onClose} title={`Bulk Edit ${ids.length} Transaction${ids.length !== 1 ? 's' : ''}`} size="max-w-md" isDirty={hasChanges} disableClose={saving}>
       <div className="space-y-4">
         <p className="text-sm text-gray-500">Only filled fields will be applied. Leave blank to keep existing values.</p>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Bank Name</label>
-          <select value={bankName} onChange={e => setBankName(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-          </select>
+          <SearchableSelect value={bankName} onChange={setBankName}
+            options={banks.map(b => ({ value: b.name, label: b.name }))}
+            placeholder="— Keep existing —" className={filterInputCls} />
         </div>
 
         <div className="space-y-1">
@@ -88,10 +89,9 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
-          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
+          <SearchableSelect value={stageCode1} onChange={setStageCode1}
+            options={categories.map(c => ({ value: c.name, label: c.name }))}
+            placeholder="— Keep existing —" className={filterInputCls} />
         </div>
 
         <div className="space-y-1">
@@ -107,15 +107,14 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
         {outflowTypes.length > 0 && (
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-500">Outflow Type</label>
-            <select value={outflowTypeId} onChange={e => setOutflowTypeId(e.target.value)} className={filterInputCls}>
-              <option value="">— Keep existing —</option>
-              {outflowTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <SearchableSelect value={outflowTypeId} onChange={setOutflowTypeId}
+              options={outflowTypes.map(t => ({ value: t.id, label: t.name }))}
+              placeholder="— Keep existing —" className={filterInputCls} />
           </div>
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+          <button type="button" onClick={() => modalRef.current?.requestClose()} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             Cancel
           </button>
           <button

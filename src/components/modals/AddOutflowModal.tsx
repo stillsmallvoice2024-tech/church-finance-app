@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
@@ -15,6 +15,7 @@ import { useDepartmentOptions } from '../../hooks/useDepartments'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { SearchableSelect } from '../ui/SearchableSelect'
 
 const TXN_TYPES = [
   { value: '',                   label: 'Normal' },
@@ -81,6 +82,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
   const loading = adding || updating
   const error   = addError || updateError
+  const modalRef = useRef<ModalHandle>(null)
 
   const {
     register,
@@ -200,7 +202,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     <div className="flex justify-end gap-3">
       <button
         type="button"
-        onClick={onClose}
+        onClick={() => modalRef.current?.requestClose()}
         disabled={loading}
         className="px-4 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
       >
@@ -220,10 +222,12 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Outflow Transaction' : 'Add Outflow Transaction'}
       isDirty={isDirty}
+      disableClose={loading}
       footer={footerEl}
     >
       <form id="add-outflow-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -265,10 +269,11 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
         {/* Bank Account */}
         <Field label="Bank Account" error={errors.bank_name?.message}>
-          <select {...register('bank_name')} className={inputCls(!!errors.bank_name)}>
-            <option value="">— Select bank (optional) —</option>
-            {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-          </select>
+          <Controller name="bank_name" control={control} render={({ field }) => (
+            <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+              options={banks.map(b => ({ value: b.name, label: b.name }))}
+              placeholder="— Select bank (optional) —" className={inputCls(!!errors.bank_name)} />
+          )} />
         </Field>
 
         {/* Description */}
@@ -322,12 +327,11 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
-            <select {...register('stage_code_1')} className={inputCls(!!errors.stage_code_1)}>
-              <option value="">— Select —</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
+            <Controller name="stage_code_1" control={control} render={({ field }) => (
+              <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                options={categories.map(c => ({ value: c.name, label: c.name }))}
+                placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
+            )} />
           </Field>
           <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}>
             <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
@@ -342,20 +346,18 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         {/* Outflow Type + Department — reporting/classification only, do not affect balances */}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Outflow Type (reporting)" error={errors.outflow_type_id?.message}>
-            <select {...register('outflow_type_id')} className={inputCls(!!errors.outflow_type_id)}>
-              <option value="">— Unclassified —</option>
-              {outflowTypeOptions.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+            <Controller name="outflow_type_id" control={control} render={({ field }) => (
+              <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
+                placeholder="— Unclassified —" className={inputCls(!!errors.outflow_type_id)} />
+            )} />
           </Field>
           <Field label="Department / Unit" error={errors.department_id?.message}>
-            <select {...register('department_id')} className={inputCls(!!errors.department_id)}>
-              <option value="">— None —</option>
-              {departmentOptions.map(d => (
-                <option key={d.id} value={d.id}>{d.code ? `[${d.code}] ${d.name}` : d.name}</option>
-              ))}
-            </select>
+            <Controller name="department_id" control={control} render={({ field }) => (
+              <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                options={departmentOptions.map(d => ({ value: d.id, label: d.code ? `[${d.code}] ${d.name}` : d.name }))}
+                placeholder="— None —" className={inputCls(!!errors.department_id)} />
+            )} />
           </Field>
         </div>
 

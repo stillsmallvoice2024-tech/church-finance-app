@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useForm, useFieldArray, useWatch, Controller, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, Trash2 } from 'lucide-react'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { InlineCategorySelect } from '../ui/InlineCategorySelect'
@@ -97,13 +97,14 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
 
   const loading = adding || updating
   const error   = addError || updateError
+  const modalRef = useRef<ModalHandle>(null)
 
   const {
     register,
     control,
     handleSubmit,
     setError,
-    formState: { errors },
+    formState: { errors, isDirty },
     reset: resetForm,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -154,10 +155,13 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Configuration' : 'New Configuration'}
       size="max-w-2xl"
+      isDirty={isDirty}
+      disableClose={loading}
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
         {error && (
@@ -285,7 +289,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
         <div className="flex justify-end gap-3 pt-1">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => modalRef.current?.requestClose()}
             disabled={loading}
             className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
           >

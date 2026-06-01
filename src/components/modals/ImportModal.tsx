@@ -25,6 +25,7 @@ import {
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
+import { SearchableSelect } from '../ui/SearchableSelect'
 
 // ── ID normalization ──────────────────────────────────────────────────────────
 // Strips invisible characters (zero-width spaces, soft hyphen, BOM, NBSP, etc.),
@@ -1720,11 +1721,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         <option value="__create__">＋ Create New Config…</option>
                       </select>
                       {incomeTypes.length > 0 && (
-                        <select value={applyIncomeType} onChange={e => setApplyIncomeType(e.target.value)}
-                          className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[110px]">
-                          <option value="">— Income Type —</option>
-                          {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
+                        <SearchableSelect value={applyIncomeType} onChange={setApplyIncomeType}
+                          options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
+                          placeholder="— Income Type —"
+                          className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                          wrapperClassName="flex-1 min-w-[110px]" />
                       )}
                       <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
                         className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
@@ -1892,10 +1893,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       </span>
                                     ) : (
                                       <div className="relative">
-                                        <select
+                                        <SearchableSelect
                                           value={effIncomeTypeId}
-                                          onChange={e => {
-                                            const newId = e.target.value
+                                          onChange={newId => {
                                             setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
                                             setRowManualOverrides(prev => {
                                               const next = { ...prev }
@@ -1903,11 +1903,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                               return next
                                             })
                                           }}
+                                          options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
+                                          placeholder="— None —"
                                           className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
-                                        >
-                                          <option value="">— None —</option>
-                                          {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                        </select>
+                                        />
                                         {autoType && !rowIncomeTypes[ri] && (
                                           <Sparkles className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-400" />
                                         )}
@@ -2061,10 +2060,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         <div>
                                           <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Income Type</label>
                                           <div className="relative">
-                                            <select
+                                            <SearchableSelect
                                               value={effIncomeTypeId}
-                                              onChange={e => {
-                                                const newId = e.target.value
+                                              onChange={newId => {
                                                 setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
                                                 setRowManualOverrides(prev => {
                                                   const next = { ...prev }
@@ -2072,11 +2070,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                                   return next
                                                 })
                                               }}
+                                              options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
+                                              placeholder="— None —"
                                               className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                                            >
-                                              <option value="">— None —</option>
-                                              {incomeTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                            </select>
+                                            />
                                             {autoType && !rowIncomeTypes[ri] && (
                                               <Sparkles className="pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-400" />
                                             )}
@@ -2188,11 +2185,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
                       Apply to {outflowTargetLabel} rows:
                     </span>
-                    <select value={applyS1} onChange={e => setApplyS1(e.target.value)}
-                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
-                      <option value="">Stage Code 1</option>
-                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
+                    <SearchableSelect value={applyS1} onChange={setApplyS1}
+                      options={categories.map(c => ({ value: c.name, label: c.name }))}
+                      placeholder="Stage Code 1"
+                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      wrapperClassName="flex-1 min-w-[100px]" />
                     <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
                       className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
                       <option value="">Stage Code 2</option>
@@ -2201,11 +2198,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       <option value="Savings">Savings</option>
                     </select>
                     {outflowTypeOptions.length > 0 && (
-                      <select value={applyOutflowType} onChange={e => setApplyOutflowType(e.target.value)}
-                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
-                        <option value="">Outflow Type</option>
-                        {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
+                      <SearchableSelect value={applyOutflowType} onChange={setApplyOutflowType}
+                        options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
+                        placeholder="Outflow Type"
+                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                        wrapperClassName="flex-1 min-w-[100px]" />
                     )}
                     <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
                       className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
@@ -2364,9 +2361,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <div className="text-gray-400">{date}</div>
                                   </div>
                                   <span className="text-gray-700 font-medium">{baseCurrencySymbol}{debit.toLocaleString()}</span>
-                                  <select value={sc.s1}
-                                    onChange={e => {
-                                      const s1 = e.target.value
+                                  <SearchableSelect value={sc.s1}
+                                    onChange={s1 => {
                                       setRowStageCodes(prev => ({ ...prev, [ri]: { s1, s2: prev[ri]?.s2 ?? '' } }))
                                       const cat = categories.find((c: { name: string }) => c.name === s1)
                                       let suggestedId = ''
@@ -2379,10 +2375,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       }
                                       setRowOutflowTypes(prev => ({ ...prev, [ri]: suggestedId }))
                                     }}
-                                    className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                    <option value="">— None —</option>
-                                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                  </select>
+                                    options={categories.map(c => ({ value: c.name, label: c.name }))}
+                                    placeholder="— None —"
+                                    className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full" />
                                   <select value={sc.s2}
                                     onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
@@ -2413,12 +2408,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 {outflowTypeOptions.length > 0 && (
                                   <div className="px-3 pb-2 flex items-center gap-2">
                                     <span className="text-[10px] text-gray-400 w-28 shrink-0">Outflow Type:</span>
-                                    <select value={rowOutflowTypes[ri] ?? ''}
-                                      onChange={e => setRowOutflowTypes(prev => ({ ...prev, [ri]: e.target.value }))}
-                                      className="flex-1 text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                                      <option value="">— None —</option>
-                                      {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                    </select>
+                                    <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
+                                      onChange={v => setRowOutflowTypes(prev => ({ ...prev, [ri]: v }))}
+                                      options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
+                                      placeholder="— None —"
+                                      className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                                      wrapperClassName="flex-1" />
                                   </div>
                                 )}
                                 {(txnType === 'refund' || txnType === 'reversal') && (
@@ -2568,12 +2563,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     {outflowTypeOptions.length > 0 && (
                                       <div>
                                         <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Outflow Type</label>
-                                        <select value={rowOutflowTypes[ri] ?? ''}
-                                          onChange={e => setRowOutflowTypes(prev => ({ ...prev, [ri]: e.target.value }))}
-                                          className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                                          <option value="">— None —</option>
-                                          {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                        </select>
+                                        <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
+                                          onChange={v => setRowOutflowTypes(prev => ({ ...prev, [ri]: v }))}
+                                          options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
+                                          placeholder="— None —"
+                                          className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
                                       </div>
                                     )}
                                     {/* Pending Deduction */}

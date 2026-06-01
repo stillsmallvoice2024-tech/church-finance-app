@@ -26,6 +26,7 @@ import { classifyIncomeType } from '../utils/classifyIncomeType'
 import { normalizeId } from '../utils/normalizeId'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { SearchableSelect } from '../components/ui/SearchableSelect'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1068,10 +1069,9 @@ function ManualEntryForm() {
             </div>
             {outflowTypeOptions.length > 0 && (
               <Field label="Outflow Type">
-                <select value={outflowTypeId} onChange={e => setOutflowTypeId(e.target.value)} className={iCls}>
-                  <option value="">— None —</option>
-                  {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
+                <SearchableSelect value={outflowTypeId} onChange={setOutflowTypeId}
+                  options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
+                  placeholder="— None —" className={iCls} />
               </Field>
             )}
             <p className="text-[11px] text-gray-400">Links this outflow to the category ledger for tracking.</p>

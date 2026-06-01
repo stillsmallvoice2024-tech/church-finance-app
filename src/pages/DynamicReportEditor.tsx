@@ -40,6 +40,7 @@ import type {
   TextBlockConfig, MetricBlockConfig, TableBlockConfig, FormulaBlockConfig, FormulaTerm,
   DynamicReportSnapshot, SnapshotData, TextBlockEmbed,
 } from '../types'
+import { SearchableSelect } from '../components/ui/SearchableSelect'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -246,11 +247,10 @@ function InsertBlockModal({
             <>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Category *</label>
-                <select value={mCategory} onChange={e => setMCategory(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  {categoryNames.length === 0 && <option value="">No categories found</option>}
-                  {categoryNames.map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
+                <SearchableSelect value={mCategory} onChange={setMCategory}
+                  options={categoryNames.map(n => ({ value: n, label: n }))}
+                  placeholder={categoryNames.length === 0 ? 'No categories found' : '— category —'}
+                  className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Budget Portion</label>
@@ -307,12 +307,12 @@ function InsertBlockModal({
                   <option value="NET">Net Movement</option>
                 </select>
                 {term.fn !== 'NET' && (
-                  <select value={term.category ?? ''}
-                    onChange={e => setFTerms(fTerms.map((t, i) => i === idx ? { ...t, category: e.target.value } : t))}
-                    className="flex-1 min-w-0 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30">
-                    <option value="">— category —</option>
-                    {categoryNames.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  <SearchableSelect value={term.category ?? ''}
+                    onChange={v => setFTerms(fTerms.map((t, i) => i === idx ? { ...t, category: v } : t))}
+                    options={categoryNames.map(n => ({ value: n, label: n }))}
+                    placeholder="— category —"
+                    className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    wrapperClassName="flex-1 min-w-0" />
                 )}
                 {term.fn !== 'NET' && (
                   <select value={term.portion ?? 'all'}
