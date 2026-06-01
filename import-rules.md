@@ -113,10 +113,11 @@ Some bank statement Excel files split a single transaction across two rows — t
 
 Pre-pass algorithm:
 1. Build shallow copy of sheet rows (`merged`)
-2. Scan each row: if no valid date, no credit, no debit, but has non-empty description or reference text → it's a continuation row
-3. Append its text (space-separated) to the nearest preceding row with a valid date
-4. Apply `normalizeId()` to every description cell (strips invisible Unicode, collapses whitespace, trims)
-5. Store result in `processedRows` state
+2. **Filter repeated header rows** — before the merge loop, compute a normalized header signature from `sheet.headers` (same normalization as `detectHeaderRow`: `toLowerCase` + strip `[\s_\-()\[\]]+`; join non-empty cells with `\0`). Backward-iterate `merged` and splice any row whose normalized cells match the signature. Prevents sub-table headers from reaching continuation-row logic.
+3. Scan each row: if no valid date, no credit, no debit, but has non-empty description or reference text → it's a continuation row
+4. Append its text (space-separated) to the nearest preceding row with a valid date
+5. Apply `normalizeId()` to every description cell (strips invisible Unicode, collapses whitespace, trims)
+6. Store result in `processedRows` state
 
 Row indices are preserved — per-row UI state (income type, stage codes, allocation config) remains correct. Normal imports with no continuation rows are unaffected.
 
@@ -132,7 +133,7 @@ Row indices are preserved — per-row UI state (income type, stage codes, alloca
 `proceedToRowConfig` is **async** — it runs a full duplicate-detection pipeline before advancing to Step 4. Step 4 receives **only genuinely new transactions**.
 
 Pipeline stages (all before Step 4 opens):
-1. **Merge continuation rows** — append overflow narration/reference rows to preceding dated row
+1. **Filter repeated header rows + Merge continuation rows** — splice repeated sub-table headers from `merged`; append overflow narration/reference rows to preceding dated row
 2. **Normalize descriptions** — `normalizeId()` on every description cell; stored in `processedRows`
 3. **Pre-populate `rowStageCodes`** — seed stage codes from mapped spreadsheet columns for debit rows
 4. **Generate fallback IDs AFTER normalization** — SHA-256 hashes from normalized description + date + amount + bank; stored in `precomputedInflowIds` / `precomputedOutflowIds` (separate maps for inflow `transaction_ref` and outflow `transaction_id`)
