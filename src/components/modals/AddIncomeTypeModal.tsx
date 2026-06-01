@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ModalHandle } from '../ui/Modal'
 import { Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
@@ -76,6 +77,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
 
   // Dirty detection — compare to snapshot taken on open
   const initialRef = useRef({ name: '', description: '', color: TYPE_PRESET_COLORS[0], specialConfigGroup: '' })
+  const modalRef = useRef<ModalHandle>(null)
   const isDirty =
     name !== initialRef.current.name ||
     description !== initialRef.current.description ||
@@ -141,7 +143,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
     <div className="flex justify-end gap-3">
       <button
         type="button"
-        onClick={onClose}
+        onClick={() => modalRef.current?.requestClose()}
         disabled={saving}
         className="px-4 min-h-[44px] text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
       >
@@ -161,11 +163,13 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Income Type' : 'Add Income Type'}
       size="max-w-lg"
       isDirty={isDirty}
+      disableClose={saving}
       footer={footerEl}
     >
       <div className="space-y-4">

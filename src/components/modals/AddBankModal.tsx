@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { AlertTriangle, Plus, Trash2, Check, X } from 'lucide-react'
 import { TechDetails } from '../ui/TechDetails'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
@@ -88,7 +88,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const newCatInputRef   = useRef<HTMLInputElement>(null)
   const cacheRetryCount  = useRef(0)
 
-  const { register, control, handleSubmit, formState: { errors }, reset: resetForm, watch } = useForm<FormValues>({
+  const modalRef = useRef<ModalHandle>(null)
+
+  const { register, control, handleSubmit, formState: { errors, isDirty }, reset: resetForm, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', account_number: '', account_type: '' },
   })
@@ -358,7 +360,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     <div className="flex justify-end gap-3">
       <button
         type="button"
-        onClick={onClose}
+        onClick={() => modalRef.current?.requestClose()}
         disabled={loading}
         className="px-4 min-h-[44px] text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
       >
@@ -377,7 +379,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   )
 
   return (
-    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Bank' : 'Add Bank'} footer={footerEl}>
+    <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Edit Bank' : 'Add Bank'} isDirty={isDirty} disableClose={loading} footer={footerEl}>
       <form id="add-bank-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
 
         {checkingSchema && (

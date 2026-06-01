@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Modal }                  from '../ui/Modal'
+import { useState, useEffect, useRef } from 'react'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { filterInputCls }         from '../ui/FormField'
 import { SearchableSelect }       from '../ui/SearchableSelect'
 import { useBulkUpdateTransaction } from '../../hooks/useMutations'
@@ -37,6 +37,7 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
   }, [open])
 
   const hasChanges = !!bankName || !!recordedAt || !!txnType || !!incomeTypeId || !!stageCode1 || !!stageCode2
+  const modalRef = useRef<ModalHandle>(null)
 
   const handleApply = async () => {
     if (!hasChanges) return
@@ -59,7 +60,7 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Bulk Edit ${ids.length} Transaction${ids.length !== 1 ? 's' : ''}`} size="max-w-md">
+    <Modal ref={modalRef} open={open} onClose={onClose} title={`Bulk Edit ${ids.length} Transaction${ids.length !== 1 ? 's' : ''}`} size="max-w-md" isDirty={hasChanges} disableClose={saving}>
       <div className="space-y-4">
         <p className="text-sm text-gray-500">Only filled fields will be applied. Leave blank to keep existing values.</p>
 
@@ -113,7 +114,7 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+          <button type="button" onClick={() => modalRef.current?.requestClose()} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             Cancel
           </button>
           <button

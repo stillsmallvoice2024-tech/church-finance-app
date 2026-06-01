@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
@@ -80,6 +80,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
   const loading = adding || updating
   const error   = addError || updateError
+  const modalRef = useRef<ModalHandle>(null)
 
   const {
     register,
@@ -199,7 +200,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     <div className="flex justify-end gap-3">
       <button
         type="button"
-        onClick={onClose}
+        onClick={() => modalRef.current?.requestClose()}
         disabled={loading}
         className="px-4 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
       >
@@ -219,10 +220,12 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Outflow Transaction' : 'Add Outflow Transaction'}
       isDirty={isDirty}
+      disableClose={loading}
       footer={footerEl}
     >
       <form id="add-outflow-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">

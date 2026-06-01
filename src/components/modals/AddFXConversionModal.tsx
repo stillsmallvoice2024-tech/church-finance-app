@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { TrendingDown, TrendingUp, AlertCircle, RefreshCw } from 'lucide-react'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddFXConversion, type AddFXConversionInput } from '../../hooks/useFXConversions'
 import { useAllocationStore } from '../../store/allocationStore'
 import { useCurrencies } from '../../hooks/useCurrencies'
@@ -31,6 +31,9 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
   const [configId,    setConfigId]    = useState('')
   const [stageCode1,  setStageCode1]  = useState('')
   const [formError,   setFormError]   = useState<string | null>(null)
+
+  const modalRef = useRef<ModalHandle>(null)
+  const isDirty = fxAmount !== '' || rate !== '' || notes !== '' || stageCode1 !== ''
 
   const summary    = summaries.find(s => s.currency === currency)
   const balance    = summary?.currentBalance ?? 0
@@ -91,7 +94,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
   const iCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
 
   return (
-    <Modal open={open} onClose={onClose} title="Convert FX to NGN" size="max-w-md">
+    <Modal ref={modalRef} open={open} onClose={onClose} title="Convert FX to NGN" size="max-w-md" isDirty={isDirty} disableClose={loading}>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
 
         {(error || formError) && (
@@ -249,7 +252,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => modalRef.current?.requestClose()}
             disabled={loading}
             className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
           >

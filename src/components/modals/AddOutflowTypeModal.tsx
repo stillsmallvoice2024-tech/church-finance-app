@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { TypeColorPicker, TYPE_PRESET_COLORS } from '../ui/TypeColorPicker'
@@ -33,6 +33,7 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
 
   // Dirty detection
   const initialRef = useRef({ name: '', color: TYPE_PRESET_COLORS[0] })
+  const modalRef = useRef<ModalHandle>(null)
   const isDirty = name !== initialRef.current.name || color !== initialRef.current.color
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
 
   const footerEl = (
     <div className="flex justify-end gap-3">
-      <button type="button" onClick={onClose} disabled={loading}
+      <button type="button" onClick={() => modalRef.current?.requestClose()} disabled={loading}
         className="px-4 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
         Cancel
       </button>
@@ -100,11 +101,13 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Outflow Type' : 'Add Outflow Type'}
       size="max-w-md"
       isDirty={isDirty && !isLocked}
+      disableClose={loading}
       footer={footerEl}
     >
       <form id="outflow-type-form" onSubmit={handleSubmit} className="space-y-4">
