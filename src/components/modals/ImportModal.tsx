@@ -22,6 +22,7 @@ import {
   type RowResolverState,
 } from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
+import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 
 // ── ID normalization ──────────────────────────────────────────────────────────
@@ -75,33 +76,7 @@ const SKIP = '__skip__'
 const SESSION_KEY = 'church-import-session'
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
-
-type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
-
-function parseDate(raw: unknown, format: DateFormat = 'DD/MM/YYYY'): string | null {
-  if (raw == null || raw === '') return null
-  if (typeof raw === 'number') {
-    const d = XLSX.SSF.parse_date_code(raw)
-    if (d) {
-      const yy = d.y.toString().padStart(4, '0')
-      const mm = String(d.m).padStart(2, '0')
-      const dd = String(d.d).padStart(2, '0')
-      return `${yy}-${mm}-${dd}`
-    }
-    return null
-  }
-  const s = String(raw).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  const parts = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (parts) {
-    const [, g1, g2, g3] = parts
-    if (format === 'MM/DD/YYYY') return `${g3}-${g1.padStart(2,'0')}-${g2.padStart(2,'0')}`
-    return `${g3}-${g2.padStart(2,'0')}-${g1.padStart(2,'0')}`
-  }
-  const parsed = new Date(s)
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
-  return null
-}
+// parseDate and DateFormat are imported from ../../utils/parseDate
 
 function parseNumber(raw: unknown): number {
   if (raw == null || raw === '') return 0
