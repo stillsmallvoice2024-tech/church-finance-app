@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+
+export interface ModalHandle {
+  requestClose: () => void
+}
 
 function getFocusable(el: HTMLElement | null): HTMLElement[] {
   if (!el) return []
@@ -50,7 +54,7 @@ interface ModalProps {
   confirmDiscardLabel?: string
 }
 
-export function Modal({
+export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
   open,
   onClose,
   title,
@@ -65,19 +69,21 @@ export function Modal({
   confirmMessage,
   confirmKeepLabel,
   confirmDiscardLabel,
-}: ModalProps) {
+}: ModalProps, ref) {
   const [confirmingClose, setConfirmingClose] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
 
-  const requestClose = () => {
+  const requestClose = useCallback(() => {
     if (disableClose) return
     if (isDirty) {
       setConfirmingClose(true)
     } else {
       onClose()
     }
-  }
+  }, [disableClose, isDirty, onClose])
+
+  useImperativeHandle(ref, () => ({ requestClose }), [requestClose])
 
   // Save trigger element on open; return focus to it on close
   useEffect(() => {
@@ -127,7 +133,7 @@ export function Modal({
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [open, isDirty, confirmingClose, disableClose]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, confirmingClose, disableClose, requestClose])
 
   // Reset confirmation state whenever modal closes
   useEffect(() => {
@@ -234,4 +240,4 @@ export function Modal({
     </div>,
     document.body,
   )
-}
+})

@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddIntraFlow, useUpdateTransaction, type AddIntraFlowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import type { IntraFlowRow } from '../../hooks/useTransactions'
@@ -44,11 +44,12 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
 
   const loading = adding || updating
   const error   = addError || updateError
+  const modalRef = useRef<ModalHandle>(null)
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
     reset: resetForm,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
@@ -113,10 +114,13 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Internal Transfer' : 'Add Internal Transfer'}
       size="max-w-2xl"
+      isDirty={isDirty}
+      disableClose={loading}
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
 
@@ -210,7 +214,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-2">
           <button
-            type="button" onClick={onClose} disabled={loading}
+            type="button" onClick={() => modalRef.current?.requestClose()} disabled={loading}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             Cancel

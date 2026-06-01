@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddReportTemplate, useUpdateReportTemplate } from '../../hooks/useReportTemplates'
 import { useToastStore } from '../../store/toastStore'
 import type { ReportLayout, ReportTemplate } from '../../types'
@@ -29,11 +29,12 @@ export function SaveReportTemplateModal({ open, onClose, onSaved, layout, editTe
   const { mutate: add,    loading: adding }   = useAddReportTemplate()
   const { mutate: update, loading: updating } = useUpdateReportTemplate()
   const loading = adding || updating
+  const modalRef = useRef<ModalHandle>(null)
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
     reset,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
@@ -68,7 +69,7 @@ export function SaveReportTemplateModal({ open, onClose, onSaved, layout, editTe
      dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100`
 
   return (
-    <Modal open={open} onClose={onClose} title={isEdit ? 'Update Template' : 'Save as Template'} size="max-w-md">
+    <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Update Template' : 'Save as Template'} size="max-w-md" isDirty={isDirty} disableClose={loading}>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
 
         <div>
@@ -101,7 +102,7 @@ export function SaveReportTemplateModal({ open, onClose, onSaved, layout, editTe
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => modalRef.current?.requestClose()}
             className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
           >
             Cancel

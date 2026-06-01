@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Modal } from '../ui/Modal'
+import { Modal, type ModalHandle } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { saveDepartment, type Department } from '../../hooks/useDepartments'
@@ -22,6 +22,7 @@ export function AddDepartmentModal({ open, onClose, onSaved, editRecord }: Props
   const [error,       setError]       = useState<string | null>(null)
 
   const initialRef = useRef({ name: '', code: '', description: '', active: true })
+  const modalRef = useRef<ModalHandle>(null)
   const isDirty =
     name        !== initialRef.current.name        ||
     code        !== initialRef.current.code        ||
@@ -67,7 +68,7 @@ export function AddDepartmentModal({ open, onClose, onSaved, editRecord }: Props
 
   const footerEl = (
     <div className="flex justify-end gap-3">
-      <button type="button" onClick={onClose} disabled={loading}
+      <button type="button" onClick={() => modalRef.current?.requestClose()} disabled={loading}
         className="px-4 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
         Cancel
       </button>
@@ -81,11 +82,13 @@ export function AddDepartmentModal({ open, onClose, onSaved, editRecord }: Props
 
   return (
     <Modal
+      ref={modalRef}
       open={open}
       onClose={onClose}
       title={isEdit ? 'Edit Department / Unit' : 'Add Department / Unit'}
       size="max-w-md"
       isDirty={isDirty}
+      disableClose={loading}
       footer={footerEl}
     >
       <form id="department-form" onSubmit={handleSubmit} className="space-y-4">
