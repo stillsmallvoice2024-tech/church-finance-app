@@ -725,6 +725,21 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       // ── Stage 1: Merge continuation rows + normalize descriptions ─────────
       // runImport reuses processedRows — no second normalization pass needed.
       const merged = (sheet.rows as unknown[][]).map(r => [...r])
+
+      // Remove repeated header rows before any stage processes merged.
+      // Some statements contain multiple sub-tables and repeat the exact header
+      // row mid-file; without this they reach continuation-row logic and get
+      // appended to the preceding transaction's description.
+      const normCell = (c: unknown) => String(c ?? '').toLowerCase().replace(/[\s_\-()\[\]]+/g, '')
+      const headerSig = sheet.headers.map(normCell).filter(Boolean).join('\0')
+      if (headerSig) {
+        for (let ri = merged.length - 1; ri >= 0; ri--) {
+          if (merged[ri].map(normCell).filter(Boolean).join('\0') === headerSig) {
+            merged.splice(ri, 1)
+          }
+        }
+      }
+
       for (let ri = 1; ri < merged.length; ri++) {
         const row = merged[ri]
         if (parseDate(row[dateIdx], dateFormat) !== null) continue
