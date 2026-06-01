@@ -13,6 +13,8 @@ import {
   type SpecialConfigGroupWithVersions,
 } from '../../hooks/useSpecialConfigGroups'
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
+import { useOrgStore } from '../../store/orgStore'
+import { formatAmount } from '../../utils/formatters'
 
 const MIGRATION_SQL =
 `ALTER TABLE allocation_configs
@@ -48,6 +50,7 @@ type ImpactPhase = 'idle' | 'prompting' | 'reason' | 'recalculating' | 'done'
 export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, copyFromVersion }: Props) {
   const { categories, refetch: refetchCategories } = useCategories()
   const { options: incomeTypeOptions, reload: reloadIncomeTypes } = useIncomeTypeOptions()
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
 
   const [name,                 setName]                 = useState('')
   const [effectiveFrom,        setEffectiveFrom]        = useState('')
@@ -340,7 +343,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
             <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
               {allocType === 'percentage'
                 ? `${runningTotal.toFixed(1)} / 100%`
-                : `₦${runningTotal.toLocaleString()} / ₦${(parseFloat(totalAmount) || 0).toLocaleString()}`}
+                : `${formatAmount(runningTotal, defaultCurrency)} / ${formatAmount(parseFloat(totalAmount) || 0, defaultCurrency)}`}
             </span>
           </div>
 
@@ -407,7 +410,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             {allocType === 'percentage'
               ? `Total is ${runningTotal.toFixed(1)}% — must equal 100%`
-              : `Total ₦${runningTotal.toLocaleString()} doesn't match ₦${(parseFloat(totalAmount) || 0).toLocaleString()}`}
+              : `Total ${formatAmount(runningTotal, defaultCurrency)} doesn't match ${formatAmount(parseFloat(totalAmount) || 0, defaultCurrency)}`}
           </div>
         )}
 

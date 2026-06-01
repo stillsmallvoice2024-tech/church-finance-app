@@ -11,6 +11,7 @@ import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
+import { useOrgStore } from '../../store/orgStore'
 import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -23,6 +24,7 @@ import {
 } from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
+import { formatAmount } from '../../utils/formatters'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
 
@@ -231,6 +233,7 @@ interface ImportResult {
 export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
 
   // Step state
   const [step,     setStep]    = useState(1)
@@ -274,6 +277,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   // Bank selector inside wizard
   const { banks: bankList } = useBanks()
   const [internalBank, setInternalBank] = useState<{ id: string; name: string } | null>(bank ?? null)
+  const importBankCurrency = bankList.find(b => b.id === internalBank?.id)?.currency ?? defaultCurrency
+  const fmtAmt = (n: number) => formatAmount(n, importBankCurrency)
 
   // Income types for auto-classify + per-row picker
   const { incomeTypes } = useIncomeTypes()
@@ -1597,8 +1602,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             <span className="font-mono text-amber-400 shrink-0 w-5 text-right">{ri + 1}</span>
                             <span className="text-amber-500 shrink-0">{date}</span>
                             <span className="truncate flex-1 min-w-0">{desc || '—'}</span>
-                            {credit > 0 && <span className="tabular-nums shrink-0 text-green-700">+₦{credit.toLocaleString()}</span>}
-                            {debit  > 0 && <span className="tabular-nums shrink-0 text-red-700">−₦{debit.toLocaleString()}</span>}
+                            {credit > 0 && <span className="tabular-nums shrink-0 text-green-700">+{fmtAmt(credit)}</span>}
+                            {debit  > 0 && <span className="tabular-nums shrink-0 text-red-700">−{fmtAmt(debit)}</span>}
                           </div>
                         )
                       })}
@@ -1862,7 +1867,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       </div>
                                       <div className="text-gray-400">{date}</div>
                                     </div>
-                                    <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
+                                    <span className="text-gray-700 font-medium">{fmtAmt(credit)}</span>
                                     {txnType ? (
                                       <span className="text-xs text-gray-400 italic">N/A</span>
                                     ) : (
@@ -2003,7 +2008,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       {date && <span className="text-[11px] font-semibold text-gray-400 truncate">{date}</span>}
                                     </div>
                                     <span className="text-sm font-mono font-bold text-success tabular-nums shrink-0 ml-2">
-                                      ₦{credit.toLocaleString()}
+                                      {fmtAmt(credit)}
                                     </span>
                                   </div>
                                   <p className="text-sm text-gray-700 line-clamp-2 leading-snug">
@@ -2358,7 +2363,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     </div>
                                     <div className="text-gray-400">{date}</div>
                                   </div>
-                                  <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
+                                  <span className="text-gray-700 font-medium">{fmtAmt(debit)}</span>
                                   <SearchableSelect value={sc.s1}
                                     onChange={s1 => {
                                       setRowStageCodes(prev => ({ ...prev, [ri]: { s1, s2: prev[ri]?.s2 ?? '' } }))
@@ -2497,7 +2502,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     )}
                                   </div>
                                   <span className="text-sm font-mono font-bold text-danger tabular-nums shrink-0 ml-2">
-                                    ₦{debit.toLocaleString()}
+                                    {fmtAmt(debit)}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-700 line-clamp-2 leading-snug">

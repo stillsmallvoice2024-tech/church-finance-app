@@ -1338,7 +1338,7 @@ function buildIntraflowDetailItems(meta: IntraflowMeta, row: LedgerRow): DetailI
     meta.status === 'reversed'               ? 'bg-red-100 text-red-700'     :
                                                'bg-gray-100 text-gray-600'
   return [
-    { label: 'Amount',    value: row.outflow > 0 ? `−${row.outflow.toLocaleString()}` : `+${row.inflow.toLocaleString()}`, mono: true },
+    { label: 'Amount',    value: row.outflow > 0 ? `−${formatCurrency(row.outflow)}` : `+${formatCurrency(row.inflow)}`, mono: true },
     { label: 'Direction', value: direction },
     { label: 'From',      value: `${meta.fromCategory} › ${meta.fromPortion}` },
     { label: 'To',        value: `${meta.toCategory} › ${meta.toPortion}` },

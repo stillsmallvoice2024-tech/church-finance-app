@@ -1,30 +1,41 @@
 import { format } from 'date-fns'
 import type { Currency } from '../types'
 
-const CURRENCY_SYMBOLS: Record<Currency, string> = {
+const CURRENCY_SYMBOLS: Record<string, string> = {
   NGN: '₦',
   USD: '$',
   GBP: '£',
   EUR: '€',
+  CNY: '¥',
+}
+
+const CURRENCY_LOCALES: Record<string, string> = {
+  NGN: 'en-NG',
+  USD: 'en-US',
+  GBP: 'en-GB',
+  EUR: 'de-DE',
+  CNY: 'zh-CN',
+}
+
+export function getCurrencyLocale(code: string): string {
+  return CURRENCY_LOCALES[code] ?? 'en-NG'
 }
 
 export function formatCurrency(amount: number, currency: Currency = 'NGN'): string {
   const symbol = CURRENCY_SYMBOLS[currency]
-  return `${symbol}${amount.toLocaleString('en-NG', {
+  return `${symbol}${amount.toLocaleString(getCurrencyLocale(currency), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
 }
 
-/** Renders negatives as (₦1,234.56), zero as —, positives normally. */
-export function formatCurrencyNegative(amount: number, currency: Currency = 'NGN'): string {
-  if (amount === 0) return '—'
-  const symbol = CURRENCY_SYMBOLS[currency]
-  const abs = Math.abs(amount).toLocaleString('en-NG', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  return amount < 0 ? `(${symbol}${abs})` : `${symbol}${abs}`
+/** Format a monetary amount for any currency code (including non-standard ones). */
+export function formatAmount(amount: number, currencyCode: string, dp = 2): string {
+  const symbol = CURRENCY_SYMBOLS[currencyCode] ?? currencyCode
+  return `${symbol}${amount.toLocaleString(getCurrencyLocale(currencyCode), {
+    minimumFractionDigits: dp,
+    maximumFractionDigits: dp,
+  })}`
 }
 
 export function formatCurrencyCompact(amount: number, currency: Currency = 'NGN'): string {

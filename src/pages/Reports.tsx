@@ -6,6 +6,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions } from '../hooks/useFX'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { exportCSV } from '../utils/csvExport'
+import { getCurrencyLocale } from '../utils/formatters'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { useOutflowTypes } from '../hooks/useOutflowTypes'
@@ -1031,13 +1032,13 @@ function FXHoldingsPanel() {
                       </div>
                     </td>
                     <td className={`px-5 py-3 text-right font-bold font-mono ${bal > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
-                      {meta.symbol}{bal.toLocaleString(undefined, { minimumFractionDigits: 4 })}
+                      {meta.symbol}{bal.toLocaleString(getCurrencyLocale(meta.code), { minimumFractionDigits: 4 })}
                     </td>
                     <td className="px-5 py-3 text-right text-success font-mono">
-                      {meta.symbol}{(s?.totalDeposits ?? 0).toLocaleString(undefined, { minimumFractionDigits: 4 })}
+                      {meta.symbol}{(s?.totalDeposits ?? 0).toLocaleString(getCurrencyLocale(meta.code), { minimumFractionDigits: 4 })}
                     </td>
                     <td className="px-5 py-3 text-right text-danger font-mono">
-                      {meta.symbol}{(s?.totalWithdrawals ?? 0).toLocaleString(undefined, { minimumFractionDigits: 4 })}
+                      {meta.symbol}{(s?.totalWithdrawals ?? 0).toLocaleString(getCurrencyLocale(meta.code), { minimumFractionDigits: 4 })}
                     </td>
                     <td className="px-5 py-3 text-right text-gray-500">
                       {s?.transactionCount ?? 0}

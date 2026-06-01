@@ -15,6 +15,7 @@ import type { DbBank, StartingBalanceRow, SchemaStatus } from '../../hooks/useBa
 import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { formatCurrency, parseCurrency } from '../../utils/currency'
+import { formatAmount } from '../../utils/formatters'
 import { useToastStore } from '../../store/toastStore'
 import { propagateBankOpeningBalance } from '../../utils/bankOpeningBalance'
 
@@ -96,6 +97,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   })
 
   const startingBalance = watch('starting_balance')
+  const bankCurrency    = watch('currency') || defaultCurrency || 'NGN'
   const hasBalance      = (startingBalance ?? 0) > 0
 
   const runningTotal = rows.reduce((s, r) => s + (parseFloat(r.value) || 0), 0)
@@ -229,7 +231,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         setAllocError(
           allocType === 'percentage'
             ? `Allocations total ${runningTotal.toFixed(1)}% — must equal 100%`
-            : `Allocations total ₦${runningTotal.toLocaleString()} — must equal starting balance ₦${(values.starting_balance ?? 0).toLocaleString()}`
+            : `Allocations total ${formatAmount(runningTotal, values.currency || defaultCurrency || 'NGN')} — must equal starting balance ${formatAmount(values.starting_balance ?? 0, values.currency || defaultCurrency || 'NGN')}`
         )
         return
       }
@@ -529,7 +531,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
                     {allocType === 'percentage'
                       ? `${runningTotal.toFixed(1)} / 100%`
-                      : `₦${runningTotal.toLocaleString()} / ₦${(startingBalance ?? 0).toLocaleString()}`}
+                      : `${formatAmount(runningTotal, bankCurrency)} / ${formatAmount(startingBalance ?? 0, bankCurrency)}`}
                   </span>
                 </div>
 
@@ -676,7 +678,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   {allocError ?? (
                     allocType === 'percentage'
                       ? `Total is ${runningTotal.toFixed(1)}% — must equal 100%`
-                      : `Total ₦${runningTotal.toLocaleString()} doesn't match starting balance ₦${(startingBalance ?? 0).toLocaleString()}`
+                      : `Total ${formatAmount(runningTotal, bankCurrency)} doesn't match starting balance ${formatAmount(startingBalance ?? 0, bankCurrency)}`
                   )}
                 </div>
               )}
