@@ -1,5 +1,22 @@
 # Import Rules
 
+## Date Parsing (`src/utils/parseDate.ts`)
+
+`parseDate(raw, format?)` — extracted utility; imported by `ImportModal.tsx`.
+
+**Three paths (all output `YYYY-MM-DD` string or `null`):**
+1. **Excel serial number** — `XLSX.SSF.parse_date_code(raw)` → direct y/m/d extraction; no `Date` object
+2. **Slash strings** — regex `(\d{1,2})\/(\d{1,2})\/(\d{4})` → string arithmetic; `DD/MM/YYYY` default, `MM/DD/YYYY` optional
+3. **Fallback** — `new Date(s)` then **local getters** (`getFullYear/getMonth/getDate`); NOT `toISOString()`
+
+**Never use `toISOString()` on a transaction date.** In UTC+1 (WAT/Nigeria), local midnight → UTC 23:00 previous day → off-by-one. The local-getter path was introduced to fix this (PR #200).
+
+`recorded_at` (full ISO timestamp) is unaffected — `new Date().toISOString()` is correct there.
+
+Tests: `src/utils/__tests__/parseDate.test.ts` — 47 cases covering all three paths and the off-by-one regression.
+
+---
+
 ## Import is the Sole Entry Point
 
 **All transaction creation goes through `Import.tsx`.** Inflows and Outflows pages are display-only — no Add buttons, no import triggers. Edit and delete remain on those pages.
