@@ -75,7 +75,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Import() {
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
   const { canImportTransactions } = useRole()
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
@@ -977,7 +977,7 @@ function ManualEntryForm() {
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
               <p className="text-xs text-gray-500">
-                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString(formatLocale, { minimumFractionDigits: 2 })}
               </p>
             )}
           </div>
@@ -1125,7 +1125,7 @@ function ManualEntryForm() {
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
               <p className="text-xs text-gray-500">
-                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString(formatLocale, { minimumFractionDigits: 2 })}
               </p>
             )}
           </div>

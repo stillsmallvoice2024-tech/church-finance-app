@@ -10,6 +10,6 @@ interface OutflowRowDetailProps {
 }
 
 export const OutflowRowDetail = memo(function OutflowRowDetail({ row, colSpan }: OutflowRowDetailProps) {
-  const { baseCurrencySymbol } = useOrgCurrency()
-  return <RowDetailPanel items={outflowDetailItems(row, baseCurrencySymbol)} colSpan={colSpan} />
+  const { baseCurrencyCode } = useOrgCurrency()
+  return <RowDetailPanel items={outflowDetailItems(row, baseCurrencyCode)} colSpan={colSpan} />
 })

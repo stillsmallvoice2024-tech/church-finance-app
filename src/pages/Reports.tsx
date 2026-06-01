@@ -21,8 +21,8 @@ const MONTH_NAMES  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
-function fmtAmt(n: number) {
-  return n.toLocaleString('en-NG', { minimumFractionDigits: 2 })
+function fmtAmt(n: number, locale: string) {
+  return n.toLocaleString(locale, { minimumFractionDigits: 2 })
 }
 
 function ErrBox({ msg }: { msg: string }) {
@@ -85,7 +85,7 @@ function ReportSection({
 interface AnnualRow { year: number; totalInflow: number; totalOutflow: number; net: number }
 
 function AnnualSummaryPanel() {
-  const { baseCurrencySymbol: sym } = useOrgCurrency()
+  const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
   const [rows,    setRows]    = useState<AnnualRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -156,10 +156,10 @@ function AnnualSummaryPanel() {
               {rows.map(r => (
                 <tr key={r.year} className="hover:bg-gray-50">
                   <td className="px-5 py-3 font-semibold text-gray-800">{r.year}</td>
-                  <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(r.totalInflow)}</td>
-                  <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(r.totalOutflow)}</td>
+                  <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(r.totalInflow, formatLocale)}</td>
+                  <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(r.totalOutflow, formatLocale)}</td>
                   <td className={`px-5 py-3 text-right font-bold ${r.net >= 0 ? 'text-success' : 'text-danger'}`}>
-                    {sym}{fmtAmt(r.net)}
+                    {sym}{fmtAmt(r.net, formatLocale)}
                   </td>
                 </tr>
               ))}
@@ -176,7 +176,7 @@ function AnnualSummaryPanel() {
 interface MonthlyRow { month: number; totalInflow: number; totalOutflow: number; net: number }
 
 function MonthlyBreakdownPanel() {
-  const { baseCurrencySymbol: sym } = useOrgCurrency()
+  const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
   const [year,    setYear]    = useState(activeYear)
 
@@ -273,20 +273,20 @@ function MonthlyBreakdownPanel() {
                   <td className="px-5 py-3 font-medium text-gray-700">
                     {MONTH_NAMES[r.month - 1]} {year}
                   </td>
-                  <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(r.totalInflow)}</td>
-                  <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(r.totalOutflow)}</td>
+                  <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(r.totalInflow, formatLocale)}</td>
+                  <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(r.totalOutflow, formatLocale)}</td>
                   <td className={`px-5 py-3 text-right font-semibold ${r.net >= 0 ? 'text-success' : 'text-danger'}`}>
-                    {sym}{fmtAmt(r.net)}
+                    {sym}{fmtAmt(r.net, formatLocale)}
                   </td>
                 </tr>
               ))}
               {/* Totals row */}
               <tr className="bg-gray-50 font-bold border-t border-gray-200">
                 <td className="px-5 py-3 text-gray-700">Total {year}</td>
-                <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(grandInflow)}</td>
-                <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(grandOutflow)}</td>
+                <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(grandInflow, formatLocale)}</td>
+                <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(grandOutflow, formatLocale)}</td>
                 <td className={`px-5 py-3 text-right ${grandNet >= 0 ? 'text-success' : 'text-danger'}`}>
-                  {sym}{fmtAmt(grandNet)}
+                  {sym}{fmtAmt(grandNet, formatLocale)}
                 </td>
               </tr>
             </tbody>
@@ -308,7 +308,7 @@ interface IncomeTypeRow {
 }
 
 function IncomeTypeBreakdownPanel() {
-  const { baseCurrencySymbol: sym } = useOrgCurrency()
+  const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
   const { incomeTypes } = useIncomeTypes()
 
@@ -414,7 +414,7 @@ function IncomeTypeBreakdownPanel() {
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-success">{sym}{fmtAmt(r.amount)}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-success">{sym}{fmtAmt(r.amount, formatLocale)}</td>
                     <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
                     <td className="px-5 py-3">
                       <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -432,7 +432,7 @@ function IncomeTypeBreakdownPanel() {
                 <td className="px-5 py-3 text-right text-gray-500">
                   {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
                 </td>
-                <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(grandTotal)}</td>
+                <td className="px-5 py-3 text-right text-success">{sym}{fmtAmt(grandTotal, formatLocale)}</td>
                 <td className="px-5 py-3 text-right text-gray-400">100%</td>
                 <td />
               </tr>
@@ -455,7 +455,7 @@ interface OutflowTypeRow {
 }
 
 function OutflowTypeBreakdownPanel() {
-  const { baseCurrencySymbol: sym } = useOrgCurrency()
+  const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
   const { outflowTypes } = useOutflowTypes()
 
@@ -562,7 +562,7 @@ function OutflowTypeBreakdownPanel() {
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-danger">{sym}{fmtAmt(r.amount)}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-danger">{sym}{fmtAmt(r.amount, formatLocale)}</td>
                     <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
                     <td className="px-5 py-3">
                       <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -580,7 +580,7 @@ function OutflowTypeBreakdownPanel() {
                 <td className="px-5 py-3 text-right text-gray-500">
                   {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
                 </td>
-                <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(grandTotal)}</td>
+                <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(grandTotal, formatLocale)}</td>
                 <td className="px-5 py-3 text-right text-gray-400">100%</td>
                 <td />
               </tr>
@@ -614,7 +614,7 @@ interface DrillTxn {
 }
 
 function DepartmentBreakdownPanel() {
-  const { baseCurrencySymbol: sym } = useOrgCurrency()
+  const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
   const { departments } = useDepartments()
   const { outflowTypes } = useOutflowTypes()
@@ -766,7 +766,7 @@ function DepartmentBreakdownPanel() {
       <td className="px-4 py-2 text-gray-700 max-w-[200px] truncate">{t.description ?? t.bank_description ?? '—'}</td>
       <td className="px-4 py-2 text-gray-500">{getTypeName(t.outflow_type_id)}</td>
       <td className="px-4 py-2 text-gray-500">{getDeptName(t.department_id)}</td>
-      <td className="px-4 py-2 text-right font-medium text-danger">{sym}{fmtAmt(t.actual_amount || t.amount_disbursed)}</td>
+      <td className="px-4 py-2 text-right font-medium text-danger">{sym}{fmtAmt(t.actual_amount || t.amount_disbursed, formatLocale)}</td>
     </tr>
   )
 
@@ -824,7 +824,7 @@ function DepartmentBreakdownPanel() {
                           </div>
                         </td>
                         <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
-                        <td className="px-5 py-3 text-right font-semibold text-danger">{sym}{fmtAmt(r.amount)}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-danger">{sym}{fmtAmt(r.amount, formatLocale)}</td>
                         <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
                         <td className="px-5 py-3">
                           <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -874,7 +874,7 @@ function DepartmentBreakdownPanel() {
                                         {drillTxns.length === 200 && ' (capped at 200)'}
                                       </td>
                                       <td className="px-4 py-2 text-right text-danger">
-                                        {sym}{fmtAmt(drillTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0))}
+                                        {sym}{fmtAmt(drillTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0), formatLocale)}
                                       </td>
                                     </tr>
                                   </tfoot>
@@ -892,7 +892,7 @@ function DepartmentBreakdownPanel() {
                   <td className="px-5 py-3 text-right text-gray-500">
                     {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
                   </td>
-                  <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(grandTotal)}</td>
+                  <td className="px-5 py-3 text-right text-danger">{sym}{fmtAmt(grandTotal, formatLocale)}</td>
                   <td className="px-5 py-3 text-right text-gray-400">100%</td>
                   <td />
                 </tr>
@@ -972,7 +972,7 @@ function DepartmentBreakdownPanel() {
                       {crossTxns.length === 500 && ' (capped at 500)'}
                     </td>
                     <td className="px-4 py-3 text-right text-danger">
-                      {sym}{fmtAmt(crossTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0))}
+                      {sym}{fmtAmt(crossTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0), formatLocale)}
                     </td>
                   </tr>
                 </tfoot>

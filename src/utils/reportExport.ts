@@ -15,8 +15,9 @@ import type {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(n: number): string {
-  return new Intl.NumberFormat('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+function makeFmt(locale: string) {
+  const nf = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (n: number) => nf.format(n)
 }
 
 function getCategoryBalance(
@@ -125,7 +126,9 @@ export function exportReportPDF(
   orgName = 'Financial Report',
   opBalances: OperationalBalanceMap = new Map(),
   currencySymbol = '₦',
+  numberLocale = 'en-NG',
 ): void {
+  const fmt = makeFmt(numberLocale)
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
@@ -263,7 +266,9 @@ export function exportReportExcel(
   orgName = 'Financial Report',
   opBalances: OperationalBalanceMap = new Map(),
   currencySymbol = '₦',
+  numberLocale = 'en-NG',
 ): void {
+  const fmt = makeFmt(numberLocale)
   const wb = XLSX.utils.book_new()
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {

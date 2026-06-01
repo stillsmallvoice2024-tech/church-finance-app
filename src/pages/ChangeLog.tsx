@@ -17,6 +17,7 @@ import type { SortField } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { filterInputCls }     from '../components/ui/FormField'
 import { EmptyState }         from '../components/ui/EmptyState'
+import { useOrgCurrency }     from '../hooks/useOrgCurrency'
 
 const TABLE_LABELS: Record<string, string> = {
   inflow_transactions:  'Inflow Transactions',
@@ -40,8 +41,8 @@ const CL_COLUMNS: TableColumnDef<FieldChangeEntry>[] = [
 const CL_SORT_COLS = new Set(['changed_at', 'field_name', 'table_name'])
 const CL_SEARCH_COLS = new Set(['field_name', 'table_name', 'old_value', 'new_value'])
 
-function fmtTs(ts: string) {
-  return new Date(ts).toLocaleString('en-NG', {
+function fmtTs(ts: string, locale: string) {
+  return new Date(ts).toLocaleString(locale, {
     year: 'numeric', month: 'short', day: '2-digit',
     hour: '2-digit', minute: '2-digit',
   })
@@ -49,6 +50,7 @@ function fmtTs(ts: string) {
 
 export default function ChangeLog() {
   usePageTitle('Change Log')
+  const { formatLocale } = useOrgCurrency()
 
   const [tableFilter, setTableFilter] = useState('')
   const [dateFrom,    setDateFrom]    = useState('')
@@ -119,7 +121,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
 
   const CL_CSV_HEADERS = ['Timestamp', 'User', 'Table', 'Record ID', 'Field', 'Old Value', 'New Value']
   const clCsvRow = (e: FieldChangeEntry) => [
-    fmtTs(e.changed_at),
+    fmtTs(e.changed_at, formatLocale),
     e.profiles?.full_name ?? e.profiles?.email ?? e.user_id ?? '—',
     TABLE_LABELS[e.table_name] ?? e.table_name,
     e.record_id, e.field_name, e.old_value ?? '', e.new_value ?? '',
@@ -287,7 +289,7 @@ CREATE POLICY "Auth insert field_changes" ON public.field_changes
               ) : (
                 displayed.map(e => (
                   <tr key={e.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.changed_at)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.changed_at, formatLocale)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                       {e.profiles?.full_name ?? e.profiles?.email ?? <span className="text-gray-400">—</span>}
                     </td>

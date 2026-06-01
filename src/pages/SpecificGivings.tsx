@@ -66,7 +66,7 @@ function groupRows(rows: SpecificRow[]): GroupedCategory[] {
 
 export default function SpecificGivings() {
   usePageTitle('Specific Givings')
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const year = useAccountingYearStore(s => s.year)
 
@@ -317,7 +317,7 @@ export default function SpecificGivings() {
           {/* Grand total strip */}
           <div className="bg-primary/5 border border-primary/20 rounded-xl px-5 py-3 flex items-center justify-between">
             <span className="text-sm font-semibold text-primary">Total Specific Givings ({year})</span>
-            <span className="font-mono font-bold text-primary text-base">{formatCurrency(grandTotal)}</span>
+            <span className="font-mono font-bold text-primary text-base">{formatCurrency(grandTotal, baseCurrencyCode)}</span>
           </div>
 
           {/* Per-category cards */}
@@ -326,7 +326,7 @@ export default function SpecificGivings() {
               {/* Category header */}
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
                 <span className="font-semibold text-gray-800 text-sm">{group.category}</span>
-                <span className="font-mono font-bold text-gray-700 text-sm">{formatCurrency(group.total)}</span>
+                <span className="font-mono font-bold text-gray-700 text-sm">{formatCurrency(group.total, baseCurrencyCode)}</span>
               </div>
 
               {/* Targets table */}
@@ -350,7 +350,7 @@ export default function SpecificGivings() {
                         {formatDate(t.latest)}
                       </td>
                       <td className="px-5 py-3 text-right font-semibold text-success">
-                        {formatCurrency(t.total)}
+                        {formatCurrency(t.total, baseCurrencyCode)}
                       </td>
                     </tr>
                   ))}

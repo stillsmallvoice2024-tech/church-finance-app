@@ -353,7 +353,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
 
 export default function Categories() {
   usePageTitle('Categories')
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
 
   const { categories, loading, error, refetch }    = useCategories()
   const { groups, error: groupsError, refetch: refetchGroups } = useCategoryGroups()
@@ -617,7 +617,7 @@ export default function Categories() {
                         <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Bal. B/F</p>
                         {displayBalances.map(b => (
                           <p key={b.budget_portion} className="text-sm font-mono font-bold tabular-nums text-gray-700">
-                            {baseCurrencySymbol}{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                            {baseCurrencySymbol}{b.amount.toLocaleString(formatLocale, { minimumFractionDigits: 2 })}
                           </p>
                         ))}
                       </div>
@@ -808,7 +808,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         {displayBalances.length > 0
           ? <div className="flex flex-col gap-0.5 items-end">
               {displayBalances.map(b => (
-                <span key={b.budget_portion}>{baseCurrencySymbol}{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+                <span key={b.budget_portion}>{baseCurrencySymbol}{b.amount.toLocaleString(formatLocale, { minimumFractionDigits: 2 })}</span>
               ))}
             </div>
           : <span className="text-gray-300">—</span>}

@@ -181,7 +181,7 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
 
 export default function IntraBankTransfers() {
   usePageTitle('Intrabank Transfers')
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const { banks } = useBanks()
   const { canWrite, canDelete } = useRole()
@@ -333,8 +333,8 @@ export default function IntraBankTransfers() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
             { label: 'Total transfers', value: filtered.length.toLocaleString() },
-            { label: 'Total amount',    value: formatCurrency(filtered.reduce((s, r) => s + r.amount, 0)) },
-            { label: 'Largest',         value: filtered.length ? formatCurrency(Math.max(...filtered.map(r => r.amount))) : '—' },
+            { label: 'Total amount',    value: formatCurrency(filtered.reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
+            { label: 'Largest',         value: filtered.length ? formatCurrency(Math.max(...filtered.map(r => r.amount)), baseCurrencyCode) : '—' },
           ].map(({ label, value }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
               <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -386,7 +386,7 @@ export default function IntraBankTransfers() {
                   <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
-                      <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(row.amount)}</p>
+                      <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                       {canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>}
@@ -439,7 +439,7 @@ export default function IntraBankTransfers() {
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.from_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.to_bank_name ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(row.amount)}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(row.amount, baseCurrencyCode)}</td>
                       <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
                         <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>

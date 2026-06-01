@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useOrgStore } from '../store/orgStore'
 import { useCurrencies, DEFAULT_CURRENCIES, type Currency as CurrencyMeta } from './useCurrencies'
-import { getCurrencySymbol, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
+import { getCurrencySymbol, getCurrencyLocale, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 
 export interface OrgCurrency {
   /** Code of the organisation's base currency, e.g. "NGN" */
@@ -12,6 +12,8 @@ export interface OrgCurrency {
   baseCurrencyName: string
   /** Flag emoji, if available */
   baseCurrencyFlag: string | null
+  /** BCP-47 locale derived from the base currency, e.g. "en-NG" */
+  formatLocale: string
   /** All active currencies that are NOT the base currency */
   foreignCurrencies: CurrencyMeta[]
   /** All active currencies (base + foreign) */
@@ -50,14 +52,15 @@ export function useOrgCurrency(): OrgCurrency {
 
     return {
       baseCurrencyCode,
-      baseCurrencySymbol: baseMeta.symbol,
-      baseCurrencyName:   baseMeta.name,
-      baseCurrencyFlag:   baseMeta.flag ?? null,
-      foreignCurrencies:  pool.filter((c) => c.code !== baseCurrencyCode),
-      allCurrencies:      pool,
-      formatAmount:       (amount, currency) => formatCurrency(amount, currency ?? baseCurrencyCode),
-      formatAmountCompact:(amount, currency) => formatCurrencyCompact(amount, currency ?? baseCurrencyCode),
-      getCurrencySymbol:  sym,
+      baseCurrencySymbol:  baseMeta.symbol,
+      baseCurrencyName:    baseMeta.name,
+      baseCurrencyFlag:    baseMeta.flag ?? null,
+      formatLocale:        getCurrencyLocale(baseCurrencyCode),
+      foreignCurrencies:   pool.filter((c) => c.code !== baseCurrencyCode),
+      allCurrencies:       pool,
+      formatAmount:        (amount, currency) => formatCurrency(amount, currency ?? baseCurrencyCode),
+      formatAmountCompact: (amount, currency) => formatCurrencyCompact(amount, currency ?? baseCurrencyCode),
+      getCurrencySymbol:   sym,
     }
   }, [storedCode, currencies])
 }

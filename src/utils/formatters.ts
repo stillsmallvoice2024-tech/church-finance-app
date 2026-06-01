@@ -1,5 +1,7 @@
 import { format } from 'date-fns'
 
+// ── Symbol map ────────────────────────────────────────────────────────────────
+
 const CURRENCY_SYMBOLS: Record<string, string> = {
   NGN: '₦',
   USD: '$',
@@ -30,30 +32,71 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   DKK: 'kr',
 }
 
+// ── Locale map — maps each currency code to its natural BCP-47 locale ─────────
+
+export const CURRENCY_LOCALE_MAP: Record<string, string> = {
+  NGN: 'en-NG',
+  USD: 'en-US',
+  GBP: 'en-GB',
+  EUR: 'de-DE',
+  CNY: 'zh-CN',
+  JPY: 'ja-JP',
+  AED: 'ar-AE',
+  CAD: 'en-CA',
+  AUD: 'en-AU',
+  CHF: 'de-CH',
+  ZAR: 'en-ZA',
+  GHS: 'en-GH',
+  KES: 'en-KE',
+  UGX: 'en-UG',
+  TZS: 'sw-TZ',
+  XOF: 'fr-SN',
+  XAF: 'fr-CM',
+  EGP: 'ar-EG',
+  INR: 'en-IN',
+  BRL: 'pt-BR',
+  MXN: 'es-MX',
+  SGD: 'en-SG',
+  HKD: 'zh-HK',
+  NZD: 'en-NZ',
+  SEK: 'sv-SE',
+  NOK: 'nb-NO',
+  DKK: 'da-DK',
+}
+
+// ── Public helpers ─────────────────────────────────────────────────────────────
+
 export function getCurrencySymbol(code: string): string {
   return CURRENCY_SYMBOLS[code] ?? code
 }
 
-export function formatCurrency(amount: number, currency = 'NGN'): string {
+/** Returns the BCP-47 locale most appropriate for formatting amounts in the given currency. */
+export function getCurrencyLocale(code: string): string {
+  return CURRENCY_LOCALE_MAP[code] ?? 'en-US'
+}
+
+export function formatCurrency(amount: number, currency: string): string {
+  const locale = getCurrencyLocale(currency)
   const symbol = getCurrencySymbol(currency)
-  return `${symbol}${amount.toLocaleString('en-NG', {
+  return `${symbol}${amount.toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
 }
 
 /** Renders negatives as (SYM 1,234.56), zero as —, positives normally. */
-export function formatCurrencyNegative(amount: number, currency = 'NGN'): string {
+export function formatCurrencyNegative(amount: number, currency: string): string {
   if (amount === 0) return '—'
+  const locale = getCurrencyLocale(currency)
   const symbol = getCurrencySymbol(currency)
-  const abs = Math.abs(amount).toLocaleString('en-NG', {
+  const abs = Math.abs(amount).toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
   return amount < 0 ? `(${symbol}${abs})` : `${symbol}${abs}`
 }
 
-export function formatCurrencyCompact(amount: number, currency = 'NGN'): string {
+export function formatCurrencyCompact(amount: number, currency: string): string {
   const symbol = getCurrencySymbol(currency)
   const abs = Math.abs(amount)
   let formatted: string

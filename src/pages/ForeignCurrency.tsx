@@ -16,7 +16,7 @@ import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
-import { formatDate } from '../utils/formatters'
+import { formatDate, getCurrencyLocale } from '../utils/formatters'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 const FX_COLUMNS: TableColumnDef<FXTransaction>[] = [
@@ -28,15 +28,16 @@ const FX_COLUMNS: TableColumnDef<FXTransaction>[] = [
 
 const FX_SORT_FIELDS = deriveSortFields(FX_COLUMNS)
 
-function fmtFX(n: number, dp = 4) {
-  return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })
-}
-function fmtBase(n: number) {
-  return n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function fmtFX(n: number, ccyCode: string, dp = 4) {
+  return n.toLocaleString(getCurrencyLocale(ccyCode), { minimumFractionDigits: dp, maximumFractionDigits: dp })
 }
 
 export default function ForeignCurrency() {
-  const { baseCurrencySymbol, baseCurrencyCode, foreignCurrencies: FX_META } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode, formatLocale, foreignCurrencies: FX_META } = useOrgCurrency()
+
+  function fmtBase(n: number) {
+    return n.toLocaleString(formatLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
   const [addOpen, setAddOpen]           = useState(false)
   const [editRecord, setEditRecord]     = useState<FXTransaction | null>(null)
   const [filterCcy, setFilterCcy]       = useState<string>('')
@@ -163,13 +164,13 @@ export default function ForeignCurrency() {
                 </span>
               </div>
               <div className={`text-xl font-bold ${active ? 'text-gray-900' : 'text-gray-400'}`}>
-                {meta.symbol}{fmtFX(balance)}
+                {meta.symbol}{fmtFX(balance, meta.code)}
               </div>
               <div className="text-xs text-gray-400 mt-0.5">{meta.name}</div>
               {s && (
                 <div className="mt-3 grid grid-cols-2 gap-1 text-xs">
-                  <div className="text-success">↑ {meta.symbol}{fmtFX(s.totalDeposits)}</div>
-                  <div className="text-danger">↓ {meta.symbol}{fmtFX(s.totalWithdrawals)}</div>
+                  <div className="text-success">↑ {meta.symbol}{fmtFX(s.totalDeposits, meta.code)}</div>
+                  <div className="text-danger">↓ {meta.symbol}{fmtFX(s.totalWithdrawals, meta.code)}</div>
                 </div>
               )}
             </div>
@@ -204,7 +205,7 @@ export default function ForeignCurrency() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                 />
                 <div className="text-xs text-gray-400">
-                  {meta.symbol}{fmtFX(bal)} → {baseCurrencySymbol}{fmtBase(equiv)}
+                  {meta.symbol}{fmtFX(bal, meta.code)} → {baseCurrencySymbol}{fmtBase(equiv)}
                 </div>
               </div>
             )
@@ -347,10 +348,10 @@ export default function ForeignCurrency() {
                           isDeposit ? 'text-success' : 'text-danger'
                         }`}
                       >
-                        {meta.symbol}{fmtFX(isDeposit ? t.deposit : t.withdrawal)}
+                        {meta.symbol}{fmtFX(isDeposit ? t.deposit : t.withdrawal, meta.code)}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-700">
-                        {meta.symbol}{fmtFX(t.running_balance)}
+                        {meta.symbol}{fmtFX(t.running_balance, meta.code)}
                       </td>
                       <td className="px-4 py-3 text-gray-600 max-w-[200px]">
                         <DescriptionCell id={t.id} text={t.narration} tooltip={descTooltip} setTooltip={setDescTooltip} />

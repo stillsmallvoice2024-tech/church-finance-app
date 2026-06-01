@@ -25,7 +25,7 @@ interface TxnRow {
 
 export default function ReversalTransactions() {
   usePageTitle('Reversals')
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -162,8 +162,8 @@ export default function ReversalTransactions() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
           { label: 'Total rows',    value: filtered.length.toLocaleString() },
-          { label: 'Total inflow',  value: formatCurrency(filtered.filter(r => r.direction === 'in').reduce((s, r) => s + r.amount, 0)) },
-          { label: 'Total outflow', value: formatCurrency(filtered.filter(r => r.direction === 'out').reduce((s, r) => s + r.amount, 0)) },
+          { label: 'Total inflow',  value: formatCurrency(filtered.filter(r => r.direction === 'in').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
+          { label: 'Total outflow', value: formatCurrency(filtered.filter(r => r.direction === 'out').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
         ].map(({ label, value }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
             <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -226,7 +226,7 @@ export default function ReversalTransactions() {
                     Reversal
                   </p>
                   <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
-                    {formatCurrency(row.amount)}
+                    {formatCurrency(row.amount, baseCurrencyCode)}
                   </p>
                 </div>
               </div>
@@ -277,7 +277,7 @@ export default function ReversalTransactions() {
                             {row.direction === 'in' ? 'Inflow' : 'Outflow'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount, baseCurrencyCode)}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]">
                           <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>

@@ -20,7 +20,7 @@ import {
 import { useCategories } from '../hooks/useCategories'
 import { useToastStore } from '../store/toastStore'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
-import { getCurrencySymbol } from '../utils/formatters'
+import { getCurrencySymbol, getCurrencyLocale } from '../utils/formatters'
 import {
   parseTokens,
   resolveTokens,
@@ -63,14 +63,14 @@ const PORTION_SHORT: Record<string, string> = {
   percentage: ' · % Alloc',
 }
 
-function fmtNum(n: number): string {
-  return n.toLocaleString('en-NG', { minimumFractionDigits: 2 })
+function fmtNum(n: number, locale: string): string {
+  return n.toLocaleString(locale, { minimumFractionDigits: 2 })
 }
 
 function fmtAmount(n: number, currency: string): string {
   const abs = Math.abs(n)
   const sym = getCurrencySymbol(currency)
-  return (n < 0 ? '-' : '') + sym + fmtNum(abs)
+  return (n < 0 ? '-' : '') + sym + fmtNum(abs, getCurrencyLocale(currency))
 }
 
 // ── Local block shape ──────────────────────────────────────────────────────────

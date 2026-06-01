@@ -43,7 +43,7 @@ const PD_SORT_FIELDS = deriveSortFields(PD_COLUMNS)
 // ── Page component ─────────────────────────────────────────────────────────────
 
 export default function PendingDeductions() {
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { dateFrom, dateTo } = useYearRange()
 
   const pdState = useDataViewState({ storageKey: 'pd', defaultSortKey: 'date', defaultSortDir: 'desc' })
@@ -251,8 +251,8 @@ export default function PendingDeductions() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
             { label: 'Pending Count',  value: count.toLocaleString() },
-            { label: 'Total (page)',   value: formatCurrencyCompact(total) },
-            { label: 'Largest',        value: formatCurrencyCompact(largest) },
+            { label: 'Total (page)',   value: formatCurrencyCompact(total, baseCurrencyCode) },
+            { label: 'Largest',        value: formatCurrencyCompact(largest, baseCurrencyCode) },
           ].map(({ label, value }) => (
             <div key={label} className="bg-white rounded-xl border border-amber-100 shadow-sm px-4 py-3">
               <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -385,8 +385,8 @@ export default function PendingDeductions() {
                           <td className="px-4 py-3 text-sm text-gray-800 max-w-[360px] truncate" title={row.description || undefined}>
                             {row.description || '—'}
                           </td>
-                          <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed))}</td>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net)}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed), baseCurrencyCode)}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">{formatCurrency(net, baseCurrencyCode)}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.stage_code_1 ?? '—'}</td>
                           <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px] truncate" title={row.remarks ?? undefined}>{row.remarks ?? '—'}</td>
                           <td className="px-4 py-3">
@@ -414,7 +414,7 @@ export default function PendingDeductions() {
                             </div>
                           </td>
                         </tr>
-                        {isExpanded && <RowDetailPanel items={outflowDetailItems(row, baseCurrencySymbol)} colSpan={9} />}
+                        {isExpanded && <RowDetailPanel items={outflowDetailItems(row, baseCurrencyCode)} colSpan={9} />}
                       </Fragment>
                     )
                   })

@@ -25,7 +25,7 @@ import { useCategories }           from '../hooks/useCategories'
 import { useAuth }                 from '../hooks/useAuth'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
-import { formatCurrencyCompact, formatDate } from '../utils/formatters'
+import { formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/formatters'
 import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 
@@ -62,7 +62,7 @@ function greeting() {
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
-  const { foreignCurrencies } = useOrgCurrency()
+  const { foreignCurrencies, baseCurrencyCode } = useOrgCurrency()
   const year   = useAccountingYearStore(s => s.year)
   const stats  = useDashboardStats(year)
   const { categories, loading: categoriesLoading } = useCategories()
@@ -176,19 +176,19 @@ export default function Dashboard() {
             <>
               <StatCard
                 title={`Total Inflows (${year})`}
-                value={formatCurrencyCompact(stats.totalInflow)}
+                value={formatCurrencyCompact(stats.totalInflow, baseCurrencyCode)}
                 icon={<TrendingUp className="w-5 h-5 text-success" />}
                 iconBgClass="bg-green-50"
               />
               <StatCard
                 title={`Total Outflows (${year})`}
-                value={formatCurrencyCompact(stats.totalOutflow)}
+                value={formatCurrencyCompact(stats.totalOutflow, baseCurrencyCode)}
                 icon={<TrendingDown className="w-5 h-5 text-danger" />}
                 iconBgClass="bg-red-50"
               />
               <StatCard
                 title="Net Balance"
-                value={formatCurrencyCompact(stats.netBalance)}
+                value={formatCurrencyCompact(stats.netBalance, baseCurrencyCode)}
                 icon={<Wallet className="w-5 h-5 text-primary" />}
                 iconBgClass="bg-primary-100"
               />
@@ -236,12 +236,12 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                   <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                   <YAxis
-                    tickFormatter={v => formatCurrencyCompact(v)}
+                    tickFormatter={v => formatCurrencyCompact(v, baseCurrencyCode)}
                     tick={{ fontSize: 11, fill: '#6B7280' }}
                     axisLine={false} tickLine={false} width={64}
                   />
                   <Tooltip
-                    formatter={(v: number) => [formatCurrencyCompact(v)]}
+                    formatter={(v: number) => [formatCurrencyCompact(v, baseCurrencyCode)]}
                     contentStyle={{ borderRadius: '0.75rem', border: '1px solid #E5E7EB', fontSize: '13px' }}
                   />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '13px' }} />
@@ -283,7 +283,7 @@ export default function Dashboard() {
                     {tx.display_description || tx.description || '—'}
                   </span>
                   <span className="text-sm font-semibold text-success whitespace-nowrap shrink-0 font-mono">
-                    +{formatCurrencyCompact(tx.amount)}
+                    +{formatCurrencyCompact(tx.amount, baseCurrencyCode)}
                   </span>
                 </div>
               ))}
@@ -310,7 +310,7 @@ export default function Dashboard() {
                     <div className="h-5 bg-gray-100 rounded animate-pulse w-3/4" />
                   ) : (
                     <p className={`text-base font-bold font-mono ${hasValue ? 'text-gray-900' : 'text-gray-400'}`}>
-                      {fx.symbol}{balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {fx.symbol}{balance.toLocaleString(getCurrencyLocale(fx.code), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   )}
                 </div>

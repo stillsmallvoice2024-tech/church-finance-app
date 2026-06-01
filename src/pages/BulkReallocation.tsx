@@ -115,7 +115,7 @@ async function executeBulkReallocation(params: {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function BulkReallocation() {
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { categories, loading: catLoading } = useCategories()
   const { push: toast } = useToastStore()
 
@@ -251,7 +251,7 @@ export default function BulkReallocation() {
             </div>
             <div className="ml-auto flex items-center gap-4 text-xs text-gray-500">
               <span>{validRows.length} category{validRows.length !== 1 ? 'ies' : 'y'}</span>
-              <span className="font-bold text-primary">{formatCurrency(totalAmount)}</span>
+              <span className="font-bold text-primary">{formatCurrency(totalAmount, baseCurrencyCode)}</span>
             </div>
           </div>
         </Card>
@@ -301,13 +301,13 @@ export default function BulkReallocation() {
                     <tr key={row.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-800">{row.name}</td>
                       <td className="px-4 py-3 text-sm font-mono text-right text-gray-600 whitespace-nowrap">
-                        {formatCurrency(row.srcBalance)}
+                        {formatCurrency(row.srcBalance, baseCurrencyCode)}
                       </td>
                       <td className="px-4 py-3 text-sm font-mono font-semibold text-right text-primary whitespace-nowrap">
-                        {formatCurrency(row.amount)}
+                        {formatCurrency(row.amount, baseCurrencyCode)}
                       </td>
                       <td className="px-4 py-3 text-sm font-mono text-right text-gray-600 whitespace-nowrap">
-                        {formatCurrency(row.dstBalance + row.amount)}
+                        {formatCurrency(row.dstBalance + row.amount, baseCurrencyCode)}
                       </td>
                       <td className="px-4 py-3 text-right pr-4">
                         {goesZero && (
@@ -325,7 +325,7 @@ export default function BulkReallocation() {
                   <td className="px-4 py-3 text-sm text-gray-700">Total</td>
                   <td />
                   <td className="px-4 py-3 text-sm font-mono text-right text-primary whitespace-nowrap">
-                    {formatCurrency(totalAmount)}
+                    {formatCurrency(totalAmount, baseCurrencyCode)}
                   </td>
                   <td colSpan={2} />
                 </tr>
@@ -478,7 +478,7 @@ export default function BulkReallocation() {
           { label: 'Categories', value: categories.length.toLocaleString(), color: 'text-gray-900' },
           { label: 'Selected',   value: selectedIds.size.toLocaleString(),  color: 'text-primary' },
           { label: 'With balance', value: tableRows.filter(r => r.srcBalance > 0).length.toLocaleString(), color: 'text-gray-700' },
-          { label: 'Total to Move', value: formatCurrency(totalAmount), color: 'text-primary' },
+          { label: 'Total to Move', value: formatCurrency(totalAmount, baseCurrencyCode), color: 'text-primary' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
             <p className="text-xs text-gray-500 mb-1 truncate">{label}</p>
@@ -571,13 +571,13 @@ export default function BulkReallocation() {
                         </div>
                       </td>
                       <td className={`px-4 py-3 text-sm font-mono text-right whitespace-nowrap ${row.srcBalance < 0 ? 'text-danger' : row.srcBalance === 0 ? 'text-gray-400' : 'text-gray-700'}`}>
-                        {formatCurrency(row.srcBalance)}
+                        {formatCurrency(row.srcBalance, baseCurrencyCode)}
                       </td>
                       <td className="px-4 py-3 text-sm font-mono text-right text-gray-500 whitespace-nowrap">
-                        {formatCurrency(row.dstBalance)}
+                        {formatCurrency(row.dstBalance, baseCurrencyCode)}
                       </td>
                       <td className={`px-4 py-3 text-sm font-mono font-semibold text-right whitespace-nowrap ${isSelected && row.amount > 0 ? 'text-primary' : 'text-gray-300'}`}>
-                        {isSelected ? formatCurrency(row.amount) : '—'}
+                        {isSelected ? formatCurrency(row.amount, baseCurrencyCode) : '—'}
                       </td>
                     </tr>
                   )

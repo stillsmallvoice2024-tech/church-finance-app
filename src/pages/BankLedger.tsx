@@ -68,7 +68,7 @@ const BL_SORT_FIELDS = deriveSortFields(BL_COLUMNS)
 
 export default function BankLedger() {
   usePageTitle('Bank Ledger')
-  const { baseCurrencySymbol } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const { banks, loading: banksLoading, error: banksError } = useBanks()
   const { canWrite } = useRole()
@@ -285,9 +285,9 @@ export default function BankLedger() {
       {selectedBank && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { label: 'Total Inflows',  value: formatCurrency(totalInflow),  color: 'text-green-700' },
-            { label: 'Total Outflows', value: formatCurrency(totalOutflow), color: 'text-red-700'   },
-            { label: 'Net Balance',    value: formatCurrency(netBalance),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700' },
+            { label: 'Total Inflows',  value: formatCurrency(totalInflow, baseCurrencyCode),  color: 'text-green-700' },
+            { label: 'Total Outflows', value: formatCurrency(totalOutflow, baseCurrencyCode), color: 'text-red-700'   },
+            { label: 'Net Balance',    value: formatCurrency(netBalance, baseCurrencyCode),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700' },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
               <p className="text-xs text-gray-500 mb-1 truncate">{label}</p>
@@ -433,7 +433,7 @@ export default function BankLedger() {
                         {row.inflow > 0 ? 'Inflow' : 'Outflow'}
                       </p>
                       <p className={`text-sm font-mono font-bold tabular-nums ${row.inflow > 0 ? 'text-success' : 'text-danger'}`}>
-                        {row.inflow > 0 ? formatCurrency(row.inflow) : formatCurrency(row.outflow)}
+                        {row.inflow > 0 ? formatCurrency(row.inflow, baseCurrencyCode) : formatCurrency(row.outflow, baseCurrencyCode)}
                       </p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0">
@@ -442,7 +442,7 @@ export default function BankLedger() {
                         <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
                       </div>
                       <p className={`text-sm font-mono font-bold tabular-nums ${row.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
-                        {formatCurrency(row.balance)}
+                        {formatCurrency(row.balance, baseCurrencyCode)}
                       </p>
                     </div>
                   </div>
@@ -479,8 +479,8 @@ export default function BankLedger() {
                     const isBF = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
                     const isExpanded = expandedId === row.id
                     const detailItems = !isBF
-                      ? (row.inflowData  ? inflowDetailItems(row.inflowData)
-                        : row.outflowData ? outflowDetailItems(row.outflowData, baseCurrencySymbol)
+                      ? (row.inflowData  ? inflowDetailItems(row.inflowData, baseCurrencyCode)
+                        : row.outflowData ? outflowDetailItems(row.outflowData, baseCurrencyCode)
                         : [])
                       : []
                     return [
