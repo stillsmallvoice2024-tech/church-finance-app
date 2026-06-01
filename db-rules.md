@@ -57,6 +57,7 @@
 
 | Columns | Tables | Required by |
 |---|---|---|
+| `username text UNIQUE` | `profiles` | Login-by-username, UserManagement display; `USERNAME_MIGRATION_SQL` constant in `UserManagement.tsx` adds it; **`select=*` silently omits missing columns — explicit join selects requesting it throw `column profile_1.username does not exist`** |
 | `outflow_type_id uuid REFERENCES outflow_types(id) ON DELETE SET NULL` + `CREATE INDEX idx_outflow_type_id` | `outflow_transactions` | Outflow Types feature; requires `outflow_types` table to exist first |
 | `transaction_type text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds, BankDeposits pages |
 | `original_transaction_id text` | `inflow_transactions`, `outflow_transactions` | Reversals, Refunds display |
@@ -149,6 +150,8 @@ This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no 
 ## Supabase FK Join Type Inference
 
 Supabase JS v2 infers many-to-one FK joins (e.g. `.select('amount, categories(name)')`) as `{ name: any }[]` (array) in TypeScript, even though the runtime value is a single object. Direct casts (`r.categories as { name: string }`) trigger TS2352 ("conversion may be a mistake").
+
+**PostgREST internal alias errors**: when an explicit join select requests a column that doesn't exist in the DB (e.g. `profiles!fk(username)` but `username` is absent), PostgREST throws `column profile_1.username does not exist` — the alias (`profile_1`) is PostgREST's internal SQL join alias, not the named response alias. Fix: remove the missing column from the explicit join select; `select=*` fetches silently omit absent columns.
 
 **Fix**: double-cast via `unknown` to bypass the overlap check:
 ```ts
