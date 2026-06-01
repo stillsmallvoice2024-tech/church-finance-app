@@ -76,13 +76,15 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
   const isMigrationError = !!error && /relation.*does not exist|does not exist/i.test(error)
 
   // Dirty detection — compare to snapshot taken on open
-  const initialRef = useRef({ name: '', description: '', color: TYPE_PRESET_COLORS[0], specialConfigGroup: '' })
+  const initialRef      = useRef({ name: '', description: '', color: TYPE_PRESET_COLORS[0], specialConfigGroup: '' })
+  const initialRulesRef = useRef<RuleDraft[]>([{ rule_type: 'keyword', rule_value: '' }])
   const modalRef = useRef<ModalHandle>(null)
   const isDirty =
     name !== initialRef.current.name ||
     description !== initialRef.current.description ||
     color !== initialRef.current.color ||
-    specialConfigGroup !== initialRef.current.specialConfigGroup
+    specialConfigGroup !== initialRef.current.specialConfigGroup ||
+    JSON.stringify(rules) !== JSON.stringify(initialRulesRef.current)
 
   // Populate form when editing
   useEffect(() => {
@@ -94,22 +96,24 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
       setDescription(editRecord.description ?? '')
       setColor(editRecord.color)
       setSpecialConfigGroup(editRecord.special_config_group_id ?? '')
-      setRules(
-        editRecord.rules.length > 0
-          ? editRecord.rules.map(r => ({ rule_type: r.rule_type, rule_value: r.rule_value }))
-          : [{ rule_type: 'keyword', rule_value: '' }]
-      )
+      const initRules = editRecord.rules.length > 0
+        ? editRecord.rules.map(r => ({ rule_type: r.rule_type, rule_value: r.rule_value }))
+        : [{ rule_type: 'keyword' as const, rule_value: '' }]
+      setRules(initRules)
       initialRef.current = {
         name: editRecord.name,
         description: editRecord.description ?? '',
         color: editRecord.color,
         specialConfigGroup: editRecord.special_config_group_id ?? '',
       }
+      initialRulesRef.current = initRules
     } else {
+      const initRules: RuleDraft[] = [{ rule_type: 'keyword', rule_value: '' }]
       setName(''); setDescription(''); setColor(TYPE_PRESET_COLORS[0])
       setSpecialConfigGroup('')
-      setRules([{ rule_type: 'keyword', rule_value: '' }])
+      setRules(initRules)
       initialRef.current = { name: '', description: '', color: TYPE_PRESET_COLORS[0], specialConfigGroup: '' }
+      initialRulesRef.current = initRules
     }
   }, [open, editRecord])
 
