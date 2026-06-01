@@ -1596,30 +1596,19 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_departments_org_active ON public.departments(org_id, active);
 
-ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
-
 DO $$ BEGIN
-  CREATE POLICY "departments_select" ON public.departments
-    FOR SELECT TO authenticated USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+  ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 
-DO $$ BEGIN
-  CREATE POLICY "departments_insert" ON public.departments
-    FOR INSERT TO authenticated WITH CHECK (is_finance_user());
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+  DROP POLICY IF EXISTS "departments_select" ON public.departments;
+  DROP POLICY IF EXISTS "departments_insert" ON public.departments;
+  DROP POLICY IF EXISTS "departments_update" ON public.departments;
+  DROP POLICY IF EXISTS "departments_delete" ON public.departments;
 
-DO $$ BEGIN
-  CREATE POLICY "departments_update" ON public.departments
-    FOR UPDATE TO authenticated USING (is_finance_user());
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE POLICY "departments_delete" ON public.departments
-    FOR DELETE TO authenticated USING (is_admin());
-EXCEPTION WHEN duplicate_object THEN NULL;
+  CREATE POLICY "departments_select" ON public.departments FOR SELECT USING (auth.uid() IS NOT NULL);
+  CREATE POLICY "departments_insert" ON public.departments FOR INSERT WITH CHECK (public.is_finance_user());
+  CREATE POLICY "departments_update" ON public.departments FOR UPDATE USING (public.is_finance_user());
+  CREATE POLICY "departments_delete" ON public.departments FOR DELETE USING (public.is_admin());
+EXCEPTION WHEN undefined_table THEN NULL;
 END $$;
 
 -- FK on outflow_transactions
