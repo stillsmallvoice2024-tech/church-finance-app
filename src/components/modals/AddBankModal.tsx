@@ -87,16 +87,25 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [checkingSchema, setCheckingSchema] = useState(false)
   const newCatInputRef   = useRef<HTMLInputElement>(null)
   const cacheRetryCount  = useRef(0)
+  const initialAllocRef  = useRef<{ type: AllocType; rows: RowDraft[] }>({
+    type: 'percentage',
+    rows: [{ category_name: '', budget_portion: '', value: '', apply_to_category: true }],
+  })
 
   const modalRef = useRef<ModalHandle>(null)
 
-  const { register, control, handleSubmit, formState: { errors, isDirty }, reset: resetForm, watch } = useForm<FormValues>({
+  const { register, control, handleSubmit, formState: { errors, isDirty: formIsDirty }, reset: resetForm, watch } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', account_number: '', account_type: '' },
   })
 
   const startingBalance = watch('starting_balance')
   const hasBalance      = (startingBalance ?? 0) > 0
+
+  const allocsDirty =
+    allocType !== initialAllocRef.current.type ||
+    JSON.stringify(rows) !== JSON.stringify(initialAllocRef.current.rows)
+  const isDirty = formIsDirty || allocsDirty
 
   const runningTotal = rows.reduce((s, r) => s + (parseFloat(r.value) || 0), 0)
   const target       = allocType === 'percentage' ? 100 : (startingBalance ?? 0)
@@ -131,32 +140,37 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         starting_balance: editRecord.starting_balance ?? undefined,
       })
       const allocs = editRecord.starting_balance_allocations ?? []
+      let initType: AllocType = 'percentage'
+      let initRows: RowDraft[]
       if (allocs.length > 0) {
         const usesPercent = allocs[0].percentage !== undefined
-        setAllocType(usesPercent ? 'percentage' : 'amount')
-        setRows(allocs.map(r => ({
+        initType = usesPercent ? 'percentage' : 'amount'
+        initRows = allocs.map(r => ({
           category_name:     r.category_name,
           budget_portion:    r.budget_portion,
           value:             String(usesPercent ? (r.percentage ?? '') : (r.amount ?? '')),
           apply_to_category: r.apply_to_category !== false,
-        })))
+        }))
       } else if (editRecord.starting_balance_category) {
         // backward-compat: legacy single-field bank
-        setAllocType('percentage')
-        setRows([{
+        initRows = [{
           category_name:     editRecord.starting_balance_category,
           budget_portion:    editRecord.starting_balance_budget_portion ?? '',
           value:             '',
           apply_to_category: true,
-        }])
+        }]
       } else {
-        setAllocType('percentage')
-        setRows([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
+        initRows = [{ category_name: '', budget_portion: '', value: '', apply_to_category: true }]
       }
+      setAllocType(initType)
+      setRows(initRows)
+      initialAllocRef.current = { type: initType, rows: initRows }
     } else {
+      const initRows: RowDraft[] = [{ category_name: '', budget_portion: '', value: '', apply_to_category: true }]
       resetForm({ name: '', account_number: '', account_type: '' })
       setAllocType('percentage')
-      setRows([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
+      setRows(initRows)
+      initialAllocRef.current = { type: 'percentage', rows: initRows }
     }
 
     // Schema check with one retry — handles stale PostgREST cache immediately

@@ -26,19 +26,24 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
 
   const [name,            setName]            = useState('')
   const [color,           setColor]           = useState(TYPE_PRESET_COLORS[0])
-  const [linkedCatIds,    setLinkedCatIds]    = useState<string[]>([])
-  const [originalName,    setOriginalName]    = useState('')
-  const [loading,         setLoading]         = useState(false)
-  const [error,           setError]           = useState<string | null>(null)
+  const [linkedCatIds,       setLinkedCatIds]       = useState<string[]>([])
+  const [originalName,       setOriginalName]       = useState('')
+  const [loading,            setLoading]            = useState(false)
+  const [error,              setError]              = useState<string | null>(null)
+  const [linkedCatsModified, setLinkedCatsModified] = useState(false)
 
   // Dirty detection
   const initialRef = useRef({ name: '', color: TYPE_PRESET_COLORS[0] })
   const modalRef = useRef<ModalHandle>(null)
-  const isDirty = name !== initialRef.current.name || color !== initialRef.current.color
+  const isDirty =
+    name !== initialRef.current.name ||
+    color !== initialRef.current.color ||
+    linkedCatsModified
 
   useEffect(() => {
     if (!open) return
     setError(null)
+    setLinkedCatsModified(false)
     if (editRecord) {
       setName(editRecord.name)
       setOriginalName(editRecord.name)
@@ -56,6 +61,7 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
   }, [open, editRecord])
 
   const handleToggleCategory = (catId: string) => {
+    setLinkedCatsModified(true)
     setLinkedCatIds(prev =>
       prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]
     )
