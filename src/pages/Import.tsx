@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Upload, PenLine, FileSpreadsheet, FileText,
@@ -91,6 +91,12 @@ export default function Import() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   usePageTitle('Import')
 
+  // Bank name derived from the selected bank ID — used for scoped dup checks.
+  const selectedBankName = useMemo(
+    () => banks.find(b => b.id === selectedBankId)?.name ?? null,
+    [selectedBankId, banks],
+  )
+
   const reset = () => {
     setParseResult(null)
     setDuplicates([])
@@ -124,7 +130,7 @@ export default function Import() {
       return
     }
 
-    // 1. Parse the Excel file
+    // 1. Parse the Excel file — DB dup check runs in the effect below
     let ids: string[] = []
     let txnIdCol: string | null = null
     let rowCount = 0
@@ -153,42 +159,56 @@ export default function Import() {
       return
     }
 
-    // 2. Check for duplicates in DB (only if we found a txn ID column)
+    // No txn ID column — nothing to check
     if (ids.length === 0) {
       setDupChecked(true)
-      return
     }
-
-    setDupLoading(true)
-    const uniqueIds = [...new Set(ids)]
-
-    const [inflowRes, outflowRes] = await Promise.all([
-      supabase
-        .from('inflow_transactions')
-        .select('transaction_ref')
-        .in('transaction_ref', uniqueIds),
-      supabase
-        .from('outflow_transactions')
-        .select('transaction_id')
-        .in('transaction_id', uniqueIds),
-    ])
-
-    const found: DupRecord[] = []
-    if (!inflowRes.error && inflowRes.data) {
-      for (const r of inflowRes.data) {
-        if (r.transaction_ref) found.push({ id: normalizeId(r.transaction_ref), table: 'inflow_transactions' })
-      }
-    }
-    if (!outflowRes.error && outflowRes.data) {
-      for (const r of outflowRes.data) {
-        if (r.transaction_id) found.push({ id: normalizeId(r.transaction_id), table: 'outflow_transactions' })
-      }
-    }
-
-    setDuplicates(found)
-    setDupChecked(true)
-    setDupLoading(false)
+    // Otherwise the useEffect below triggers the DB check
   }, [])
+
+  // Re-run the DB duplicate check whenever the parsed IDs or the selected bank
+  // changes.  Scoped to bank_name so transactions in different banks with the
+  // same ID are not treated as duplicates.
+  useEffect(() => {
+    if (!parseResult?.ids?.length) return
+    let isCurrent = true
+
+    const runCheck = async () => {
+      setDupLoading(true)
+      setDupChecked(false)
+      const uniqueIds = [...new Set(parseResult.ids)]
+
+      const [inflowRes, outflowRes] = await Promise.all([
+        selectedBankName
+          ? supabase.from('inflow_transactions').select('transaction_ref').eq('bank_name', selectedBankName).in('transaction_ref', uniqueIds)
+          : supabase.from('inflow_transactions').select('transaction_ref').in('transaction_ref', uniqueIds),
+        selectedBankName
+          ? supabase.from('outflow_transactions').select('transaction_id').eq('bank_name', selectedBankName).in('transaction_id', uniqueIds)
+          : supabase.from('outflow_transactions').select('transaction_id').in('transaction_id', uniqueIds),
+      ])
+
+      if (!isCurrent) return
+
+      const found: DupRecord[] = []
+      if (!inflowRes.error && inflowRes.data) {
+        for (const r of inflowRes.data) {
+          if (r.transaction_ref) found.push({ id: normalizeId(r.transaction_ref), table: 'inflow_transactions' })
+        }
+      }
+      if (!outflowRes.error && outflowRes.data) {
+        for (const r of outflowRes.data) {
+          if (r.transaction_id) found.push({ id: normalizeId(r.transaction_id), table: 'outflow_transactions' })
+        }
+      }
+
+      setDuplicates(found)
+      setDupChecked(true)
+      setDupLoading(false)
+    }
+
+    runCheck()
+    return () => { isCurrent = false }
+  }, [parseResult, selectedBankName])
 
   // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
   if (!canImportTransactions()) return <Navigate to="/" replace />
@@ -569,22 +589,20 @@ function ManualEntryForm() {
   const v = (key: string) => fields[key] ?? ''
 
   // ── Duplicate check helpers ──────────────────────────────────────────────
+  // bankName scopes the check to the selected bank so the same ID in a
+  // different bank is not treated as a duplicate.
 
-  async function checkInflowDup(ref: string): Promise<boolean> {
-    const { data } = await supabase
-      .from('inflow_transactions')
-      .select('id')
-      .eq('transaction_ref', ref)
-      .limit(1)
+  async function checkInflowDup(ref: string, bankName: string | null): Promise<boolean> {
+    let q = supabase.from('inflow_transactions').select('id').eq('transaction_ref', ref)
+    if (bankName) q = q.eq('bank_name', bankName)
+    const { data } = await q.limit(1)
     return (data?.length ?? 0) > 0
   }
 
-  async function checkOutflowDup(txnId: string): Promise<boolean> {
-    const { data } = await supabase
-      .from('outflow_transactions')
-      .select('id')
-      .eq('transaction_id', txnId)
-      .limit(1)
+  async function checkOutflowDup(txnId: string, bankName: string | null): Promise<boolean> {
+    let q = supabase.from('outflow_transactions').select('id').eq('transaction_id', txnId)
+    if (bankName) q = q.eq('bank_name', bankName)
+    const { data } = await q.limit(1)
     return (data?.length ?? 0) > 0
   }
 
@@ -718,7 +736,8 @@ function ManualEntryForm() {
 
     const ref = v('transaction_ref').trim()
     if (ref) {
-      const isDup = await checkInflowDup(ref)
+      const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
+      const isDup = await checkInflowDup(ref, bankName)
       if (isDup) {
         setPendingSave(() => doSaveInflow)
         setDupWarning({ txnId: ref })
@@ -739,7 +758,8 @@ function ManualEntryForm() {
 
     const txnId = v('transaction_id').trim()
     if (txnId) {
-      const isDup = await checkOutflowDup(txnId)
+      const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
+      const isDup = await checkOutflowDup(txnId, bankName)
       if (isDup) {
         setPendingSave(() => doSaveOutflow)
         setDupWarning({ txnId })

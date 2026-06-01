@@ -832,17 +832,22 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       setPrecomputedOutflowIds(newOutflowIds)
 
       // ── Stage 4: Duplicate detection against the database ─────────────────
-      // Query DB for ALL pre-computed IDs — both bank-provided and fallback.
-      // This catches duplicates for accounts with OR without preset transaction IDs.
+      // Scoped to the selected bank (bank_name) so that the same transaction ID
+      // in a different bank is not treated as a duplicate.
       const uniqueInflowIds  = [...new Set(inflowIdList)].filter(Boolean)
       const uniqueOutflowIds = [...new Set(outflowIdList)].filter(Boolean)
+      const bankName = internalBank?.name ?? null
 
       const [inflowRes, outflowRes] = await Promise.all([
         uniqueInflowIds.length > 0
-          ? supabase.from('inflow_transactions').select('transaction_ref').in('transaction_ref', uniqueInflowIds)
+          ? (bankName
+              ? supabase.from('inflow_transactions').select('transaction_ref').eq('bank_name', bankName).in('transaction_ref', uniqueInflowIds)
+              : supabase.from('inflow_transactions').select('transaction_ref').in('transaction_ref', uniqueInflowIds))
           : Promise.resolve({ data: [] as { transaction_ref: string }[], error: null }),
         uniqueOutflowIds.length > 0
-          ? supabase.from('outflow_transactions').select('transaction_id').in('transaction_id', uniqueOutflowIds)
+          ? (bankName
+              ? supabase.from('outflow_transactions').select('transaction_id').eq('bank_name', bankName).in('transaction_id', uniqueOutflowIds)
+              : supabase.from('outflow_transactions').select('transaction_id').in('transaction_id', uniqueOutflowIds))
           : Promise.resolve({ data: [] as { transaction_id: string }[], error: null }),
       ])
 
