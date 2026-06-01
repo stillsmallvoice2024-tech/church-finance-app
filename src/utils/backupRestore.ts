@@ -33,6 +33,14 @@ export interface ManagedTableConfig {
 /** Ordered for restore: parents before children */
 export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
+    key: 'organizations', label: 'Organisations', module: 'Configuration',
+    restorePriority: 0, backupEnabled: true, restoreMode: 'merge',
+    conflictColumn: 'id',
+    requiresMigration: false, sensitive: false, optional: false,
+    dependencies: [],
+    notes: 'Must be restored before org_members and all business tables',
+  },
+  {
     key: 'currencies', label: 'Currencies', module: 'Configuration',
     restorePriority: 1, backupEnabled: true, restoreMode: 'replace',
     conflictColumn: 'code',
@@ -210,6 +218,14 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
     conflictColumn: 'id',
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: ['dynamic_reports'],
+  },
+  {
+    key: 'org_members', label: 'Org Members', module: 'Configuration',
+    restorePriority: 25, backupEnabled: true, restoreMode: 'merge',
+    conflictColumn: 'id',
+    requiresMigration: false, sensitive: true, optional: false,
+    dependencies: ['organizations'],
+    notes: 'Contains user roles — restore with care; sensitive',
   },
 ]
 

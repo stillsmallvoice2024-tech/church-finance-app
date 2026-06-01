@@ -37,6 +37,7 @@ interface OrgMember {
 // ── Role display config ────────────────────────────────────────────────────────
 
 const ROLE_CONFIG: Record<UserRole, { label: string; pill: string }> = {
+  owner:      { label: 'Owner',      pill: 'bg-purple-600 text-white'      },
   admin:      { label: 'Admin',      pill: 'bg-primary text-white'         },
   accountant: { label: 'Accountant', pill: 'bg-amber-100 text-amber-700'   },
   viewer:     { label: 'Viewer',     pill: 'bg-gray-100 text-gray-500'     },
@@ -46,7 +47,7 @@ function RolePill({ role }: { role: UserRole }) {
   const { label, pill } = ROLE_CONFIG[role]
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${pill}`}>
-      {role === 'admin' && <Shield className="w-3 h-3" />}
+      {(role === 'owner' || role === 'admin') && <Shield className="w-3 h-3" />}
       {label}
     </span>
   )
@@ -60,7 +61,7 @@ function initials(name: string) {
 
 const inviteSchema = z.object({
   email: z.string().email('Enter a valid email'),
-  role:  z.enum(['accountant', 'viewer'] as const),
+  role:  z.enum(['admin', 'accountant', 'viewer'] as const),
 })
 type InviteForm = z.infer<typeof inviteSchema>
 
@@ -196,10 +197,11 @@ function InviteUserModal({
               {...register('role')}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white focus:border-primary"
             >
+              <option value="admin">Admin — full access except ownership transfer</option>
               <option value="accountant">Accountant — can add and edit records</option>
               <option value="viewer">Viewer — read-only access</option>
             </select>
-            <p className="text-xs text-gray-400">Admin role can only be assigned directly in the database.</p>
+            <p className="text-xs text-gray-400">Owner role can only be assigned via Transfer Ownership after the user joins.</p>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -470,7 +472,7 @@ function ChangePasswordModal({
 
 export default function UserManagement() {
   const { user, profile } = useAuth()
-  const { isAdmin }       = useRole()
+  const { isAdmin, isOwner, canTransferOwnership } = useRole()
   const { push: toast }   = useToastStore()
   const { orgId }         = useOrgStore()
 
@@ -481,9 +483,11 @@ export default function UserManagement() {
   const [inviteOpen,       setInviteOpen]       = useState(false)
   const [editProfileOpen,  setEditProfileOpen]  = useState(false)
   const [changePwOpen,     setChangePwOpen]     = useState(false)
-  const [revokeId,         setRevokeId]         = useState<string | null>(null)
+  const [removeId,         setRemoveId]         = useState<string | null>(null)
+  const [transferTarget,   setTransferTarget]   = useState<OrgMember | null>(null)
   const [savingId,         setSavingId]         = useState<string | null>(null)
-  const [revoking,         setRevoking]         = useState(false)
+  const [removing,         setRemoving]         = useState(false)
+  const [transferring,     setTransferring]     = useState(false)
   const [currentProfile,   setCurrentProfile]   = useState({
     full_name: profile?.full_name ?? '',
     username:  profile?.username  ?? null as string | null,
@@ -539,13 +543,13 @@ export default function UserManagement() {
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
-  // Updates org_members.role — authoritative role source for all permission checks.
+  // Uses update_org_member_role RPC — enforces min-owner constraint and caller permissions.
   const handleRoleChange = async (memberId: string, newRole: UserRole) => {
     setSavingId(memberId)
-    const { error } = await supabase
-      .from('org_members')
-      .update({ role: newRole })
-      .eq('id', memberId)
+    const { error } = await supabase.rpc('update_org_member_role', {
+      p_member_id: memberId,
+      p_new_role:  newRole,
+    })
     setSavingId(null)
     if (error) {
       toast(error.message, 'error')
@@ -555,24 +559,38 @@ export default function UserManagement() {
     }
   }
 
-  const handleRevoke = async () => {
-    if (!revokeId) return
-    setRevoking(true)
-    const { error } = await supabase
-      .from('org_members')
-      .update({ role: 'viewer' })
-      .eq('id', revokeId)
-    setRevoking(false)
+  const handleRemove = async () => {
+    if (!removeId) return
+    setRemoving(true)
+    const { error } = await supabase.rpc('remove_org_member', { p_member_id: removeId })
+    setRemoving(false)
     if (error) {
       toast(error.message, 'error')
     } else {
-      toast('Access restricted to view-only', 'success')
-      setMembers(prev => prev.map(m => m.id === revokeId ? { ...m, role: 'viewer' } : m))
-      setRevokeId(null)
+      toast('Member removed', 'success')
+      setMembers(prev => prev.filter(m => m.id !== removeId))
+      setRemoveId(null)
     }
   }
 
-  const revokeTarget = members.find(m => m.id === revokeId)
+  const handleTransferOwnership = async () => {
+    if (!transferTarget || !orgId) return
+    setTransferring(true)
+    const { error } = await supabase.rpc('transfer_org_ownership', {
+      p_org_id:         orgId,
+      p_target_user_id: transferTarget.user_id,
+    })
+    setTransferring(false)
+    if (error) {
+      toast(error.message, 'error')
+    } else {
+      toast(`Ownership transferred to ${transferTarget.full_name || transferTarget.email}`, 'success')
+      setTransferTarget(null)
+      fetchUsers()
+    }
+  }
+
+  const removeTarget   = members.find(m => m.id === removeId)
 
   const UM_CSV_HEADERS = ['Email', 'Full Name', 'Role', 'Joined']
   const umCsvRow = (m: OrgMember) => [m.email, m.full_name, m.role, m.created_at ? new Date(m.created_at).toLocaleDateString() : '']
@@ -581,6 +599,7 @@ export default function UserManagement() {
   const handleExportAll  = () => exportCSV(UM_CSV_FILE, UM_CSV_HEADERS, members.map(umCsvRow))
 
   const totalCount      = members.length
+  const ownerCount      = members.filter(m => m.role === 'owner').length
   const adminCount      = members.filter(m => m.role === 'admin').length
   const accountantCount = members.filter(m => m.role === 'accountant').length
 
@@ -645,9 +664,10 @@ export default function UserManagement() {
       </div>
 
       {/* ── Stats ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: 'Total Members', value: totalCount,      icon: <Users className="w-5 h-5 text-primary" /> },
+          { label: 'Owners',        value: ownerCount,      icon: <Shield className="w-5 h-5 text-purple-600" /> },
           { label: 'Admins',        value: adminCount,      icon: <Shield className="w-5 h-5 text-primary" /> },
           { label: 'Accountants',   value: accountantCount, icon: <User  className="w-5 h-5 text-amber-500" /> },
         ].map(({ label, value, icon }) => (
@@ -693,9 +713,10 @@ export default function UserManagement() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {members.map(m => {
-                  const isSelf   = m.user_id === user?.id
-                  const saving   = savingId === m.id
-                  const isViewer = m.role === 'viewer'
+                  const isSelf  = m.user_id === user?.id
+                  const saving  = savingId === m.id
+                  // Owner can change any role; admin can change non-owner roles only
+                  const canEditRole = !isSelf && isAdmin() && !(m.role === 'owner' && !isOwner())
 
                   return (
                     <tr key={m.id} className={`hover:bg-gray-50 ${isSelf ? 'bg-blue-50/30' : ''}`}>
@@ -717,21 +738,22 @@ export default function UserManagement() {
                       {/* Email */}
                       <td className="px-5 py-3 text-gray-500">{m.email}</td>
 
-                      {/* Role — editable dropdown, writes to org_members.role */}
+                      {/* Role — editable dropdown via RPC */}
                       <td className="px-5 py-3">
                         <div className="relative inline-block">
                           <select
                             value={m.role}
-                            disabled={isSelf || saving}
+                            disabled={!canEditRole || saving}
                             onChange={e => handleRoleChange(m.id, e.target.value as UserRole)}
-                            className={`appearance-none pr-6 pl-2.5 py-1 text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[m.role].pill} ${isSelf ? 'opacity-60' : ''}`}
+                            className={`appearance-none pr-6 pl-2.5 py-1 text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[m.role].pill} ${!canEditRole ? 'opacity-60' : ''}`}
                             title={isSelf ? 'You cannot change your own role' : undefined}
                           >
+                            {isOwner() && <option value="owner">Owner</option>}
                             <option value="admin">Admin</option>
                             <option value="accountant">Accountant</option>
                             <option value="viewer">Viewer</option>
                           </select>
-                          {!isSelf && (
+                          {canEditRole && (
                             <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none" />
                           )}
                           {saving && (
@@ -752,18 +774,27 @@ export default function UserManagement() {
 
                       {/* Actions */}
                       <td className="px-5 py-3 text-right">
-                        {!isSelf && !isViewer && (
-                          <button
-                            onClick={() => setRevokeId(m.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Restrict to viewer"
-                          >
-                            <XCircle className="w-3.5 h-3.5" /> Revoke Access
-                          </button>
-                        )}
-                        {(isSelf || isViewer) && (
-                          <span className="text-xs text-gray-300">—</span>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {canTransferOwnership() && !isSelf && m.role !== 'owner' && (
+                            <button
+                              onClick={() => setTransferTarget(m)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors"
+                              title="Transfer ownership"
+                            >
+                              <Shield className="w-3.5 h-3.5" /> Make Owner
+                            </button>
+                          )}
+                          {!isSelf && isAdmin() && (
+                            <button
+                              onClick={() => setRemoveId(m.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remove from organisation"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Remove
+                            </button>
+                          )}
+                          {isSelf && <span className="text-xs text-gray-300">—</span>}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -796,11 +827,19 @@ export default function UserManagement() {
       />
 
       <DeleteDialog
-        open={!!revokeId}
-        onClose={() => setRevokeId(null)}
-        onConfirm={handleRevoke}
-        loading={revoking}
-        label={revokeTarget?.full_name || revokeTarget?.email || 'this member'}
+        open={!!removeId}
+        onClose={() => setRemoveId(null)}
+        onConfirm={handleRemove}
+        loading={removing}
+        label={removeTarget?.full_name || removeTarget?.email || 'this member'}
+      />
+
+      <DeleteDialog
+        open={!!transferTarget}
+        onClose={() => setTransferTarget(null)}
+        onConfirm={handleTransferOwnership}
+        loading={transferring}
+        label={`Transfer ownership to ${transferTarget?.full_name || transferTarget?.email || 'this member'}? They will become an owner of this organisation.`}
       />
     </div>
   )

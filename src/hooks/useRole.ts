@@ -16,16 +16,22 @@ export function useRole() {
 
   const role = orgRole
 
+  const isOwnerOrAdmin = role === 'owner' || role === 'admin'
+  const isFinanceUser  = isOwnerOrAdmin || role === 'accountant'
+
   return {
     role,
-    isAdmin:               (): boolean => resolved && role === 'admin',
+    isOwner:               (): boolean => resolved && role === 'owner',
+    isAdmin:               (): boolean => resolved && isOwnerOrAdmin,
     isAccountant:          (): boolean => resolved && role === 'accountant',
     isViewer:              (): boolean => resolved && role === 'viewer',
     isReadOnly:            (): boolean => resolved && role === 'viewer',
-    canWrite:              (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canDelete:             (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canEditTransactions:   (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canImportTransactions: (): boolean => resolved && (role === 'admin' || role === 'accountant'),
-    canManageConfigs:      (): boolean => resolved && role === 'admin',
+    canWrite:              (): boolean => resolved && isFinanceUser,
+    canDelete:             (): boolean => resolved && isFinanceUser,
+    canEditTransactions:   (): boolean => resolved && isFinanceUser,
+    canImportTransactions: (): boolean => resolved && isFinanceUser,
+    canManageConfigs:      (): boolean => resolved && isOwnerOrAdmin,
+    canManageMembers:      (): boolean => resolved && isOwnerOrAdmin,
+    canTransferOwnership:  (): boolean => resolved && role === 'owner',
   }
 }

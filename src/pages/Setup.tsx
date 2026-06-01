@@ -870,7 +870,46 @@ function CurrenciesTab() {
 
 // ── Database tab ───────────────────────────────────────────────────────────────────
 
-const MIGRATION_SQL = `-- Add bank_name to inflow/outflow
+const MIGRATION_SQL = `-- ── Multi-org owner role (run if upgrading from a pre-owner-role install) ──────
+ALTER TABLE public.org_members
+  DROP CONSTRAINT IF EXISTS org_members_role_check;
+ALTER TABLE public.org_members
+  ADD CONSTRAINT org_members_role_check
+    CHECK (role IN ('owner', 'admin', 'accountant', 'viewer'));
+
+ALTER TABLE public.invitations
+  DROP CONSTRAINT IF EXISTS invitations_role_check;
+ALTER TABLE public.invitations
+  ADD CONSTRAINT invitations_role_check
+    CHECK (role IN ('owner', 'admin', 'accountant', 'viewer'));
+
+ALTER TABLE public.profiles
+  DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_role_check
+    CHECK (role IN ('owner', 'admin', 'accountant', 'viewer'));
+
+-- Promote org creators to owner; fallback: promote all admins where no owner exists
+UPDATE public.org_members om
+SET role = 'owner'
+FROM public.organizations o
+WHERE om.org_id  = o.id
+  AND om.user_id = o.created_by
+  AND om.role    = 'admin'
+  AND om.status  = 'active';
+
+UPDATE public.org_members
+SET role = 'owner'
+WHERE role   = 'admin'
+  AND status = 'active'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.org_members o2
+    WHERE o2.org_id = org_members.org_id AND o2.role = 'owner'
+  );
+
+NOTIFY pgrst, 'reload schema';
+
+-- ── Add bank_name to inflow/outflow
 ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS bank_name text;
 ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS bank_name text;
 

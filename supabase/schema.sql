@@ -9,7 +9,7 @@ create table public.profiles (
   email      text not null,
   full_name  text,
   username   text unique,
-  role       text not null default 'viewer' check (role in ('admin', 'accountant', 'viewer')),
+  role       text not null default 'viewer' check (role in ('owner', 'admin', 'accountant', 'viewer')),
   avatar_url text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -389,7 +389,7 @@ create table public.receipts (
 create table public.invitations (
   id          uuid default gen_random_uuid() primary key,
   email       text not null,
-  role        text not null default 'viewer' check (role in ('accountant', 'viewer')),
+  role        text not null default 'viewer' check (role in ('owner', 'admin', 'accountant', 'viewer')),
   invited_by  uuid references public.profiles(id),
   status      text not null default 'pending' check (status in ('pending', 'accepted', 'expired')),
   token       uuid default gen_random_uuid() unique,
@@ -463,7 +463,7 @@ returns boolean as $$
   select exists (
     select 1 from public.org_members
     where user_id = auth.uid()
-      and role    in ('admin', 'accountant')
+      and role    in ('owner', 'admin', 'accountant')
       and status  = 'active'
   );
 $$ language sql security definer stable;
@@ -473,7 +473,7 @@ returns boolean as $$
   select exists (
     select 1 from public.org_members
     where user_id = auth.uid()
-      and role    = 'admin'
+      and role    in ('owner', 'admin')
       and status  = 'active'
   );
 $$ language sql security definer stable;
@@ -742,13 +742,29 @@ create policy "invitations_delete" on public.invitations
 -- Returns minimal invite data for a PENDING, non-expired token.
 -- Safe for anonymous callers; never exposes accepted/expired rows or other invites.
 create or replace function public.get_invitation_by_token(p_token uuid)
-returns table(id uuid, email text, role text, status text, expires_at timestamptz)
+returns table(
+  id         uuid,
+  email      text,
+  role       text,
+  org_id     uuid,
+  org_name   text,
+  status     text,
+  expires_at timestamptz
+)
 language plpgsql security definer stable
 as $$
 begin
   return query
-    select i.id, i.email, i.role, i.status, i.expires_at
+    select
+      i.id,
+      i.email,
+      i.role,
+      i.org_id,
+      o.name as org_name,
+      i.status,
+      i.expires_at
     from   public.invitations i
+    left join public.organizations o on o.id = i.org_id
     where  i.token      = p_token
       and  i.status     = 'pending'
       and  i.expires_at > now();
@@ -1159,7 +1175,7 @@ create table if not exists public.org_members (
   org_id     uuid        not null references public.organizations(id) on delete cascade,
   user_id    uuid        not null references public.profiles(id)      on delete cascade,
   role       text        not null default 'viewer'
-                         check (role in ('admin', 'accountant', 'viewer')),
+                         check (role in ('owner', 'admin', 'accountant', 'viewer')),
   joined_at  timestamptz not null default now(),
   invited_by uuid        references public.profiles(id) on delete set null,
   status     text        not null default 'active'
@@ -1268,7 +1284,7 @@ returns boolean language sql security definer stable as $$
     select 1 from public.org_members
     where org_id  = p_org_id
       and user_id = auth.uid()
-      and role    = 'admin'
+      and role    in ('owner', 'admin')
       and status  = 'active'
   );
 $$;
@@ -1279,7 +1295,7 @@ returns boolean language sql security definer stable as $$
     select 1 from public.org_members
     where org_id  = p_org_id
       and user_id = auth.uid()
-      and role    in ('admin', 'accountant')
+      and role    in ('owner', 'admin', 'accountant')
       and status  = 'active'
   );
 $$;
@@ -1326,8 +1342,8 @@ begin
   end loop;
 
   insert into public.org_members (org_id, user_id, role, status)
-  values (v_org_id, v_user_id, 'admin', 'active')
-  on conflict (org_id, user_id) do update set role = 'admin', status = 'active';
+  values (v_org_id, v_user_id, 'owner', 'active')
+  on conflict (org_id, user_id) do update set role = 'owner', status = 'active';
 
   delete from public.org_members
   where  org_id  = (select id from public.organizations where slug = 'primary' limit 1)
@@ -1381,3 +1397,119 @@ end;
 $$;
 
 grant execute on function public.complete_org_onboarding(uuid, text, text, int, text) to authenticated;
+
+-- ── Role management RPCs (Phase: multi-org owner role) ────────────────────────
+
+create or replace function public.update_org_member_role(
+  p_member_id uuid,
+  p_new_role  text
+)
+returns void language plpgsql security definer as $$
+declare
+  v_member      public.org_members;
+  v_caller_role text;
+  v_owner_count int;
+begin
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
+  if p_new_role not in ('owner', 'admin', 'accountant', 'viewer') then
+    raise exception 'Invalid role: %', p_new_role;
+  end if;
+
+  select * into v_member from public.org_members where id = p_member_id;
+  if not found then raise exception 'Member not found'; end if;
+
+  select role into v_caller_role
+  from public.org_members
+  where org_id = v_member.org_id and user_id = auth.uid() and status = 'active';
+
+  if v_caller_role is null or v_caller_role not in ('owner', 'admin') then
+    raise exception 'Unauthorized: only org owners and admins can change roles';
+  end if;
+
+  if v_caller_role = 'admin' and p_new_role = 'owner' then
+    raise exception 'Only an org owner can promote members to owner';
+  end if;
+
+  if v_member.role = 'owner' and p_new_role != 'owner' then
+    select count(*) into v_owner_count
+    from public.org_members
+    where org_id = v_member.org_id and role = 'owner' and status = 'active';
+    if v_owner_count <= 1 then
+      raise exception 'Cannot demote the last owner of an organisation';
+    end if;
+  end if;
+
+  update public.org_members set role = p_new_role where id = p_member_id;
+end;
+$$;
+
+grant execute on function public.update_org_member_role(uuid, text) to authenticated;
+
+create or replace function public.remove_org_member(p_member_id uuid)
+returns void language plpgsql security definer as $$
+declare
+  v_member      public.org_members;
+  v_caller_role text;
+  v_owner_count int;
+begin
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
+
+  select * into v_member from public.org_members where id = p_member_id;
+  if not found then raise exception 'Member not found'; end if;
+
+  select role into v_caller_role
+  from public.org_members
+  where org_id = v_member.org_id and user_id = auth.uid() and status = 'active';
+
+  if v_caller_role is null or v_caller_role not in ('owner', 'admin') then
+    raise exception 'Unauthorized: only org owners and admins can remove members';
+  end if;
+
+  if v_member.role = 'owner' then
+    select count(*) into v_owner_count
+    from public.org_members
+    where org_id = v_member.org_id and role = 'owner' and status = 'active';
+    if v_owner_count <= 1 then
+      raise exception 'Cannot remove the last owner of an organisation';
+    end if;
+  end if;
+
+  delete from public.org_members where id = p_member_id;
+end;
+$$;
+
+grant execute on function public.remove_org_member(uuid) to authenticated;
+
+create or replace function public.transfer_org_ownership(
+  p_org_id         uuid,
+  p_target_user_id uuid
+)
+returns void language plpgsql security definer as $$
+declare
+  v_caller_role text;
+  v_target      public.org_members;
+begin
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
+
+  select role into v_caller_role
+  from public.org_members
+  where org_id = p_org_id and user_id = auth.uid() and status = 'active';
+
+  if v_caller_role != 'owner' then
+    raise exception 'Unauthorized: only an org owner can transfer ownership';
+  end if;
+
+  select * into v_target
+  from public.org_members
+  where org_id = p_org_id and user_id = p_target_user_id and status = 'active';
+
+  if not found then
+    raise exception 'Target user is not an active member of this organisation';
+  end if;
+
+  update public.org_members set role = 'owner'
+  where org_id = p_org_id and user_id = p_target_user_id;
+end;
+$$;
+
+grant execute on function public.transfer_org_ownership(uuid, uuid) to authenticated;
