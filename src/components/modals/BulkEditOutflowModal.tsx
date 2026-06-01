@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Modal }                  from '../ui/Modal'
 import { filterInputCls }         from '../ui/FormField'
+import { SearchableSelect }       from '../ui/SearchableSelect'
 import { useBulkUpdateTransaction } from '../../hooks/useMutations'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
@@ -64,10 +65,9 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Bank Name</label>
-          <select value={bankName} onChange={e => setBankName(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-          </select>
+          <SearchableSelect value={bankName} onChange={setBankName}
+            options={banks.map(b => ({ value: b.name, label: b.name }))}
+            placeholder="— Keep existing —" className={filterInputCls} />
         </div>
 
         <div className="space-y-1">
@@ -88,10 +88,9 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
-          <select value={stageCode1} onChange={e => setStageCode1(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
+          <SearchableSelect value={stageCode1} onChange={setStageCode1}
+            options={categories.map(c => ({ value: c.name, label: c.name }))}
+            placeholder="— Keep existing —" className={filterInputCls} />
         </div>
 
         <div className="space-y-1">
@@ -107,10 +106,9 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
         {outflowTypes.length > 0 && (
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-500">Outflow Type</label>
-            <select value={outflowTypeId} onChange={e => setOutflowTypeId(e.target.value)} className={filterInputCls}>
-              <option value="">— Keep existing —</option>
-              {outflowTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <SearchableSelect value={outflowTypeId} onChange={setOutflowTypeId}
+              options={outflowTypes.map(t => ({ value: t.id, label: t.name }))}
+              placeholder="— Keep existing —" className={filterInputCls} />
           </div>
         )}
 

@@ -18,6 +18,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { SearchableSelect } from '../components/ui/SearchableSelect'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
@@ -743,14 +744,10 @@ export default function CategoryLedger() {
                 </button>
               ))}
             </div>
-            <select
-              value={activeCategory}
-              onChange={e => setActiveCategory(e.target.value)}
-              className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700"
-            >
-              <option value="">All categories</option>
-              {rows.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-            </select>
+            <SearchableSelect value={activeCategory} onChange={setActiveCategory}
+              options={rows.map(r => ({ value: r.name, label: r.name }))}
+              placeholder="All categories"
+              className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700" />
           </div>
 
           {error && (
@@ -982,14 +979,10 @@ export default function CategoryLedger() {
         <>
           {/* Controls row */}
           <div className="flex flex-wrap items-center gap-3">
-            <select
-              value={activeCategory}
-              onChange={e => setActiveCategory(e.target.value)}
-              className="text-sm px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700 min-w-[180px]"
-            >
-              <option value="">Select a category…</option>
-              {rows.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-            </select>
+            <SearchableSelect value={activeCategory} onChange={setActiveCategory}
+              options={rows.map(r => ({ value: r.name, label: r.name }))}
+              placeholder="Select a category…"
+              className="text-sm px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700 min-w-[180px]" />
 
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
               {LEDGER_PORTIONS.map(p => (
