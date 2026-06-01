@@ -11,7 +11,7 @@ import { PaginationBar }           from '../components/ui/PaginationBar'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { AddIntraFlowModal }       from '../components/modals/AddIntraFlowModal'
 import { useIntraFlows, type IntraFlowRow } from '../hooks/useTransactions'
-import { useDeleteTransaction }    from '../hooks/useMutations'
+import { useDeleteTransaction, useBulkDeleteTransaction } from '../hooks/useMutations'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
@@ -31,7 +31,6 @@ import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel
 import { BulkActionBar }          from '../components/ui/BulkActionBar'
 import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowModal'
 import { useBulkSelection }       from '../hooks/useBulkSelection'
-import { useBulkDeleteAction }    from '../hooks/useBulkActions'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -145,8 +144,8 @@ export default function IntraFlow() {
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
-  const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('intra_flows')
-  const { execute: bulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
+  const { mutate: deleteRecord, loading: deleting }    = useDeleteTransaction('intra_flows')
+  const { execute: bulkDelete, loading: bulkDeleting } = useBulkDeleteTransaction('intra_flows')
   const { categories } = useCategories()
 
   usePageTitle('Intra Accounts')

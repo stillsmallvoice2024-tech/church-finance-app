@@ -5,6 +5,15 @@ import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import type { StartingBalanceRow } from './useBanks'
 
+const MISSING_COL_RE = /Could not find (?:the ')?(\w+)'? column/
+const BULK_CHUNK_SIZE = 500
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size))
+  return chunks
+}
+
 // Returns { org_id } fragment. Throws if no active org is set — all mutations require
 // an explicit org_id because the DB column default (get_current_org_id()) returns NULL.
 function orgPayload(): { org_id: string } {
@@ -82,6 +91,36 @@ async function logAudit({
     new_data:   newData,
   })
   if (error) console.warn('[audit_log] write failed:', error.message)
+}
+
+async function batchLogAudit(
+  rows: Array<{
+    user_id: string
+    action: 'INSERT' | 'UPDATE' | 'DELETE'
+    table_name: string
+    record_id: string
+    old_data: Record<string, unknown> | null
+    new_data: Record<string, unknown> | null
+  }>
+): Promise<void> {
+  if (rows.length === 0) return
+  const { error } = await supabase.from('audit_log').insert(rows)
+  if (error) console.warn('[audit_log] batch write failed:', error.message)
+}
+
+async function batchLogFieldChanges(
+  rows: Array<{
+    user_id: string
+    table_name: string
+    record_id: string
+    field_name: string
+    old_value: string | null
+    new_value: string | null
+  }>
+): Promise<void> {
+  if (rows.length === 0) return
+  const { error } = await supabase.from('field_changes').insert(rows)
+  if (error) console.warn('[field_changes] batch write failed:', error.message)
 }
 
 // ── Input types ────────────────────────────────────────────────────────────────
@@ -1055,4 +1094,184 @@ export function useUnlockAllocationConfig(): MutationHook<string> {
   }, [])
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useBulkDeleteTransaction ────────────────────────────────────────────────────
+// Processes IDs in chunks of BULK_CHUNK_SIZE to stay within PostgREST URL limits.
+// 3 queries per chunk (SELECT IN + DELETE IN + batch audit INSERT).
+// Chunk failures are non-fatal: failed count accumulates and is returned to the caller.
+
+export function useBulkDeleteTransaction(table: DeletableTable) {
+  const [loading, setLoading] = useState(false)
+
+  const execute = useCallback(async (ids: string[]): Promise<{ failed: number; total: number }> => {
+    if (ids.length === 0) return { failed: 0, total: 0 }
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to delete records.')
+
+    setLoading(true)
+    let totalDeleted = 0
+    try {
+      for (const chunk of chunkArray(ids, BULK_CHUNK_SIZE)) {
+        try {
+          const { data: oldRows } = await supabase.from(table).select('*').in('id', chunk)
+          const oldMap = new Map((oldRows ?? []).map(r => [r.id as string, r as Record<string, unknown>]))
+
+          const { data: deletedRows, error: err } = await supabase
+            .from(table)
+            .delete()
+            .in('id', chunk)
+            .select('id')
+
+          if (err) throw err
+
+          const deletedIds = (deletedRows ?? []).map(r => r.id as string)
+          totalDeleted += deletedIds.length
+
+          batchLogAudit(
+            deletedIds.map(id => ({
+              user_id:    user.id,
+              action:     'DELETE' as const,
+              table_name: table,
+              record_id:  id,
+              old_data:   oldMap.get(id) ?? null,
+              new_data:   null,
+            }))
+          )
+        } catch (chunkErr) {
+          handleAuthError(chunkErr)
+          console.warn('[bulkDelete] chunk failed:', extractMessage(chunkErr))
+          // chunk.length records counted as failed via totalDeleted not advancing
+        }
+      }
+
+      if (table === 'intra_flows') useTransactionSyncStore.getState().bumpIntraflow()
+
+      return { failed: ids.length - totalDeleted, total: ids.length }
+    } finally {
+      setLoading(false)
+    }
+  }, [table])
+
+  return { execute, loading }
+}
+
+// ── useBulkUpdateTransaction ────────────────────────────────────────────────────
+// Processes IDs in chunks of BULK_CHUNK_SIZE.  4 queries per chunk
+// (SELECT IN + UPDATE IN + batch audit_log + batch field_changes INSERTs).
+// Missing-column strips discovered in any chunk propagate to all subsequent chunks.
+// Chunk failures are non-fatal: failed count accumulates and is returned to the caller.
+
+export function useBulkUpdateTransaction(table: UpdatableTable) {
+  const [loading, setLoading] = useState(false)
+
+  const execute = useCallback(async (
+    ids: string[],
+    baseUpdates: Record<string, unknown>,
+  ): Promise<{ failed: number; total: number; strippedCols: string[] }> => {
+    if (ids.length === 0) return { failed: 0, total: 0, strippedCols: [] }
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to update records.')
+
+    setLoading(true)
+    const strippedCols: string[] = []
+    let totalUpdated = 0
+
+    // Shared `updates` object mutated as missing columns are discovered across chunks.
+    // The timestamp is set once so all records in the batch share the same updated_at.
+    let updates: Record<string, unknown> = table !== 'intra_flows'
+      ? { ...baseUpdates, updated_at: new Date().toISOString() }
+      : { ...baseUpdates }
+
+    try {
+      for (const chunk of chunkArray(ids, BULK_CHUNK_SIZE)) {
+        const { data: oldRows } = await supabase.from(table).select('*').in('id', chunk)
+        const oldMap = new Map((oldRows ?? []).map(r => [r.id as string, r as Record<string, unknown>]))
+
+        // Attempt update, stripping unknown columns on each retry.
+        // Any strip here updates `updates` so subsequent chunks start clean.
+        let chunkUpdatedIds: string[] = []
+        let chunkUpdates = { ...updates }
+
+        while (Object.keys(chunkUpdates).length > 0) {
+          const { data: updatedRows, error: err } = await supabase
+            .from(table)
+            .update(chunkUpdates)
+            .in('id', chunk)
+            .select('id')
+
+          if (!err) {
+            chunkUpdatedIds = (updatedRows ?? []).map(r => r.id as string)
+            updates = chunkUpdates   // persist strip(s) for remaining chunks
+            break
+          }
+
+          const col = err.message.match(MISSING_COL_RE)?.[1]
+          if (col && col in chunkUpdates) {
+            if (!strippedCols.includes(col)) strippedCols.push(col)
+            chunkUpdates = Object.fromEntries(Object.entries(chunkUpdates).filter(([k]) => k !== col))
+            updates = chunkUpdates
+          } else {
+            handleAuthError(err)
+            console.warn('[bulkUpdate] chunk failed:', err.message)
+            break // non-recoverable error; chunk counts as failed
+          }
+        }
+
+        totalUpdated += chunkUpdatedIds.length
+
+        if (chunkUpdatedIds.length > 0) {
+          const appliedUpdates = Object.fromEntries(
+            Object.entries(baseUpdates).filter(([k]) => !strippedCols.includes(k))
+          )
+
+          batchLogAudit(
+            chunkUpdatedIds.map(id => ({
+              user_id:    user.id,
+              action:     'UPDATE' as const,
+              table_name: table,
+              record_id:  id,
+              old_data:   oldMap.get(id) ?? null,
+              new_data:   appliedUpdates,
+            }))
+          )
+
+          const fcRows: Array<{
+            user_id: string; table_name: string; record_id: string
+            field_name: string; old_value: string | null; new_value: string | null
+          }> = []
+          for (const id of chunkUpdatedIds) {
+            const oldData = oldMap.get(id)
+            if (!oldData) continue
+            for (const [k, newVal] of Object.entries(appliedUpdates)) {
+              if (String(oldData[k] ?? '') !== String(newVal ?? '')) {
+                fcRows.push({
+                  user_id:    user.id,
+                  table_name: table,
+                  record_id:  id,
+                  field_name: k,
+                  old_value:  oldData[k] != null ? String(oldData[k]) : null,
+                  new_value:  newVal    != null ? String(newVal)    : null,
+                })
+              }
+            }
+          }
+          batchLogFieldChanges(fcRows)
+        }
+      }
+
+      if (table === 'outflow_transactions') useTransactionSyncStore.getState().bumpOutflow()
+      if (table === 'intra_flows')          useTransactionSyncStore.getState().bumpIntraflow()
+
+      return { failed: ids.length - totalUpdated, total: ids.length, strippedCols }
+    } catch (err) {
+      const msg = extractMessage(err)
+      handleAuthError(err)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [table])
+
+  return { execute, loading }
 }

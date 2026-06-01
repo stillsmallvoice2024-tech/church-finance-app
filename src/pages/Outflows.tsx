@@ -16,9 +16,8 @@ import { useDataViewState }        from '../hooks/useDataViewState'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields } from '../utils/tableColumns'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
-import { useDeleteTransaction }    from '../hooks/useMutations'
+import { useDeleteTransaction, useBulkDeleteTransaction } from '../hooks/useMutations'
 import { useBulkSelection }        from '../hooks/useBulkSelection'
-import { useBulkDeleteAction }     from '../hooks/useBulkActions'
 import { useBanks }                from '../hooks/useBanks'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
@@ -152,8 +151,8 @@ export default function Outflows() {
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
-  const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('outflow_transactions')
-  const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
+  const { mutate: deleteRecord, loading: deleting }            = useDeleteTransaction('outflow_transactions')
+  const { execute: executeBulkDelete, loading: bulkDeleting }  = useBulkDeleteTransaction('outflow_transactions')
   const { banks }                                   = useBanks()
   const { categories }                              = useCategories()
   const { outflowTypes }                            = useOutflowTypes()

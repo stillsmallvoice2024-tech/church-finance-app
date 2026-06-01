@@ -15,9 +15,8 @@ import { AddOutflowModal }          from '../components/modals/AddOutflowModal'
 import { BulkEditOutflowModal }     from '../components/modals/BulkEditOutflowModal'
 import { CanWrite }                 from '../components/auth/RoleGates'
 import { useOutflowTransactions, type OutflowTransaction } from '../hooks/useTransactions'
-import { useUpdateTransaction, useDeleteTransaction } from '../hooks/useMutations'
+import { useUpdateTransaction, useBulkDeleteTransaction, useBulkUpdateTransaction } from '../hooks/useMutations'
 import { useBulkSelection }         from '../hooks/useBulkSelection'
-import { useBulkDeleteAction }      from '../hooks/useBulkActions'
 import { useBanks }                 from '../hooks/useBanks'
 import { useToastStore }            from '../store/toastStore'
 import { useRole }                  from '../hooks/useRole'
@@ -50,7 +49,6 @@ export default function PendingDeductions() {
   const [editRecord,    setEditRecord]    = useState<OutflowTransaction | null>(null)
   const [modalOpen,     setModalOpen]     = useState(false)
   const [resolvingId,   setResolvingId]   = useState<string | null>(null)
-  const [bulkResolving, setBulkResolving] = useState(false)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkEditOpen,  setBulkEditOpen]  = useState(false)
 
@@ -68,8 +66,8 @@ export default function PendingDeductions() {
   const { push: toast } = useToastStore()
   const { canWrite, canDelete } = useRole()
   const updateMutation = useUpdateTransaction('outflow_transactions')
-  const { mutate: deleteRecord } = useDeleteTransaction('outflow_transactions')
-  const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
+  const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteTransaction('outflow_transactions')
+  const { execute: executeBulkResolve, loading: bulkResolving } = useBulkUpdateTransaction('outflow_transactions')
   const { banks } = useBanks()
 
   // Sort
@@ -134,15 +132,8 @@ export default function PendingDeductions() {
     if (skipped > 0)
       toast(`${skipped} row(s) skipped — fill in both stage codes first`, 'info')
     if (valid.length === 0) return
-    setBulkResolving(true)
-    let resolved = 0; let failed = 0
-    for (const row of valid) {
-      try {
-        await updateMutation.mutate({ id: row.id, updates: { is_pending_deduction: false } })
-        resolved++
-      } catch { failed++ }
-    }
-    setBulkResolving(false)
+    const { failed, total } = await executeBulkResolve(valid.map(r => r.id), { is_pending_deduction: false })
+    const resolved = total - failed
     if (failed   > 0) toast(`${failed} row(s) failed to resolve`, 'error')
     if (resolved > 0) toast(`${resolved} transaction(s) marked as resolved`, 'success')
     clearAll()
