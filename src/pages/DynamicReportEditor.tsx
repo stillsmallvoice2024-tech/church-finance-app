@@ -1599,7 +1599,6 @@ export default function DynamicReportEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { push: pushToast } = useToastStore()
-  const defaultCurrency = useOrgStore(s => s.defaultCurrency)
 
   const { reports, loading: reportsLoading } = useDynamicReports()
   const report: DynamicReport | undefined = reports.find(r => r.id === id)
