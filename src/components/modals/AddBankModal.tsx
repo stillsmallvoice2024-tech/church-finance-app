@@ -11,6 +11,7 @@ import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '..
 import { useCategories, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { useOrgStore } from '../../store/orgStore'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import type { DbBank, StartingBalanceRow, SchemaStatus } from '../../hooks/useBanks'
 import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
@@ -62,6 +63,7 @@ interface Props {
 
 export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { categories, refetch: refetchCategories } = useCategories()
   const { currencies } = useCurrencies()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
@@ -243,7 +245,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         setAllocError(
           allocType === 'percentage'
             ? `Allocations total ${runningTotal.toFixed(1)}% — must equal 100%`
-            : `Allocations total ₦${runningTotal.toLocaleString()} — must equal starting balance ₦${(values.starting_balance ?? 0).toLocaleString()}`
+            : `Allocations total ${baseCurrencySymbol}${runningTotal.toLocaleString()} — must equal starting balance ${baseCurrencySymbol}${(values.starting_balance ?? 0).toLocaleString()}`
         )
         return
       }
@@ -506,7 +508,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balance (optional)</p>
 
-          <Field label="Starting Balance (₦)" error={errors.starting_balance?.message}>
+          <Field label={`Starting Balance (${baseCurrencySymbol})`} error={errors.starting_balance?.message}>
             <Controller control={control} name="starting_balance" render={({ field }) => (
               <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.starting_balance)} />
             )} />
@@ -530,7 +532,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                           : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
                       }`}
                     >
-                      {t === 'percentage' ? 'Percentage %' : 'Amount ₦'}
+                      {t === 'percentage' ? 'Percentage %' : `Amount ${baseCurrencySymbol}`}
                     </button>
                   ))}
                 </div>
@@ -543,7 +545,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
                     {allocType === 'percentage'
                       ? `${runningTotal.toFixed(1)} / 100%`
-                      : `₦${runningTotal.toLocaleString()} / ₦${(startingBalance ?? 0).toLocaleString()}`}
+                      : `${baseCurrencySymbol}${runningTotal.toLocaleString()} / ${baseCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`}
                   </span>
                 </div>
 
@@ -551,7 +553,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                     <span>Category</span>
                     <span>Portion</span>
-                    <span>{allocType === 'percentage' ? '%' : '₦'}</span>
+                    <span>{allocType === 'percentage' ? '%' : baseCurrencySymbol}</span>
                     <span title="Count in category balance" className="cursor-help">Count</span>
                     <span />
                   </div>
@@ -690,7 +692,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   {allocError ?? (
                     allocType === 'percentage'
                       ? `Total is ${runningTotal.toFixed(1)}% — must equal 100%`
-                      : `Total ₦${runningTotal.toLocaleString()} doesn't match starting balance ₦${(startingBalance ?? 0).toLocaleString()}`
+                      : `Total ${baseCurrencySymbol}${runningTotal.toLocaleString()} doesn't match starting balance ${baseCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`
                   )}
                 </div>
               )}

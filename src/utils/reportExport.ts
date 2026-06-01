@@ -15,8 +15,9 @@ import type {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(n: number): string {
-  return new Intl.NumberFormat('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+function makeFmt(locale: string) {
+  const nf = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (n: number) => nf.format(n)
 }
 
 function getCategoryBalance(
@@ -124,7 +125,10 @@ export function exportReportPDF(
   reportDate: string,
   orgName = 'Financial Report',
   opBalances: OperationalBalanceMap = new Map(),
+  currencySymbol = '₦',
+  numberLocale = 'en-NG',
 ): void {
+  const fmt = makeFmt(numberLocale)
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
@@ -175,7 +179,7 @@ export function exportReportPDF(
         if (child.kind === 'item') {
           if (!child.data.visible) continue
           const val = getItemBalance(child.data, balances, opBalances)
-          tableBody.push([child.data.displayLabel, `₦${fmt(val)}`])
+          tableBody.push([child.data.displayLabel, `${currencySymbol}${fmt(val)}`])
         } else {
           const sg = child.data
           if (!sg.visible) continue
@@ -186,12 +190,12 @@ export function exportReportPDF(
           for (const item of sg.items) {
             if (!item.visible) continue
             const val = getItemBalance(item, balances, opBalances)
-            tableBody.push([`    ${item.displayLabel}`, `₦${fmt(val)}`])
+            tableBody.push([`    ${item.displayLabel}`, `${currencySymbol}${fmt(val)}`])
           }
           const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
           tableBody.push([
             { content: `  ${sg.label} Sub-Total`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
-            { content: `₦${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
+            { content: `${currencySymbol}${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
           ])
         }
       }
@@ -199,7 +203,7 @@ export function exportReportPDF(
       const groupTotal = computeGroupTotal(group, balances, opBalances)
       tableBody.push([
         { content: `${group.label} Sub-Total`, styles: { fontStyle: 'bold' } },
-        { content: `₦${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
+        { content: `${currencySymbol}${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
       ])
       tableBody.push([{ content: '', styles: { cellPadding: 1 } }, ''])
     }
@@ -209,7 +213,7 @@ export function exportReportPDF(
     const totalLabel = tables.length > 1 ? `${table.title} TOTAL` : 'GRAND TOTAL'
     tableBody.push([
       { content: totalLabel, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
-      { content: `₦${fmt(tableTotal)}`, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
+      { content: `${currencySymbol}${fmt(tableTotal)}`, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
     ])
 
     autoTable(doc, {
@@ -242,7 +246,7 @@ export function exportReportPDF(
       startY,
       body: [[
         { content: 'COMBINED GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10 } },
-        { content: `₦${fmt(combinedTotal)}`, styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10, halign: 'right' } },
+        { content: `${currencySymbol}${fmt(combinedTotal)}`, styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10, halign: 'right' } },
       ]],
       columnStyles: { 0: { cellWidth: 130 }, 1: { cellWidth: 50, halign: 'right' } },
       styles: { fontSize: 9, cellPadding: 2.5 },
@@ -261,7 +265,10 @@ export function exportReportExcel(
   reportDate: string,
   orgName = 'Financial Report',
   opBalances: OperationalBalanceMap = new Map(),
+  currencySymbol = '₦',
+  numberLocale = 'en-NG',
 ): void {
+  const fmt = makeFmt(numberLocale)
   const wb = XLSX.utils.book_new()
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
@@ -279,7 +286,7 @@ export function exportReportExcel(
     rows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
     if (tables.length > 1) rows.push([table.title.toUpperCase()])
     rows.push([])
-    rows.push(['Account / Description', 'Amount (₦)'])
+    rows.push(['Account / Description', `Amount (${currencySymbol})`])
 
     for (const group of table.groups) {
       if (!group.visible) continue
@@ -325,7 +332,7 @@ export function exportReportExcel(
     summaryRows.push([orgName])
     summaryRows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
     summaryRows.push([])
-    summaryRows.push(['Table', 'Total (₦)'])
+    summaryRows.push(['Table', `Total (${currencySymbol})`])
     for (const t of combinedTbls) {
       summaryRows.push([t.title, computeTableTotal(t, balances, opBalances)])
     }

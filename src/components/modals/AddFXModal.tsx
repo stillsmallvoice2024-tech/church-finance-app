@@ -6,12 +6,11 @@ import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddFXTransaction, useUpdateFXTransaction, type AddFXTransactionInput, type UpdateFXTransactionInput } from '../../hooks/useMutations'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import type { FXTransaction } from '../../hooks/useFX'
-
-type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 const schema = z.object({
   date:            z.string().min(1, 'Date is required'),
-  currency:        z.enum(['USD', 'GBP', 'EUR', 'CNY'] as const),
+  currency:        z.string().min(1, 'Currency is required'),
   type:            z.enum(['deposit', 'withdrawal'] as const),
   amount:          z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   narration:       z.string().optional(),
@@ -34,11 +33,15 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const addMutation    = useAddFXTransaction()
   const updateMutation = useUpdateFXTransaction()
   const { loading, error, reset } = isEdit ? updateMutation : addMutation
+  const { foreignCurrencies, getCurrencySymbol } = useOrgCurrency()
+
+  const defaultFxCurrency = foreignCurrencies[0]?.code ?? 'USD'
+
   const modalRef = useRef<ModalHandle>(null)
 
   const { register, control, handleSubmit, watch, formState: { errors, isDirty }, reset: resetForm } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { currency: 'USD', type: 'deposit' },
+    defaultValues: { currency: defaultFxCurrency, type: 'deposit' },
   })
 
   useEffect(() => {
@@ -47,18 +50,18 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
     if (editRecord) {
       resetForm({
         date:            editRecord.date,
-        currency:        editRecord.currency as FXCurrency,
+        currency:        editRecord.currency,
         type:            editRecord.deposit > 0 ? 'deposit' : 'withdrawal',
         amount:          editRecord.deposit > 0 ? editRecord.deposit : editRecord.withdrawal,
         narration:       editRecord.narration       ?? '',
         transaction_ref: editRecord.transaction_ref ?? '',
       })
     } else {
-      resetForm({ date: new Date().toISOString().slice(0, 10), currency: 'USD', type: 'deposit', amount: undefined })
+      resetForm({ date: new Date().toISOString().slice(0, 10), currency: defaultFxCurrency, type: 'deposit', amount: undefined })
     }
-  }, [open, reset, resetForm, editRecord])
+  }, [open, reset, resetForm, editRecord, defaultFxCurrency])
 
-  const selectedCurrency = watch('currency') as FXCurrency
+  const selectedCurrency = watch('currency')
   const txType    = watch('type')
   const amount    = Number(watch('amount') || 0)
   const prevBal   = currentBalances.get(selectedCurrency) ?? 0
@@ -100,7 +103,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
     } catch { /* surfaced via hook error */ }
   }
 
-  const sym = { USD: '$', GBP: '£', EUR: '€', CNY: '¥' }[selectedCurrency]
+  const sym = getCurrencySymbol(selectedCurrency)
 
   return (
     <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Edit FX Transaction' : 'Add FX Transaction'} isDirty={isDirty} disableClose={loading}>
@@ -113,8 +116,8 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           </Field>
           <Field label="Currency" error={errors.currency?.message}>
             <select {...register('currency')} className={`${iCls(!!errors.currency)} bg-white`}>
-              {(['USD','GBP','EUR','CNY'] as const).map(c => (
-                <option key={c} value={c}>{c}</option>
+              {foreignCurrencies.map(c => (
+                <option key={c.code} value={c.code}>{c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}</option>
               ))}
             </select>
           </Field>

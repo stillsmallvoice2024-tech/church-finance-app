@@ -31,6 +31,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
-          <Field label="Amount (₦) *" error={errors.amount?.message}>
+          <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.amount?.message}>
             <input type="number" min="0" step="0.01" placeholder="0.00"
               {...register('amount')} className={inputCls(!!errors.amount)} />
           </Field>
@@ -189,6 +190,7 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
 
 export default function BankDeposits() {
   usePageTitle('Bank Deposits')
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const { banks }       = useBanks()
   const { isAdmin }     = useRole()
@@ -359,7 +361,7 @@ export default function BankDeposits() {
   ]
 
   const BD_SOURCE_LABELS: Record<string, string> = { bank_deposits: 'Deposit', inflow: 'Inflow', outflow: 'Outflow' }
-  const BD_CSV_HEADERS = ['Date', 'Bank', 'Description', 'Amount (₦)', 'Ref', 'Remarks', 'Source']
+  const BD_CSV_HEADERS = ['Date', 'Bank', 'Description', `Amount (${baseCurrencySymbol})`, 'Ref', 'Remarks', 'Source']
   const bdCsvRow = (r: DepositRow) => [
     r.date, r.bank_name ?? '', r.description ?? '', r.amount,
     r.transaction_ref ?? '', r.remarks ?? '', BD_SOURCE_LABELS[r.source] ?? r.source,
@@ -435,8 +437,8 @@ export default function BankDeposits() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
           { label: 'Total deposits', value: dateFiltered.length.toLocaleString() },
-          { label: 'Total amount',   value: formatCurrency(totalAmount) },
-          { label: 'Avg deposit',    value: dateFiltered.length ? formatCurrency(totalAmount / dateFiltered.length) : '—' },
+          { label: 'Total amount',   value: formatCurrency(totalAmount, baseCurrencyCode) },
+          { label: 'Avg deposit',    value: dateFiltered.length ? formatCurrency(totalAmount / dateFiltered.length, baseCurrencyCode) : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
             <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -550,7 +552,7 @@ export default function BankDeposits() {
                 <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Amount</p>
-                    <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(row.amount)}</p>
+                    <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                   </div>
                   {admin && row.source === 'bank_deposits' ? (
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
@@ -615,7 +617,7 @@ export default function BankDeposits() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount, baseCurrencyCode)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
                       <DescriptionCell id={`${row.source}-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                     </td>
@@ -667,7 +669,7 @@ export default function BankDeposits() {
 
       <DeleteDialog
         open={!!deleteTarget}
-        label={deleteTarget ? `deposit of ${formatCurrency(deleteTarget.amount)} on ${formatDate(deleteTarget.date)}` : 'this record'}
+        label={deleteTarget ? `deposit of ${formatCurrency(deleteTarget.amount, baseCurrencyCode)} on ${formatDate(deleteTarget.date)}` : 'this record'}
         loading={deleting}
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}
@@ -704,7 +706,7 @@ function ReconRow({ label, value, highlight }: { label: string; value: number; h
     <div className="flex items-center justify-between text-sm">
       <span className="text-gray-600">{label}</span>
       <span className={`font-semibold ${highlight && isNonZero ? 'text-amber-600' : 'text-gray-900'}`}>
-        {formatCurrency(value)}
+        {formatCurrency(value, baseCurrencyCode)}
       </span>
     </div>
   )

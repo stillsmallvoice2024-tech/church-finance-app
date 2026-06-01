@@ -36,6 +36,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 
 const DEFAULT_PAGE_SIZE = 25
@@ -73,10 +74,10 @@ function SummaryStrip({ total, count, largest, average, loading }: {
   total: number; count: number; largest: number; average: number; loading: boolean
 }) {
   const items = [
-    { label: 'Total (page)', value: formatCurrencyCompact(total) },
+    { label: 'Total (page)', value: formatCurrencyCompact(total, baseCurrencyCode) },
     { label: 'Records',      value: count.toLocaleString() },
-    { label: 'Largest',      value: formatCurrencyCompact(largest) },
-    { label: 'Average',      value: formatCurrencyCompact(average) },
+    { label: 'Largest',      value: formatCurrencyCompact(largest, baseCurrencyCode) },
+    { label: 'Average',      value: formatCurrencyCompact(average, baseCurrencyCode) },
   ]
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -95,6 +96,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Outflows() {
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
@@ -195,7 +197,7 @@ export default function Outflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Outflow Type', 'Remarks']
+  const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', `Disbursed (${baseCurrencySymbol})`, `Refunded (${baseCurrencySymbol})`, `Transfer Charge (${baseCurrencySymbol})`, `Net Amount (${baseCurrencySymbol})`, 'Stage Code 1', 'Outflow Type', 'Remarks']
   const outflowCsvRow = (r: OutflowTransaction) => [
     r.date, r.transaction_id, r.display_description, r.bank_description,
     r.amount_disbursed, r.amount_refunded, r.transfer_charge,
@@ -393,12 +395,12 @@ export default function Outflows() {
                   <div className={`border-t border-gray-100 bg-gray-50/40 px-4 py-3 ${netDiffers ? 'grid grid-cols-3' : 'grid grid-cols-2'}`}>
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-red-600/70">Disbursed</p>
-                      <p className="text-sm font-mono font-bold tabular-nums text-danger">{formatCurrency(Number(row.amount_disbursed))}</p>
+                      <p className="text-sm font-mono font-bold tabular-nums text-danger">{formatCurrency(Number(row.amount_disbursed), baseCurrencyCode)}</p>
                     </div>
                     {netDiffers && (
                       <div className="border-l border-gray-200/80 pl-4 min-w-0">
                         <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Net</p>
-                        <p className="text-sm font-mono font-bold tabular-nums text-gray-700">{formatCurrency(net)}</p>
+                        <p className="text-sm font-mono font-bold tabular-nums text-gray-700">{formatCurrency(net, baseCurrencyCode)}</p>
                       </div>
                     )}
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">

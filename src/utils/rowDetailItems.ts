@@ -1,4 +1,4 @@
-import { formatDate, formatCurrency } from './formatters'
+import { formatDate, formatCurrency, getCurrencySymbol } from './formatters'
 import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 import type { DetailItem } from '../components/ui/RowDetailPanel'
 
@@ -10,7 +10,7 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   balance_brought_forward: 'Balance Brought Forward',
 }
 
-export function inflowDetailItems(row: InflowTransaction): DetailItem[] {
+export function inflowDetailItems(row: InflowTransaction, currency: string): DetailItem[] {
   return [
     { label: 'Txn Ref',         value: row.transaction_ref,          mono: true, breakAll: true },
     { label: 'Recorded',        value: row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null },
@@ -23,7 +23,7 @@ export function inflowDetailItems(row: InflowTransaction): DetailItem[] {
     {
       label: 'FX',
       value: row.fx_currency
-        ? `${row.fx_currency} ${row.fx_amount != null ? formatCurrency(Number(row.fx_amount)) : ''}${row.fx_rate != null ? ` @ ${row.fx_rate}` : ''}`
+        ? `${row.fx_currency} ${row.fx_amount != null ? formatCurrency(Number(row.fx_amount), row.fx_currency) : ''}${row.fx_rate != null ? ` @ ${row.fx_rate}` : ''}`
         : null,
       mono: true,
     },
@@ -37,23 +37,24 @@ export function inflowDetailItems(row: InflowTransaction): DetailItem[] {
   ]
 }
 
-export function outflowDetailItems(row: OutflowTransaction): DetailItem[] {
+export function outflowDetailItems(row: OutflowTransaction, currency: string): DetailItem[] {
+  const sym = getCurrencySymbol(currency)
   const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
   return [
-    { label: 'Txn ID',              value: row.transaction_id,           mono: true, breakAll: true },
-    { label: 'Recorded',            value: row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null },
-    { label: 'Raw Bank Narration',  value: row.description,              breakAll: true },
-    { label: 'Remarks',             value: row.remarks,                  breakAll: true },
-    { label: 'Refunded (₦)',        value: Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded)) : null, mono: true },
-    { label: 'Transfer Charge (₦)', value: Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : null, mono: true },
-    { label: 'Net (₦)',             value: net !== Number(row.amount_disbursed) ? formatCurrency(net) : null, mono: true },
+    { label: 'Txn ID',                   value: row.transaction_id,           mono: true, breakAll: true },
+    { label: 'Recorded',                 value: row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null },
+    { label: 'Raw Bank Narration',       value: row.description,              breakAll: true },
+    { label: 'Remarks',                  value: row.remarks,                  breakAll: true },
+    { label: `Refunded (${sym})`,        value: Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded), currency) : null, mono: true },
+    { label: `Transfer Charge (${sym})`, value: Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge), currency) : null, mono: true },
+    { label: `Net (${sym})`,             value: net !== Number(row.amount_disbursed) ? formatCurrency(net, currency) : null, mono: true },
     { label: 'Stage Code 1',        value: row.stage_code_1 },
     { label: 'Stage Code 2',        value: row.stage_code_2 },
     { label: 'Outflow Type',        value: row.outflow_type_name },
     {
       label: 'FX',
       value: row.fx_currency
-        ? `${row.fx_currency} ${row.fx_amount != null ? formatCurrency(Number(row.fx_amount)) : ''}${row.fx_rate != null ? ` @ ${row.fx_rate}` : ''}`
+        ? `${row.fx_currency} ${row.fx_amount != null ? formatCurrency(Number(row.fx_amount), row.fx_currency) : ''}${row.fx_rate != null ? ` @ ${row.fx_rate}` : ''}`
         : null,
       mono: true,
     },

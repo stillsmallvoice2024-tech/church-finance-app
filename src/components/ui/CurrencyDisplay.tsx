@@ -1,9 +1,10 @@
 import { formatCurrency } from '../../utils/formatters'
-import type { Currency, TransactionType } from '../../types'
+import { useOrgStore } from '../../store/orgStore'
+import type { TransactionType } from '../../types'
 
 interface CurrencyDisplayProps {
   amount: number
-  currency?: Currency
+  currency?: string
   type?: TransactionType
   className?: string
   size?: 'sm' | 'md' | 'lg'
@@ -17,11 +18,12 @@ const SIZE_CLASSES = {
 
 export function CurrencyDisplay({
   amount,
-  currency = 'NGN',
+  currency,
   type,
   className = '',
   size = 'md',
 }: CurrencyDisplayProps) {
+  const defaultCurrency = useOrgStore((s) => s.defaultCurrency) ?? 'NGN'
   const colorClass =
     type === 'inflow'
       ? 'text-success'
@@ -32,7 +34,7 @@ export function CurrencyDisplay({
   return (
     <span className={`font-medium tabular-nums ${SIZE_CLASSES[size]} ${colorClass} ${className}`}>
       {type === 'inflow' ? '+' : type === 'outflow' ? '−' : ''}
-      {formatCurrency(amount, currency)}
+      {formatCurrency(amount, currency ?? defaultCurrency)}
     </span>
   )
 }

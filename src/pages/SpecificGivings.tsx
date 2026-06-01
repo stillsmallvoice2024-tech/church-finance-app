@@ -13,6 +13,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 interface SpecificRow {
   id:                       string
@@ -65,6 +66,7 @@ function groupRows(rows: SpecificRow[]): GroupedCategory[] {
 
 export default function SpecificGivings() {
   usePageTitle('Specific Givings')
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const year = useAccountingYearStore(s => s.year)
 
@@ -236,7 +238,7 @@ export default function SpecificGivings() {
 
   const grandTotal = rows.reduce((s, r) => s + Number(r.amount), 0)
 
-  const SG_CSV_HEADERS = ['Category', 'Total (₦)']
+  const SG_CSV_HEADERS = ['Category', `Total (${baseCurrencySymbol})`]
   const sgCsvRow = (g: GroupedCategory) => [g.category, g.total]
   const SG_CSV_FILE = `specific-givings-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(SG_CSV_FILE, SG_CSV_HEADERS, sgPage.map(sgCsvRow))
@@ -315,7 +317,7 @@ export default function SpecificGivings() {
           {/* Grand total strip */}
           <div className="bg-primary/5 border border-primary/20 rounded-xl px-5 py-3 flex items-center justify-between">
             <span className="text-sm font-semibold text-primary">Total Specific Givings ({year})</span>
-            <span className="font-mono font-bold text-primary text-base">{formatCurrency(grandTotal)}</span>
+            <span className="font-mono font-bold text-primary text-base">{formatCurrency(grandTotal, baseCurrencyCode)}</span>
           </div>
 
           {/* Per-category cards */}
@@ -324,7 +326,7 @@ export default function SpecificGivings() {
               {/* Category header */}
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
                 <span className="font-semibold text-gray-800 text-sm">{group.category}</span>
-                <span className="font-mono font-bold text-gray-700 text-sm">{formatCurrency(group.total)}</span>
+                <span className="font-mono font-bold text-gray-700 text-sm">{formatCurrency(group.total, baseCurrencyCode)}</span>
               </div>
 
               {/* Targets table */}
@@ -348,7 +350,7 @@ export default function SpecificGivings() {
                         {formatDate(t.latest)}
                       </td>
                       <td className="px-5 py-3 text-right font-semibold text-success">
-                        {formatCurrency(t.total)}
+                        {formatCurrency(t.total, baseCurrencyCode)}
                       </td>
                     </tr>
                   ))}

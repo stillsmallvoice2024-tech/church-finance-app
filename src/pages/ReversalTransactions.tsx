@@ -10,6 +10,7 @@ import { supabase }        from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 interface TxnRow {
   id:                      string
@@ -24,6 +25,7 @@ interface TxnRow {
 
 export default function ReversalTransactions() {
   usePageTitle('Reversals')
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -96,7 +98,7 @@ export default function ReversalTransactions() {
     return true
   })
 
-  const RV_CSV_HEADERS = ['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks']
+  const RV_CSV_HEADERS = ['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks']
   const rvCsvRow = (r: TxnRow) => [r.date, r.direction === 'in' ? 'Inflow' : 'Outflow', r.amount, r.description ?? '', r.bank_name ?? '', r.original_transaction_id ?? '', r.remarks ?? '']
   const RV_CSV_FILE = `reversal-transactions-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(RV_CSV_FILE, RV_CSV_HEADERS, filtered.map(rvCsvRow))
@@ -160,8 +162,8 @@ export default function ReversalTransactions() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
           { label: 'Total rows',    value: filtered.length.toLocaleString() },
-          { label: 'Total inflow',  value: formatCurrency(filtered.filter(r => r.direction === 'in').reduce((s, r) => s + r.amount, 0)) },
-          { label: 'Total outflow', value: formatCurrency(filtered.filter(r => r.direction === 'out').reduce((s, r) => s + r.amount, 0)) },
+          { label: 'Total inflow',  value: formatCurrency(filtered.filter(r => r.direction === 'in').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
+          { label: 'Total outflow', value: formatCurrency(filtered.filter(r => r.direction === 'out').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
         ].map(({ label, value }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
             <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -224,7 +226,7 @@ export default function ReversalTransactions() {
                     Reversal
                   </p>
                   <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
-                    {formatCurrency(row.amount)}
+                    {formatCurrency(row.amount, baseCurrencyCode)}
                   </p>
                 </div>
               </div>
@@ -236,7 +238,7 @@ export default function ReversalTransactions() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
-                  {['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
+                  {['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -275,7 +277,7 @@ export default function ReversalTransactions() {
                             {row.direction === 'in' ? 'Inflow' : 'Outflow'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount)}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount, baseCurrencyCode)}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[200px]">
                           <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>

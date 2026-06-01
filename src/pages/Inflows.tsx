@@ -34,6 +34,7 @@ import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { inflowDetailItems } from '../utils/rowDetailItems'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -69,10 +70,10 @@ function SummaryStrip({ total, count, largest, average, loading }: {
   total: number; count: number; largest: number; average: number; loading: boolean
 }) {
   const items = [
-    { label: 'Total (page)', value: formatCurrencyCompact(total) },
+    { label: 'Total (page)', value: formatCurrencyCompact(total, baseCurrencyCode) },
     { label: 'Records',      value: count.toLocaleString() },
-    { label: 'Largest',      value: formatCurrencyCompact(largest) },
-    { label: 'Average',      value: formatCurrencyCompact(average) },
+    { label: 'Largest',      value: formatCurrencyCompact(largest, baseCurrencyCode) },
+    { label: 'Average',      value: formatCurrencyCompact(average, baseCurrencyCode) },
   ]
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -91,6 +92,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Inflows() {
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
@@ -182,7 +184,7 @@ export default function Inflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (Naira)', 'Transaction Type', 'Txn Ref', 'Remark']
+  const INF_CSV_HEADERS = ['Date', 'Description', `Amount (${baseCurrencySymbol})`, 'Transaction Type', 'Txn Ref', 'Remark']
   const inflowCsvRow = (r: InflowTransaction) => [
     r.date, r.description, r.amount,
     TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? '', r.transaction_ref, r.remark,
@@ -354,7 +356,7 @@ export default function Inflows() {
                   <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-green-600/70">Inflow</p>
-                      <p className="text-sm font-mono font-bold tabular-nums text-success">{formatCurrency(Number(row.amount))}</p>
+                      <p className="text-sm font-mono font-bold tabular-nums text-success">{formatCurrency(Number(row.amount), baseCurrencyCode)}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                       {canWrite() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
@@ -507,7 +509,7 @@ export default function Inflows() {
                     ]
                     if (expanded) {
                       rows.push(
-                        <RowDetailPanel key={`${row.id}-detail`} items={inflowDetailItems(row)} colSpan={10} />,
+                        <RowDetailPanel key={`${row.id}-detail`} items={inflowDetailItems(row, baseCurrencyCode)} colSpan={10} />,
                       )
                     }
                     return rows

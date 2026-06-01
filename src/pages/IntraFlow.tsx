@@ -32,6 +32,7 @@ import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel
 import { BulkActionBar }          from '../components/ui/BulkActionBar'
 import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowModal'
 import { useBulkSelection }       from '../hooks/useBulkSelection'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -54,10 +55,10 @@ function SummaryStrip({ total, count, largest, average, loading }: {
   total: number; count: number; largest: number; average: number; loading: boolean
 }) {
   const items = [
-    { label: 'Total (page)', value: formatCurrencyCompact(total) },
+    { label: 'Total (page)', value: formatCurrencyCompact(total, baseCurrencyCode) },
     { label: 'Records',      value: count.toLocaleString() },
-    { label: 'Largest',      value: formatCurrencyCompact(largest) },
-    { label: 'Average',      value: formatCurrencyCompact(average) },
+    { label: 'Largest',      value: formatCurrencyCompact(largest, baseCurrencyCode) },
+    { label: 'Average',      value: formatCurrencyCompact(average, baseCurrencyCode) },
   ]
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -76,6 +77,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function IntraFlow() {
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
@@ -185,7 +187,7 @@ export default function IntraFlow() {
     refetch()
   }
 
-  const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
+  const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', `Amount (${baseCurrencySymbol})`, 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
   const iflCsvRow = (r: IntraFlowRow) => [
     r.date, r.account_from ?? '', r.account_to ?? '', r.total_amount,
     r.account_from_stage1, r.account_from_stage2,
@@ -384,7 +386,7 @@ export default function IntraFlow() {
                     <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                       <div className="min-w-0">
                         <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
-                        <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(Number(row.total_amount))}</p>
+                        <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(Number(row.total_amount), baseCurrencyCode)}</p>
                       </div>
                       <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                         {canWrite() && (
@@ -531,7 +533,7 @@ export default function IntraFlow() {
                             <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                             <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_from ?? '—'}</td>
                             <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account_to ?? '—'}</td>
-                            <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap text-right">{formatCurrency(Number(row.total_amount))}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap text-right">{formatCurrency(Number(row.total_amount), baseCurrencyCode)}</td>
                             <td className="px-4 py-3 text-sm text-gray-500 max-w-[200px]">
                               <DescriptionCell id={`desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                             </td>

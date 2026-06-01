@@ -19,7 +19,8 @@ import {
 } from '../hooks/useDynamicReports'
 import { useCategories } from '../hooks/useCategories'
 import { useToastStore } from '../store/toastStore'
-import { useOrgStore } from '../store/orgStore'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { getCurrencySymbol, getCurrencyLocale } from '../utils/formatters'
 import {
   parseTokens,
   resolveTokens,
@@ -63,22 +64,14 @@ const PORTION_SHORT: Record<string, string> = {
   percentage: ' · % Alloc',
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  NGN: '₦', USD: '$', GBP: '£', EUR: '€', CNY: '¥',
+function fmtNum(n: number, locale: string): string {
+  return n.toLocaleString(locale, { minimumFractionDigits: 2 })
 }
 
-const CURRENCY_OPTIONS = Object.entries(CURRENCY_SYMBOLS).map(([value, sym]) => ({
-  value, label: `${sym} ${value}`,
-}))
-
-function fmtNGN(n: number): string {
-  return n.toLocaleString('en-NG', { minimumFractionDigits: 2 })
-}
-
-function fmtAmount(n: number, currency = 'NGN'): string {
+function fmtAmount(n: number, currency: string): string {
   const abs = Math.abs(n)
-  const sym = CURRENCY_SYMBOLS[currency] ?? '₦'
-  return (n < 0 ? '-' : '') + sym + fmtNGN(abs)
+  const sym = getCurrencySymbol(currency)
+  return (n < 0 ? '-' : '') + sym + fmtNum(abs, getCurrencyLocale(currency))
 }
 
 // ── Local block shape ──────────────────────────────────────────────────────────
@@ -110,7 +103,8 @@ function InsertBlockModal({
   onInsertMetric: (token: string) => void
   onInsertEmbed: (id: string, type: 'formula' | 'table', config: Record<string, unknown>) => void
 }) {
-  const defaultCurrency = useOrgStore(s => s.defaultCurrency)
+  const { allCurrencies, baseCurrencyCode } = useOrgCurrency()
+  const currencyOptions = allCurrencies.map(c => ({ value: c.code, label: `${c.symbol} ${c.code}` }))
   const [tab, setTab] = useState<InsertTab>('metric')
 
   // Metric state
@@ -126,7 +120,7 @@ function InsertBlockModal({
   const [fDateFrom, setFDateFrom] = useState('')
   const [fDateTo,   setFDateTo]   = useState('')
   const [fDateField, setFDateField] = useState('date')
-  const [fCurrency, setFCurrency] = useState(defaultCurrency ?? '')
+  const [fCurrency, setFCurrency] = useState(baseCurrencyCode)
   const [fLabel,    setFLabel]    = useState('')
 
   // Table state
@@ -136,7 +130,7 @@ function InsertBlockModal({
   const [tDateFrom, setTDateFrom] = useState('')
   const [tDateTo,   setTDateTo]   = useState('')
   const [tDateField, setTDateField] = useState('date')
-  const [tCurrency, setTCurrency] = useState(defaultCurrency ?? '')
+  const [tCurrency, setTCurrency] = useState(baseCurrencyCode)
   const [tLabel,    setTLabel]    = useState('')
 
   // Reset on open
@@ -145,10 +139,10 @@ function InsertBlockModal({
     setTab('metric')
     setMFn('BALANCE'); setMCategory(categoryNames[0] ?? ''); setMPortion('all')
     setMDateFrom(''); setMDateTo(''); setMDateField('date')
-    setFTerms([]); setFDateFrom(''); setFDateTo(''); setFDateField('date'); setFCurrency(defaultCurrency ?? ''); setFLabel('')
+    setFTerms([]); setFDateFrom(''); setFDateTo(''); setFDateField('date'); setFCurrency(baseCurrencyCode); setFLabel('')
     setTCats([]); setTCols(['inflows', 'outflows', 'balance']); setTPortion('all')
-    setTDateFrom(''); setTDateTo(''); setTDateField('date'); setTCurrency(defaultCurrency ?? ''); setTLabel('')
-  }, [open, categoryNames])
+    setTDateFrom(''); setTDateTo(''); setTDateField('date'); setTCurrency(baseCurrencyCode); setTLabel('')
+  }, [open, categoryNames, baseCurrencyCode])
 
   const insertDisabled =
     tab === 'metric'  ? (mFn !== 'NET' && !mCategory.trim()) :
@@ -358,7 +352,7 @@ function InsertBlockModal({
             <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
             <select value={fCurrency} onChange={e => setFCurrency(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
-              {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {currencyOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div>
@@ -437,7 +431,7 @@ function InsertBlockModal({
             <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
             <select value={tCurrency} onChange={e => setTCurrency(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
-              {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {currencyOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div>
@@ -543,6 +537,8 @@ function MetricBlockEditor({
   onChange: (cfg: Record<string, unknown>) => void
   categoryNames: string[]
 }) {
+  const { allCurrencies, baseCurrencyCode } = useOrgCurrency()
+  const currencyOptions = allCurrencies.map(c => ({ value: c.code, label: `${c.symbol} ${c.code}` }))
   const cfg       = block.config_json as Record<string, string>
   const isNet     = cfg.fn === 'NET'
   const isInflows = cfg.fn === 'INFLOWS'
@@ -642,11 +638,11 @@ function MetricBlockEditor({
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
         <select
-          value={cfg.displayCurrency ?? 'NGN'}
+          value={(cfg.displayCurrency as string) ?? baseCurrencyCode}
           onChange={e => onChange({ ...cfg, displayCurrency: e.target.value })}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
-          {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {currencyOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
 
@@ -681,6 +677,8 @@ function TableBlockEditor({
   onChange: (cfg: Record<string, unknown>) => void
   categoryNames: string[]
 }) {
+  const { allCurrencies, baseCurrencyCode } = useOrgCurrency()
+  const currencyOptions = allCurrencies.map(c => ({ value: c.code, label: `${c.symbol} ${c.code}` }))
   const cfg = block.config_json as Partial<TableBlockConfig> & Record<string, unknown>
   const categories: string[] = Array.isArray(cfg.categories) ? cfg.categories : []
   const columns: string[] = Array.isArray(cfg.columns) && cfg.columns.length > 0
@@ -787,11 +785,11 @@ function TableBlockEditor({
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
         <select
-          value={(cfg.displayCurrency as string) ?? 'NGN'}
+          value={(cfg.displayCurrency as string) ?? baseCurrencyCode}
           onChange={e => onChange({ ...cfg, displayCurrency: e.target.value })}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
-          {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {currencyOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
       <div className="col-span-2">
@@ -835,6 +833,8 @@ function FormulaBlockEditor({
   onChange: (cfg: Record<string, unknown>) => void
   categoryNames: string[]
 }) {
+  const { allCurrencies, baseCurrencyCode } = useOrgCurrency()
+  const currencyOptions = allCurrencies.map(c => ({ value: c.code, label: `${c.symbol} ${c.code}` }))
   const cfg = block.config_json as Partial<FormulaBlockConfig> & Record<string, unknown>
   const terms: FormulaTerm[] = Array.isArray(cfg.terms) ? cfg.terms : []
 
@@ -973,11 +973,11 @@ function FormulaBlockEditor({
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Display Currency</label>
           <select
-            value={(cfg.displayCurrency as string) ?? 'NGN'}
+            value={(cfg.displayCurrency as string) ?? baseCurrencyCode}
             onChange={e => onChange({ ...cfg, displayCurrency: e.target.value })}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
-            {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {currencyOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div className="col-span-2">
@@ -1110,7 +1110,7 @@ function BlockCard({
 
 // ── Preview renderers ──────────────────────────────────────────────────────────
 
-function ResolvedValue({ result, currency = 'NGN' }: { result: QueryResult | undefined; currency?: string }) {
+function ResolvedValue({ result, currency }: { result: QueryResult | undefined; currency: string }) {
   if (!result) {
     return <span className="text-gray-300 text-xs font-mono animate-pulse">…</span>
   }
@@ -1142,6 +1142,7 @@ function TextBlockPreview({
   resolved: Map<string, QueryResult>
   tableData: Map<string, TableRow[]>
 }) {
+  const { baseCurrencyCode } = useOrgCurrency()
   const cfg    = block.config_json as Partial<TextBlockConfig>
   const text   = cfg.text ?? ''
   const embeds = (Array.isArray(cfg.embeds) ? cfg.embeds : []) as TextBlockEmbed[]
@@ -1179,7 +1180,7 @@ function TextBlockPreview({
           return <span key={i} className="whitespace-pre-wrap">{seg.content}</span>
         }
         if (seg.kind === 'metric') {
-          return <ResolvedValue key={i} result={resolved.get(seg.raw)} />
+          return <ResolvedValue key={i} result={resolved.get(seg.raw)} currency={baseCurrencyCode} />
         }
         // Embed
         const embed = embeds.find(e => e.id === seg.id)
@@ -1205,7 +1206,7 @@ function TextBlockPreview({
           if (pending || terms.length === 0) {
             return <span key={i} className="text-gray-300 text-xs font-mono animate-pulse">…</span>
           }
-          return <ResolvedValue key={i} result={{ value: total, error: null }} currency={(fCfg.displayCurrency as string) ?? 'NGN'} />
+          return <ResolvedValue key={i} result={{ value: total, error: null }} currency={(fCfg.displayCurrency as string) ?? baseCurrencyCode} />
         }
         if (embed.type === 'table') {
           return (
@@ -1231,11 +1232,12 @@ function MetricBlockPreview({
   block: EditorBlock
   resolved: Map<string, QueryResult>
 }) {
+  const { baseCurrencyCode } = useOrgCurrency()
   const cfg      = block.config_json as Partial<MetricBlockConfig>
   const fn       = cfg.fn ?? 'BALANCE'
   const category = cfg.category ?? ''
   const portion  = (cfg.portion as BudgetPortion | undefined) ?? 'all'
-  const currency = cfg.displayCurrency ?? 'NGN'
+  const currency = cfg.displayCurrency ?? baseCurrencyCode
   const dateFrom = cfg.dateFrom
   const dateTo   = cfg.dateTo
 
@@ -1279,8 +1281,9 @@ function TableBlockPreview({
   rows: TableRow[] | undefined
   resolving: boolean
 }) {
+  const { baseCurrencyCode } = useOrgCurrency()
   const cfg      = block.config_json as Partial<TableBlockConfig>
-  const currency = cfg.displayCurrency ?? 'NGN'
+  const currency = cfg.displayCurrency ?? baseCurrencyCode
   const label    = cfg.label || 'Financial Summary'
   const cats    = Array.isArray(cfg.categories) ? cfg.categories : []
   const colKeys: Array<'inflows' | 'outflows' | 'balance'> =
@@ -1415,9 +1418,10 @@ function FormulaBlockPreview({
   resolved: Map<string, QueryResult>
   resolving: boolean
 }) {
+  const { baseCurrencyCode } = useOrgCurrency()
   const cfg       = block.config_json as Partial<FormulaBlockConfig>
   const terms     = cfg.terms ?? []
-  const currency  = cfg.displayCurrency ?? 'NGN'
+  const currency  = cfg.displayCurrency ?? baseCurrencyCode
   const dateFrom  = cfg.dateFrom
   const dateTo    = cfg.dateTo
   const dateField = (cfg.dateField as string | undefined) || undefined

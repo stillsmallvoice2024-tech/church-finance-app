@@ -6,6 +6,7 @@ import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddIntraFlow, useUpdateTransaction, type AddIntraFlowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import type { IntraFlowRow } from '../../hooks/useTransactions'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Props) {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { categories } = useCategories()
   const isEdit = !!editRecord
 
@@ -135,7 +137,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
-          <Field label="Amount (₦) *" error={errors.total_amount?.message}>
+          <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.total_amount?.message}>
             <input
               type="number" min="0" step="0.01" placeholder="0.00"
               {...register('total_amount')}

@@ -18,6 +18,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ import { SearchableSelect } from '../components/ui/SearchableSelect'
 const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
   { key: 'name',                label: 'Category',      sortType: 'text',    primary: true, accessor: r => r.name },
   { key: 'percentage',          label: '% Alloc',       sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
-  { key: 'percentageAllocated', label: '₦ Allocation',   sortType: 'numeric', primary: true },
+  { key: 'percentageAllocated', label: 'Allocation',      sortType: 'numeric', primary: true },
   { key: 'specificSeed',        label: 'Specific Seed', sortType: 'numeric', primary: true },
   { key: 'savingsNet',          label: 'Savings Net',   sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut },
 ]
@@ -83,6 +84,7 @@ const LEDGER_PORTIONS: LedgerPortion[] = ['Percentage', 'Specific Seed', 'Saving
 
 export default function CategoryLedger() {
   usePageTitle('Category Ledger')
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const { categories }                           = useCategories()
   const { groups }                               = useCategoryGroups()
@@ -638,9 +640,9 @@ export default function CategoryLedger() {
   const activeLedgerField = LEDGER_SORT_FIELDS.find(f => f.key === ledgerViewState.sortKey)
 
   const CL_CSV_FILE = `category-ledger-${new Date().toISOString().slice(0, 10)}.csv`
-  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', '₦ Allocation', 'Specific Seed', 'Savings Net']
+  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', `${baseCurrencySymbol} Allocation`, 'Specific Seed', 'Savings Net']
   const summaryCsvRow = (r: CategoryRow) => [r.name, r.percentage ?? '', r.percentageAllocated, r.specificSeed, r.savingsIn - r.savingsOut]
-  const LEDGER_CSV_HEADERS = ['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
+  const LEDGER_CSV_HEADERS = ['Date', 'Description', `Inflow (${baseCurrencySymbol})`, `Outflow (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const ledgerCsvRow = (r: LedgerRow) => [r.date, r.description ?? '', r.inflow || '', r.outflow || '', r.balance]
   const handleExportView = () => {
     if (viewMode === 'summary') exportCSV(CL_CSV_FILE, SUMMARY_CSV_HEADERS, summaryPage.map(summaryCsvRow))
@@ -708,23 +710,23 @@ export default function CategoryLedger() {
                 <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1.5 flex items-center gap-1">
                   <Percent className="w-3 h-3 shrink-0" /><span className="truncate">% Allocation</span>
                 </p>
-                <p className="text-sm font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc)}</p>
+                <p className="text-sm font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc, baseCurrencyCode)}</p>
               </div>
               <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-3 min-w-0 overflow-hidden">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1.5 flex items-center gap-1">
                   <Gift className="w-3 h-3 shrink-0" /><span className="truncate">Specific Seeds</span>
                 </p>
-                <p className="text-sm font-mono font-bold text-amber-700 tabular-nums">{formatCurrency(globalTotals.seed)}</p>
+                <p className="text-sm font-mono font-bold text-amber-700 tabular-nums">{formatCurrency(globalTotals.seed, baseCurrencyCode)}</p>
               </div>
               <div className={`rounded-xl border px-3 py-3 min-w-0 overflow-hidden ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <p className={`text-[10px] font-bold uppercase tracking-wide mb-1.5 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
                   <Archive className="w-3 h-3 shrink-0" /><span className="truncate">Savings Net</span>
                 </p>
-                <p className={`text-sm font-mono font-bold tabular-nums ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav)}</p>
+                <p className={`text-sm font-mono font-bold tabular-nums ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav, baseCurrencyCode)}</p>
               </div>
               <div className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3 min-w-0 overflow-hidden">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300 mb-1.5 truncate">Grand Total</p>
-                <p className="text-sm font-mono font-bold text-white tabular-nums">{formatCurrency(globalTotals.alloc + globalTotals.seed + globalTotals.sav)}</p>
+                <p className="text-sm font-mono font-bold text-white tabular-nums">{formatCurrency(globalTotals.alloc + globalTotals.seed + globalTotals.sav, baseCurrencyCode)}</p>
               </div>
             </div>
           )}
@@ -837,7 +839,7 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-4 py-3 hidden md:table-cell"
                         >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocation</span>
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> {baseCurrencySymbol} Allocation</span>
                         </SortableHeader>
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[3]}
@@ -879,17 +881,17 @@ export default function CategoryLedger() {
                             </td>
                             <td className="px-4 py-3 text-right hidden md:table-cell">
                               {row.percentageAllocated > 0
-                                ? <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated)}</span>
+                                ? <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated, baseCurrencyCode)}</span>
                                 : <span className="text-gray-300 text-xs">—</span>}
                             </td>
                             <td className="px-4 py-3 text-right hidden md:table-cell">
                               {row.specificSeed > 0
-                                ? <span className="font-mono text-amber-700">{formatCurrency(row.specificSeed)}</span>
+                                ? <span className="font-mono text-amber-700">{formatCurrency(row.specificSeed, baseCurrencyCode)}</span>
                                 : <span className="text-gray-300 text-xs">—</span>}
                             </td>
                             <td className="px-5 py-3 text-right">
                               {row.savingsIn > 0 || row.savingsOut > 0
-                                ? <span className={`font-mono font-semibold ${row.savingsIn - row.savingsOut >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(row.savingsIn - row.savingsOut)}</span>
+                                ? <span className={`font-mono font-semibold ${row.savingsIn - row.savingsOut >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(row.savingsIn - row.savingsOut, baseCurrencyCode)}</span>
                                 : <span className="text-gray-300 text-xs">—</span>}
                             </td>
                           </tr>
@@ -904,9 +906,9 @@ export default function CategoryLedger() {
                             <tr className="bg-gray-50 border-t border-gray-100 text-xs font-semibold text-gray-600">
                               <td className="px-5 py-2 pl-8">↳ {label} subtotal</td>
                               <td className="px-4 py-2 text-right font-mono text-primary">{sPct > 0 ? `${sPct.toFixed(1)}%` : '—'}</td>
-                              <td className="px-4 py-2 text-right font-mono text-primary hidden md:table-cell">{sAlloc > 0 ? formatCurrency(sAlloc) : '—'}</td>
-                              <td className="px-4 py-2 text-right font-mono text-amber-700 hidden md:table-cell">{sSeed > 0 ? formatCurrency(sSeed) : '—'}</td>
-                              <td className={`px-5 py-2 text-right font-mono ${sSav >= 0 ? 'text-success' : 'text-danger'}`}>{sSav !== 0 ? formatCurrency(sSav) : '—'}</td>
+                              <td className="px-4 py-2 text-right font-mono text-primary hidden md:table-cell">{sAlloc > 0 ? formatCurrency(sAlloc, baseCurrencyCode) : '—'}</td>
+                              <td className="px-4 py-2 text-right font-mono text-amber-700 hidden md:table-cell">{sSeed > 0 ? formatCurrency(sSeed, baseCurrencyCode) : '—'}</td>
+                              <td className={`px-5 py-2 text-right font-mono ${sSav >= 0 ? 'text-success' : 'text-danger'}`}>{sSav !== 0 ? formatCurrency(sSav, baseCurrencyCode) : '—'}</td>
                             </tr>
                           )
                         }
@@ -948,13 +950,13 @@ export default function CategoryLedger() {
                           {totals.pct > 0 ? `${totals.pct.toFixed(1)}%` : '—'}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-primary hidden md:table-cell">
-                          {totals.alloc > 0 ? formatCurrency(totals.alloc) : '—'}
+                          {totals.alloc > 0 ? formatCurrency(totals.alloc, baseCurrencyCode) : '—'}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-amber-700 hidden md:table-cell">
-                          {totals.seed > 0 ? formatCurrency(totals.seed) : '—'}
+                          {totals.seed > 0 ? formatCurrency(totals.seed, baseCurrencyCode) : '—'}
                         </td>
                         <td className={`px-5 py-3 text-right font-mono ${totals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {formatCurrency(totals.sav)}
+                          {formatCurrency(totals.sav, baseCurrencyCode)}
                         </td>
                       </tr>
                     </tfoot>
@@ -1037,11 +1039,11 @@ export default function CategoryLedger() {
                 </div>
                 <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-success mb-1">Total Inflow</p>
-                  <p className="text-sm font-mono font-semibold text-success tabular-nums">{formatCurrency(ledgerTotals.inflow)}</p>
+                  <p className="text-sm font-mono font-semibold text-success tabular-nums">{formatCurrency(ledgerTotals.inflow, baseCurrencyCode)}</p>
                 </div>
                 <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-danger mb-1">Total Outflow</p>
-                  <p className="text-sm font-mono font-semibold text-danger tabular-nums">{formatCurrency(ledgerTotals.outflow)}</p>
+                  <p className="text-sm font-mono font-semibold text-danger tabular-nums">{formatCurrency(ledgerTotals.outflow, baseCurrencyCode)}</p>
                 </div>
               </div>
 
@@ -1166,13 +1168,13 @@ export default function CategoryLedger() {
                                     )}
                                   </td>
                                   <td className="px-4 py-3 text-right font-mono text-success">
-                                    {row.inflow > 0 ? formatCurrency(row.inflow) : <span className="text-gray-300 text-xs">—</span>}
+                                    {row.inflow > 0 ? formatCurrency(row.inflow, baseCurrencyCode) : <span className="text-gray-300 text-xs">—</span>}
                                   </td>
                                   <td className="px-4 py-3 text-right font-mono text-danger">
-                                    {row.outflow > 0 ? formatCurrency(row.outflow) : <span className="text-gray-300 text-xs">—</span>}
+                                    {row.outflow > 0 ? formatCurrency(row.outflow, baseCurrencyCode) : <span className="text-gray-300 text-xs">—</span>}
                                   </td>
                                   <td className={`px-5 py-3 text-right font-mono font-semibold ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                                    {formatCurrency(row.balance)}
+                                    {formatCurrency(row.balance, baseCurrencyCode)}
                                   </td>
                                 </tr>
                                 {meta && isExpanded && (
@@ -1188,10 +1190,10 @@ export default function CategoryLedger() {
                         <tfoot>
                           <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
                             <td className="px-4 py-3 text-gray-700" colSpan={2}>Totals</td>
-                            <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow, baseCurrencyCode)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow, baseCurrencyCode)}</td>
                             <td className={`px-5 py-3 text-right font-mono ${closingBalance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                              {ledgerSorted.length > 0 ? formatCurrency(closingBalance) : '—'}
+                              {ledgerSorted.length > 0 ? formatCurrency(closingBalance, baseCurrencyCode) : '—'}
                             </td>
                           </tr>
                         </tfoot>
@@ -1291,7 +1293,7 @@ export default function CategoryLedger() {
                                 <p className={`text-sm font-mono font-bold tabular-nums ${
                                   row.inflow > 0 ? 'text-success' : 'text-danger'
                                 }`}>
-                                  {row.inflow > 0 ? formatCurrency(row.inflow) : formatCurrency(row.outflow)}
+                                  {row.inflow > 0 ? formatCurrency(row.inflow, baseCurrencyCode) : formatCurrency(row.outflow, baseCurrencyCode)}
                                 </p>
                               </div>
                               <div className="border-l border-gray-200/80 pl-4 min-w-0">
@@ -1299,7 +1301,7 @@ export default function CategoryLedger() {
                                 <p className={`text-sm font-mono font-bold tabular-nums ${
                                   row.balance >= 0 ? 'text-gray-900' : 'text-danger'
                                 }`}>
-                                  {formatCurrency(row.balance)}
+                                  {formatCurrency(row.balance, baseCurrencyCode)}
                                 </p>
                               </div>
                             </div>

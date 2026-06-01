@@ -13,6 +13,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 type PcaRow = { category_name: string; percentage?: number }
 
@@ -25,6 +26,7 @@ const PCA_SORT_FIELDS = deriveSortFields(PCA_COLUMNS)
 
 export default function PercentageAllocations() {
   usePageTitle('Allocation Configs')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const { configs, loading, error, fetch } = useAllocationStore()
   const [selectedId, setSelectedId] = useState<string>('')
@@ -192,7 +194,7 @@ export default function PercentageAllocations() {
                     <th className="px-5 py-3 text-left font-medium">#</th>
                     <SortableHeader field={PCA_SORT_FIELDS[0]} activeSortKey={pcaState.sortKey} activeSortDir={pcaState.sortDir} onSort={pcaState.setSort} className="px-5 py-3" />
                     <SortableHeader field={PCA_SORT_FIELDS[1]} activeSortKey={pcaState.sortKey} activeSortDir={pcaState.sortDir} onSort={pcaState.setSort} rightAlign className="px-5 py-3" />
-                    <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Per ₦100 received</th>
+                    <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Per {baseCurrencySymbol}100 received</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -206,7 +208,7 @@ export default function PercentageAllocations() {
                         </span>
                       </td>
                       <td className="px-5 py-3 text-right text-gray-500 hidden sm:table-cell">
-                        ₦{Number(row.percentage).toFixed(2)}
+                        {baseCurrencySymbol}{Number(row.percentage).toFixed(2)}
                       </td>
                     </tr>
                   ))}

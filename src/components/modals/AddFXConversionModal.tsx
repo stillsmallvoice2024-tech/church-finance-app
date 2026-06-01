@@ -3,11 +3,13 @@ import { TrendingDown, TrendingUp, AlertCircle, RefreshCw } from 'lucide-react'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddFXConversion, type AddFXConversionInput } from '../../hooks/useFXConversions'
 import { useAllocationStore } from '../../store/allocationStore'
-import { useCurrencies } from '../../hooks/useCurrencies'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { getCurrencyLocale } from '../../utils/formatters'
 import type { FXCurrencySummary } from '../../hooks/useFX'
 
-function fmtFX(n: number, dp = 4)  { return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp }) }
-function fmtNGN(n: number)          { return n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function fmtFX(n: number, locale: string, dp = 4) {
+  return n.toLocaleString(locale, { minimumFractionDigits: dp, maximumFractionDigits: dp })
+}
 
 interface Props {
   open:              boolean
@@ -20,10 +22,9 @@ interface Props {
 export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defaultCurrency }: Props) {
   const { mutate, loading, error, reset } = useAddFXConversion()
   const { configs } = useAllocationStore()
-  const { currencies } = useCurrencies()
-  const fxCurrencies = currencies.filter(c => c.code !== 'NGN')
+  const { baseCurrencyCode, baseCurrencySymbol, formatLocale, foreignCurrencies: fxCurrencies, getCurrencySymbol } = useOrgCurrency()
 
-  const [currency,    setCurrency]    = useState(defaultCurrency ?? 'USD')
+  const [currency,    setCurrency]    = useState(defaultCurrency ?? fxCurrencies[0]?.code ?? 'USD')
   const [fxAmount,    setFxAmount]    = useState('')
   const [rate,        setRate]        = useState('')
   const [date,        setDate]        = useState('')
@@ -37,10 +38,10 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
 
   const summary    = summaries.find(s => s.currency === currency)
   const balance    = summary?.currentBalance ?? 0
-  const meta       = fxCurrencies.find(m => m.code === currency) ?? { code: currency, symbol: currency, flag: null }
+  const meta       = fxCurrencies.find(m => m.code === currency) ?? { code: currency, symbol: getCurrencySymbol(currency), flag: null }
   const fxAmt      = parseFloat(fxAmount) || 0
   const exchangeRate = parseFloat(rate)   || 0
-  const nairaAmt   = fxAmt * exchangeRate
+  const baseAmt    = fxAmt * exchangeRate
   const isPartial  = fxAmt > 0 && fxAmt < balance
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
     setFormError(null)
     if (!currency)          { setFormError('Select a currency.'); return }
     if (fxAmt <= 0)         { setFormError('Enter a positive FX amount.'); return }
-    if (fxAmt > balance)    { setFormError(`Amount exceeds available balance (${meta.symbol}${fmtFX(balance)}).`); return }
+    if (fxAmt > balance)    { setFormError(`Amount exceeds available balance (${meta.symbol}${fmtFX(balance, getCurrencyLocale(currency))}).`); return }
     if (exchangeRate <= 0)  { setFormError('Enter a valid exchange rate.'); return }
     if (!date)              { setFormError('Select a date.'); return }
 
@@ -75,7 +76,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
       fx_currency:          currency,
       fx_amount:            fxAmt,
       exchange_rate:        exchangeRate,
-      naira_amount:         nairaAmt,
+      naira_amount:         baseAmt,
       notes:                notes.trim() || undefined,
       allocation_config_id: configId || undefined,
       stage_code_1:         stageCode1.trim() || undefined,
@@ -94,7 +95,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
   const iCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
 
   return (
-    <Modal ref={modalRef} open={open} onClose={onClose} title="Convert FX to NGN" size="max-w-md" isDirty={isDirty} disableClose={loading}>
+    <Modal ref={modalRef} open={open} onClose={onClose} title={`Convert FX to ${baseCurrencyCode}`} size="max-w-md" isDirty={isDirty} disableClose={loading}>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
 
         {(error || formError) && (
@@ -125,7 +126,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
                     }`}
                   >
                     {m.flag} {m.code}
-                    <span className="font-mono opacity-70">{m.symbol}{fmtFX(bal, 2)}</span>
+                    <span className="font-mono opacity-70">{m.symbol}{fmtFX(bal, getCurrencyLocale(m.code), 2)}</span>
                   </button>
                 )
               })}
@@ -136,7 +137,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
         {/* Balance indicator */}
         {meta && balance > 0 && (
           <div className="flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-xs">
-            <span className="text-blue-700">Available: <strong>{meta.symbol}{fmtFX(balance)}</strong></span>
+            <span className="text-blue-700">Available: <strong>{meta.symbol}{fmtFX(balance, getCurrencyLocale(currency))}</strong></span>
             <button
               type="button"
               onClick={() => setFxAmount(String(balance))}
@@ -163,12 +164,12 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
               className={iCls}
             />
             {isPartial && (
-              <p className="text-[10px] text-amber-600">Partial conversion — {meta.symbol}{fmtFX(balance - fxAmt)} remains</p>
+              <p className="text-[10px] text-amber-600">Partial conversion — {meta.symbol}{fmtFX(balance - fxAmt, getCurrencyLocale(currency))} remains</p>
             )}
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">Rate (₦ per {currency}) *</label>
+            <label className="text-xs font-medium text-gray-600">Rate ({baseCurrencySymbol} per {currency}) *</label>
             <input
               type="number"
               min="0"
@@ -186,12 +187,12 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
           <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-sm">
             <div className="flex items-center gap-1.5 text-gray-600">
               <TrendingDown className="w-4 h-4 text-danger" />
-              <span className="font-mono">{meta?.symbol}{fmtFX(fxAmt)}</span>
+              <span className="font-mono">{meta?.symbol}{fmtFX(fxAmt, getCurrencyLocale(currency))}</span>
             </div>
             <RefreshCw className="w-3.5 h-3.5 text-gray-400" />
             <div className="flex items-center gap-1.5 text-success font-semibold">
               <TrendingUp className="w-4 h-4" />
-              <span>₦{fmtNGN(nairaAmt)}</span>
+              <span>{baseCurrencySymbol}{baseAmt.toLocaleString(formatLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         )}
@@ -221,7 +222,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
 
         {/* Allocation */}
         <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation for the NGN Inflow</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation for the {baseCurrencyCode} Inflow</p>
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Allocation Config</label>

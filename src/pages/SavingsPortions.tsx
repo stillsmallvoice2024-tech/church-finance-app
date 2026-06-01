@@ -13,6 +13,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 interface SavingsRow {
   category:     string
@@ -31,6 +32,7 @@ const SVP_SORT_FIELDS = deriveSortFields(SVP_COLUMNS)
 
 export default function SavingsPortions() {
   usePageTitle('Savings Portions')
+  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const [rows,    setRows]    = useState<SavingsRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -177,7 +179,7 @@ export default function SavingsPortions() {
     [sortedRows, svpState.page, svpState.pageSize],
   )
 
-  const SVP_CSV_HEADERS = ['Category', 'Deposited (₦)', 'Withdrawn (₦)', 'Balance (₦)']
+  const SVP_CSV_HEADERS = ['Category', `Deposited (${baseCurrencySymbol})`, `Withdrawn (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const svpCsvRow = (r: SavingsRow) => [r.category, r.deposited, r.withdrawn, r.balance]
   const SVP_CSV_FILE = `savings-portions-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(SVP_CSV_FILE, SVP_CSV_HEADERS, svpPage.map(svpCsvRow))
@@ -247,14 +249,14 @@ export default function SavingsPortions() {
                 <TrendingUp className="w-4 h-4" />
                 <span className="text-xs font-semibold uppercase tracking-wide">Total Saved</span>
               </div>
-              <p className="font-mono font-bold text-success text-base">{formatCurrency(totalDeposited)}</p>
+              <p className="font-mono font-bold text-success text-base">{formatCurrency(totalDeposited, baseCurrencyCode)}</p>
             </div>
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-center">
               <div className="flex items-center justify-center gap-1.5 text-danger mb-1">
                 <TrendingDown className="w-4 h-4" />
                 <span className="text-xs font-semibold uppercase tracking-wide">Withdrawn</span>
               </div>
-              <p className="font-mono font-bold text-danger text-base">{formatCurrency(totalWithdrawn)}</p>
+              <p className="font-mono font-bold text-danger text-base">{formatCurrency(totalWithdrawn, baseCurrencyCode)}</p>
             </div>
             <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 text-center">
               <div className="flex items-center justify-center gap-1.5 text-primary mb-1">
@@ -262,7 +264,7 @@ export default function SavingsPortions() {
                 <span className="text-xs font-semibold uppercase tracking-wide">Net Balance</span>
               </div>
               <p className={`font-mono font-bold text-base ${totalBalance >= 0 ? 'text-primary' : 'text-danger'}`}>
-                {formatCurrency(totalBalance)}
+                {formatCurrency(totalBalance, baseCurrencyCode)}
               </p>
             </div>
           </div>
@@ -301,13 +303,13 @@ export default function SavingsPortions() {
                   <tr key={row.category} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
                     <td className="px-5 py-3 text-right text-success font-mono">
-                      {formatCurrency(row.deposited)}
+                      {formatCurrency(row.deposited, baseCurrencyCode)}
                     </td>
                     <td className="px-5 py-3 text-right text-danger font-mono hidden sm:table-cell">
-                      {row.withdrawn > 0 ? formatCurrency(row.withdrawn) : '—'}
+                      {row.withdrawn > 0 ? formatCurrency(row.withdrawn, baseCurrencyCode) : '—'}
                     </td>
                     <td className={`px-5 py-3 text-right font-bold font-mono ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                      {formatCurrency(row.balance)}
+                      {formatCurrency(row.balance, baseCurrencyCode)}
                     </td>
                   </tr>
                 ))}
@@ -315,12 +317,12 @@ export default function SavingsPortions() {
               <tfoot>
                 <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold">
                   <td className="px-5 py-3 text-gray-700">Total</td>
-                  <td className="px-5 py-3 text-right text-success font-mono">{formatCurrency(totalDeposited)}</td>
+                  <td className="px-5 py-3 text-right text-success font-mono">{formatCurrency(totalDeposited, baseCurrencyCode)}</td>
                   <td className="px-5 py-3 text-right text-danger font-mono hidden sm:table-cell">
-                    {totalWithdrawn > 0 ? formatCurrency(totalWithdrawn) : '—'}
+                    {totalWithdrawn > 0 ? formatCurrency(totalWithdrawn, baseCurrencyCode) : '—'}
                   </td>
                   <td className={`px-5 py-3 text-right font-mono ${totalBalance >= 0 ? 'text-primary' : 'text-danger'}`}>
-                    {formatCurrency(totalBalance)}
+                    {formatCurrency(totalBalance, baseCurrencyCode)}
                   </td>
                 </tr>
               </tfoot>
