@@ -121,6 +121,9 @@ $$;
 GRANT EXECUTE ON FUNCTION public.create_organization(text) TO authenticated;
 
 -- ── 4. Update get_invitation_by_token(): include org_name ─────────────────────
+-- Must DROP first — return type changed (added org_id, org_name columns).
+
+DROP FUNCTION IF EXISTS public.get_invitation_by_token(uuid);
 
 CREATE OR REPLACE FUNCTION public.get_invitation_by_token(p_token uuid)
 RETURNS TABLE(
