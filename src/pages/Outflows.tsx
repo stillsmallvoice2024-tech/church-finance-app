@@ -36,6 +36,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -94,6 +95,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Outflows() {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
@@ -194,7 +196,7 @@ export default function Outflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', 'Disbursed (₦)', 'Refunded (₦)', 'Transfer Charge (₦)', 'Net Amount (₦)', 'Stage Code 1', 'Outflow Type', 'Remarks']
+  const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', `Disbursed (${baseCurrencySymbol})`, `Refunded (${baseCurrencySymbol})`, `Transfer Charge (${baseCurrencySymbol})`, `Net Amount (${baseCurrencySymbol})`, 'Stage Code 1', 'Outflow Type', 'Remarks']
   const outflowCsvRow = (r: OutflowTransaction) => [
     r.date, r.transaction_id, r.display_description, r.bank_description,
     r.amount_disbursed, r.amount_refunded, r.transfer_charge,

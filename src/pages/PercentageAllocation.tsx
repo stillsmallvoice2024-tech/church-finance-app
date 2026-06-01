@@ -13,6 +13,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 interface PctRow {
   category:  string
@@ -33,6 +34,7 @@ type ConfigRowShape = { category_name: string; budget_portion?: string; percenta
 
 export default function PercentageAllocation() {
   usePageTitle('Percentage Allocation')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const [rows,    setRows]    = useState<PctRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -176,7 +178,7 @@ export default function PercentageAllocation() {
     [sortedRows, state.page, state.pageSize],
   )
 
-  const PA_CSV_HEADERS = ['Category', 'Allocated (₦)', 'Withdrawn (₦)', 'Balance (₦)']
+  const PA_CSV_HEADERS = ['Category', `Allocated (${baseCurrencySymbol})`, `Withdrawn (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const paCsvRow = (r: PctRow) => [r.category, r.deposited, r.withdrawn, r.balance]
   const PA_CSV_FILE = `percentage-allocation-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(PA_CSV_FILE, PA_CSV_HEADERS, paPage.map(paCsvRow))

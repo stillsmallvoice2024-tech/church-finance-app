@@ -25,6 +25,7 @@ import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
 import { normalizeId } from '../utils/normalizeId'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Import() {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { canImportTransactions } = useRole()
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
@@ -816,7 +818,7 @@ function ManualEntryForm() {
             <Field label="Date *" error={errors.date}>
               <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
             </Field>
-            <Field label="Amount (₦) *" error={errors.amount}>
+            <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.amount}>
               <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('amount')} onChange={e => setCurrency('amount', e.target.value)} className={iCls} />
             </Field>
           </div>
@@ -975,7 +977,7 @@ function ManualEntryForm() {
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
               <p className="text-xs text-gray-500">
-                ≈ ₦{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
               </p>
             )}
           </div>
@@ -1003,7 +1005,7 @@ function ManualEntryForm() {
             <Field label="Date *" error={errors.date}>
               <input type="date" value={v('date')} onChange={e => set('date', e.target.value)} className={iCls} />
             </Field>
-            <Field label="Amount Disbursed (₦) *" error={errors.amount_disbursed}>
+            <Field label={`Amount Disbursed (${baseCurrencySymbol}) *`} error={errors.amount_disbursed}>
               <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('amount_disbursed')} onChange={e => setCurrency('amount_disbursed', e.target.value)} className={iCls} />
             </Field>
           </div>
@@ -1123,7 +1125,7 @@ function ManualEntryForm() {
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
               <p className="text-xs text-gray-500">
-                ≈ ₦{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
               </p>
             )}
           </div>

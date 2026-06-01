@@ -27,17 +27,11 @@ import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
 import { formatCurrencyCompact, formatDate } from '../utils/formatters'
 import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
+import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-const FX_META = [
-  { code: 'USD', symbol: '$', flag: '🇺🇸' },
-  { code: 'GBP', symbol: '£', flag: '🇬🇧' },
-  { code: 'EUR', symbol: '€', flag: '🇪🇺' },
-  { code: 'CNY', symbol: '¥', flag: '🇨🇳' },
-]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +62,7 @@ function greeting() {
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
+  const { foreignCurrencies } = useOrgCurrency()
   const year   = useAccountingYearStore(s => s.year)
   const stats  = useDashboardStats(year)
   const { categories, loading: categoriesLoading } = useCategories()
@@ -302,7 +297,7 @@ export default function Dashboard() {
             Foreign Currency Holdings
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {FX_META.map(fx => {
+            {foreignCurrencies.map(fx => {
               const balance  = fxMap.get(fx.code) ?? 0
               const hasValue = balance > 0
               return (

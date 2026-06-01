@@ -16,10 +16,9 @@ import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
-
-const FX_CURRENCIES = ['USD', 'GBP', 'EUR', 'CNY', 'AED', 'CAD', 'CHF', 'ZAR']
 
 const optNum = z.union([
   z.coerce.number().min(0),
@@ -66,6 +65,7 @@ interface Props {
 
 export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
+  const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const { categories } = useCategories()
   const { banks } = useBanks()
   const { configs: allocConfigs, fetch: fetchAllocConfigs } = useAllocationStore()
@@ -303,7 +303,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
-          <Field label="Amount (₦) *" error={errors.amount?.message}>
+          <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.amount?.message}>
             <Controller control={control} name="amount" render={({ field }) => (
               <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.amount)} />
             )} />
@@ -472,8 +472,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         <Field label="FX Currency (if applicable)" error={errors.fx_currency?.message}>
           <select {...register('fx_currency')} className={inputCls(!!errors.fx_currency)}>
             <option value="">— None —</option>
-            {FX_CURRENCIES.map(c => (
-              <option key={c} value={c}>{c}</option>
+            {foreignCurrencies.map(c => (
+              <option key={c.code} value={c.code}>{c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}</option>
             ))}
           </select>
         </Field>

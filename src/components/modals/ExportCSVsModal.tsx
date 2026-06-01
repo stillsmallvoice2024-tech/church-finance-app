@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, Loader2, FileDown } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { exportCSV } from '../../utils/csvExport'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 type ItemStatus = 'pending' | 'running' | 'done' | 'error'
 
@@ -30,14 +31,14 @@ const EXPORT_ITEMS: ExportItem[] = [
 const Q = (table: string) =>
   supabase.from(table).select('*', { count: 'exact' }).limit(100_000)
 
-async function runExport(key: string): Promise<void> {
+async function runExport(key: string, sym: string): Promise<void> {
   const date = new Date().toISOString().slice(0, 10)
 
   if (key === 'inflows') {
     const { data } = await Q('inflow_transactions').order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`inflows-${date}.csv`,
-      ['Date','Description','Amount (₦)','Inflow Type','Stage 1','Stage 2','Stage 3','Txn Ref','FX Currency','Txn Type','Created At'],
+      ['Date','Description',`Amount (${sym})`,'Inflow Type','Stage 1','Stage 2','Stage 3','Txn Ref','FX Currency','Txn Type','Created At'],
       rows.map(r => [r.date, r.description, r.amount, r.inflow_type, r.stage_code_1,
         r.stage_code_2, r.stage_code_3, r.transaction_ref, r.fx_currency, r.transaction_type, r.created_at]))
   }
@@ -46,7 +47,7 @@ async function runExport(key: string): Promise<void> {
     const { data } = await Q('outflow_transactions').order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`outflows-${date}.csv`,
-      ['Date','Txn ID','Description','Disbursed (₦)','Refunded (₦)','Transfer Charge (₦)','Stage 1','Stage 2','Remarks','FX Currency','Txn Type','Created At'],
+      ['Date','Txn ID','Description',`Disbursed (${sym})`,`Refunded (${sym})`,`Transfer Charge (${sym})`,'Stage 1','Stage 2','Remarks','FX Currency','Txn Type','Created At'],
       rows.map(r => [r.date, r.transaction_id, r.description, r.amount_disbursed,
         r.amount_refunded, r.transfer_charge, r.stage_code_1, r.stage_code_2,
         r.remarks, r.fx_currency, r.transaction_type, r.created_at]))
@@ -56,7 +57,7 @@ async function runExport(key: string): Promise<void> {
     const { data } = await Q('intra_flows').order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`intra-flows-${date}.csv`,
-      ['Date','From Category','To Category','Amount (₦)','Description','Transaction Ref','From Stage 1','From Stage 2','To Stage 1','To Stage 2','Remark','Created At'],
+      ['Date','From Category','To Category',`Amount (${sym})`,'Description','Transaction Ref','From Stage 1','From Stage 2','To Stage 1','To Stage 2','Remark','Created At'],
       rows.map(r => [r.date, r.account_from, r.account_to, r.total_amount, r.description,
         r.transaction_ref, r.account_from_stage1, r.account_from_stage2,
         r.account_to_stage1, r.account_to_stage2, r.remark, r.created_at]))
@@ -66,7 +67,7 @@ async function runExport(key: string): Promise<void> {
     const { data } = await Q('bank_deposits').order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`bank-deposits-${date}.csv`,
-      ['Date','Bank','Amount (₦)','Description','Transaction Ref','Remarks','Created At'],
+      ['Date','Bank',`Amount (${sym})`,'Description','Transaction Ref','Remarks','Created At'],
       rows.map(r => [r.date, r.bank_name, r.amount, r.description, r.transaction_ref, r.remarks, r.created_at]))
   }
 
@@ -74,7 +75,7 @@ async function runExport(key: string): Promise<void> {
     const { data } = await Q('intrabank_transfers').order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`intrabank-transfers-${date}.csv`,
-      ['Date','From Bank','To Bank','Amount (₦)','Description','Transaction Ref','Remarks','Created At'],
+      ['Date','From Bank','To Bank',`Amount (${sym})`,'Description','Transaction Ref','Remarks','Created At'],
       rows.map(r => [r.date, r.from_bank_name, r.to_bank_name, r.amount,
         r.description, r.transaction_ref, r.remarks, r.created_at]))
   }
@@ -92,7 +93,7 @@ async function runExport(key: string): Promise<void> {
     const { data } = await Q('special_projects').order('name')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`special-projects-${date}.csv`,
-      ['Name','Code','Opening Balance (₦)','Active','Created At'],
+      ['Name','Code',`Opening Balance (${sym})`,'Active','Created At'],
       rows.map(r => [r.name, r.code, r.opening_balance, r.is_active, r.created_at]))
   }
 
@@ -102,7 +103,7 @@ async function runExport(key: string): Promise<void> {
     const nameMap = new Map((projects ?? []).map((p: Record<string, unknown>) => [p.id, p.name]))
     const rows    = (entries ?? []) as Record<string, unknown>[]
     exportCSV(`special-project-entries-${date}.csv`,
-      ['Project','Date','Description','Inflow (₦)','% Inflow (₦)','Refund/Intraflow (₦)','Outflow (₦)','Balance (₦)','Created At'],
+      ['Project','Date','Description',`Inflow (${sym})`,`% Inflow (${sym})`,`Refund/Intraflow (${sym})`,`Outflow (${sym})`,`Balance (${sym})`,'Created At'],
       rows.map(r => [nameMap.get(r.project_id as string) ?? r.project_id, r.date, r.description,
         r.inflow, r.percentage_inflow, r.refund_intraflow, r.outflow, r.balance, r.created_at]))
   }
@@ -127,7 +128,7 @@ async function runExport(key: string): Promise<void> {
       ...(outflowRes.data ?? []).map((r: R) => ({ date: r.date, description: r.description, inflow: 0, outflow: r.amount_disbursed, category: r.stage_code_1, type: 'Outflow' })),
     ].sort((a, b) => String(a.date).localeCompare(String(b.date)))
     exportCSV(`bank-ledger-${date}.csv`,
-      ['Date','Description','Inflow (₦)','Outflow (₦)','Category','Type'],
+      ['Date','Description',`Inflow (${sym})`,`Outflow (${sym})`,'Category','Type'],
       merged.map(r => [r.date, r.description, r.inflow, r.outflow, r.category, r.type]))
   }
 
@@ -142,7 +143,7 @@ async function runExport(key: string): Promise<void> {
       ...(outflowRes.data ?? []).map((r: R) => ({ date: r.date, category: r.stage_code_1 ?? '(none)', description: r.description, inflow: '', outflow: r.amount_disbursed, type: 'Outflow' })),
     ].sort((a, b) => String(a.category).localeCompare(String(b.category)) || String(a.date).localeCompare(String(b.date)))
     exportCSV(`category-ledger-${date}.csv`,
-      ['Category','Date','Description','Inflow (₦)','Outflow (₦)','Type'],
+      ['Category','Date','Description',`Inflow (${sym})`,`Outflow (${sym})`,'Type'],
       rows.map(r => [r.category, r.date, r.description, r.inflow, r.outflow, r.type]))
   }
 
@@ -170,6 +171,7 @@ interface Props {
 export function ExportCSVsModal({ open, onClose }: Props) {
   const [items,  setItems]  = useState<ExportItem[]>(EXPORT_ITEMS)
   const [done,   setDone]   = useState(false)
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const setStatus = useCallback((key: string, status: ItemStatus) => {
     setItems(prev => prev.map(it => it.key === key ? { ...it, status } : it))
@@ -181,12 +183,13 @@ export function ExportCSVsModal({ open, onClose }: Props) {
     setDone(false)
 
     let cancelled = false
+    const sym = baseCurrencySymbol
     ;(async () => {
       for (const item of EXPORT_ITEMS) {
         if (cancelled) return
         setStatus(item.key, 'running')
         try {
-          await runExport(item.key)
+          await runExport(item.key, sym)
           if (!cancelled) setStatus(item.key, 'done')
         } catch {
           if (!cancelled) setStatus(item.key, 'error')
@@ -196,7 +199,7 @@ export function ExportCSVsModal({ open, onClose }: Props) {
     })()
 
     return () => { cancelled = true }
-  }, [open, setStatus])
+  }, [open, setStatus, baseCurrencySymbol])
 
   const allFinished = items.every(it => it.status === 'done' || it.status === 'error')
 
@@ -227,36 +230,26 @@ export function ExportCSVsModal({ open, onClose }: Props) {
                 <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
               )}
               {item.status === 'error' && (
-                <XCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                <XCircle className="w-4 h-4 text-red-500 shrink-0" />
               )}
-              <span className={
-                item.status === 'done'    ? 'text-gray-700' :
-                item.status === 'error'   ? 'text-amber-600' :
-                item.status === 'running' ? 'text-gray-900 font-medium' :
-                'text-gray-400'
-              }>
+              <span className={item.status === 'error' ? 'text-red-600' : item.status === 'done' ? 'text-gray-700' : 'text-gray-500'}>
                 {item.label}
-                {item.status === 'error' && (
-                  <span className="ml-1 text-xs">(skipped — table may not exist)</span>
-                )}
               </span>
             </div>
           ))}
         </div>
 
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button
-            onClick={onClose}
-            disabled={!allFinished}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark disabled:opacity-40 transition-colors"
-          >
-            {allFinished ? (
-              <><FileDown className="w-4 h-4" /> Done</>
-            ) : (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Exporting…</>
-            )}
-          </button>
-        </div>
+        {allFinished && (
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light"
+            >
+              <FileDown className="w-4 h-4" />
+              Done
+            </button>
+          </div>
+        )}
       </div>
     </Modal>
   )

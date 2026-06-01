@@ -11,7 +11,7 @@ export interface UserProfile {
   updated_at: string
 }
 
-export type Currency = 'NGN' | 'USD' | 'GBP' | 'EUR'
+export type Currency = string
 
 export type TransactionType = 'inflow' | 'outflow'
 

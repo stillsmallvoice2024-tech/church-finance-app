@@ -31,6 +31,7 @@ import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel
 import { BulkActionBar }          from '../components/ui/BulkActionBar'
 import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowModal'
 import { useBulkSelection }       from '../hooks/useBulkSelection'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function IntraFlow() {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
@@ -184,7 +186,7 @@ export default function IntraFlow() {
     refetch()
   }
 
-  const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', 'Amount (₦)', 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
+  const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', `Amount (${baseCurrencySymbol})`, 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
   const iflCsvRow = (r: IntraFlowRow) => [
     r.date, r.account_from ?? '', r.account_to ?? '', r.total_amount,
     r.account_from_stage1, r.account_from_stage2,

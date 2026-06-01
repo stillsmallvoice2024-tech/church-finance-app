@@ -14,7 +14,6 @@ export const ROLE_BADGE_CLASSES: Record<UserRole, string> = {
   viewer: 'bg-gray-100 text-gray-600',
 }
 
-export const CURRENCIES = ['NGN', 'USD', 'GBP', 'EUR'] as const
 
 export const INFLOW_CATEGORIES = [
   'Tithes',

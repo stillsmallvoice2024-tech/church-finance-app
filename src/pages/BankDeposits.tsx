@@ -31,6 +31,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
-          <Field label="Amount (₦) *" error={errors.amount?.message}>
+          <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.amount?.message}>
             <input type="number" min="0" step="0.01" placeholder="0.00"
               {...register('amount')} className={inputCls(!!errors.amount)} />
           </Field>
@@ -189,6 +190,7 @@ function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
 
 export default function BankDeposits() {
   usePageTitle('Bank Deposits')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const { banks }       = useBanks()
   const { isAdmin }     = useRole()
@@ -359,7 +361,7 @@ export default function BankDeposits() {
   ]
 
   const BD_SOURCE_LABELS: Record<string, string> = { bank_deposits: 'Deposit', inflow: 'Inflow', outflow: 'Outflow' }
-  const BD_CSV_HEADERS = ['Date', 'Bank', 'Description', 'Amount (₦)', 'Ref', 'Remarks', 'Source']
+  const BD_CSV_HEADERS = ['Date', 'Bank', 'Description', `Amount (${baseCurrencySymbol})`, 'Ref', 'Remarks', 'Source']
   const bdCsvRow = (r: DepositRow) => [
     r.date, r.bank_name ?? '', r.description ?? '', r.amount,
     r.transaction_ref ?? '', r.remarks ?? '', BD_SOURCE_LABELS[r.source] ?? r.source,

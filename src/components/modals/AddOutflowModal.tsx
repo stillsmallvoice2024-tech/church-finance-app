@@ -14,6 +14,7 @@ import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTyp
 import { useDepartmentOptions } from '../../hooks/useDepartments'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 const TXN_TYPES = [
   { value: '',                   label: 'Normal' },
@@ -63,6 +64,7 @@ interface Props {
 }
 
 export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props) {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { categories }    = useCategories()
   const { banks }         = useBanks()
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
@@ -242,7 +244,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
-          <Field label="Amount Disbursed (₦) *" error={errors.amount_disbursed?.message}>
+          <Field label={`Amount Disbursed (${baseCurrencySymbol}) *`} error={errors.amount_disbursed?.message}>
             <Controller control={control} name="amount_disbursed" render={({ field }) => (
               <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.amount_disbursed)} />
             )} />

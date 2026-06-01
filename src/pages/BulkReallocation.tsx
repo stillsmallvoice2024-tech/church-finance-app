@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
 import type { ReportCategoryBalance } from '../types'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ async function executeBulkReallocation(params: {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function BulkReallocation() {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { categories, loading: catLoading } = useCategories()
   const { push: toast } = useToastStore()
 
@@ -436,7 +438,7 @@ export default function BulkReallocation() {
 
           {mode === 'fixed' && (
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">Amount (₦)</label>
+              <label className="text-xs font-medium text-gray-500">Amount ({baseCurrencySymbol})</label>
               <input
                 type="number"
                 min={0}

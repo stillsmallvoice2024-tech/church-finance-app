@@ -27,6 +27,7 @@ import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeningBalance'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ const BL_SORT_FIELDS = deriveSortFields(BL_COLUMNS)
 
 export default function BankLedger() {
   usePageTitle('Bank Ledger')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const { banks, loading: banksLoading, error: banksError } = useBanks()
   const { canWrite } = useRole()
@@ -216,7 +218,7 @@ export default function BankLedger() {
   const selectedBankObj  = banks.find(b => b.id === selectedBank)
   const selectedBankName = selectedBankObj?.name ?? ''
 
-  const BL_CSV_HEADERS = ['Date', 'Description', 'Type', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
+  const BL_CSV_HEADERS = ['Date', 'Description', 'Type', `Inflow (${baseCurrencySymbol})`, `Outflow (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const blCsvRow = (r: LedgerRow) => [
     r.date, r.description ?? '',
     TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '',
@@ -478,7 +480,7 @@ export default function BankLedger() {
                     const isExpanded = expandedId === row.id
                     const detailItems = !isBF
                       ? (row.inflowData  ? inflowDetailItems(row.inflowData)
-                        : row.outflowData ? outflowDetailItems(row.outflowData)
+                        : row.outflowData ? outflowDetailItems(row.outflowData, baseCurrencySymbol)
                         : [])
                       : []
                     return [

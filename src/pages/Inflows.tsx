@@ -34,6 +34,7 @@ import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { inflowDetailItems } from '../utils/rowDetailItems'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -91,6 +92,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Inflows() {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
 
   // Filters
@@ -182,7 +184,7 @@ export default function Inflows() {
     else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
   }
 
-  const INF_CSV_HEADERS = ['Date', 'Description', 'Amount (Naira)', 'Transaction Type', 'Txn Ref', 'Remark']
+  const INF_CSV_HEADERS = ['Date', 'Description', `Amount (${baseCurrencySymbol})`, 'Transaction Type', 'Txn Ref', 'Remark']
   const inflowCsvRow = (r: InflowTransaction) => [
     r.date, r.description, r.amount,
     TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? '', r.transaction_ref, r.remark,

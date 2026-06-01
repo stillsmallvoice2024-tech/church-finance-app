@@ -13,6 +13,7 @@ import {
   type SpecialConfigGroupWithVersions,
 } from '../../hooks/useSpecialConfigGroups'
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 const MIGRATION_SQL =
 `ALTER TABLE allocation_configs
@@ -46,6 +47,7 @@ interface RowDraft {
 type ImpactPhase = 'idle' | 'prompting' | 'reason' | 'recalculating' | 'done'
 
 export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, copyFromVersion }: Props) {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { categories, refetch: refetchCategories } = useCategories()
   const { options: incomeTypeOptions, reload: reloadIncomeTypes } = useIncomeTypeOptions()
 
@@ -296,7 +298,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
                 }`}
               >
-                {t === 'percentage' ? 'Percentage %' : 'Amount ₦'}
+                {t === 'percentage' ? 'Percentage %' : `Amount ${baseCurrencySymbol}`}
               </button>
             ))}
           </div>
@@ -305,7 +307,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         {/* Total amount (amount-type only) */}
         {allocType === 'amount' && (
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">Total Amount (₦) *</label>
+            <label className="text-xs font-medium text-gray-600">Total Amount ({baseCurrencySymbol}) *</label>
             <input
               type="number"
               min="0"
@@ -325,7 +327,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
             <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
               {allocType === 'percentage'
                 ? `${runningTotal.toFixed(1)} / 100%`
-                : `₦${runningTotal.toLocaleString()} / ₦${(parseFloat(totalAmount) || 0).toLocaleString()}`}
+                : `${baseCurrencySymbol}${runningTotal.toLocaleString()} / ${baseCurrencySymbol}${(parseFloat(totalAmount) || 0).toLocaleString()}`}
             </span>
           </div>
 
@@ -333,7 +335,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
               <span>Category</span>
               <span>Budget Portion</span>
-              <span>{allocType === 'percentage' ? '%' : '₦ Amount'}</span>
+              <span>{allocType === 'percentage' ? '%' : `${baseCurrencySymbol} Amount`}</span>
               <span />
             </div>
             <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
@@ -392,7 +394,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             {allocType === 'percentage'
               ? `Total is ${runningTotal.toFixed(1)}% — must equal 100%`
-              : `Total ₦${runningTotal.toLocaleString()} doesn't match ₦${(parseFloat(totalAmount) || 0).toLocaleString()}`}
+              : `Total ${baseCurrencySymbol}${runningTotal.toLocaleString()} doesn't match ${baseCurrencySymbol}${(parseFloat(totalAmount) || 0).toLocaleString()}`}
           </div>
         )}
 

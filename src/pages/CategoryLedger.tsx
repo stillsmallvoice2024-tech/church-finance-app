@@ -18,13 +18,14 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
 const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
   { key: 'name',                label: 'Category',      sortType: 'text',    primary: true, accessor: r => r.name },
   { key: 'percentage',          label: '% Alloc',       sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
-  { key: 'percentageAllocated', label: '₦ Allocation',   sortType: 'numeric', primary: true },
+  { key: 'percentageAllocated', label: 'Allocation',      sortType: 'numeric', primary: true },
   { key: 'specificSeed',        label: 'Specific Seed', sortType: 'numeric', primary: true },
   { key: 'savingsNet',          label: 'Savings Net',   sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut },
 ]
@@ -82,6 +83,7 @@ const LEDGER_PORTIONS: LedgerPortion[] = ['Percentage', 'Specific Seed', 'Saving
 
 export default function CategoryLedger() {
   usePageTitle('Category Ledger')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const { categories }                           = useCategories()
   const { groups }                               = useCategoryGroups()
@@ -637,9 +639,9 @@ export default function CategoryLedger() {
   const activeLedgerField = LEDGER_SORT_FIELDS.find(f => f.key === ledgerViewState.sortKey)
 
   const CL_CSV_FILE = `category-ledger-${new Date().toISOString().slice(0, 10)}.csv`
-  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', '₦ Allocation', 'Specific Seed', 'Savings Net']
+  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', `${baseCurrencySymbol} Allocation`, 'Specific Seed', 'Savings Net']
   const summaryCsvRow = (r: CategoryRow) => [r.name, r.percentage ?? '', r.percentageAllocated, r.specificSeed, r.savingsIn - r.savingsOut]
-  const LEDGER_CSV_HEADERS = ['Date', 'Description', 'Inflow (₦)', 'Outflow (₦)', 'Balance (₦)']
+  const LEDGER_CSV_HEADERS = ['Date', 'Description', `Inflow (${baseCurrencySymbol})`, `Outflow (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const ledgerCsvRow = (r: LedgerRow) => [r.date, r.description ?? '', r.inflow || '', r.outflow || '', r.balance]
   const handleExportView = () => {
     if (viewMode === 'summary') exportCSV(CL_CSV_FILE, SUMMARY_CSV_HEADERS, summaryPage.map(summaryCsvRow))
@@ -840,7 +842,7 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-4 py-3 hidden md:table-cell"
                         >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> ₦ Allocation</span>
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> {baseCurrencySymbol} Allocation</span>
                         </SortableHeader>
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[3]}

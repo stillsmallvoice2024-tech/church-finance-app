@@ -13,6 +13,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 interface SavingsRow {
   category:     string
@@ -31,6 +32,7 @@ const SVP_SORT_FIELDS = deriveSortFields(SVP_COLUMNS)
 
 export default function SavingsPortions() {
   usePageTitle('Savings Portions')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const [rows,    setRows]    = useState<SavingsRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -177,7 +179,7 @@ export default function SavingsPortions() {
     [sortedRows, svpState.page, svpState.pageSize],
   )
 
-  const SVP_CSV_HEADERS = ['Category', 'Deposited (₦)', 'Withdrawn (₦)', 'Balance (₦)']
+  const SVP_CSV_HEADERS = ['Category', `Deposited (${baseCurrencySymbol})`, `Withdrawn (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const svpCsvRow = (r: SavingsRow) => [r.category, r.deposited, r.withdrawn, r.balance]
   const SVP_CSV_FILE = `savings-portions-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(SVP_CSV_FILE, SVP_CSV_HEADERS, svpPage.map(svpCsvRow))

@@ -30,6 +30,7 @@ import {
 import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
@@ -321,6 +322,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
   onEditLocked: (c: AllocationConfig) => void
   onDelete:     (c: AllocationConfig) => void
 }) {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { configs, loading, error, fetch } = useAllocationStore()
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
@@ -581,7 +583,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                         Active: v{av.version_number} &nbsp;&middot;&nbsp;
                         {av.effective_from ?? '—'}{av.effective_to ? ` → ${av.effective_to}` : ' → open'} &nbsp;&middot;&nbsp;
                         <span className={isAmt ? 'text-blue-600' : 'text-purple-600'}>
-                          {isAmt ? 'Amount ₦' : 'Percentage %'}
+                          {isAmt ? `Amount ${baseCurrencySymbol}` : 'Percentage %'}
                         </span>
                         {' '}&nbsp;&middot;&nbsp;
                         <span className="text-green-700">Locked</span>

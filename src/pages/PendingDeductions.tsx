@@ -27,6 +27,7 @@ import { outflowDetailItems } from '../utils/rowDetailItems'
 import { supabase }                 from '../lib/supabase'
 import { exportCSV }               from '../utils/csvExport'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ const PD_SORT_FIELDS = deriveSortFields(PD_COLUMNS)
 // ── Page component ─────────────────────────────────────────────────────────────
 
 export default function PendingDeductions() {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { dateFrom, dateTo } = useYearRange()
 
   const pdState = useDataViewState({ storageKey: 'pd', defaultSortKey: 'date', defaultSortDir: 'desc' })
@@ -96,7 +98,7 @@ export default function PendingDeductions() {
   // Clear selection on page change
   useEffect(() => { clearAll() }, [pdState.page]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const PD_CSV_HEADERS = ['Date', 'Description', 'Bank', 'Disbursed (₦)', 'Transfer Charge (₦)', 'Net (₦)', 'Stage Code 1', 'Stage Code 2', 'Remarks']
+  const PD_CSV_HEADERS = ['Date', 'Description', 'Bank', `Disbursed (${baseCurrencySymbol})`, `Transfer Charge (${baseCurrencySymbol})`, `Net (${baseCurrencySymbol})`, 'Stage Code 1', 'Stage Code 2', 'Remarks']
   const pdCsvRow = (r: OutflowTransaction) => [
     r.date, r.description ?? '', r.bank_name ?? '',
     r.amount_disbursed, r.transfer_charge,
@@ -325,7 +327,7 @@ export default function PendingDeductions() {
                   <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
                   <SortableHeader field={PD_SORT_FIELDS[1]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Net (₦)</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Net ({baseCurrencySymbol})</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Stage Code</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Remarks</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
@@ -412,7 +414,7 @@ export default function PendingDeductions() {
                             </div>
                           </td>
                         </tr>
-                        {isExpanded && <RowDetailPanel items={outflowDetailItems(row)} colSpan={9} />}
+                        {isExpanded && <RowDetailPanel items={outflowDetailItems(row, baseCurrencySymbol)} colSpan={9} />}
                       </Fragment>
                     )
                   })

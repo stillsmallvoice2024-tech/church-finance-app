@@ -69,7 +69,8 @@ export function useAddFXConversion() {
 
   const mutate = useCallback(async (input: AddFXConversionInput): Promise<void> => {
     const { user } = useAuthStore.getState()
-    const { orgId } = useOrgStore.getState()
+    const { orgId, defaultCurrency } = useOrgStore.getState()
+    const baseCurrency = defaultCurrency ?? 'NGN'
     if (!user?.id) throw new Error('You must be signed in.')
     if (!orgId) throw new Error('No active organisation.')
     setLoading(true); setError(null)
@@ -96,7 +97,7 @@ export function useAddFXConversion() {
           withdrawal:      input.fx_amount,
           deposit:         0,
           running_balance: newBalance,
-          narration:       input.notes ?? `Converted to NGN @ ₦${input.exchange_rate}`,
+          narration:       input.notes ?? `Converted to ${baseCurrency} @ ${input.exchange_rate}`,
           created_by:      user.id,
           org_id:          orgId,
         })
@@ -110,7 +111,7 @@ export function useAddFXConversion() {
         .insert({
           date:                 input.date,
           amount:               input.naira_amount,
-          description:          input.notes ?? `FX Conversion: ${input.fx_currency} → NGN`,
+          description:          input.notes ?? `FX Conversion: ${input.fx_currency} → ${baseCurrency}`,
           stage_code_1:         input.stage_code_1 ?? null,
           stage_code_2:         input.stage_code_2 ?? 'Percentage Allocation',
           allocation_config_id: input.allocation_config_id ?? null,

@@ -10,6 +10,7 @@ import { supabase }        from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 interface TxnRow {
   id:                      string
@@ -24,6 +25,7 @@ interface TxnRow {
 
 export default function ReversalTransactions() {
   usePageTitle('Reversals')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -96,7 +98,7 @@ export default function ReversalTransactions() {
     return true
   })
 
-  const RV_CSV_HEADERS = ['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks']
+  const RV_CSV_HEADERS = ['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks']
   const rvCsvRow = (r: TxnRow) => [r.date, r.direction === 'in' ? 'Inflow' : 'Outflow', r.amount, r.description ?? '', r.bank_name ?? '', r.original_transaction_id ?? '', r.remarks ?? '']
   const RV_CSV_FILE = `reversal-transactions-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(RV_CSV_FILE, RV_CSV_HEADERS, filtered.map(rvCsvRow))
@@ -236,7 +238,7 @@ export default function ReversalTransactions() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
-                  {['Date', 'Direction', 'Amount (₦)', 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
+                  {['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>

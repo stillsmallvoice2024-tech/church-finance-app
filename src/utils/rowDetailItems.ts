@@ -37,16 +37,16 @@ export function inflowDetailItems(row: InflowTransaction): DetailItem[] {
   ]
 }
 
-export function outflowDetailItems(row: OutflowTransaction): DetailItem[] {
+export function outflowDetailItems(row: OutflowTransaction, sym = '₦'): DetailItem[] {
   const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
   return [
-    { label: 'Txn ID',              value: row.transaction_id,           mono: true, breakAll: true },
-    { label: 'Recorded',            value: row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null },
-    { label: 'Raw Bank Narration',  value: row.description,              breakAll: true },
-    { label: 'Remarks',             value: row.remarks,                  breakAll: true },
-    { label: 'Refunded (₦)',        value: Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded)) : null, mono: true },
-    { label: 'Transfer Charge (₦)', value: Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : null, mono: true },
-    { label: 'Net (₦)',             value: net !== Number(row.amount_disbursed) ? formatCurrency(net) : null, mono: true },
+    { label: 'Txn ID',                   value: row.transaction_id,           mono: true, breakAll: true },
+    { label: 'Recorded',                 value: row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null },
+    { label: 'Raw Bank Narration',       value: row.description,              breakAll: true },
+    { label: 'Remarks',                  value: row.remarks,                  breakAll: true },
+    { label: `Refunded (${sym})`,        value: Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded)) : null, mono: true },
+    { label: `Transfer Charge (${sym})`, value: Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge)) : null, mono: true },
+    { label: `Net (${sym})`,             value: net !== Number(row.amount_disbursed) ? formatCurrency(net) : null, mono: true },
     { label: 'Stage Code 1',        value: row.stage_code_1 },
     { label: 'Stage Code 2',        value: row.stage_code_2 },
     { label: 'Outflow Type',        value: row.outflow_type_name },

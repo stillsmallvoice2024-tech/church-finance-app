@@ -1,25 +1,51 @@
 import { format } from 'date-fns'
-import type { Currency } from '../types'
 
-const CURRENCY_SYMBOLS: Record<Currency, string> = {
+const CURRENCY_SYMBOLS: Record<string, string> = {
   NGN: '₦',
   USD: '$',
   GBP: '£',
   EUR: '€',
+  CNY: '¥',
+  JPY: '¥',
+  AED: 'د.إ',
+  CAD: 'CA$',
+  AUD: 'A$',
+  CHF: 'Fr',
+  ZAR: 'R',
+  GHS: '₵',
+  KES: 'KSh',
+  UGX: 'USh',
+  TZS: 'TSh',
+  XOF: 'Fr',
+  XAF: 'Fr',
+  EGP: '£',
+  INR: '₹',
+  BRL: 'R$',
+  MXN: '$',
+  SGD: 'S$',
+  HKD: 'HK$',
+  NZD: 'NZ$',
+  SEK: 'kr',
+  NOK: 'kr',
+  DKK: 'kr',
 }
 
-export function formatCurrency(amount: number, currency: Currency = 'NGN'): string {
-  const symbol = CURRENCY_SYMBOLS[currency]
+export function getCurrencySymbol(code: string): string {
+  return CURRENCY_SYMBOLS[code] ?? code
+}
+
+export function formatCurrency(amount: number, currency = 'NGN'): string {
+  const symbol = getCurrencySymbol(currency)
   return `${symbol}${amount.toLocaleString('en-NG', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
 }
 
-/** Renders negatives as (₦1,234.56), zero as —, positives normally. */
-export function formatCurrencyNegative(amount: number, currency: Currency = 'NGN'): string {
+/** Renders negatives as (SYM 1,234.56), zero as —, positives normally. */
+export function formatCurrencyNegative(amount: number, currency = 'NGN'): string {
   if (amount === 0) return '—'
-  const symbol = CURRENCY_SYMBOLS[currency]
+  const symbol = getCurrencySymbol(currency)
   const abs = Math.abs(amount).toLocaleString('en-NG', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -27,8 +53,8 @@ export function formatCurrencyNegative(amount: number, currency: Currency = 'NGN
   return amount < 0 ? `(${symbol}${abs})` : `${symbol}${abs}`
 }
 
-export function formatCurrencyCompact(amount: number, currency: Currency = 'NGN'): string {
-  const symbol = CURRENCY_SYMBOLS[currency]
+export function formatCurrencyCompact(amount: number, currency = 'NGN'): string {
+  const symbol = getCurrencySymbol(currency)
   const abs = Math.abs(amount)
   let formatted: string
   if (abs >= 1_000_000) formatted = `${symbol}${(abs / 1_000_000).toFixed(1)}M`

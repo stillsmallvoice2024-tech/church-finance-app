@@ -17,8 +17,7 @@ import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { formatDate } from '../utils/formatters'
-
-type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 const FX_COLUMNS: TableColumnDef<FXTransaction>[] = [
   { key: 'date',            label: 'Date',      sortType: 'date',    primary: true, noSearch: true },
@@ -29,30 +28,22 @@ const FX_COLUMNS: TableColumnDef<FXTransaction>[] = [
 
 const FX_SORT_FIELDS = deriveSortFields(FX_COLUMNS)
 
-const FX_META: { code: FXCurrency; symbol: string; flag: string; name: string }[] = [
-  { code: 'USD', symbol: '$', flag: '🇺🇸', name: 'US Dollar'      },
-  { code: 'GBP', symbol: '£', flag: '🇬🇧', name: 'British Pound'  },
-  { code: 'EUR', symbol: '€', flag: '🇪🇺', name: 'Euro'           },
-  { code: 'CNY', symbol: '¥', flag: '🇨🇳', name: 'Chinese Yuan'   },
-]
-
 function fmtFX(n: number, dp = 4) {
   return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })
 }
-function fmtNGN(n: number) {
+function fmtBase(n: number) {
   return n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export default function ForeignCurrency() {
+  const { baseCurrencySymbol, baseCurrencyCode, foreignCurrencies: FX_META } = useOrgCurrency()
   const [addOpen, setAddOpen]           = useState(false)
   const [editRecord, setEditRecord]     = useState<FXTransaction | null>(null)
-  const [filterCcy, setFilterCcy]       = useState<FXCurrency | ''>('')
+  const [filterCcy, setFilterCcy]       = useState<string>('')
   const [expandedId, setExpandedId]     = useState<string | null>(null)
   const fxState = useDataViewState({ storageKey: 'fx', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
-  const [rates, setRates]               = useState<Record<FXCurrency, number>>({
-    USD: 0, GBP: 0, EUR: 0, CNY: 0,
-  })
+  const [rates, setRates]               = useState<Record<string, number>>({})
 
   const { canWrite }                                = useRole()
   const { transactions, summaries, loading, error, refetch } =
@@ -131,7 +122,7 @@ export default function ForeignCurrency() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Foreign Currency</h1>
-          <p className="text-sm text-gray-500 mt-0.5">FX holdings across USD, GBP, EUR, and CNY</p>
+          <p className="text-sm text-gray-500 mt-0.5">FX holdings in foreign currencies</p>
         </div>
         {canWrite() && (
           <button
@@ -186,10 +177,10 @@ export default function ForeignCurrency() {
         })}
       </div>
 
-      {/* Naira Equivalent */}
+      {/* Base Currency Equivalent */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">
-          Naira Equivalent (Enter Rates)
+          {baseCurrencyCode} Equivalent (Enter Rates)
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {FX_META.map(meta => {
@@ -199,7 +190,7 @@ export default function ForeignCurrency() {
             return (
               <div key={meta.code} className="space-y-1.5">
                 <label className="text-xs font-medium text-gray-500">
-                  {meta.code} Rate (₦ per {meta.code})
+                  {meta.code} Rate ({baseCurrencySymbol} per {meta.code})
                 </label>
                 <input
                   type="number"
@@ -213,15 +204,15 @@ export default function ForeignCurrency() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                 />
                 <div className="text-xs text-gray-400">
-                  {meta.symbol}{fmtFX(bal)} → ₦{fmtNGN(equiv)}
+                  {meta.symbol}{fmtFX(bal)} → {baseCurrencySymbol}{fmtBase(equiv)}
                 </div>
               </div>
             )
           })}
         </div>
         <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Total Naira Equivalent</span>
-          <span className="text-lg font-bold text-primary">₦{fmtNGN(totalNairaEquivalent)}</span>
+          <span className="text-sm font-medium text-gray-700">Total {baseCurrencyCode} Equivalent</span>
+          <span className="text-lg font-bold text-primary">{baseCurrencySymbol}{fmtBase(totalNairaEquivalent)}</span>
         </div>
       </div>
 

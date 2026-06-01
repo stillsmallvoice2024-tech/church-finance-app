@@ -24,6 +24,7 @@ import { formatDate, formatCurrency } from '../utils/formatters'
 import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
           </Field>
-          <Field label="Amount (₦) *" error={errors.amount?.message}>
+          <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.amount?.message}>
             <input type="number" min="0" step="0.01" placeholder="0.00" {...register('amount')} className={inputCls(!!errors.amount)} />
           </Field>
         </div>
@@ -180,6 +181,7 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
 
 export default function IntraBankTransfers() {
   usePageTitle('Intrabank Transfers')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const { banks } = useBanks()
   const { canWrite, canDelete } = useRole()
@@ -235,7 +237,7 @@ export default function IntraBankTransfers() {
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: TransferRow) => { setEditRecord(r); setModalOpen(true) }
 
-  const IBT_CSV_HEADERS = ['Date', 'From Bank', 'To Bank', 'Amount (₦)', 'Description', 'Ref', 'Remarks']
+  const IBT_CSV_HEADERS = ['Date', 'From Bank', 'To Bank', `Amount (${baseCurrencySymbol})`, 'Description', 'Ref', 'Remarks']
   const ibtCsvRow = (r: TransferRow) => [
     r.date, r.from_bank_name ?? '', r.to_bank_name ?? '', r.amount,
     r.description ?? '', r.transaction_ref ?? '', r.remarks ?? '',
@@ -400,7 +402,7 @@ export default function IntraBankTransfers() {
                 <thead>
                   <tr className="border-b border-gray-100">
                     <th className="w-8" />
-                    {['Date', 'From Bank', 'To Bank', 'Amount (₦)', 'Description', 'Ref', 'Remarks', 'Actions'].map(h => (
+                    {['Date', 'From Bank', 'To Bank', `Amount (${baseCurrencySymbol})`, 'Description', 'Ref', 'Remarks', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>

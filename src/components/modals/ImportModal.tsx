@@ -16,6 +16,7 @@ import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../../hooks/useOutflowTypes'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import {
   resolveDefaultIncomeType,
   getFinalConfig,
@@ -228,6 +229,7 @@ interface ImportResult {
 }
 
 export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: Props) {
+  const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
 
@@ -1380,8 +1382,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                   }`}
                 >
                   <option value="">— Select currency —</option>
-                  {['USD','GBP','EUR','CNY','AED','CAD','CHF','ZAR'].map(c => (
-                    <option key={c} value={c}>{c}</option>
+                  {foreignCurrencies.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
                   ))}
                 </select>
                 {!fxCurrency && (
@@ -1596,8 +1598,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             <span className="font-mono text-amber-400 shrink-0 w-5 text-right">{ri + 1}</span>
                             <span className="text-amber-500 shrink-0">{date}</span>
                             <span className="truncate flex-1 min-w-0">{desc || '—'}</span>
-                            {credit > 0 && <span className="tabular-nums shrink-0 text-green-700">+₦{credit.toLocaleString()}</span>}
-                            {debit  > 0 && <span className="tabular-nums shrink-0 text-red-700">−₦{debit.toLocaleString()}</span>}
+                            {credit > 0 && <span className="tabular-nums shrink-0 text-green-700">+{baseCurrencySymbol}{credit.toLocaleString()}</span>}
+                            {debit  > 0 && <span className="tabular-nums shrink-0 text-red-700">−{baseCurrencySymbol}{debit.toLocaleString()}</span>}
                           </div>
                         )
                       })}
@@ -1861,7 +1863,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       </div>
                                       <div className="text-gray-400">{date}</div>
                                     </div>
-                                    <span className="text-gray-700 font-medium">₦{credit.toLocaleString()}</span>
+                                    <span className="text-gray-700 font-medium">{baseCurrencySymbol}{credit.toLocaleString()}</span>
                                     {txnType ? (
                                       <span className="text-xs text-gray-400 italic">N/A</span>
                                     ) : (
@@ -2004,7 +2006,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       {date && <span className="text-[11px] font-semibold text-gray-400 truncate">{date}</span>}
                                     </div>
                                     <span className="text-sm font-mono font-bold text-success tabular-nums shrink-0 ml-2">
-                                      ₦{credit.toLocaleString()}
+                                      {baseCurrencySymbol}{credit.toLocaleString()}
                                     </span>
                                   </div>
                                   <p className="text-sm text-gray-700 line-clamp-2 leading-snug">
@@ -2361,7 +2363,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     </div>
                                     <div className="text-gray-400">{date}</div>
                                   </div>
-                                  <span className="text-gray-700 font-medium">₦{debit.toLocaleString()}</span>
+                                  <span className="text-gray-700 font-medium">{baseCurrencySymbol}{debit.toLocaleString()}</span>
                                   <select value={sc.s1}
                                     onChange={e => {
                                       const s1 = e.target.value
@@ -2502,7 +2504,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     )}
                                   </div>
                                   <span className="text-sm font-mono font-bold text-danger tabular-nums shrink-0 ml-2">
-                                    ₦{debit.toLocaleString()}
+                                    {baseCurrencySymbol}{debit.toLocaleString()}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-700 line-clamp-2 leading-snug">

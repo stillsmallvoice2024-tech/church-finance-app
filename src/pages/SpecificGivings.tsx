@@ -13,6 +13,7 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
+import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 interface SpecificRow {
   id:                       string
@@ -65,6 +66,7 @@ function groupRows(rows: SpecificRow[]): GroupedCategory[] {
 
 export default function SpecificGivings() {
   usePageTitle('Specific Givings')
+  const { baseCurrencySymbol } = useOrgCurrency()
 
   const year = useAccountingYearStore(s => s.year)
 
@@ -236,7 +238,7 @@ export default function SpecificGivings() {
 
   const grandTotal = rows.reduce((s, r) => s + Number(r.amount), 0)
 
-  const SG_CSV_HEADERS = ['Category', 'Total (₦)']
+  const SG_CSV_HEADERS = ['Category', `Total (${baseCurrencySymbol})`]
   const sgCsvRow = (g: GroupedCategory) => [g.category, g.total]
   const SG_CSV_FILE = `specific-givings-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(SG_CSV_FILE, SG_CSV_HEADERS, sgPage.map(sgCsvRow))
