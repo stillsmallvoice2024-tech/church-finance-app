@@ -8,7 +8,7 @@
 
 | Table | Purpose |
 |---|---|
-| `profiles` | Extends auth.users; `full_name`, `username`, `role` |
+| `profiles` | Extends auth.users; `full_name`, `username` (unique, nullable — added via migration 20260530000000), `role` |
 | `categories` | Budget categories; `group_id`, `is_hidden` — `starting_balance` and `starting_balance_budget_portion` columns dropped (see migration script) |
 | `category_groups` | Groups categories for ledger display |
 | `category_opening_balances` | Multi-portion opening balances; **sole source of truth** for category opening balances |
@@ -52,6 +52,10 @@
   - Policy blocks use `DROP POLICY IF EXISTS` + `CREATE POLICY` (not `DO $$ EXCEPTION duplicate_object`) — re-running the migration replaces any pre-existing wrong policies
   - Correct receipts INSERT/DELETE policy: `is_finance_user()` — re-run full receipts migration if older `auth.uid() IS NOT NULL` policies are present
 - **Security hardening migration**: `supabase/migrations/20260519000000_security_hardening.sql` — apply once in Supabase SQL editor; idempotent (`DROP IF EXISTS` before every `CREATE`)
+- **Invite signup fix migrations** (apply in order):
+  - `20260529000003_fix_invite_signup_trigger.sql` — defensive `handle_new_user` (WHEN OTHERS on both profile and org_members INSERTs; never re-raises)
+  - `20260530000000_fix_username_and_org_fallback.sql` — adds `profiles.username` column + unique index; updates `accept_invitation` to upsert username from metadata + 3-tier org fallback; repair block backfills existing broken accounts
+  - `20260530000001_resolve_username_rpc.sql` — `resolve_username(p_username text)` SECURITY DEFINER function + `GRANT EXECUTE TO anon`
 
 ### Live-DB Migration Notes
 
