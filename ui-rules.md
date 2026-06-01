@@ -334,9 +334,9 @@ Low-emphasis collapsible section below the main tab content, above Danger Zone. 
 
 **Bulk resolve** (`handleBulkResolve`) applies the same guard at scale:
 - Rows missing either stage code are **skipped** (not errored) — info toast shows skipped count
-- Valid rows resolved sequentially via `updateMutation.mutate` loop
+- Valid rows resolved in one batch call: `executeBulkResolve(validIds, { is_pending_deduction: false })` via `useBulkUpdateTransaction('outflow_transactions')`
 - Toast order: skipped warning → failed count → resolved count
-- Selection cleared and `refetch()` called after loop completes
+- Selection cleared and `refetch()` called after batch completes
 
 ---
 
@@ -883,8 +883,13 @@ Pages using multi-select: **Inflows**, **Outflows** (table view only), **Pending
 
 ### Shared utilities
 - `useBulkSelection` (`src/hooks/useBulkSelection.ts`) — generic hook: `Set<string>` state, `headerRef` for indeterminate, `toggleRow`/`clearAll`/`selectAllRows`
-- `useBulkActions` (`src/hooks/useBulkActions.ts`) — `useBulkDeleteAction` (sequential loop) + `useBulkUpdateAction` (strip-and-retry on missing columns)
+- `useBulkDeleteTransaction(table)` (`src/hooks/useMutations.ts`) — batch delete via `.in('id', ids)`; 3 queries per 500-ID chunk; returns `{ failed, total }`
+- `useBulkUpdateTransaction(table)` (`src/hooks/useMutations.ts`) — batch update via `.in('id', ids)`; 4 queries per chunk; missing-col strips propagate across chunks; returns `{ failed, total, strippedCols }`
 - `BulkActionBar` (`src/components/ui/BulkActionBar.tsx`) — renders `null` when count=0; shows count badge + configurable action buttons + Clear; placed above `overflow-x-auto`
+
+**Chunking:** Both bulk hooks split ID lists into batches of 500 (`BULK_CHUNK_SIZE`) automatically. Chunk failures are non-fatal — failed count accumulates and is returned. No caller changes required for lists of any size.
+
+**Audit trail:** Each chunk fires `batchLogAudit` + `batchLogFieldChanges` (single INSERT per chunk) immediately after the chunk completes. Per-record diffs are preserved.
 
 ### Shared mechanics
 - `selectedIds: Set<string>` state; cleared on page change, filter change, and year reset
@@ -893,24 +898,27 @@ Pages using multi-select: **Inflows**, **Outflows** (table view only), **Pending
 - **Bulk action bar** appears above `overflow-x-auto` when `selectedIds.size > 0` — wrap `BulkActionBar` + `<div className="overflow-x-auto">` in a `<>` Fragment
 
 ### Inflows / Outflows
-- Actions: "Edit selected" (canWrite) → `BulkEditInflowModal` / `BulkEditOutflowModal`; "Delete selected" (canDelete) → `DeleteDialog` → sequential `deleteRecord` loop → `refetch()`
-- **BulkEdit modal** (inline component at bottom of page file):
+- Actions: "Edit selected" (canWrite) → `BulkEditInflowModal` / `BulkEditOutflowModal`; "Delete selected" (canDelete) → `DeleteDialog` → `useBulkDeleteTransaction` → `refetch()`
+- **BulkEdit modals** (`src/components/modals/BulkEdit*Modal.tsx`):
+  - Use `useBulkUpdateTransaction(table)` directly — single batch call, not per-record loop
   - Inflows: `bank_name`, `recorded_at`, `transaction_type`, `income_type_id`, `stage_code_1`, `stage_code_2`
-  - Outflows: `bank_name`, `recorded_at`, `transaction_type`, `stage_code_1`, `stage_code_2`
-  - Blank fields skipped; `useUpdateTransaction` called per ID
-  - **Strip-and-retry pattern**: build `const baseUpdates` before loop; on schema error for a column → add to `strippedCols`, retry row without it; never mutate `baseUpdates` inside loop. Toast order: column warnings → success/fail count.
+  - Outflows: `bank_name`, `recorded_at`, `transaction_type`, `stage_code_1`, `stage_code_2`, `outflow_type_id`
+  - Blank fields skipped (not included in `baseUpdates`); `strippedCols` returned if schema is missing columns
+  - Toast order: column warnings → success/fail count
   - **Form reset on close** (`if (open) return` guard so state is clean before next open)
 - colSpan: 10 (Inflows), 13 (Outflows)
 - Multi-select is **table view only** — cards view unchanged
+- **Do not** use `useBulkDeleteAction` / `useBulkUpdateAction` — those hooks no longer exist
 
 ### IntraFlow (Internal Transfers)
-- Actions: "Edit selected" (canWrite) → `BulkEditIntraFlowModal`; "Delete selected" (canDelete) → `DeleteDialog`
-- `BulkEditIntraFlowModal` (`src/components/modals/BulkEditIntraFlowModal.tsx`): editable fields: `date`, `account_from`, `account_from_stage2`, `account_to`, `account_to_stage2`, `description`, `remark`; uses `useBulkUpdateAction`
+- Actions: "Edit selected" (canWrite) → `BulkEditIntraFlowModal`; "Delete selected" (canDelete) → `DeleteDialog` → `useBulkDeleteTransaction('intra_flows')`
+- `BulkEditIntraFlowModal` (`src/components/modals/BulkEditIntraFlowModal.tsx`): editable fields: `date`, `account_from`, `account_from_stage2`, `account_to`, `account_to_stage2`, `description`, `remark`; uses `useBulkUpdateTransaction('intra_flows')`
 - colSpan: 9 (Checkbox + Expand + Date + From + To + Amount + Description + Remark + Actions)
 - Selection also clears on tab change (transfers ↔ reallocation)
 
 ### PendingDeductions
-- Action: "Resolve selected" (canWrite) — see PendingDeductions Resolve Guard section for bulk behaviour
+- Actions: "Resolve selected" (canWrite) → `useBulkUpdateTransaction('outflow_transactions')`; "Delete selected" (canDelete) → `useBulkDeleteTransaction('outflow_transactions')`
+- See PendingDeductions Resolve Guard section for bulk resolve guard behaviour
 - colSpan: 9 (Expand + Checkbox + Date + Description + Disbursed + Net + Stage Code + Remarks + Actions)
 
 ---
