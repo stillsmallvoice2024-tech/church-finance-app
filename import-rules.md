@@ -136,7 +136,7 @@ Pipeline stages (all before Step 4 opens):
 2. **Normalize descriptions** — `normalizeId()` on every description cell; stored in `processedRows`
 3. **Pre-populate `rowStageCodes`** — seed stage codes from mapped spreadsheet columns for debit rows
 4. **Generate fallback IDs AFTER normalization** — SHA-256 hashes from normalized description + date + amount + bank; stored in `precomputedInflowIds` / `precomputedOutflowIds` (separate maps for inflow `transaction_ref` and outflow `transaction_id`)
-5. **Query DB** — `Promise.all` over `inflow_transactions.transaction_ref IN (...)` and `outflow_transactions.transaction_id IN (...)` for all computed IDs
+5. **Query DB** — `Promise.all` over `inflow_transactions.transaction_ref IN (...)` and `outflow_transactions.transaction_id IN (...)` for all computed IDs, **scoped to `bank_name = internalBank.name`**. Falls back to unscoped query only when `internalBank` is null. This prevents cross-bank false positives: the same transaction ID in a different bank is NOT a duplicate.
 6. **Merge `skipTxnIds`** from `Import.tsx` pre-stage into existing-ID sets
 7. **Build `duplicateRis: Set<number>`** — row indices confirmed as DB duplicates
 8. **Compute `dupStats`** — `{ total, newCount, dupCount }` shown in Step 4 summary banner
@@ -365,11 +365,34 @@ Called from `extractTargetName()`. Handles the pattern `To <bank>/Description/Pa
 
 ---
 
+## Duplicate Detection — Bank Scope
+
+All three dedup paths must be scoped to the selected bank (`bank_name`). Transactions sharing the same ID in different banks are **not** duplicates.
+
+### `ImportModal.tsx` — `proceedToRowConfig` Stage 5 (authoritative)
+- Queries filtered with `.eq('bank_name', internalBank.name)` on both inflow and outflow tables.
+- Falls back to unscoped only when `internalBank` is null (shouldn't happen — bank is required by Step 2).
+
+### `Import.tsx` — pre-modal batch check
+- `parseAndCheck` only parses the file (extracts IDs); it does **not** run the DB check.
+- A `useEffect([parseResult, selectedBankName])` runs the bank-scoped DB check and updates `duplicates`.
+  - Re-fires when the user switches banks, cancelling any in-flight request (`isCurrent` guard).
+  - When no bank is selected, `selectedBankName` is null and the query runs unscoped (informational only).
+- `duplicates` → `skipTxnIds` passed to `ImportModal` is therefore bank-scoped; the unscoped merge inside the modal is safe.
+- `DupRecord.table` (inflow vs outflow) is discarded when building `skipTxnIds` — a duplicate inflow ref also suppresses an outflow with the same ID in the same bank (pre-existing behaviour, not a bug introduced by scoping).
+
+### `Import.tsx` — manual entry `checkInflowDup` / `checkOutflowDup`
+- Both accept a `bankName: string | null` parameter.
+- Callers (`handleSaveInflow`, `handleSaveOutflow`) pass `banks.find(b => b.id === v('bank_id'))?.name ?? null`.
+- When `bankName` is null (no bank on the form), query runs unscoped.
+
+---
+
 ## `runImport` Safety Rules
 
 - **Always wrap the full `runImport` body in `try/finally`** with `setImporting(false)` in the `finally` block. Any unhandled exception (network error, `crypto.subtle` failure, Supabase timeout) otherwise leaves `importing=true` forever — spinner rolls indefinitely, no result shown, no way to recover without closing the modal.
 - **Primary dedup:** `duplicateRis.has(ri)` skip at loop entry — rows identified by the Step 3→4 DB check are skipped before any processing.
-- **Safety net:** `allSkipIds` built from `skipTxnIds` (Import.tsx pre-stage) filters any remaining duplicates after `inflowRows`/`outflowRows` are built. Redundant with `duplicateRis` in normal flow but retained for edge cases.
+- **Safety net:** `allSkipIds` built from `skipTxnIds` (Import.tsx pre-stage) filters any remaining duplicates after `inflowRows`/`outflowRows` are built. Redundant with `duplicateRis` in normal flow but retained for edge cases. `skipTxnIds` is bank-scoped (see below) so it is safe to merge unfiltered.
 - **Precomputed IDs:** `precomputedInflowIds[ri] ?? generateFallbackTransactionId(...)` — uses the ID generated at Step 3→4 transition; falls back to on-the-fly generation if missing. Within-batch collision suffix (`-1`, `-2`) still applies.
 
 ---
