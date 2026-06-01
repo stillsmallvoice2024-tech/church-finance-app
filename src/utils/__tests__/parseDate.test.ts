@@ -11,13 +11,7 @@ import { describe, it, expect } from 'vitest'
 import { parseDate } from '../parseDate'
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/** Return a YYYY-MM-DD string built from LOCAL date getters — timezone-safe. */
-function localISODate(y: number, m: number, d: number): string {
-  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-}
 
 // ---------------------------------------------------------------------------
 // 1. Excel date serial numbers (XLSX.SSF.parse_date_code path)
