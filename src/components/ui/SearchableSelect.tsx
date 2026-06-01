@@ -38,6 +38,7 @@ export function SearchableSelect({
   const listId       = useId()
 
   const selectedLabel = options.find(o => o.value === value)?.label ?? value
+  const textCls = (className ?? DEFAULT_CLS).match(/\btext-\S+/)?.[0] ?? 'text-sm'
 
   const hasQuery  = query.trim() !== ''
   const filtered  = hasQuery
@@ -168,7 +169,7 @@ export function SearchableSelect({
               aria-selected={value === ''}
               onMouseDown={e => { e.preventDefault(); pick('') }}
               onMouseEnter={() => setHighlighted(0)}
-              className={`px-3 py-2 text-sm cursor-pointer select-none text-gray-400 italic ${
+              className={`px-3 py-2 ${textCls} cursor-pointer select-none text-gray-400 italic ${
                 highlighted === 0 ? 'bg-primary/10' : 'hover:bg-gray-50'
               }`}
             >
@@ -177,7 +178,7 @@ export function SearchableSelect({
           )}
 
           {filtered.length === 0 && (
-            <li className="px-3 py-2 text-sm text-gray-400 italic" role="presentation">
+            <li className={`px-3 py-2 ${textCls} text-gray-400 italic`} role="presentation">
               No matches
             </li>
           )}
@@ -192,7 +193,7 @@ export function SearchableSelect({
                 aria-selected={opt.value === value}
                 onMouseDown={e => { e.preventDefault(); pick(opt.value) }}
                 onMouseEnter={() => setHighlighted(idx)}
-                className={`flex items-center px-3 py-2 text-sm cursor-pointer select-none ${
+                className={`flex items-center px-3 py-2 ${textCls} cursor-pointer select-none ${
                   idx === highlighted
                     ? 'bg-primary/10 text-primary'
                     : 'text-gray-800 hover:bg-gray-50'
