@@ -15,9 +15,8 @@ import { useDataViewState }        from '../hooks/useDataViewState'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields } from '../utils/tableColumns'
 import { useInflowTransactions, type InflowTransaction } from '../hooks/useTransactions'
-import { useDeleteTransaction }    from '../hooks/useMutations'
+import { useDeleteTransaction, useBulkDeleteTransaction } from '../hooks/useMutations'
 import { useBulkSelection }        from '../hooks/useBulkSelection'
-import { useBulkDeleteAction }     from '../hooks/useBulkActions'
 import { useBanks }                from '../hooks/useBanks'
 import { useToastStore }           from '../store/toastStore'
 import { useRole }                 from '../hooks/useRole'
@@ -141,8 +140,8 @@ export default function Inflows() {
 
   const { push: toast }                             = useToastStore()
   const { canWrite, canDelete }                     = useRole()
-  const { mutate: deleteRecord, loading: deleting } = useDeleteTransaction('inflow_transactions')
-  const { execute: executeBulkDelete, loading: bulkDeleting } = useBulkDeleteAction(deleteRecord)
+  const { mutate: deleteRecord, loading: deleting }            = useDeleteTransaction('inflow_transactions')
+  const { execute: executeBulkDelete, loading: bulkDeleting }  = useBulkDeleteTransaction('inflow_transactions')
   const { banks }                                   = useBanks()
   const { incomeTypes }                             = useIncomeTypes()
 

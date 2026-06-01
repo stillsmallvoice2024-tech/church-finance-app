@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Modal }                  from '../ui/Modal'
 import { filterInputCls }         from '../ui/FormField'
-import { useUpdateTransaction }   from '../../hooks/useMutations'
-import { useBulkUpdateAction }    from '../../hooks/useBulkActions'
+import { useBulkUpdateTransaction } from '../../hooks/useMutations'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
 import { useOutflowTypes }        from '../../hooks/useOutflowTypes'
@@ -14,8 +13,7 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
   banks: { id: string; name: string }[]
   onSuccess: () => void
 }) {
-  const { mutate: update }          = useUpdateTransaction('outflow_transactions')
-  const { execute, loading: saving } = useBulkUpdateAction(update)
+  const { execute, loading: saving } = useBulkUpdateTransaction('outflow_transactions')
   const { push: toast }             = useToastStore()
   const { categories }              = useCategories()
   const { outflowTypes }            = useOutflowTypes()

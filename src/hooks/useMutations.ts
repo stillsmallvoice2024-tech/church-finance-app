@@ -5,6 +5,8 @@ import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import type { StartingBalanceRow } from './useBanks'
 
+const MISSING_COL_RE = /Could not find (?:the ')?(\w+)'? column/
+
 // Returns { org_id } fragment. Throws if no active org is set — all mutations require
 // an explicit org_id because the DB column default (get_current_org_id()) returns NULL.
 function orgPayload(): { org_id: string } {
@@ -82,6 +84,36 @@ async function logAudit({
     new_data:   newData,
   })
   if (error) console.warn('[audit_log] write failed:', error.message)
+}
+
+async function batchLogAudit(
+  rows: Array<{
+    user_id: string
+    action: 'INSERT' | 'UPDATE' | 'DELETE'
+    table_name: string
+    record_id: string
+    old_data: Record<string, unknown> | null
+    new_data: Record<string, unknown> | null
+  }>
+): Promise<void> {
+  if (rows.length === 0) return
+  const { error } = await supabase.from('audit_log').insert(rows)
+  if (error) console.warn('[audit_log] batch write failed:', error.message)
+}
+
+async function batchLogFieldChanges(
+  rows: Array<{
+    user_id: string
+    table_name: string
+    record_id: string
+    field_name: string
+    old_value: string | null
+    new_value: string | null
+  }>
+): Promise<void> {
+  if (rows.length === 0) return
+  const { error } = await supabase.from('field_changes').insert(rows)
+  if (error) console.warn('[field_changes] batch write failed:', error.message)
 }
 
 // ── Input types ────────────────────────────────────────────────────────────────
@@ -1055,4 +1087,157 @@ export function useUnlockAllocationConfig(): MutationHook<string> {
   }, [])
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+// ── useBulkDeleteTransaction ────────────────────────────────────────────────────
+// 3 queries total (SELECT IN + DELETE IN + batch audit) vs 3N with the old per-record loop.
+
+export function useBulkDeleteTransaction(table: DeletableTable) {
+  const [loading, setLoading] = useState(false)
+
+  const execute = useCallback(async (ids: string[]): Promise<{ failed: number; total: number }> => {
+    if (ids.length === 0) return { failed: 0, total: 0 }
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to delete records.')
+
+    setLoading(true)
+    try {
+      const { data: oldRows } = await supabase.from(table).select('*').in('id', ids)
+      const oldMap = new Map((oldRows ?? []).map(r => [r.id as string, r as Record<string, unknown>]))
+
+      const { data: deletedRows, error: err } = await supabase
+        .from(table)
+        .delete()
+        .in('id', ids)
+        .select('id')
+
+      if (err) throw err
+
+      const deletedIds = (deletedRows ?? []).map(r => r.id as string)
+
+      batchLogAudit(
+        deletedIds.map(id => ({
+          user_id:    user.id,
+          action:     'DELETE' as const,
+          table_name: table,
+          record_id:  id,
+          old_data:   oldMap.get(id) ?? null,
+          new_data:   null,
+        }))
+      )
+
+      if (table === 'intra_flows') useTransactionSyncStore.getState().bumpIntraflow()
+
+      return { failed: ids.length - deletedIds.length, total: ids.length }
+    } catch (err) {
+      const msg = extractMessage(err)
+      handleAuthError(err)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [table])
+
+  return { execute, loading }
+}
+
+// ── useBulkUpdateTransaction ────────────────────────────────────────────────────
+// 4 queries total (SELECT IN + UPDATE IN + 2 batch audits) vs 4N with the old per-record loop.
+// Retains missing-col stripping and per-record field diffs.
+
+export function useBulkUpdateTransaction(table: UpdatableTable) {
+  const [loading, setLoading] = useState(false)
+
+  const execute = useCallback(async (
+    ids: string[],
+    baseUpdates: Record<string, unknown>,
+  ): Promise<{ failed: number; total: number; strippedCols: string[] }> => {
+    if (ids.length === 0) return { failed: 0, total: 0, strippedCols: [] }
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in to update records.')
+
+    setLoading(true)
+    const strippedCols: string[] = []
+
+    try {
+      const { data: oldRows } = await supabase.from(table).select('*').in('id', ids)
+      const oldMap = new Map((oldRows ?? []).map(r => [r.id as string, r as Record<string, unknown>]))
+
+      let updates: Record<string, unknown> = table !== 'intra_flows'
+        ? { ...baseUpdates, updated_at: new Date().toISOString() }
+        : { ...baseUpdates }
+
+      let updatedIds: string[] = []
+      while (Object.keys(updates).length > 0) {
+        const { data: updatedRows, error: err } = await supabase
+          .from(table)
+          .update(updates)
+          .in('id', ids)
+          .select('id')
+
+        if (!err) {
+          updatedIds = (updatedRows ?? []).map(r => r.id as string)
+          break
+        }
+
+        const col = err.message.match(MISSING_COL_RE)?.[1]
+        if (col && col in updates) {
+          if (!strippedCols.includes(col)) strippedCols.push(col)
+          updates = Object.fromEntries(Object.entries(updates).filter(([k]) => k !== col))
+        } else {
+          throw err
+        }
+      }
+
+      const appliedUpdates = Object.fromEntries(
+        Object.entries(baseUpdates).filter(([k]) => !strippedCols.includes(k))
+      )
+
+      batchLogAudit(
+        updatedIds.map(id => ({
+          user_id:    user.id,
+          action:     'UPDATE' as const,
+          table_name: table,
+          record_id:  id,
+          old_data:   oldMap.get(id) ?? null,
+          new_data:   appliedUpdates,
+        }))
+      )
+
+      const fcRows: Array<{
+        user_id: string; table_name: string; record_id: string
+        field_name: string; old_value: string | null; new_value: string | null
+      }> = []
+      for (const id of updatedIds) {
+        const oldData = oldMap.get(id)
+        if (!oldData) continue
+        for (const [k, newVal] of Object.entries(appliedUpdates)) {
+          if (String(oldData[k] ?? '') !== String(newVal ?? '')) {
+            fcRows.push({
+              user_id:    user.id,
+              table_name: table,
+              record_id:  id,
+              field_name: k,
+              old_value:  oldData[k] != null ? String(oldData[k]) : null,
+              new_value:  newVal    != null ? String(newVal)    : null,
+            })
+          }
+        }
+      }
+      batchLogFieldChanges(fcRows)
+
+      if (table === 'outflow_transactions') useTransactionSyncStore.getState().bumpOutflow()
+      if (table === 'intra_flows')          useTransactionSyncStore.getState().bumpIntraflow()
+
+      return { failed: ids.length - updatedIds.length, total: ids.length, strippedCols }
+    } catch (err) {
+      const msg = extractMessage(err)
+      handleAuthError(err)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [table])
+
+  return { execute, loading }
 }

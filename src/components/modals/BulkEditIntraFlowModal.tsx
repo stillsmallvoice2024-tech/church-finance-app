@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Modal }                  from '../ui/Modal'
 import { filterInputCls }         from '../ui/FormField'
-import { useUpdateTransaction }   from '../../hooks/useMutations'
-import { useBulkUpdateAction }    from '../../hooks/useBulkActions'
+import { useBulkUpdateTransaction } from '../../hooks/useMutations'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
 
@@ -14,8 +13,7 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
   ids: string[]
   onSuccess: () => void
 }) {
-  const { mutate: update }           = useUpdateTransaction('intra_flows')
-  const { execute, loading: saving } = useBulkUpdateAction(update)
+  const { execute, loading: saving } = useBulkUpdateTransaction('intra_flows')
   const { push: toast }              = useToastStore()
   const { categories }               = useCategories()
 
