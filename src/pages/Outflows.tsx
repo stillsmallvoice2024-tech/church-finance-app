@@ -36,6 +36,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
+import { SearchableSelect } from '../components/ui/SearchableSelect'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -282,21 +283,15 @@ export default function Outflows() {
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
             </FilterGroup>
             <FilterGroup label="Stage Code 1" className="min-w-[180px]">
-              <select value={stageCode} onChange={e => setStageCode(e.target.value)} className={`${filterInputCls} bg-white`}>
-                <option value="">All categories</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect value={stageCode} onChange={setStageCode}
+                options={categories.map(c => ({ value: c.name, label: c.name }))}
+                placeholder="All categories" className={`${filterInputCls} bg-white`} />
             </FilterGroup>
             {outflowTypes.length > 0 && (
               <FilterGroup label="Outflow Type" className="min-w-[180px]">
-                <select value={outflowTypeFilter} onChange={e => setOutflowTypeFilter(e.target.value)} className={`${filterInputCls} bg-white`}>
-                  <option value="">All types</option>
-                  {outflowTypes.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
+                <SearchableSelect value={outflowTypeFilter} onChange={setOutflowTypeFilter}
+                  options={outflowTypes.map(t => ({ value: t.id, label: t.name }))}
+                  placeholder="All types" className={`${filterInputCls} bg-white`} />
               </FilterGroup>
             )}
             {(dateFrom || dateTo || stageCode || outflowTypeFilter) && (

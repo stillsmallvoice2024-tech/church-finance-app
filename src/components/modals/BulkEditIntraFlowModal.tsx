@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Modal }                  from '../ui/Modal'
 import { filterInputCls }         from '../ui/FormField'
+import { SearchableSelect }       from '../ui/SearchableSelect'
 import { useBulkUpdateTransaction } from '../../hooks/useMutations'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
@@ -76,10 +77,9 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">From Category</label>
-          <select value={accountFrom} onChange={e => setAccountFrom(e.target.value)} className={`${filterInputCls} bg-white`}>
-            <option value="">— Keep existing —</option>
-            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
+          <SearchableSelect value={accountFrom} onChange={setAccountFrom}
+            options={categories.map(c => ({ value: c.name, label: c.name }))}
+            placeholder="— Keep existing —" className={`${filterInputCls} bg-white`} />
         </div>
 
         <div className="space-y-1">
@@ -92,10 +92,9 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">To Category</label>
-          <select value={accountTo} onChange={e => setAccountTo(e.target.value)} className={`${filterInputCls} bg-white`}>
-            <option value="">— Keep existing —</option>
-            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
+          <SearchableSelect value={accountTo} onChange={setAccountTo}
+            options={categories.map(c => ({ value: c.name, label: c.name }))}
+            placeholder="— Keep existing —" className={`${filterInputCls} bg-white`} />
         </div>
 
         <div className="space-y-1">
