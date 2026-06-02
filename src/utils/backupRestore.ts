@@ -28,6 +28,8 @@ export interface ManagedTableConfig {
   optional: boolean
   dependencies: string[]
   notes?: string
+  /** True when table has org_id — backup scopes fetch to the active org. */
+  orgScoped?: boolean
 }
 
 /** Ordered for restore: parents before children */
@@ -35,7 +37,7 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
     key: 'organizations', label: 'Organisations', module: 'Configuration',
     restorePriority: 0, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: false,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
     notes: 'Must be restored before org_members and all business tables',
@@ -43,7 +45,7 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
     key: 'currencies', label: 'Currencies', module: 'Configuration',
     restorePriority: 1, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'code',
+    conflictColumn: 'code', orgScoped: false,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: [],
     notes: 'PK is code, not id',
@@ -51,56 +53,56 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
     key: 'category_groups', label: 'Category Groups', module: 'Configuration',
     restorePriority: 2, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
   },
   {
     key: 'categories', label: 'Categories', module: 'Configuration',
     restorePriority: 3, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: ['category_groups'],
   },
   {
     key: 'category_opening_balances', label: 'Category Opening Balances', module: 'Configuration',
     restorePriority: 4, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: ['categories'],
   },
   {
     key: 'banks', label: 'Banks', module: 'Configuration',
     restorePriority: 5, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
   },
   {
     key: 'special_config_groups', label: 'Special Config Groups', module: 'Allocation',
     restorePriority: 6, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: [],
   },
   {
     key: 'allocation_configs', label: 'Allocation Configs', module: 'Allocation',
     restorePriority: 7, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: ['special_config_groups'],
   },
   {
     key: 'income_types', label: 'Income Types', module: 'Allocation',
     restorePriority: 8, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: ['special_config_groups'],
   },
   {
     key: 'outflow_types', label: 'Outflow Types', module: 'Allocation',
     restorePriority: 9, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: [],
     notes: 'reporting classification layer for outflows',
@@ -108,63 +110,63 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
     key: 'income_type_rules', label: 'Income Type Rules', module: 'Allocation',
     restorePriority: 10, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: ['income_types'],
   },
   {
     key: 'inflow_transactions', label: 'Inflow Transactions', module: 'Transactions',
     restorePriority: 11, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: ['income_types', 'allocation_configs'],
   },
   {
     key: 'outflow_transactions', label: 'Outflow Transactions', module: 'Transactions',
     restorePriority: 12, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: ['outflow_types'],
   },
   {
     key: 'intra_flows', label: 'Intra-Account Flows', module: 'Transactions',
     restorePriority: 13, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
   },
   {
     key: 'bank_deposits', label: 'Bank Deposits', module: 'Transactions',
     restorePriority: 13, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
   },
   {
     key: 'intrabank_transfers', label: 'Intrabank Transfers', module: 'Transactions',
     restorePriority: 14, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
   },
   {
     key: 'fx_transactions', label: 'FX Transactions', module: 'Transactions',
     restorePriority: 15, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
   },
   {
     key: 'fx_conversions', label: 'FX Conversions', module: 'Transactions',
     restorePriority: 16, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: ['fx_transactions', 'inflow_transactions'],
   },
   {
     key: 'transaction_allocation_snapshots', label: 'Allocation Snapshots', module: 'Allocation',
     restorePriority: 17, backupEnabled: true, restoreMode: 'append',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: ['inflow_transactions', 'allocation_configs'],
     notes: 'append-only: never deleted in replace mode; requires snapshot migration',
@@ -172,7 +174,7 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
     key: 'recalculation_logs', label: 'Recalculation Logs', module: 'Allocation',
     restorePriority: 18, backupEnabled: true, restoreMode: 'append',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: ['special_config_groups', 'allocation_configs'],
     notes: 'audit trail — append-only, never deleted',
@@ -180,49 +182,49 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
     key: 'special_projects', label: 'Special Projects', module: 'Projects',
     restorePriority: 19, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: [],
   },
   {
     key: 'project_entries', label: 'Project Entries', module: 'Projects',
     restorePriority: 20, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: ['special_projects'],
   },
   {
     key: 'report_templates', label: 'Report Templates', module: 'Reports',
     restorePriority: 21, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: [],
   },
   {
     key: 'dynamic_reports', label: 'Dynamic Reports', module: 'Reports',
     restorePriority: 22, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: [],
   },
   {
     key: 'dynamic_report_blocks', label: 'Dynamic Report Blocks', module: 'Reports',
     restorePriority: 23, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: ['dynamic_reports'],
   },
   {
     key: 'dynamic_report_snapshots', label: 'Report Snapshots', module: 'Reports',
     restorePriority: 24, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: ['dynamic_reports'],
   },
   {
     key: 'org_members', label: 'Org Members', module: 'Configuration',
     restorePriority: 25, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id',
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: true, optional: false,
     dependencies: ['organizations'],
     notes: 'Contains user roles — restore with care; sensitive',
@@ -386,9 +388,12 @@ export async function compareRegistryToSchema(): Promise<SchemaCheckResult> {
 export async function fetchTableData(
   tableKey: string,
   onProgress?: (status: 'running' | 'done' | 'error', count?: number) => void,
+  orgId?: string,
 ): Promise<Record<string, unknown>[]> {
   onProgress?.('running')
-  const { data, error } = await supabase.from(tableKey).select('*').limit(100_000)
+  let q = supabase.from(tableKey).select('*').limit(100_000)
+  if (orgId) q = q.eq('org_id', orgId)
+  const { data, error } = await q
   if (error) { onProgress?.('error'); return [] }
   const rows = (data ?? []) as Record<string, unknown>[]
   onProgress?.('done', rows.length)
@@ -407,6 +412,7 @@ export async function createBackup(
   userEmail: string,
   options?: BackupOptions,
   onProgress?: BackupProgressCallback,
+  orgId?: string,
 ): Promise<BackupFileV2> {
   // 1. Discover schema to find unmanaged tables
   const { tables: schemaTables, available: discoveryAvailable } = await discoverSchemaTables()
@@ -431,16 +437,17 @@ export async function createBackup(
     )
   }
 
-  // 2. Export managed tables
+  // 2. Export managed tables (org-scoped tables filtered to active org)
   const managed: Record<string, Record<string, unknown>[]> = {}
   for (const def of MANAGED_TABLES.filter(t => t.backupEnabled)) {
+    const tableOrgId = (def.orgScoped && orgId) ? orgId : undefined
     const rows = await fetchTableData(def.key, (status, count) => {
       onProgress?.('managed', def.key, status, count)
-    })
+    }, tableOrgId)
     managed[def.key] = rows
   }
 
-  // 3. Export unmanaged tables (raw, unverified)
+  // 3. Export unmanaged tables (raw, unverified — no org filter, rely on RLS)
   const unmanaged: Record<string, Record<string, unknown>[]> = {}
   for (const tableKey of unmanagedKeys) {
     const rows = await fetchTableData(tableKey, (status, count) => {
@@ -525,11 +532,13 @@ export function downloadBackup(backup: BackupFileV2): void {
 
 // ── Cloud link ─────────────────────────────────────────────────────────────────
 
-export async function uploadBackupForLink(backup: BackupFileV2, userId: string): Promise<string> {
+export async function uploadBackupForLink(backup: BackupFileV2, userId: string, orgId?: string): Promise<string> {
   const json = JSON.stringify(backup)
   const blob = new Blob([json], { type: 'application/json' })
   const date = backup._meta.createdAt.slice(0, 10)
-  const path = `${userId}/backup-${date}-${Date.now()}.json`
+  // Path: {userId}/{orgId}/backup-{date}-{ts}.json — org segment scopes storage policy
+  const orgSegment = orgId ?? 'unscoped'
+  const path = `${userId}/${orgSegment}/backup-${date}-${Date.now()}.json`
 
   const { error: uploadError } = await supabase.storage
     .from('backups')

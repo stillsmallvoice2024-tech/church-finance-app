@@ -284,3 +284,181 @@ describe('security migration: audit log org isolation', () => {
     expect(migration).toContain('SET    org_id = COALESCE')
   })
 })
+
+// ── Storage: receipt file paths include org prefix ────────────────────────────
+
+describe('useReceipts storage org isolation', () => {
+  const code = src('hooks/useReceipts.ts')
+
+  it('upload path uses org prefix {orgId}/{entityType}/{entityId}/...', () => {
+    expect(code).toContain('`${currentOrgId}/${entityType}/${entityId}/')
+  })
+
+  it('upload throws when no active org', () => {
+    expect(code).toContain("if (!currentOrgId) throw new Error('No active organisation.')")
+  })
+
+  it('upload always sets org_id in DB insert', () => {
+    const uploadSection = code.slice(
+      code.indexOf('const upload = useCallback'),
+      code.indexOf('const remove = useCallback'),
+    )
+    expect(uploadSection).toContain('org_id:      currentOrgId')
+    expect(uploadSection).not.toContain('...(orgId ?')
+  })
+
+  it('per-entity fetch adds org_id filter when available', () => {
+    const fetchSection = code.slice(
+      code.indexOf('const fetch = useCallback'),
+      code.indexOf('const upload = useCallback'),
+    )
+    expect(fetchSection).toContain("q.eq('org_id', orgId)")
+  })
+})
+
+// ── Storage: migration hardens bucket policies ────────────────────────────────
+
+describe('storage isolation migration', () => {
+  const migration = readFileSync(
+    resolve(ROOT, 'supabase/migrations/20260602000003_storage_org_isolation.sql'),
+    'utf-8',
+  )
+
+  it('sets receipts bucket to private (not public)', () => {
+    expect(migration).toContain("'receipts', false")
+  })
+
+  it('sets backups bucket to private', () => {
+    expect(migration).toContain("'backups', false")
+  })
+
+  it('drops old permissive receipts storage policies', () => {
+    expect(migration).toContain("DROP POLICY IF EXISTS \"receipts_objects_insert\"")
+    expect(migration).toContain("DROP POLICY IF EXISTS \"receipts_objects_select\"")
+  })
+
+  it('new receipts INSERT checks org membership via path prefix', () => {
+    const insertSection = migration.slice(
+      migration.indexOf('receipts_storage_insert'),
+      migration.indexOf('receipts_storage_select'),
+    )
+    expect(insertSection).toContain('is_org_member')
+    expect(insertSection).toContain('is_org_finance_user')
+    expect(insertSection).toContain('storage.foldername(name)')
+  })
+
+  it('new receipts SELECT checks org membership via path prefix', () => {
+    const selectSection = migration.slice(
+      migration.indexOf('receipts_storage_select'),
+      migration.indexOf('receipts_storage_delete'),
+    )
+    expect(selectSection).toContain('is_org_member')
+    expect(selectSection).toContain('storage.foldername(name)')
+  })
+
+  it('backups INSERT enforces caller-owned path prefix', () => {
+    const insertSection = migration.slice(
+      migration.indexOf('backups_storage_insert'),
+      migration.indexOf('backups_storage_select'),
+    )
+    expect(insertSection).toContain("auth.uid()::text")
+    expect(insertSection).toContain('storage.foldername(name)')
+  })
+
+  it('backups SELECT enforces caller-owned path prefix', () => {
+    const selectSection = migration.slice(
+      migration.indexOf('backups_storage_select'),
+      migration.indexOf('backups_storage_delete'),
+    )
+    expect(selectSection).toContain("auth.uid()::text")
+  })
+})
+
+// ── Backup: explicit org scoping, not RLS-only ────────────────────────────────
+
+describe('backupRestore explicit org scoping', () => {
+  const code = src('utils/backupRestore.ts')
+
+  it('ManagedTableConfig has orgScoped field', () => {
+    expect(code).toContain('orgScoped?: boolean')
+  })
+
+  it('fetchTableData accepts optional orgId and filters', () => {
+    const fnSection = code.slice(
+      code.indexOf('export async function fetchTableData'),
+      code.indexOf('export type BackupProgressCallback'),
+    )
+    expect(fnSection).toContain('orgId?: string')
+    expect(fnSection).toContain("q.eq('org_id', orgId)")
+  })
+
+  it('createBackup accepts optional orgId parameter', () => {
+    const fnSig = code.slice(
+      code.indexOf('export async function createBackup'),
+      code.indexOf('): Promise<BackupFileV2>'),
+    )
+    expect(fnSig).toContain('orgId?: string')
+  })
+
+  it('createBackup passes orgId to fetchTableData for orgScoped tables', () => {
+    const bodySection = code.slice(
+      code.indexOf('// 2. Export managed tables'),
+      code.indexOf('// 3. Export unmanaged tables'),
+    )
+    expect(bodySection).toContain('def.orgScoped && orgId')
+  })
+
+  it('uploadBackupForLink accepts orgId and scopes storage path', () => {
+    const fnSection = code.slice(
+      code.indexOf('export async function uploadBackupForLink'),
+      code.indexOf('// ── Validation'),
+    )
+    expect(fnSection).toContain('orgId?: string')
+    expect(fnSection).toContain('orgSegment')
+    expect(fnSection).toContain('`${userId}/${orgSegment}/')
+  })
+
+  it('all major transaction tables are orgScoped: true', () => {
+    const orgScopedTables = [
+      'inflow_transactions', 'outflow_transactions', 'intra_flows',
+      'bank_deposits', 'intrabank_transfers', 'fx_transactions',
+      'banks', 'categories', 'category_groups', 'allocation_configs',
+    ]
+    orgScopedTables.forEach(t => {
+      const idx = code.indexOf(`key: '${t}'`)
+      const block = code.slice(idx, idx + 300)
+      expect(block).toContain('orgScoped: true')
+    })
+  })
+
+  it('non-org tables are orgScoped: false', () => {
+    const nonOrgTables = ['organizations', 'currencies']
+    nonOrgTables.forEach(t => {
+      const idx = code.indexOf(`key: '${t}'`)
+      const block = code.slice(idx, idx + 300)
+      expect(block).toContain('orgScoped: false')
+    })
+  })
+})
+
+// ── BackupModal passes orgId ──────────────────────────────────────────────────
+
+describe('BackupModal org scoping', () => {
+  const code = src('components/modals/BackupModal.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../../store/orgStore'")
+  })
+
+  it('reads orgId from store', () => {
+    expect(code).toContain('useOrgStore((s) => s.orgId)')
+  })
+
+  it('passes orgId to createBackup', () => {
+    expect(code).toContain('orgId ?? undefined,')
+  })
+
+  it('passes orgId to uploadBackupForLink', () => {
+    expect(code).toContain('uploadBackupForLink(backup, user.id, orgId ?? undefined)')
+  })
+})
