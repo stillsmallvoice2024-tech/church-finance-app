@@ -57,11 +57,11 @@ export default function Onboarding() {
   const storeOrgRole = useOrgStore(s => s.orgRole)
   const { currencies } = useCurrencies()
 
-  // Only inherit an existing org when the user is already its admin (i.e. the
-  // org was just created by create_organization() in LoginPage for the
-  // email-confirmation-disabled flow).  A viewer membership means the user was
-  // auto-attached to an existing org by the DB trigger — never adopt that org.
-  const isAdminOfStoredOrg = storeOrgRole === 'admin'
+  // Only inherit an existing org when the user is already its owner/admin (i.e.
+  // the org was just created by create_organization()).  A viewer membership
+  // means the user was auto-attached to an existing org by the DB trigger —
+  // never adopt that org.
+  const isAdminOfStoredOrg = storeOrgRole === 'owner' || storeOrgRole === 'admin'
 
   const [step,       setStep]       = useState(1)
   const [localOrgId, setLocalOrgId] = useState<string | null>(isAdminOfStoredOrg ? storeOrgId : null)
@@ -113,7 +113,7 @@ export default function Onboarding() {
       const membership = {
         org_id:              newOrgId,
         org_name:            name.trim(),
-        role:                'admin' as UserRole,
+        role:                'owner' as UserRole,
         onboarding_complete: false,
       }
       useOrgStore.getState().setOrg(membership)
@@ -144,7 +144,7 @@ export default function Onboarding() {
     useOrgStore.getState().setOrg({
       org_id:              id,
       org_name:            name.trim(),
-      role:                'admin' as UserRole,
+      role:                (storeOrgRole ?? 'owner') as UserRole,
       onboarding_complete: true,
       default_currency:    currency,
     })
