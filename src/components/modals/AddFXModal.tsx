@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { useAddFXTransaction, useUpdateFXTransaction, type AddFXTransactionInput, type UpdateFXTransactionInput } from '../../hooks/useMutations'
 import { CurrencyInput } from '../ui/CurrencyInput'
+import { getCurrencyLocale } from '../../utils/formatters'
 import type { FXTransaction } from '../../hooks/useFX'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
@@ -141,12 +142,12 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
         <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 space-y-1.5 text-sm">
           <div className="flex justify-between text-gray-500">
             <span>Previous balance</span>
-            <span>{sym}{prevBal.toLocaleString(undefined, { minimumFractionDigits: 4 })}</span>
+            <span>{sym}{prevBal.toLocaleString(getCurrencyLocale(selectedCurrency), { minimumFractionDigits: 4 })}</span>
           </div>
           <div className="flex justify-between font-semibold">
             <span className="text-gray-700">New balance</span>
             <span className={newBal >= 0 ? 'text-success' : 'text-danger'}>
-              {sym}{newBal.toLocaleString(undefined, { minimumFractionDigits: 4 })}
+              {sym}{newBal.toLocaleString(getCurrencyLocale(selectedCurrency), { minimumFractionDigits: 4 })}
             </span>
           </div>
         </div>

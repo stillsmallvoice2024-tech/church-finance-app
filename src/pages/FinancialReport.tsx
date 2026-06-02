@@ -54,6 +54,8 @@ import {
 } from '../utils/reportExport'
 import { useToastStore } from '../store/toastStore'
 import { useReportTemplateStore } from '../store/reportTemplateStore'
+import { useOrgStore } from '../store/orgStore'
+import { getCurrencyLocale, CURRENCY_SYMBOLS } from '../utils/formatters'
 import type {
   ReportGroup,
   ReportGroupChild,
@@ -71,8 +73,8 @@ import type {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(n: number): string {
-  return new Intl.NumberFormat('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+function fmt(n: number, locale = 'en-NG'): string {
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 }
 
 function uid(): string {
@@ -191,6 +193,9 @@ function SortableItem({
 
   const value = getItemBalance(item, balances, opBalances)
   const rowType = item.rowType ?? 'category'
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
+  const sym = CURRENCY_SYMBOLS[bc] ?? bc
+  const locale = getCurrencyLocale(bc)
 
   return (
     <div
@@ -240,7 +245,7 @@ function SortableItem({
       )}
 
       <span className="text-right font-mono shrink-0 text-sm">
-        ₦{fmt(value)}
+        {sym}{fmt(value, locale)}
       </span>
 
       {editing && (
@@ -348,6 +353,9 @@ function SortableSubgroup({
 
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
+  const sym = CURRENCY_SYMBOLS[bc] ?? bc
+  const locale = getCurrencyLocale(bc)
 
   return (
     <div
@@ -441,7 +449,7 @@ function SortableSubgroup({
         <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
           {sg.label} Sub-Total
         </span>
-        <span className="font-mono font-bold text-xs">₦{fmt(sgTotal)}</span>
+        <span className="font-mono font-bold text-xs">{sym}{fmt(sgTotal, locale)}</span>
       </div>
     </div>
   )
@@ -506,6 +514,9 @@ function SortableGroup({
 
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const groupTotal = computeGroupTotal(group, balances, opBalances)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
+  const sym = CURRENCY_SYMBOLS[bc] ?? bc
+  const locale = getCurrencyLocale(bc)
 
   return (
     <div
@@ -655,7 +666,7 @@ function SortableGroup({
         <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
           {group.label} Sub-Total
         </span>
-        <span className="font-mono font-bold text-sm">₦{fmt(groupTotal)}</span>
+        <span className="font-mono font-bold text-sm">{sym}{fmt(groupTotal, locale)}</span>
       </div>
     </div>
   )
@@ -736,6 +747,9 @@ function SortableTableBlock({
 
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const tableTotal = computeTableTotal(table, balances, opBalances)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
+  const sym = CURRENCY_SYMBOLS[bc] ?? bc
+  const locale = getCurrencyLocale(bc)
 
   return (
     <div
@@ -860,7 +874,7 @@ function SortableTableBlock({
       {/* Table grand total */}
       <div className="flex justify-between items-center px-4 py-3 bg-primary text-white font-bold border-t border-primary/30">
         <span className="uppercase tracking-widest text-sm">{table.title} Total</span>
-        <span className="font-mono text-lg">₦{fmt(tableTotal)}</span>
+        <span className="font-mono text-lg">{sym}{fmt(tableTotal, locale)}</span>
       </div>
     </div>
   )
@@ -1033,6 +1047,9 @@ export default function FinancialReport() {
   usePageTitle('Financial Report')
 
   const { push } = useToastStore()
+  const baseCurrency = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
+  const sym = CURRENCY_SYMBOLS[baseCurrency] ?? baseCurrency
+  const locale = getCurrencyLocale(baseCurrency)
   const { categories } = useCategories()
   const { incomeTypes } = useIncomeTypes()
   const { templates, refetch: refetchTemplates } = useReportTemplates()
@@ -1666,7 +1683,7 @@ export default function FinancialReport() {
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500 dark:text-gray-400">
                   <th className="px-6 py-2 text-left font-semibold">Account / Description</th>
-                  <th className="px-6 py-2 text-right font-semibold">Amount (₦)</th>
+                  <th className="px-6 py-2 text-right font-semibold">Amount ({sym})</th>
                 </tr>
               </thead>
               <tbody>
@@ -1688,7 +1705,7 @@ export default function FinancialReport() {
                           return (
                             <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                               <td className="px-8 py-2 text-gray-700 dark:text-gray-300">{item.displayLabel}</td>
-                              <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">₦{fmt(val)}</td>
+                              <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{sym}{fmt(val, locale)}</td>
                             </tr>
                           )
                         } else {
@@ -1707,13 +1724,13 @@ export default function FinancialReport() {
                                 return (
                                   <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800">
                                     <td className="px-12 py-2 text-gray-600 dark:text-gray-400">{item.displayLabel}</td>
-                                    <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">₦{fmt(val)}</td>
+                                    <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{sym}{fmt(val, locale)}</td>
                                   </tr>
                                 )
                               })}
                               <tr key={`sgs-${sg.id}`} className="bg-gray-100/60 dark:bg-gray-800/30">
                                 <td className="px-8 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{sg.label} Sub-Total</td>
-                                <td className="px-6 py-1 text-right font-mono font-bold text-xs">₦{fmt(sgTotal)}</td>
+                                <td className="px-6 py-1 text-right font-mono font-bold text-xs">{sym}{fmt(sgTotal, locale)}</td>
                               </tr>
                             </>
                           )
@@ -1725,7 +1742,7 @@ export default function FinancialReport() {
                           {group.label} Sub-Total
                         </td>
                         <td className="px-6 py-2 text-right font-mono font-bold text-gray-900 dark:text-gray-100">
-                          ₦{fmt(groupTotal)}
+                          {sym}{fmt(groupTotal, locale)}
                         </td>
                       </tr>
                       <tr key={`sp-${group.id}`}><td colSpan={2} className="py-1" /></tr>
@@ -1738,7 +1755,7 @@ export default function FinancialReport() {
                     {tables.length > 1 ? `${table.title} Total` : 'Grand Total'}
                   </td>
                   <td className="px-6 py-3 text-right font-mono font-bold text-lg">
-                    ₦{fmt(computeTableTotal(table, balances, operationalBalances))}
+                    {sym}{fmt(computeTableTotal(table, balances, operationalBalances), locale)}
                   </td>
                 </tr>
               </tbody>
@@ -1750,7 +1767,7 @@ export default function FinancialReport() {
         {showCombinedTotal && (
           <div className="flex justify-between items-center px-6 py-4 rounded-xl bg-primary/5 border-2 border-primary/20 font-bold">
             <span className="text-primary uppercase tracking-widest text-sm">Combined Grand Total</span>
-            <span className="font-mono text-lg text-primary">₦{fmt(grandTotal)}</span>
+            <span className="font-mono text-lg text-primary">{sym}{fmt(grandTotal, locale)}</span>
           </div>
         )}
       </div>
@@ -1854,7 +1871,7 @@ export default function FinancialReport() {
           {showCombinedTotal && (
             <div className="flex justify-between items-center px-4 py-3 rounded-xl bg-primary/5 border-2 border-primary/20 font-bold text-primary">
               <span className="uppercase tracking-widest text-sm">Combined Grand Total</span>
-              <span className="font-mono text-lg">₦{fmt(grandTotal)}</span>
+              <span className="font-mono text-lg">{sym}{fmt(grandTotal, locale)}</span>
             </div>
           )}
         </div>
@@ -2043,7 +2060,7 @@ export default function FinancialReport() {
           {!editMode && tables.length > 0 && (
             <button
               type="button"
-              onClick={() => exportReportPDF(currentLayout, balances, reportDate, undefined, operationalBalances)}
+              onClick={() => exportReportPDF(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrency)}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <Download className="w-3.5 h-3.5" />
@@ -2055,7 +2072,7 @@ export default function FinancialReport() {
           {!editMode && tables.length > 0 && (
             <button
               type="button"
-              onClick={() => exportReportExcel(currentLayout, balances, reportDate, undefined, operationalBalances)}
+              onClick={() => exportReportExcel(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrency)}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />

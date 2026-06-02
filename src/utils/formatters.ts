@@ -1,7 +1,7 @@
 import { format } from 'date-fns'
 import type { Currency } from '../types'
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
+export const CURRENCY_SYMBOLS: Record<string, string> = {
   NGN: '₦',
   USD: '$',
   GBP: '£',

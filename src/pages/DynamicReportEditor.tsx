@@ -20,6 +20,7 @@ import {
 import { useCategories } from '../hooks/useCategories'
 import { useToastStore } from '../store/toastStore'
 import { useOrgStore } from '../store/orgStore'
+import { getCurrencyLocale } from '../utils/formatters'
 import {
   parseTokens,
   resolveTokens,
@@ -71,14 +72,10 @@ const CURRENCY_OPTIONS = Object.entries(CURRENCY_SYMBOLS).map(([value, sym]) => 
   value, label: `${sym} ${value}`,
 }))
 
-function fmtNGN(n: number): string {
-  return n.toLocaleString('en-NG', { minimumFractionDigits: 2 })
-}
-
 function fmtAmount(n: number, currency = 'NGN'): string {
   const abs = Math.abs(n)
-  const sym = CURRENCY_SYMBOLS[currency] ?? '₦'
-  return (n < 0 ? '-' : '') + sym + fmtNGN(abs)
+  const sym = CURRENCY_SYMBOLS[currency] ?? currency
+  return (n < 0 ? '-' : '') + sym + abs.toLocaleString(getCurrencyLocale(currency), { minimumFractionDigits: 2 })
 }
 
 // ── Local block shape ──────────────────────────────────────────────────────────

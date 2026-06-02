@@ -6,7 +6,8 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions } from '../hooks/useFX'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { exportCSV } from '../utils/csvExport'
-import { getCurrencyLocale } from '../utils/formatters'
+import { getCurrencyLocale, formatAmount } from '../utils/formatters'
+import { useOrgStore } from '../store/orgStore'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { useOutflowTypes } from '../hooks/useOutflowTypes'
@@ -20,10 +21,6 @@ const YEARS        = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i)
 const MONTH_NAMES  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
-
-function fmtNGN(n: number) {
-  return n.toLocaleString('en-NG', { minimumFractionDigits: 2 })
-}
 
 function ErrBox({ msg }: { msg: string }) {
   return (
@@ -86,6 +83,7 @@ interface AnnualRow { year: number; totalInflow: number; totalOutflow: number; n
 
 function AnnualSummaryPanel() {
   const activeYear = useAccountingYearStore(s => s.year)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
   const [rows,    setRows]    = useState<AnnualRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -131,7 +129,7 @@ function AnnualSummaryPanel() {
   const handleExport = () =>
     exportCSV(
       'annual_summary',
-      ['Year', 'Total Inflow (₦)', 'Total Outflow (₦)', 'Net (₦)'],
+      [`Year`, `Total Inflow (${bc})`, `Total Outflow (${bc})`, `Net (${bc})`],
       rows.map(r => [r.year, r.totalInflow, r.totalOutflow, r.net]),
     )
 
@@ -155,10 +153,10 @@ function AnnualSummaryPanel() {
               {rows.map(r => (
                 <tr key={r.year} className="hover:bg-gray-50">
                   <td className="px-5 py-3 font-semibold text-gray-800">{r.year}</td>
-                  <td className="px-5 py-3 text-right text-success">₦{fmtNGN(r.totalInflow)}</td>
-                  <td className="px-5 py-3 text-right text-danger">₦{fmtNGN(r.totalOutflow)}</td>
+                  <td className="px-5 py-3 text-right text-success">{formatAmount(r.totalInflow, bc)}</td>
+                  <td className="px-5 py-3 text-right text-danger">{formatAmount(r.totalOutflow, bc)}</td>
                   <td className={`px-5 py-3 text-right font-bold ${r.net >= 0 ? 'text-success' : 'text-danger'}`}>
-                    ₦{fmtNGN(r.net)}
+                    {formatAmount(r.net, bc)}
                   </td>
                 </tr>
               ))}
@@ -176,6 +174,7 @@ interface MonthlyRow { month: number; totalInflow: number; totalOutflow: number;
 
 function MonthlyBreakdownPanel() {
   const activeYear = useAccountingYearStore(s => s.year)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
   const [year,    setYear]    = useState(activeYear)
 
   useEffect(() => { setYear(activeYear) }, [activeYear])
@@ -234,7 +233,7 @@ function MonthlyBreakdownPanel() {
   const handleExport = () =>
     exportCSV(
       `monthly_breakdown_${year}`,
-      ['Month', 'Total Inflow (₦)', 'Total Outflow (₦)', 'Net (₦)'],
+      [`Month`, `Total Inflow (${bc})`, `Total Outflow (${bc})`, `Net (${bc})`],
       rows.map(r => [MONTH_NAMES[r.month - 1], r.totalInflow, r.totalOutflow, r.net]),
     )
 
@@ -271,20 +270,20 @@ function MonthlyBreakdownPanel() {
                   <td className="px-5 py-3 font-medium text-gray-700">
                     {MONTH_NAMES[r.month - 1]} {year}
                   </td>
-                  <td className="px-5 py-3 text-right text-success">₦{fmtNGN(r.totalInflow)}</td>
-                  <td className="px-5 py-3 text-right text-danger">₦{fmtNGN(r.totalOutflow)}</td>
+                  <td className="px-5 py-3 text-right text-success">{formatAmount(r.totalInflow, bc)}</td>
+                  <td className="px-5 py-3 text-right text-danger">{formatAmount(r.totalOutflow, bc)}</td>
                   <td className={`px-5 py-3 text-right font-semibold ${r.net >= 0 ? 'text-success' : 'text-danger'}`}>
-                    ₦{fmtNGN(r.net)}
+                    {formatAmount(r.net, bc)}
                   </td>
                 </tr>
               ))}
               {/* Totals row */}
               <tr className="bg-gray-50 font-bold border-t border-gray-200">
                 <td className="px-5 py-3 text-gray-700">Total {year}</td>
-                <td className="px-5 py-3 text-right text-success">₦{fmtNGN(grandInflow)}</td>
-                <td className="px-5 py-3 text-right text-danger">₦{fmtNGN(grandOutflow)}</td>
+                <td className="px-5 py-3 text-right text-success">{formatAmount(grandInflow, bc)}</td>
+                <td className="px-5 py-3 text-right text-danger">{formatAmount(grandOutflow, bc)}</td>
                 <td className={`px-5 py-3 text-right ${grandNet >= 0 ? 'text-success' : 'text-danger'}`}>
-                  ₦{fmtNGN(grandNet)}
+                  {formatAmount(grandNet, bc)}
                 </td>
               </tr>
             </tbody>
@@ -307,6 +306,7 @@ interface IncomeTypeRow {
 
 function IncomeTypeBreakdownPanel() {
   const activeYear = useAccountingYearStore(s => s.year)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
   const { incomeTypes } = useIncomeTypes()
 
   const filter  = useReportDateFilter(activeYear)
@@ -358,7 +358,7 @@ function IncomeTypeBreakdownPanel() {
   const handleExport = () =>
     exportCSV(
       `income_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
-      ['Income Type', 'Total (₦)', 'Count', '% of Total'],
+      [`Income Type`, `Total (${bc})`, `Count`, `% of Total`],
       rows.map(r => [
         r.name,
         r.amount,
@@ -392,7 +392,7 @@ function IncomeTypeBreakdownPanel() {
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Income Type</th>
                 <th className="px-5 py-3 text-right font-medium">Transactions</th>
-                <th className="px-5 py-3 text-right font-medium">Total (₦)</th>
+                <th className="px-5 py-3 text-right font-medium">Total</th>
                 <th className="px-5 py-3 text-right font-medium">% Share</th>
                 <th className="px-5 py-3 w-40" />
               </tr>
@@ -411,7 +411,7 @@ function IncomeTypeBreakdownPanel() {
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-success">₦{fmtNGN(r.amount)}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-success">{formatAmount(r.amount, bc)}</td>
                     <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
                     <td className="px-5 py-3">
                       <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -429,7 +429,7 @@ function IncomeTypeBreakdownPanel() {
                 <td className="px-5 py-3 text-right text-gray-500">
                   {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
                 </td>
-                <td className="px-5 py-3 text-right text-success">₦{fmtNGN(grandTotal)}</td>
+                <td className="px-5 py-3 text-right text-success">{formatAmount(grandTotal, bc)}</td>
                 <td className="px-5 py-3 text-right text-gray-400">100%</td>
                 <td />
               </tr>
@@ -453,6 +453,7 @@ interface OutflowTypeRow {
 
 function OutflowTypeBreakdownPanel() {
   const activeYear = useAccountingYearStore(s => s.year)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
   const { outflowTypes } = useOutflowTypes()
 
   const filter  = useReportDateFilter(activeYear)
@@ -505,7 +506,7 @@ function OutflowTypeBreakdownPanel() {
   const handleExport = () =>
     exportCSV(
       `outflow_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
-      ['Outflow Type', 'Total (₦)', 'Count', '% of Total'],
+      [`Outflow Type`, `Total (${bc})`, `Count`, `% of Total`],
       rows.map(r => [
         r.name,
         r.amount,
@@ -539,7 +540,7 @@ function OutflowTypeBreakdownPanel() {
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Outflow Type</th>
                 <th className="px-5 py-3 text-right font-medium">Transactions</th>
-                <th className="px-5 py-3 text-right font-medium">Total (₦)</th>
+                <th className="px-5 py-3 text-right font-medium">Total</th>
                 <th className="px-5 py-3 text-right font-medium">% Share</th>
                 <th className="px-5 py-3 w-40" />
               </tr>
@@ -558,7 +559,7 @@ function OutflowTypeBreakdownPanel() {
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-danger">₦{fmtNGN(r.amount)}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-danger">{formatAmount(r.amount, bc)}</td>
                     <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
                     <td className="px-5 py-3">
                       <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -576,7 +577,7 @@ function OutflowTypeBreakdownPanel() {
                 <td className="px-5 py-3 text-right text-gray-500">
                   {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
                 </td>
-                <td className="px-5 py-3 text-right text-danger">₦{fmtNGN(grandTotal)}</td>
+                <td className="px-5 py-3 text-right text-danger">{formatAmount(grandTotal, bc)}</td>
                 <td className="px-5 py-3 text-right text-gray-400">100%</td>
                 <td />
               </tr>
@@ -611,6 +612,7 @@ interface DrillTxn {
 
 function DepartmentBreakdownPanel() {
   const activeYear = useAccountingYearStore(s => s.year)
+  const bc = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
   const { departments } = useDepartments()
   const { outflowTypes } = useOutflowTypes()
 
@@ -745,7 +747,7 @@ function DepartmentBreakdownPanel() {
   const handleExport = () =>
     exportCSV(
       `department_breakdown_${periodLabel.replace(/ /g, '_')}`,
-      ['Department', 'Code', 'Total (₦)', 'Count', '% of Total'],
+      [`Department`, `Code`, `Total (${bc})`, `Count`, `% of Total`],
       rows.map(r => [
         r.name,
         r.code ?? '',
@@ -761,7 +763,7 @@ function DepartmentBreakdownPanel() {
       <td className="px-4 py-2 text-gray-700 max-w-[200px] truncate">{t.description ?? t.bank_description ?? '—'}</td>
       <td className="px-4 py-2 text-gray-500">{getTypeName(t.outflow_type_id)}</td>
       <td className="px-4 py-2 text-gray-500">{getDeptName(t.department_id)}</td>
-      <td className="px-4 py-2 text-right font-medium text-danger">₦{fmtNGN(t.actual_amount || t.amount_disbursed)}</td>
+      <td className="px-4 py-2 text-right font-medium text-danger">{formatAmount(t.actual_amount || t.amount_disbursed, bc)}</td>
     </tr>
   )
 
@@ -791,7 +793,7 @@ function DepartmentBreakdownPanel() {
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                   <th className="px-5 py-3 text-left font-medium">Department</th>
                   <th className="px-5 py-3 text-right font-medium">Transactions</th>
-                  <th className="px-5 py-3 text-right font-medium">Total (₦)</th>
+                  <th className="px-5 py-3 text-right font-medium">Total</th>
                   <th className="px-5 py-3 text-right font-medium">% Share</th>
                   <th className="px-5 py-3 w-40" />
                 </tr>
@@ -819,7 +821,7 @@ function DepartmentBreakdownPanel() {
                           </div>
                         </td>
                         <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
-                        <td className="px-5 py-3 text-right font-semibold text-danger">₦{fmtNGN(r.amount)}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-danger">{formatAmount(r.amount, bc)}</td>
                         <td className="px-5 py-3 text-right text-gray-500">{pct.toFixed(1)}%</td>
                         <td className="px-5 py-3">
                           <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -869,7 +871,7 @@ function DepartmentBreakdownPanel() {
                                         {drillTxns.length === 200 && ' (capped at 200)'}
                                       </td>
                                       <td className="px-4 py-2 text-right text-danger">
-                                        ₦{fmtNGN(drillTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0))}
+                                        {formatAmount(drillTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0), bc)}
                                       </td>
                                     </tr>
                                   </tfoot>
@@ -887,7 +889,7 @@ function DepartmentBreakdownPanel() {
                   <td className="px-5 py-3 text-right text-gray-500">
                     {rows.reduce((s, r) => s + r.count, 0).toLocaleString()}
                   </td>
-                  <td className="px-5 py-3 text-right text-danger">₦{fmtNGN(grandTotal)}</td>
+                  <td className="px-5 py-3 text-right text-danger">{formatAmount(grandTotal, bc)}</td>
                   <td className="px-5 py-3 text-right text-gray-400">100%</td>
                   <td />
                 </tr>
@@ -954,7 +956,7 @@ function DepartmentBreakdownPanel() {
                     <th className="px-4 py-3 text-left font-medium">Description</th>
                     <th className="px-4 py-3 text-left font-medium">Outflow Type</th>
                     <th className="px-4 py-3 text-left font-medium">Department</th>
-                    <th className="px-4 py-3 text-right font-medium">Amount (₦)</th>
+                    <th className="px-4 py-3 text-right font-medium">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -967,7 +969,7 @@ function DepartmentBreakdownPanel() {
                       {crossTxns.length === 500 && ' (capped at 500)'}
                     </td>
                     <td className="px-4 py-3 text-right text-danger">
-                      ₦{fmtNGN(crossTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0))}
+                      {formatAmount(crossTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0), bc)}
                     </td>
                   </tr>
                 </tfoot>

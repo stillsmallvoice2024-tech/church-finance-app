@@ -16,7 +16,8 @@ import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
-import { formatDate } from '../utils/formatters'
+import { formatDate, getCurrencyLocale, formatAmount } from '../utils/formatters'
+import { useOrgStore } from '../store/orgStore'
 
 type FXCurrency = 'USD' | 'GBP' | 'EUR' | 'CNY'
 
@@ -36,11 +37,8 @@ const FX_META: { code: FXCurrency; symbol: string; flag: string; name: string }[
   { code: 'CNY', symbol: '¥', flag: '🇨🇳', name: 'Chinese Yuan'   },
 ]
 
-function fmtFX(n: number, dp = 4) {
-  return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })
-}
-function fmtNGN(n: number) {
-  return n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function fmtFx(n: number, code: string, dp = 4) {
+  return n.toLocaleString(getCurrencyLocale(code), { minimumFractionDigits: dp, maximumFractionDigits: dp })
 }
 
 export default function ForeignCurrency() {
@@ -55,6 +53,7 @@ export default function ForeignCurrency() {
   })
 
   const { canWrite }                                = useRole()
+  const baseCurrency = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
   const { transactions, summaries, loading, error, refetch } =
     useFXTransactions(filterCcy || undefined)
 
@@ -172,13 +171,13 @@ export default function ForeignCurrency() {
                 </span>
               </div>
               <div className={`text-xl font-bold ${active ? 'text-gray-900' : 'text-gray-400'}`}>
-                {meta.symbol}{fmtFX(balance)}
+                {meta.symbol}{fmtFx(balance, meta.code)}
               </div>
               <div className="text-xs text-gray-400 mt-0.5">{meta.name}</div>
               {s && (
                 <div className="mt-3 grid grid-cols-2 gap-1 text-xs">
-                  <div className="text-success">↑ {meta.symbol}{fmtFX(s.totalDeposits)}</div>
-                  <div className="text-danger">↓ {meta.symbol}{fmtFX(s.totalWithdrawals)}</div>
+                  <div className="text-success">↑ {meta.symbol}{fmtFx(s.totalDeposits, meta.code)}</div>
+                  <div className="text-danger">↓ {meta.symbol}{fmtFx(s.totalWithdrawals, meta.code)}</div>
                 </div>
               )}
             </div>
@@ -189,7 +188,7 @@ export default function ForeignCurrency() {
       {/* Naira Equivalent */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">
-          Naira Equivalent (Enter Rates)
+          {baseCurrency} Equivalent (Enter Rates)
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {FX_META.map(meta => {
@@ -199,7 +198,7 @@ export default function ForeignCurrency() {
             return (
               <div key={meta.code} className="space-y-1.5">
                 <label className="text-xs font-medium text-gray-500">
-                  {meta.code} Rate (₦ per {meta.code})
+                  {meta.code} Rate ({baseCurrency} per {meta.code})
                 </label>
                 <input
                   type="number"
@@ -213,15 +212,15 @@ export default function ForeignCurrency() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                 />
                 <div className="text-xs text-gray-400">
-                  {meta.symbol}{fmtFX(bal)} → ₦{fmtNGN(equiv)}
+                  {meta.symbol}{fmtFx(bal, meta.code)} → {formatAmount(equiv, baseCurrency)}
                 </div>
               </div>
             )
           })}
         </div>
         <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Total Naira Equivalent</span>
-          <span className="text-lg font-bold text-primary">₦{fmtNGN(totalNairaEquivalent)}</span>
+          <span className="text-sm font-medium text-gray-700">Total {baseCurrency} Equivalent</span>
+          <span className="text-lg font-bold text-primary">{formatAmount(totalNairaEquivalent, baseCurrency)}</span>
         </div>
       </div>
 
@@ -356,10 +355,10 @@ export default function ForeignCurrency() {
                           isDeposit ? 'text-success' : 'text-danger'
                         }`}
                       >
-                        {meta.symbol}{fmtFX(isDeposit ? t.deposit : t.withdrawal)}
+                        {meta.symbol}{fmtFx(isDeposit ? t.deposit : t.withdrawal, t.currency)}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-700">
-                        {meta.symbol}{fmtFX(t.running_balance)}
+                        {meta.symbol}{fmtFx(t.running_balance, t.currency)}
                       </td>
                       <td className="px-4 py-3 text-gray-600 max-w-[200px]">
                         <DescriptionCell id={t.id} text={t.narration} tooltip={descTooltip} setTooltip={setDescTooltip} />

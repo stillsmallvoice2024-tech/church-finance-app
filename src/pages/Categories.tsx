@@ -26,6 +26,8 @@ import { Modal } from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { supabase } from '../lib/supabase'
 import { exportCSV } from '../utils/csvExport'
+import { formatAmount } from '../utils/formatters'
+import { useOrgStore } from '../store/orgStore'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
@@ -361,6 +363,7 @@ export default function Categories() {
   const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
   const { mutate: updateGroup }                     = useUpdateCategoryGroup()
   const toast = useToast()
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
 
   const scrollYRef = useRef(0)
 
@@ -615,7 +618,7 @@ export default function Categories() {
                         <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Bal. B/F</p>
                         {displayBalances.map(b => (
                           <p key={b.budget_portion} className="text-sm font-mono font-bold tabular-nums text-gray-700">
-                            ₦{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                            {formatAmount(b.amount, defaultCurrency)}
                           </p>
                         ))}
                       </div>
@@ -780,6 +783,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
   checking:        boolean
 }) {
   const { tooltip, setTooltip } = useDescriptionExpand()
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
 
   const displayBalances = openingBalances.filter(b => b.category_id === cat.id)
 
@@ -806,7 +810,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         {displayBalances.length > 0
           ? <div className="flex flex-col gap-0.5 items-end">
               {displayBalances.map(b => (
-                <span key={b.budget_portion}>₦{b.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+                <span key={b.budget_portion}>{formatAmount(b.amount, defaultCurrency)}</span>
               ))}
             </div>
           : <span className="text-gray-300">—</span>}

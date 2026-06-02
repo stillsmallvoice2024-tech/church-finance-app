@@ -17,7 +17,8 @@ import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../store/allocationStore'
 import { getFinalConfig, type RowResolverState } from '../utils/configResolver'
-import { formatDate } from '../utils/formatters'
+import { formatDate, formatAmount } from '../utils/formatters'
+import { useOrgStore } from '../store/orgStore'
 import { formatCurrency } from '../utils/currency'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 // inflowTypes import removed — income type classification replaces hardcoded types
@@ -76,6 +77,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 
 export default function Import() {
   const { canImportTransactions } = useRole()
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
   const [skipDups, setSkipDups]       = useState(false)
@@ -976,7 +978,7 @@ function ManualEntryForm() {
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
               <p className="text-xs text-gray-500">
-                ≈ ₦{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                ≈ {formatAmount(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate')), defaultCurrency)}
               </p>
             )}
           </div>
@@ -1123,7 +1125,7 @@ function ManualEntryForm() {
             </div>
             {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
               <p className="text-xs text-gray-500">
-                ≈ ₦{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                ≈ {formatAmount(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate')), defaultCurrency)}
               </p>
             )}
           </div>
