@@ -29,6 +29,7 @@ import { formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/f
 import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
+import { OnboardingChecklist }     from '../components/onboarding/OnboardingChecklist'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -167,6 +168,9 @@ export default function Dashboard() {
             </div>
           </CanWrite>
         </div>
+
+        {/* ── Onboarding checklist ─────────────────────────────────────────── */}
+        <OnboardingChecklist />
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
