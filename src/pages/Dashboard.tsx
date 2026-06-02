@@ -28,6 +28,7 @@ import { supabase }                from '../lib/supabase'
 import { formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/formatters'
 import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 import { useOrgCurrency }          from '../hooks/useOrgCurrency'
+import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ export default function Dashboard() {
   const { categories, loading: categoriesLoading } = useCategories()
 
   usePageTitle('Dashboard')
+  useWizardAutoShow()
 
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
