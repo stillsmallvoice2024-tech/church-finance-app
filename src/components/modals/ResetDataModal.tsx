@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { exportCSV } from '../../utils/csvExport'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { useOrgStore } from '../../store/orgStore'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -34,13 +35,14 @@ const INITIAL_EXPORTS: ExportItem[] = [
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const ALL = { count: 'exact' as const }
-const Q   = (table: string) => supabase.from(table).select('*', ALL).limit(100_000)
+const Q   = (table: string, orgId: string) =>
+  supabase.from(table).select('*', ALL).eq('org_id', orgId).limit(100_000)
 
-async function runExport(key: string, sym: string): Promise<void> {
+async function runExport(key: string, sym: string, orgId: string): Promise<void> {
   const date = new Date().toISOString().slice(0, 10)
 
   if (key === 'inflows') {
-    const { data } = await Q('inflow_transactions').order('date')
+    const { data } = await Q('inflow_transactions', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`inflows-${date}.csv`,
       ['Date','Description',`Amount (${sym})`,'Inflow Type','Stage 1','Stage 2','Stage 3','Txn Ref','FX Currency','Txn Type','Created At'],
@@ -49,7 +51,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'outflows') {
-    const { data } = await Q('outflow_transactions').order('date')
+    const { data } = await Q('outflow_transactions', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`outflows-${date}.csv`,
       ['Date','Txn ID','Description',`Disbursed (${sym})`,`Refunded (${sym})`,`Transfer Charge (${sym})`,'Stage 1','Stage 2','Remarks','FX Currency','Txn Type','Created At'],
@@ -59,7 +61,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'intra-flows') {
-    const { data } = await Q('intra_flows').order('date')
+    const { data } = await Q('intra_flows', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`intra-flows-${date}.csv`,
       ['Date','From Category','To Category',`Amount (${sym})`,'Description','Transaction Ref','From Stage 1','From Stage 2','To Stage 1','To Stage 2','Remark','Created At'],
@@ -69,7 +71,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'bank-deposits') {
-    const { data } = await Q('bank_deposits').order('date')
+    const { data } = await Q('bank_deposits', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`bank-deposits-${date}.csv`,
       ['Date','Bank',`Amount (${sym})`,'Description','Transaction Ref','Remarks','Created At'],
@@ -77,7 +79,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'intrabank-transfers') {
-    const { data } = await Q('intrabank_transfers').order('date')
+    const { data } = await Q('intrabank_transfers', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`intrabank-transfers-${date}.csv`,
       ['Date','From Bank','To Bank',`Amount (${sym})`,'Description','Transaction Ref','Remarks','Created At'],
@@ -86,7 +88,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'foreign-currency') {
-    const { data } = await Q('fx_transactions').order('date')
+    const { data } = await Q('fx_transactions', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`foreign-currency-${date}.csv`,
       ['Date','Currency','Narration','Deposit','Withdrawal','Running Balance','Transaction Ref','Created At'],
@@ -95,7 +97,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'special-projects') {
-    const { data } = await Q('special_projects').order('name')
+    const { data } = await Q('special_projects', orgId).order('name')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`special-projects-${date}.csv`,
       ['Name','Code',`Opening Balance (${sym})`,'Active','Created At'],
@@ -103,8 +105,8 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'project-entries') {
-    const { data: entries } = await Q('project_entries').order('date')
-    const { data: projects } = await supabase.from('special_projects').select('id, name').limit(10_000)
+    const { data: entries } = await Q('project_entries', orgId).order('date')
+    const { data: projects } = await supabase.from('special_projects').select('id, name').eq('org_id', orgId).limit(10_000)
     const nameMap = new Map((projects ?? []).map((p: Record<string, unknown>) => [p.id, p.name]))
     const rows = (entries ?? []) as Record<string, unknown>[]
     exportCSV(`special-project-entries-${date}.csv`,
@@ -114,7 +116,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'receipts') {
-    const { data } = await Q('receipts').order('created_at')
+    const { data } = await Q('receipts', orgId).order('created_at')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`receipts-${date}.csv`,
       ['Entity Type','Entity ID','File Name','File Path','File Size (bytes)','MIME Type','Uploaded By','Created At'],
@@ -124,8 +126,8 @@ async function runExport(key: string, sym: string): Promise<void> {
 
   else if (key === 'bank-ledger') {
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('id,date,description,amount,stage_code_1').order('date').limit(100_000),
-      supabase.from('outflow_transactions').select('id,date,description,amount_disbursed,stage_code_1').order('date').limit(100_000),
+      supabase.from('inflow_transactions').select('id,date,description,amount,stage_code_1').eq('org_id', orgId).order('date').limit(100_000),
+      supabase.from('outflow_transactions').select('id,date,description,amount_disbursed,stage_code_1').eq('org_id', orgId).order('date').limit(100_000),
     ])
     type R = Record<string, unknown>
     const merged = [
@@ -139,8 +141,8 @@ async function runExport(key: string, sym: string): Promise<void> {
 
   else if (key === 'category-ledger') {
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('date,description,amount,stage_code_1,inflow_type').order('stage_code_1').order('date').limit(100_000),
-      supabase.from('outflow_transactions').select('date,description,amount_disbursed,stage_code_1').order('stage_code_1').order('date').limit(100_000),
+      supabase.from('inflow_transactions').select('date,description,amount,stage_code_1,inflow_type').eq('org_id', orgId).order('stage_code_1').order('date').limit(100_000),
+      supabase.from('outflow_transactions').select('date,description,amount_disbursed,stage_code_1').eq('org_id', orgId).order('stage_code_1').order('date').limit(100_000),
     ])
     type R = Record<string, unknown>
     const rows = [
@@ -156,6 +158,7 @@ async function runExport(key: string, sym: string): Promise<void> {
     const { data } = await supabase
       .from('audit_log')
       .select('id,user_id,action,table_name,record_id,created_at,profiles:user_id(full_name,email)')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(100_000)
     const rows = (data ?? []) as Record<string, unknown>[]
@@ -170,26 +173,25 @@ async function runExport(key: string, sym: string): Promise<void> {
 
 // ── Delete all data ────────────────────────────────────────────────────────────
 
-async function deleteAllData(): Promise<void> {
-  // 1. Delete storage files for receipts
+async function deleteAllData(orgId: string): Promise<void> {
+  // 1. Delete storage files for receipts belonging to this org only
   const { data: receiptRows } = await supabase
-    .from('receipts').select('file_path').limit(100_000)
+    .from('receipts').select('file_path').eq('org_id', orgId).limit(100_000)
   if (receiptRows?.length) {
     const paths = (receiptRows as { file_path: string }[]).map(r => r.file_path)
-    // Delete in batches of 100
     for (let i = 0; i < paths.length; i += 100) {
       await supabase.storage.from('receipts').remove(paths.slice(i, i + 100))
     }
   }
 
-  // 2. Delete DB rows (order matters for FK constraints)
+  // 2. Delete DB rows scoped to this org (order matters for FK constraints)
   const tables = [
-    'receipts', 'audit_log', 'project_entries',
+    'receipts', 'audit_log', 'field_changes', 'project_entries',
     'intra_flows', 'bank_deposits', 'intrabank_transfers',
     'fx_transactions', 'inflow_transactions', 'outflow_transactions',
   ]
   for (const table of tables) {
-    const { error } = await supabase.from(table).delete().not('id', 'is', null)
+    const { error } = await supabase.from(table).delete().eq('org_id', orgId)
     if (error) throw new Error(`Failed to delete ${table}: ${error.message}`)
   }
 }
@@ -209,6 +211,7 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
   const [deleting,  setDeleting]  = useState(false)
   const [deleteErr, setDeleteErr] = useState<string | null>(null)
   const { baseCurrencySymbol } = useOrgCurrency()
+  const orgId = useOrgStore((s) => s.orgId)
 
   const setStatus = useCallback((key: string, status: ItemStatus) => {
     setItems(prev => prev.map(it => it.key === key ? { ...it, status } : it))
@@ -216,7 +219,7 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
 
   // Auto-run exports when modal opens
   useEffect(() => {
-    if (!open) return
+    if (!open || !orgId) return
     setStep('exporting')
     setItems(INITIAL_EXPORTS)
     setConfirm('')
@@ -229,7 +232,7 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
         if (cancelled) return
         setStatus(item.key, 'running')
         try {
-          await runExport(item.key, sym)
+          await runExport(item.key, sym, orgId)
           if (!cancelled) setStatus(item.key, 'done')
         } catch {
           if (!cancelled) setStatus(item.key, 'error')
@@ -238,13 +241,14 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
     })()
 
     return () => { cancelled = true }
-  }, [open, setStatus, baseCurrencySymbol])
+  }, [open, orgId, setStatus, baseCurrencySymbol])
 
   const handleDelete = async () => {
+    if (!orgId) return
     setDeleting(true)
     setDeleteErr(null)
     try {
-      await deleteAllData()
+      await deleteAllData(orgId)
       onDone()
       onClose()
     } catch (e) {

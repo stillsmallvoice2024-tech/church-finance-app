@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 
 // ── DB row type (with joined profile) ─────────────────────────────────────────
 
@@ -29,11 +30,13 @@ export interface AuditLogResult {
 }
 
 export function useAuditLog(limit = 100): AuditLogResult {
+  const orgId = useOrgStore((s) => s.orgId)
   const [entries, setEntries] = useState<AuditLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
@@ -53,6 +56,7 @@ export function useAuditLog(limit = 100): AuditLogResult {
           email
         )
       `)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -62,7 +66,7 @@ export function useAuditLog(limit = 100): AuditLogResult {
       setEntries((data ?? []) as unknown as AuditLogEntry[])
     }
     setLoading(false)
-  }, [limit])
+  }, [orgId, limit])
 
   useEffect(() => { fetch() }, [fetch])
 

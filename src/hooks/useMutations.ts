@@ -52,6 +52,7 @@ async function logFieldChanges(
   oldData:   Record<string, unknown>,
   newData:   Record<string, unknown>,
 ): Promise<void> {
+  const orgId = useOrgStore.getState().orgId
   const rows = Object.keys(newData)
     .filter(k => String(oldData[k] ?? '') !== String(newData[k] ?? ''))
     .map(k => ({
@@ -61,6 +62,7 @@ async function logFieldChanges(
       field_name: k,
       old_value:  oldData[k] != null ? String(oldData[k]) : null,
       new_value:  newData[k] != null ? String(newData[k]) : null,
+      ...(orgId ? { org_id: orgId } : {}),
     }))
   if (rows.length === 0) return
   const { error } = await supabase.from('field_changes').insert(rows)
@@ -82,6 +84,7 @@ async function logAudit({
   oldData?: Record<string, unknown> | null
   newData?: Record<string, unknown> | null
 }): Promise<void> {
+  const orgId = useOrgStore.getState().orgId
   const { error } = await supabase.from('audit_log').insert({
     user_id:    userId,
     action,
@@ -89,6 +92,7 @@ async function logAudit({
     record_id:  recordId,
     old_data:   oldData,
     new_data:   newData,
+    ...(orgId ? { org_id: orgId } : {}),
   })
   if (error) console.warn('[audit_log] write failed:', error.message)
 }
@@ -104,7 +108,9 @@ async function batchLogAudit(
   }>
 ): Promise<void> {
   if (rows.length === 0) return
-  const { error } = await supabase.from('audit_log').insert(rows)
+  const orgId = useOrgStore.getState().orgId
+  const tagged = orgId ? rows.map(r => ({ ...r, org_id: orgId })) : rows
+  const { error } = await supabase.from('audit_log').insert(tagged)
   if (error) console.warn('[audit_log] batch write failed:', error.message)
 }
 
@@ -119,7 +125,9 @@ async function batchLogFieldChanges(
   }>
 ): Promise<void> {
   if (rows.length === 0) return
-  const { error } = await supabase.from('field_changes').insert(rows)
+  const orgId = useOrgStore.getState().orgId
+  const tagged = orgId ? rows.map(r => ({ ...r, org_id: orgId })) : rows
+  const { error } = await supabase.from('field_changes').insert(tagged)
   if (error) console.warn('[field_changes] batch write failed:', error.message)
 }
 

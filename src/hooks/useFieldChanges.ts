@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 import type { AdvancedSortLevel } from '../utils/sortUtils'
 
 export interface FieldChangeEntry {
@@ -36,6 +37,7 @@ export interface UseFieldChangesOptions {
 
 export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
   const { tableName, userId, dateFrom, dateTo, page = 0, pageSize = 200, search, searchCol, sortColumn, sortAscending, advancedSort } = opts
+  const orgId = useOrgStore((s) => s.orgId)
 
   const [entries, setEntries] = useState<FieldChangeEntry[]>([])
   const [count,   setCount]   = useState(0)
@@ -43,6 +45,7 @@ export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
   const [error,   setError]   = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
@@ -53,6 +56,7 @@ export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
         old_value, new_value, changed_at,
         profiles:user_id ( full_name, email )
       `, { count: 'exact' })
+      .eq('org_id', orgId)
 
     // Server-side sort
     if (advancedSort && advancedSort.length > 0) {
@@ -90,7 +94,7 @@ export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [tableName, userId, dateFrom, dateTo, page, pageSize, search, searchCol, sortColumn, sortAscending, advancedSort])
+  }, [orgId, tableName, userId, dateFrom, dateTo, page, pageSize, search, searchCol, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 
