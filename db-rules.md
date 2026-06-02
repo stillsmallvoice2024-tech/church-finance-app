@@ -8,7 +8,9 @@
 
 | Table | Purpose |
 |---|---|
-| `profiles` | Extends auth.users; `full_name`, `username` (unique, nullable — added via migration 20260530000000), `role` |
+| `organizations` | Top-level tenant; `name`, `slug` (unique), `created_by` FK → `profiles(id)`, `onboarding_complete bool`, `default_currency`, `fiscal_year_start`, `timezone` |
+| `org_members` | Junction: user ↔ org; `org_id` FK → `organizations(id)`, `user_id` FK → `profiles(id)`, `role` CHECK (`owner`\|`admin`\|`accountant`\|`viewer`), `status` (`active`); UNIQUE `(org_id, user_id)`; authoritative source for role |
+| `profiles` | Extends auth.users; `full_name`, `username` (unique, nullable — added via migration 20260530000000), `role` (includes `owner` — synced from `org_members.role` by RPCs for backward compat; **not used for permission checks**) |
 | `categories` | Budget categories; `group_id`, `is_hidden` — `starting_balance` and `starting_balance_budget_portion` columns dropped (see migration script) |
 | `category_groups` | Groups categories for ledger display |
 | `category_opening_balances` | Multi-portion opening balances; **sole source of truth** for category opening balances |
@@ -56,6 +58,7 @@
   - `20260529000003_fix_invite_signup_trigger.sql` — defensive `handle_new_user` (WHEN OTHERS on both profile and org_members INSERTs; never re-raises)
   - `20260530000000_fix_username_and_org_fallback.sql` — adds `profiles.username` column + unique index; updates `accept_invitation` to upsert username from metadata + 3-tier org fallback; repair block backfills existing broken accounts
   - `20260530000001_resolve_username_rpc.sql` — `resolve_username(p_username text)` SECURITY DEFINER function + `GRANT EXECUTE TO anon`
+- **Multi-org owner role migration**: `20260601000001_multi_org_owner_role.sql` — idempotent; adds `owner` to role CHECK constraints on `org_members`, `invitations`, `profiles`; updates `is_admin()`, `is_finance_user()`, `is_org_admin()`, `is_org_finance_user()` to include `owner`; `create_organization()` assigns `owner` (was `admin`); drops + recreates `get_invitation_by_token()` with added `org_id`/`org_name` columns; updates `accept_invitation()` for `owner` role; adds `update_org_member_role()`, `remove_org_member()`, `transfer_org_ownership()` RPCs; data migration promotes existing org creators to `owner`
 
 ### Live-DB Migration Notes
 
@@ -147,6 +150,7 @@ This distinction matters because `cache_stale` requires only `NOTIFY pgrst` (no 
   ```
 - To replace a policy: `DROP POLICY IF EXISTS "name" ON table;` then `CREATE POLICY`
 - After any `ALTER TABLE ... ADD COLUMN`: append `NOTIFY pgrst, 'reload schema';` so PostgREST schema cache reloads immediately without user having to wait
+- **Function return type changes**: `CREATE OR REPLACE FUNCTION` cannot change OUT parameter signatures — PostgreSQL raises `ERROR: 42P13: cannot change return type of existing function`. Always precede with `DROP FUNCTION IF EXISTS function_name(arg_types);` when adding/removing OUT parameters or changing their types
 
 ---
 
@@ -229,7 +233,7 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 
 ## Backup & Restore System (`src/utils/backupRestore.ts`)
 
-- **`MANAGED_TABLES`** — registry of 22 tables with metadata: `key`, `label`, `module`, `restorePriority`, `backupEnabled`, `restoreMode`, `conflictColumn`, `requiresMigration`, `sensitive`, `optional`, `dependencies`
+- **`MANAGED_TABLES`** — registry of 24 tables with metadata: `key`, `label`, `module`, `restorePriority`, `backupEnabled`, `restoreMode`, `conflictColumn`, `requiresMigration`, `sensitive`, `optional`, `dependencies`; includes `organizations` (priority 0, `merge`) and `org_members` (priority 25, `merge`, `sensitive: true`, depends on `organizations`)
 - **`restoreMode`** per table: `replace` (delete+insert), `merge` (upsert, rows preserved), `append` (upsert, nothing deleted — used for audit/log tables)
 - **`DELETE_TABLES`** — derived at module load from `MANAGED_TABLES` (reversed order, filtered to `restoreMode !== 'append'` and `backupEnabled`). Never manually maintained.
 - **`currencies` PK is `code`** (not `id`) — `conflictColumn: 'code'` required for upsert. All other tables use `conflictColumn: 'id'`.
