@@ -108,6 +108,7 @@ export default function LoginPage() {
     // After confirmation the auth listener fires SIGNED_IN, profile loads, and
     // NoOrgScreen → /onboarding handles org creation.
     if (!signUpData.session) {
+      try { localStorage.setItem('pendingOrgName', signupOrgName.trim()) } catch { /* ignore */ }
       setLoading(false)
       setSignupPending(true)
       return

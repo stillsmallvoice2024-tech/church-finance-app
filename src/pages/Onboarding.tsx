@@ -63,9 +63,12 @@ export default function Onboarding() {
   // never adopt that org.
   const isAdminOfStoredOrg = storeOrgRole === 'owner' || storeOrgRole === 'admin'
 
-  const [step,       setStep]       = useState(1)
+  // Skip Step 1 when the org was already created (signup or CreateOrgModal).
+  // Fall back to a pending name stored in localStorage for the email-confirmation path.
+  const pendingOrgName = (() => { try { return localStorage.getItem('pendingOrgName') ?? '' } catch { return '' } })()
+  const [step,       setStep]       = useState(isAdminOfStoredOrg && storeOrgId ? 2 : 1)
   const [localOrgId, setLocalOrgId] = useState<string | null>(isAdminOfStoredOrg ? storeOrgId : null)
-  const [name,       setName]       = useState(isAdminOfStoredOrg ? (storeOrgName ?? '') : '')
+  const [name,       setName]       = useState(isAdminOfStoredOrg ? (storeOrgName ?? '') : pendingOrgName)
   const [currency,   setCurrency]   = useState('')
   const [yearStart,  setYearStart]  = useState(1)
   const [timezone,   setTimezone]   = useState('Africa/Lagos')
@@ -118,6 +121,7 @@ export default function Onboarding() {
       }
       useOrgStore.getState().setOrg(membership)
       useOrgStore.getState().setMemberships([membership])
+      try { localStorage.removeItem('pendingOrgName') } catch { /* ignore */ }
     }
 
     setStep(2)
