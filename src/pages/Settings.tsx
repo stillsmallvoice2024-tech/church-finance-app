@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff, Database, Download, UploadCloud, FileDown } from 'lucide-react'
+import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff, Database, Download, UploadCloud, FileDown, FolderSync } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
@@ -10,6 +10,7 @@ import { ROLE_LABELS } from '../utils/constants'
 import { BackupModal }     from '../components/modals/BackupModal'
 import { RestoreModal }    from '../components/modals/RestoreModal'
 import { ExportCSVsModal } from '../components/modals/ExportCSVsModal'
+import { migrateReceiptPaths, auditLegacyReceiptPaths, type MigrationStats } from '../utils/migrateReceiptPaths'
 
 const APP_VERSION = '1.0.0'
 
@@ -393,6 +394,9 @@ export default function Settings() {
           <InfoRow label="Environment" value={import.meta.env.MODE === 'production' ? 'Production' : 'Development'} />
         </div>
       </Section>
+      {/* ── Receipt Path Migration (admin only) ─────────────────────── */}
+      {role === 'admin' && <ReceiptMigrationPanel />}
+
       <BackupModal
         open={backupOpen}
         onClose={() => setBackupOpen(false)}
@@ -407,6 +411,138 @@ export default function Settings() {
         onClose={() => setExportOpen(false)}
       />
     </div>
+  )
+}
+
+// ── Receipt Path Migration panel ──────────────────────────────────────────────
+
+function ReceiptMigrationPanel() {
+  const [legacyCount, setLegacyCount] = useState<number | null>(null)
+  const [auditing,    setAuditing]    = useState(false)
+  const [running,     setRunning]     = useState(false)
+  const [progress,    setProgress]    = useState<{ current: number; total: number; message: string } | null>(null)
+  const [stats,       setStats]       = useState<MigrationStats | null>(null)
+  const [err,         setErr]         = useState<string | null>(null)
+
+  const handleAudit = async () => {
+    setAuditing(true); setErr(null); setStats(null); setLegacyCount(null)
+    try {
+      const count = await auditLegacyReceiptPaths()
+      setLegacyCount(count)
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setAuditing(false)
+    }
+  }
+
+  const handleMigrate = async () => {
+    setRunning(true); setErr(null); setStats(null); setProgress(null)
+    try {
+      const result = await migrateReceiptPaths((current, total, message) => {
+        setProgress({ current, total, message })
+      })
+      setStats(result)
+      setLegacyCount(result.failed + result.skipped)
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setRunning(false); setProgress(null)
+    }
+  }
+
+  return (
+    <Section icon={FolderSync} title="Receipt Path Migration">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-500">
+          Moves legacy receipt files from <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">entityType/entityId/file</code> to
+          the org-prefixed format <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">orgId/entityType/entityId/file</code>.
+          Run Audit first to see how many files need migration.
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleAudit}
+            disabled={auditing || running}
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-60 flex items-center gap-2"
+          >
+            {auditing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {auditing ? 'Auditing…' : 'Audit Legacy Paths'}
+          </button>
+
+          {legacyCount !== null && legacyCount > 0 && (
+            <button
+              onClick={handleMigrate}
+              disabled={running}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
+            >
+              {running && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {running ? 'Migrating…' : `Migrate ${legacyCount} Files`}
+            </button>
+          )}
+        </div>
+
+        {legacyCount === 0 && !stats && (
+          <div className="flex items-center gap-2 text-sm text-success">
+            <CheckCircle2 className="w-4 h-4" /> All receipt paths are already org-prefixed.
+          </div>
+        )}
+
+        {progress && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>{progress.message}</span>
+              <span>{progress.current} / {progress.total}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1.5">
+              <div
+                className="bg-primary h-1.5 rounded-full transition-all"
+                style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {stats && (
+          <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 text-sm overflow-hidden">
+            <div className="flex justify-between px-4 py-2.5 bg-gray-50">
+              <span className="text-gray-500">Total legacy files found</span>
+              <span className="font-medium">{stats.total}</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-gray-500">Migrated successfully</span>
+              <span className="font-medium text-success">{stats.migrated}</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-gray-500">Skipped (no org_id)</span>
+              <span className="font-medium text-amber-600">{stats.skipped}</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-gray-500">Failed</span>
+              <span className="font-medium text-danger">{stats.failed}</span>
+            </div>
+          </div>
+        )}
+
+        {stats && stats.errors.length > 0 && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+              {stats.errors.length} warning{stats.errors.length !== 1 ? 's' : ''} / errors
+            </summary>
+            <pre className="mt-2 p-3 bg-gray-50 rounded-lg overflow-auto text-gray-600 max-h-48 whitespace-pre-wrap">
+              {stats.errors.join('\n')}
+            </pre>
+          </details>
+        )}
+
+        {err && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-danger">
+            <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            {err}
+          </div>
+        )}
+      </div>
+    </Section>
   )
 }
 
