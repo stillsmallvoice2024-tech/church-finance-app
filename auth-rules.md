@@ -6,32 +6,36 @@
 
 ## Role System
 
-- Three roles: `admin`, `accountant`, `viewer` — stored in `profiles.role`
-- Roles are enforced at **both** the frontend (`useRole`) and database (RLS) layers
-- `useRole()` returns actual role-based booleans — checks `profile.role`, guards on `loading`
+- **Four roles:** `owner`, `admin`, `accountant`, `viewer` — stored in `org_members.role` (authoritative) and synced to `profiles.role` (legacy/compat)
+- `profiles.role` is kept in sync by RPCs but **not used for permission checks** — `useRole()` reads `orgStore.orgRole` (from `org_members`)
+- Roles enforced at both frontend (`useRole`) and database (RLS helper functions) layers
 - During profile hydration (`loading === true`), all permission methods return `false` — prevents flash
 
 ### `useRole()` helpers
 
 | Helper | Access |
 |---|---|
-| `isAdmin()` | `role === 'admin'` |
+| `isOwner()` | `role === 'owner'` |
+| `isAdmin()` | `role === 'owner'` \| `role === 'admin'` |
 | `isAccountant()` | `role === 'accountant'` |
 | `isViewer()` / `isReadOnly()` | `role === 'viewer'` |
-| `canWrite()` | admin \| accountant |
-| `canDelete()` | admin \| accountant |
-| `canEditTransactions()` | admin \| accountant |
-| `canImportTransactions()` | admin \| accountant |
-| `canManageConfigs()` | admin only |
+| `canWrite()` | owner \| admin \| accountant |
+| `canDelete()` | owner \| admin \| accountant |
+| `canEditTransactions()` | owner \| admin \| accountant |
+| `canImportTransactions()` | owner \| admin \| accountant |
+| `canManageConfigs()` | owner \| admin |
+| `canManageMembers()` | owner \| admin |
+| `canTransferOwnership()` | owner only |
 
 ### `RoleGates` components
 
 | Component | Access |
 |---|---|
-| `<AdminOnly>` | admin only |
-| `<CanWrite>` | admin \| accountant |
-| `<CanImport>` | admin \| accountant |
-| `<CanManageConfigs>` | admin only |
+| `<OwnerOnly>` | owner only |
+| `<AdminOnly>` | owner \| admin |
+| `<CanWrite>` | owner \| admin \| accountant |
+| `<CanImport>` | owner \| admin \| accountant |
+| `<CanManageConfigs>` | owner \| admin |
 
 ### Route-level guards (`App.tsx`)
 
@@ -64,10 +68,16 @@ Old pattern `isAdmin: () => !!user` has been removed — it bypassed all role ch
 
 ### Invite (`/invite/:token`)
 - `AcceptInvite.tsx` validates token via `get_invitation_by_token(p_token)` RPC — security-definer, anon-safe, returns only pending non-expired rows
-- On valid token: calls Supabase `signUp` (with `username` + `full_name` in `options.data`), then calls `accept_invitation(p_token, p_user_id)` RPC **first**, then `profiles.update()` non-fatally as a display-name overlay
+- `get_invitation_by_token` returns `org_id uuid` and `org_name text` (via LEFT JOIN to `organizations`) in addition to `id`, `email`, `role`, `status`, `expires_at`; displayed in the invite UI as the target org name
+- **Logged-in user detection**: after fetching the invite, `AcceptInvite` calls `supabase.auth.getUser()`:
+  - Email matches current session → shows "Join organisation" UI (`flow = 'loggedin'`); calls `accept_invitation` RPC directly (no signUp)
+  - Email mismatch → shows error "You are signed in as X. This invite is for Y. Please sign out first."
+  - No session → normal `'register'` or `'signin'` flow
+- On new-user registration: calls Supabase `signUp` (with `username` + `full_name` in `options.data`), then calls `accept_invitation(p_token, p_user_id)` RPC **first**, then `profiles.update()` non-fatally as a display-name overlay
 - Order matters: `accept_invitation` must run before `profiles.update()` — the RPC guarantees the profile row exists (INSERT from `auth.users` if trigger failed) and sets role; `profiles_update_self` WITH CHECK will fail if no profile row exists yet
 - `accept_invitation` atomically: upserts profile with `username`/`full_name` from `auth.users` metadata (COALESCE — never clobbers existing values), sets `profiles.role`, upserts `org_members`, marks invite accepted
 - Org resolution in `accept_invitation`: `v_invite.org_id` → `organizations WHERE slug='primary'` → `organizations LIMIT 1` (any org) — RAISE WARNING if all fail
+- Invite roles available via UI: `admin`, `accountant`, `viewer` — `owner` is intentionally excluded; promote post-join via Transfer Ownership in UserManagement
 - Role is never set via a direct `profiles` UPDATE from the client — always through the RPC
 - Invite tokens are single-use UUIDs
 
@@ -137,9 +147,34 @@ Use `accept_invitation(token, user_id)` RPC to consume and apply role.
 
 | Function | Caller | Purpose |
 |---|---|---|
-| `get_invitation_by_token(p_token uuid)` | anon / new user | Returns pending non-expired invite row; never exposes accepted/expired rows |
-| `accept_invitation(p_token uuid, p_user_id uuid)` | newly registered user | Upserts profile (with username from auth.users metadata), sets role, upserts org_members, marks invite accepted; enforces `p_user_id = auth.uid()`; 3-tier org fallback |
+| `get_invitation_by_token(p_token uuid)` | anon / new user | Returns pending non-expired invite row with `org_id` + `org_name` (LEFT JOIN organizations); never exposes accepted/expired rows |
+| `accept_invitation(p_token uuid, p_user_id uuid)` | newly registered or logged-in user | Upserts profile (with username from auth.users metadata), sets role, upserts org_members, marks invite accepted; enforces `p_user_id = auth.uid()`; 3-tier org fallback |
 | `resolve_username(p_username text)` | anon (login page) | Maps username → email, bypassing `profiles_select` RLS; returns only `email`; granted to `anon` role |
+| `create_organization(p_name text)` | authenticated | Creates org with unique slug, inserts calling user as `owner` in `org_members`, removes any auto-created viewer membership on the bootstrap org; returns new `org_id uuid` |
+| `update_org_member_role(p_member_id uuid, p_new_role text)` | authenticated (owner/admin) | Changes a member's role within the org; enforces: caller must be owner/admin of same org; only owners can promote to `owner`; cannot demote the last owner |
+| `remove_org_member(p_member_id uuid)` | authenticated (owner/admin) | Deletes a member from the org; enforces: caller must be owner/admin; cannot remove the last owner |
+| `transfer_org_ownership(p_org_id uuid, p_target_user_id uuid)` | authenticated (owner) | Promotes target active member to `owner` role; caller retains their existing role; only existing owners may call |
+
+## UserManagement (`/users`)
+
+- Role changes use `update_org_member_role(p_member_id, p_new_role)` RPC — never direct `org_members` UPDATE
+- Member removal uses `remove_org_member(p_member_id)` RPC — never direct DELETE
+- Ownership transfer uses `transfer_org_ownership(p_org_id, p_target_user_id)` RPC
+- Admins cannot edit owner-role rows (UI disables dropdown); only owners can promote to `owner`
+- "Make Owner" action (owner-only) shows a confirmation dialog before calling transfer RPC
+- Stats row shows: Total members, Owners, Admins, Accountants
+- Invite modal role options: `admin`, `accountant`, `viewer` — `owner` excluded by design
+
+## OrgSwitcher
+
+- `src/components/ui/OrgSwitcher.tsx` — renders in TopBar; shows active org name + ChevronDown
+- Single-org view: dropdown with "+ New Organisation" entry only
+- Multi-org view: lists all memberships with role label and checkmark on active org; "+ New Organisation" at bottom with divider
+- "New Organisation" opens `<CreateOrgModal>` — calls `create_organization()` RPC → adds membership to store → navigates to `/onboarding?new=true`
+- `src/pages/Onboarding.tsx` detects `?new=true` via `useSearchParams` → shows "New Organisation" header copy vs first-time "Welcome!" copy
+- Org switching calls `useOrgSwitch().switchOrg(membership)` — updates `orgStore` + persists active org
+
+---
 
 ## handle_new_user Trigger (auth.users → profiles)
 
