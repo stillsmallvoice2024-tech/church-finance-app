@@ -322,7 +322,6 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
   onEditLocked: (c: AllocationConfig) => void
   onDelete:     (c: AllocationConfig) => void
 }) {
-  const { baseCurrencySymbol } = useOrgCurrency()
   const { configs, loading, error, fetch } = useAllocationStore()
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
@@ -483,6 +482,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
   onRefetch:    () => void
 }) {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { groups, loading, error } = useSpecialConfigGroups()
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')

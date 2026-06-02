@@ -781,6 +781,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
   onToggleHide:    (c: Category, hide: boolean) => void
   checking:        boolean
 }) {
+  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
   const { tooltip, setTooltip } = useDescriptionExpand()
 
   const displayBalances = openingBalances.filter(b => b.category_id === cat.id)
