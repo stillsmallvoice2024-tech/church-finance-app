@@ -4,10 +4,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   UserPlus, Shield, Users, User,
-  ChevronDown, Pencil, XCircle, MailOpen, Eye, EyeOff, KeyRound,
+  ChevronDown, Pencil, XCircle, MailOpen, Eye, EyeOff, KeyRound, Trash2,
 } from 'lucide-react'
-import { Modal }        from '../components/ui/Modal'
-import { DeleteDialog } from '../components/ui/DeleteDialog'
+import { Modal }           from '../components/ui/Modal'
+import { DeleteDialog }    from '../components/ui/DeleteDialog'
+import { DeleteOrgModal }  from '../components/modals/DeleteOrgModal'
 import { exportCSV }    from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { Navigate } from 'react-router-dom'
@@ -488,6 +489,7 @@ export default function UserManagement() {
   const [savingId,         setSavingId]         = useState<string | null>(null)
   const [removing,         setRemoving]         = useState(false)
   const [transferring,     setTransferring]     = useState(false)
+  const [deleteOrgOpen,    setDeleteOrgOpen]    = useState(false)
   const [currentProfile,   setCurrentProfile]   = useState({
     full_name: profile?.full_name ?? '',
     username:  profile?.username  ?? null as string | null,
@@ -805,6 +807,34 @@ export default function UserManagement() {
         )}
       </div>
 
+      {/* ── Danger Zone (owner only) ──────────────────────────────────────── */}
+      {isOwner() && (
+        <div className="mt-10 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-6">
+          <h3 className="text-sm font-semibold text-red-800 dark:text-red-300 mb-1 flex items-center gap-2">
+            <Trash2 className="w-4 h-4" />
+            Danger Zone
+          </h3>
+          <p className="text-xs text-red-600 dark:text-red-400 mb-4">
+            Irreversible actions. Proceed with extreme caution.
+          </p>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-gray-900 p-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Delete this organisation</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Locks the organisation immediately. All data is permanently deleted after 30 days unless restored.
+              </p>
+            </div>
+            <button
+              onClick={() => setDeleteOrgOpen(true)}
+              className="shrink-0 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+            >
+              Delete Organisation…
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Modals ────────────────────────────────────────────────────────── */}
       <InviteUserModal
         open={inviteOpen}
@@ -840,6 +870,11 @@ export default function UserManagement() {
         onConfirm={handleTransferOwnership}
         loading={transferring}
         label={`Transfer ownership to ${transferTarget?.full_name || transferTarget?.email || 'this member'}? They will become an owner of this organisation.`}
+      />
+
+      <DeleteOrgModal
+        open={deleteOrgOpen}
+        onClose={() => setDeleteOrgOpen(false)}
       />
     </div>
   )

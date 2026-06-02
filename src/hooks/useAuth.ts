@@ -5,7 +5,7 @@ import { useOrgStore, type OrgMembership } from '../store/orgStore'
 import { useAllocationStore } from '../store/allocationStore'
 import { useAccountCodesStore } from '../store/accountCodesStore'
 import { useReportTemplateStore } from '../store/reportTemplateStore'
-import type { UserProfile, UserRole } from '../types'
+import type { OrgStatus, UserProfile, UserRole } from '../types'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 const PROFILE_FETCH_TIMEOUT_MS = 10_000
@@ -14,8 +14,9 @@ type AuthEvent = AuthChangeEvent | 'FOCUS_REVALIDATE'
 
 // ── fetchAllOrgMemberships ─────────────────────────────────────────────────────
 // Fetches all active org memberships for the user.
-// Tries to include onboarding_complete (added in migration 20260530000000).
-// Falls back to a simpler query on pre-migration DBs (400 = unknown column).
+// Attempt 1: full columns including deletion state (requires 20260602000001).
+// Attempt 2: without deletion columns (requires 20260530000000).
+// Attempt 3: minimal fallback for very old DBs.
 async function fetchAllOrgMemberships(
   userId:      string,
   accessToken: string,
@@ -31,9 +32,9 @@ async function fetchAllOrgMemberships(
   }
   const base = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active`
 
-  // Attempt 1: with onboarding_complete + default_currency (requires migration 20260530000000)
+  // Attempt 1: full columns including deletion-lifecycle fields
   const res1 = await fetch(
-    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency)`,
+    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,status,deleted_at,purge_at)`,
     { signal, headers },
   )
 
@@ -41,7 +42,14 @@ async function fetchAllOrgMemberships(
     const rows = await res1.json() as Array<{
       org_id:        string
       role:          UserRole
-      organizations: { name: string; onboarding_complete: boolean | null; default_currency: string | null } | null
+      organizations: {
+        name:                string
+        onboarding_complete: boolean | null
+        default_currency:    string | null
+        status:              OrgStatus | null
+        deleted_at:          string | null
+        purge_at:            string | null
+      } | null
     }>
     return rows.map(row => ({
       org_id:              row.org_id,
@@ -49,31 +57,65 @@ async function fetchAllOrgMemberships(
       role:                row.role,
       onboarding_complete: row.organizations?.onboarding_complete ?? null,
       default_currency:    row.organizations?.default_currency ?? null,
+      org_status:          row.organizations?.status ?? 'active',
+      org_deleted_at:      row.organizations?.deleted_at ?? null,
+      org_purge_at:        row.organizations?.purge_at ?? null,
     }))
   }
 
-  // Attempt 2: fallback for pre-migration DBs (onboarding_complete column absent → 400)
+  // Attempt 2: without deletion columns (pre-20260602000001 DBs)
   if (res1.status === 400) {
     const res2 = await fetch(
-      `${base}&select=org_id,role,organizations(name)`,
+      `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency)`,
       { signal, headers },
     )
-    if (!res2.ok) {
-      console.warn(`[auth] fetchAllOrgMemberships fallback HTTP ${res2.status}`)
-      return []
+    if (res2.ok) {
+      const rows = await res2.json() as Array<{
+        org_id:        string
+        role:          UserRole
+        organizations: { name: string; onboarding_complete: boolean | null; default_currency: string | null } | null
+      }>
+      return rows.map(row => ({
+        org_id:              row.org_id,
+        org_name:            row.organizations?.name ?? 'My Organization',
+        role:                row.role,
+        onboarding_complete: row.organizations?.onboarding_complete ?? null,
+        default_currency:    row.organizations?.default_currency ?? null,
+        org_status:          'active' as OrgStatus,
+        org_deleted_at:      null,
+        org_purge_at:        null,
+      }))
     }
-    const rows = await res2.json() as Array<{
-      org_id:        string
-      role:          UserRole
-      organizations: { name: string } | null
-    }>
-    return rows.map(row => ({
-      org_id:              row.org_id,
-      org_name:            row.organizations?.name ?? 'My Organization',
-      role:                row.role,
-      onboarding_complete: null, // pre-migration: treat as already onboarded
-      default_currency:    null,
-    }))
+
+    // Attempt 3: minimal fallback for very old DBs
+    if (res2.status === 400) {
+      const res3 = await fetch(
+        `${base}&select=org_id,role,organizations(name)`,
+        { signal, headers },
+      )
+      if (!res3.ok) {
+        console.warn(`[auth] fetchAllOrgMemberships minimal fallback HTTP ${res3.status}`)
+        return []
+      }
+      const rows = await res3.json() as Array<{
+        org_id:        string
+        role:          UserRole
+        organizations: { name: string } | null
+      }>
+      return rows.map(row => ({
+        org_id:              row.org_id,
+        org_name:            row.organizations?.name ?? 'My Organization',
+        role:                row.role,
+        onboarding_complete: null,
+        default_currency:    null,
+        org_status:          'active' as OrgStatus,
+        org_deleted_at:      null,
+        org_purge_at:        null,
+      }))
+    }
+
+    console.warn(`[auth] fetchAllOrgMemberships attempt 2 HTTP ${res2.status}`)
+    return []
   }
 
   console.warn(`[auth] fetchAllOrgMemberships HTTP ${res1.status}`)

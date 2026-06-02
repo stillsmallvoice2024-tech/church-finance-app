@@ -1,0 +1,148 @@
+import { useState } from 'react'
+import { AlertTriangle, Download, Loader2, RefreshCw, ShieldOff } from 'lucide-react'
+import { useOrgStore } from '../../store/orgStore'
+import { useOrgDeletion } from '../../hooks/useOrgDeletion'
+import { useRole } from '../../hooks/useRole'
+
+function daysUntil(iso: string | null): number {
+  if (!iso) return 0
+  const ms = new Date(iso).getTime() - Date.now()
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)))
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+export function OrgLockedScreen() {
+  const { orgName, orgPurgeAt, orgDeletedAt } = useOrgStore()
+  const { isOwner }                            = useRole()
+  const del                                    = useOrgDeletion()
+
+  const [restoring,  setRestoring]  = useState(false)
+  const [restoreErr, setRestoreErr] = useState<string | null>(null)
+  const [restored,   setRestored]   = useState(false)
+
+  const days    = daysUntil(orgPurgeAt)
+  const dateStr = formatDate(orgPurgeAt)
+  const owner   = isOwner()
+
+  async function handleRestore() {
+    setRestoring(true)
+    setRestoreErr(null)
+    try {
+      await del.restoreOrg()
+      setRestored(true)
+      // Full page reload to re-initialise all data hooks
+      setTimeout(() => window.location.reload(), 1200)
+    } catch (e) {
+      setRestoreErr(e instanceof Error ? e.message : 'Restore failed')
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  if (restored) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950 p-4">
+        <div className="max-w-md w-full text-center space-y-4">
+          <RefreshCw className="w-12 h-12 text-green-500 mx-auto" />
+          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">Organisation restored!</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Reloading…</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
+      <div className="max-w-lg w-full">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/50 mb-4">
+            <ShieldOff className="w-8 h-8 text-red-600 dark:text-red-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Organisation Locked</h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            <span className="font-semibold">{orgName}</span> has been scheduled for deletion
+          </p>
+        </div>
+
+        {/* Countdown */}
+        <div className="rounded-xl border border-orange-200 bg-orange-50 dark:border-orange-900/40 dark:bg-orange-950/30 p-5 mb-6">
+          <div className="text-center">
+            <p className="text-4xl font-bold text-orange-700 dark:text-orange-300">{days}</p>
+            <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">
+              day{days !== 1 ? 's' : ''} until permanent deletion
+            </p>
+            <p className="text-xs text-orange-500 dark:text-orange-500 mt-2">
+              Scheduled for <span className="font-medium">{dateStr}</span>
+              {orgDeletedAt && (
+                <> · Requested on {formatDate(orgDeletedAt)}</>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {owner ? (
+          /* Owner view: restore + download options */
+          <div className="space-y-3">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-400">
+              <p className="font-medium text-gray-800 dark:text-gray-200 mb-2">You requested this deletion.</p>
+              <p>You can restore the organisation and recover all data before {dateStr}.</p>
+            </div>
+
+            {restoreErr && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30 p-3">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 dark:text-red-300">{restoreErr}</p>
+              </div>
+            )}
+
+            <button
+              onClick={handleRestore}
+              disabled={restoring || days === 0}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {restoring
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Restoring…</>
+                : <><RefreshCw className="w-4 h-4" /> Restore Organisation</>
+              }
+            </button>
+
+            <button
+              onClick={del.downloadBackupNow}
+              disabled={!del.backupReady}
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              Download backup (.json)
+            </button>
+
+            <p className="text-center text-xs text-gray-400 dark:text-gray-500">
+              {days === 0
+                ? 'The restore window has passed. Organisation will be purged shortly.'
+                : `Restore window closes on ${dateStr}.`}
+            </p>
+          </div>
+        ) : (
+          /* Non-owner view */
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 text-center space-y-3">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              You no longer have access to <span className="font-semibold">{orgName}</span>.
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Contact the organisation owner if you believe this is an error.
+            </p>
+            {days > 0 && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Data will be permanently deleted on {dateStr} unless restored by the owner.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
