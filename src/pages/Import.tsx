@@ -490,6 +490,7 @@ export default function Import() {
 // ── Manual Entry Form ──────────────────────────────────────────────────────────
 
 function ManualEntryForm() {
+  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
   const { categories }                                 = useCategories()
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
