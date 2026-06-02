@@ -186,10 +186,16 @@ export default function AcceptInvite() {
       setError(
         acceptErr.message.includes('Unauthorized')
           ? 'Session error — please refresh and try again.'
-          : 'Failed to accept invitation. It may have already been used.',
+          : acceptErr.message.includes('different email')
+          ? 'This invitation was sent to a different email address.'
+          : acceptErr.message.includes('expired')
+          ? 'This invitation has expired.'
+          : 'Failed to accept invitation. Please try again or contact your administrator.',
       )
       return
     }
+    // Refresh session so useAuth re-fetches org memberships including the new org.
+    await supabase.auth.refreshSession()
     setLoading(false)
     setDone(true)
     setTimeout(() => navigate('/', { replace: true }), 3000)
@@ -206,15 +212,23 @@ export default function AcceptInvite() {
     setLoading(true)
     const { error: acceptErr } = await supabase
       .rpc('accept_invitation', { p_token: token, p_user_id: currentUser.id })
-    setLoading(false)
     if (acceptErr) {
+      console.error('[invite] accept_invitation (loggedin flow) failed:', acceptErr)
+      setLoading(false)
       setError(
         acceptErr.message.includes('Unauthorized')
           ? 'Session error — please refresh and try again.'
-          : 'Failed to accept invitation. It may have already been used.',
+          : acceptErr.message.includes('different email')
+          ? 'This invitation was sent to a different email address.'
+          : acceptErr.message.includes('expired')
+          ? 'This invitation has expired.'
+          : 'Failed to accept invitation. Please try again or contact your administrator.',
       )
       return
     }
+    // Refresh session so useAuth re-fetches org memberships including the new org.
+    await supabase.auth.refreshSession()
+    setLoading(false)
     setDone(true)
     setTimeout(() => navigate('/', { replace: true }), 2000)
   }

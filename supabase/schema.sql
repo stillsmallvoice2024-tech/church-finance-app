@@ -788,13 +788,47 @@ begin
 
   select * into v_invite
   from   public.invitations
-  where  token      = p_token
-    and  status     = 'pending'
-    and  expires_at > now()
+  where  token = p_token
   for update;
 
   if not found then
     raise exception 'Invalid or expired invitation';
+  end if;
+
+  -- Resolve org_id:
+  --   1. org_id from the invite (Phase 5+ invites)
+  --   2. org with slug = 'primary' (legacy fallback)
+  --   3. any organization (last-resort for single-org churches without primary slug)
+  v_org_id := v_invite.org_id;
+  if v_org_id is null then
+    select id into v_org_id from public.organizations where slug = 'primary' limit 1;
+  end if;
+  if v_org_id is null then
+    select id into v_org_id from public.organizations limit 1;
+  end if;
+
+  -- Idempotency: if already accepted and user is already a member, succeed silently.
+  if v_invite.status = 'accepted' then
+    if v_org_id is not null and exists (
+      select 1 from public.org_members
+      where org_id = v_org_id and user_id = p_user_id and status = 'active'
+    ) then
+      return;
+    end if;
+    raise exception 'This invitation has already been used';
+  end if;
+
+  if v_invite.status = 'expired' or (v_invite.expires_at is not null and v_invite.expires_at <= now()) then
+    raise exception 'This invitation has expired';
+  end if;
+
+  if v_invite.status != 'pending' then
+    raise exception 'Invalid invitation';
+  end if;
+
+  -- Verify the accepting user's email matches the invite email.
+  if lower(v_invite.email) != lower((select email from auth.users where id = p_user_id)) then
+    raise exception 'This invitation is for a different email address';
   end if;
 
   -- Guarantee profile row exists; include username from metadata.
@@ -825,23 +859,20 @@ begin
         set full_name = coalesce(excluded.full_name, profiles.full_name);
   end;
 
-  -- Keep profiles.role in sync for frontend useRole() hook
-  update public.profiles
-    set role       = v_invite.role,
-        updated_at = now()
-  where id = p_user_id;
-
-  -- Resolve org_id:
-  --   1. org_id from the invite (Phase 5+ invites)
-  --   2. org with slug = 'primary' (legacy fallback)
-  --   3. any organization (last-resort for single-org churches without primary slug)
-  v_org_id := v_invite.org_id;
-  if v_org_id is null then
-    select id into v_org_id from public.organizations where slug = 'primary' limit 1;
-  end if;
-  if v_org_id is null then
-    select id into v_org_id from public.organizations limit 1;
-  end if;
+  -- Keep profiles.role in sync for frontend useRole() hook (backward compat; Phase 6 removes).
+  -- Wrapped non-fatal: profiles_update_self RLS WITH CHECK can block this for non-admin
+  -- existing users when SECURITY DEFINER doesn't bypass RLS. org_members.role is the
+  -- authoritative source for all actual permission checks.
+  begin
+    update public.profiles
+      set role       = v_invite.role,
+          updated_at = now()
+    where id = p_user_id;
+  exception when others then
+    raise warning
+      '[accept_invitation] profiles.role update failed (non-fatal) user=% sqlstate=% err=%',
+      p_user_id, sqlstate, sqlerrm;
+  end;
 
   -- Upsert org_members.role (authoritative for Phase 3 RLS helpers)
   if v_org_id is not null then
