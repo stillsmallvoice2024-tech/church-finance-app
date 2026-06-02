@@ -6,6 +6,7 @@ import { useOrgStore } from './store/orgStore'
 import './store/themeStore' // side-effect: applies stored theme class immediately
 import { supabase } from './lib/supabase'
 import { AuthGuard } from './components/auth/AuthGuard'
+import { OrgLockedScreen } from './components/layout/OrgLockedScreen'
 import { useRole } from './hooks/useRole'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
@@ -68,6 +69,18 @@ function OnboardingGuard() {
   return <Outlet />
 }
 
+// Shows OrgLockedScreen when org is pending_deletion.
+// Owner sees the locked screen with restore/download controls.
+// Non-owners see an access-denied message.
+function OrgLockedGuard() {
+  const orgStatus = useOrgStore(s => s.orgStatus)
+
+  if (orgStatus === 'pending_deletion') {
+    return <OrgLockedScreen />
+  }
+  return <Outlet />
+}
+
 export default function App() {
   useAuthListener()
   const fetchCodes = useAccountCodesStore(s => s.fetch)
@@ -112,6 +125,8 @@ export default function App() {
 
           {/* App routes — OnboardingGuard redirects to /onboarding if setup incomplete */}
           <Route element={<OnboardingGuard />}>
+          {/* OrgLockedGuard shows lock screen when org is pending_deletion */}
+          <Route element={<OrgLockedGuard />}>
           <Route element={<Layout />}>
             <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
             <Route path="inflows" element={<ErrorBoundary><Inflows /></ErrorBoundary>} />
@@ -147,6 +162,7 @@ export default function App() {
             <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
             <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
           </Route>
+          </Route> {/* OrgLockedGuard */}
           </Route> {/* OnboardingGuard */}
         </Route> {/* AuthGuard */}
 

@@ -1657,6 +1657,64 @@ ALTER TABLE public.outflow_transactions
   ADD COLUMN IF NOT EXISTS department_id uuid REFERENCES departments(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_outflow_department_id ON public.outflow_transactions(department_id);
 
+-- ── Organisation deletion lifecycle (migration 20260602000001) ────────────────
+ALTER TABLE public.organizations
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'pending_deletion')),
+  ADD COLUMN IF NOT EXISTS deleted_at            timestamptz,
+  ADD COLUMN IF NOT EXISTS purge_at              timestamptz,
+  ADD COLUMN IF NOT EXISTS deletion_requested_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS deletion_backup_path  text;
+
+CREATE INDEX IF NOT EXISTS idx_organizations_status   ON public.organizations(status);
+CREATE INDEX IF NOT EXISTS idx_organizations_purge_at ON public.organizations(purge_at);
+
+ALTER TABLE public.audit_log
+  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_log_org_id ON public.audit_log(org_id);
+
+CREATE TABLE IF NOT EXISTS public.org_deletion_backups (
+  id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id           uuid        NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  created_by       uuid        REFERENCES public.profiles(id) ON DELETE SET NULL,
+  backup_path      text        NOT NULL,
+  file_size_bytes  bigint,
+  status           text        NOT NULL DEFAULT 'available'
+                               CHECK (status IN ('generating', 'available', 'expired', 'failed')),
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  expires_at       timestamptz NOT NULL
+);
+ALTER TABLE public.org_deletion_backups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "del_backup_owner_select" ON public.org_deletion_backups;
+DO $$ BEGIN
+  CREATE POLICY "del_backup_owner_select" ON public.org_deletion_backups
+    FOR SELECT USING (
+      EXISTS (
+        SELECT 1 FROM public.org_members
+        WHERE org_id  = org_deletion_backups.org_id
+          AND user_id = auth.uid()
+          AND role    = 'owner'
+          AND status  = 'active'
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "del_backup_rpc_insert" ON public.org_deletion_backups
+    FOR INSERT WITH CHECK (false);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "del_backup_owner_delete" ON public.org_deletion_backups
+    FOR DELETE USING (
+      EXISTS (
+        SELECT 1 FROM public.org_members
+        WHERE org_id  = org_deletion_backups.org_id
+          AND user_id = auth.uid()
+          AND role    = 'owner'
+          AND status  = 'active'
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────

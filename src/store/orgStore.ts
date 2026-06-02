@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { UserRole } from '../types'
+import type { OrgStatus, UserRole } from '../types'
 
 export interface OrgMembership {
   org_id:               string
@@ -7,6 +7,9 @@ export interface OrgMembership {
   role:                 UserRole
   onboarding_complete?: boolean | null
   default_currency?:    string | null
+  org_status?:          OrgStatus | null
+  org_deleted_at?:      string | null
+  org_purge_at?:        string | null
 }
 
 const activeOrgKey = (userId: string) => `org-active-${userId}`
@@ -17,12 +20,16 @@ interface OrgState {
   orgRole:             UserRole | null
   onboardingComplete:  boolean | null
   defaultCurrency:     string | null
+  orgStatus:           OrgStatus | null
+  orgDeletedAt:        string | null
+  orgPurgeAt:          string | null
   memberships:         OrgMembership[]
   switching:           boolean
 
   setOrg:               (m: OrgMembership) => void
   setMemberships:       (ms: OrgMembership[]) => void
   setOnboardingComplete:(v: boolean | null) => void
+  setOrgStatus:         (status: OrgStatus, deletedAt?: string | null, purgeAt?: string | null) => void
   setSwitching:         (v: boolean) => void
   clearOrg:             () => void
   persistActive:        (userId: string, orgId: string) => void
@@ -35,6 +42,9 @@ export const useOrgStore = create<OrgState>((set) => ({
   orgRole:            null,
   onboardingComplete: null,
   defaultCurrency:    null,
+  orgStatus:          null,
+  orgDeletedAt:       null,
+  orgPurgeAt:         null,
   memberships:        [],
   switching:          false,
 
@@ -44,15 +54,26 @@ export const useOrgStore = create<OrgState>((set) => ({
     orgRole:            m.role,
     onboardingComplete: m.onboarding_complete !== undefined ? (m.onboarding_complete ?? null) : null,
     defaultCurrency:    m.default_currency !== undefined ? (m.default_currency ?? null) : null,
+    orgStatus:          m.org_status ?? 'active',
+    orgDeletedAt:       m.org_deleted_at ?? null,
+    orgPurgeAt:         m.org_purge_at ?? null,
   }),
 
   setMemberships: (ms) => set({ memberships: ms }),
 
   setOnboardingComplete: (v) => set({ onboardingComplete: v }),
 
+  setOrgStatus: (status, deletedAt = null, purgeAt = null) =>
+    set({ orgStatus: status, orgDeletedAt: deletedAt, orgPurgeAt: purgeAt }),
+
   setSwitching: (v) => set({ switching: v }),
 
-  clearOrg: () => set({ orgId: null, orgName: null, orgRole: null, onboardingComplete: null, defaultCurrency: null, memberships: [], switching: false }),
+  clearOrg: () => set({
+    orgId: null, orgName: null, orgRole: null,
+    onboardingComplete: null, defaultCurrency: null,
+    orgStatus: null, orgDeletedAt: null, orgPurgeAt: null,
+    memberships: [], switching: false,
+  }),
 
   persistActive: (userId, orgId) => {
     try { localStorage.setItem(activeOrgKey(userId), orgId) } catch { /* storage unavailable */ }
