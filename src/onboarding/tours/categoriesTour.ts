@@ -4,38 +4,38 @@ export const categoriesTour: TourDefinition = {
   id: 'categoriesTour',
   pageId: 'categories',
   title: 'Categories Tour',
-  description: 'Learn how income and outflow categories organise your finances.',
+  description: 'Learn how categories organise your financial transactions.',
   steps: [
     {
       id: 'categories-header',
       target: '[data-tour="page-header"]',
       title: 'Categories',
       content:
-        'Categories group your transactions for reporting. Every inflow and outflow is assigned a category, which drives the financial report and budget analysis.',
+        'Categories group your transactions for reporting. Every inflow and outflow is assigned a category, driving your financial reports and budget analysis.',
       placement: 'bottom',
     },
     {
-      id: 'categories-income',
-      target: '[data-tour="income-types"]',
-      title: 'Income Types',
+      id: 'categories-controls',
+      target: '[data-tour="data-controls"]',
+      title: 'Search & Sort',
       content:
-        'Income types classify your inflows (e.g. Tithes, Offerings, Donations). Each type can have its own allocation rules and reporting labels.',
+        'Use the search bar and sort controls to find specific categories. Switch between card and table views using the view toggle.',
       placement: 'bottom',
     },
     {
-      id: 'categories-outflow',
-      target: '[data-tour="outflow-types"]',
-      title: 'Outflow Types',
+      id: 'categories-list',
+      target: '[data-tour="categories-list"]',
+      title: 'Category List',
       content:
-        'Outflow types classify your expenditure (e.g. Salaries, Utilities, Events). Well-named categories make your financial reports easier to read.',
-      placement: 'bottom',
+        'All your income and expense categories are listed here. Click any category to edit its name, colour, or group. Well-named categories make your reports easier to read.',
+      placement: 'top',
     },
     {
       id: 'categories-add',
       target: '[data-tour="add-button"]',
       title: 'Adding Categories',
       content:
-        'Click Add to create a new income or outflow type. Changes take effect immediately for all future transaction imports.',
+        'Click Add to create a new income or outflow category. Changes take effect immediately for all future transaction imports.',
       placement: 'left',
     },
   ],

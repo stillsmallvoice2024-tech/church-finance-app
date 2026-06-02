@@ -25,6 +25,8 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { exportCSV }               from '../utils/csvExport'
 import { supabase }                from '../lib/supabase'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
+import { HelpButton }              from '../components/onboarding/HelpButton'
+import { Link }                    from 'react-router-dom'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -240,12 +242,20 @@ export default function Inflows() {
       <div className="space-y-5">
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Inflow Transactions</h1>
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
+            <HelpButton tourId="inflowsTour" size="sm" />
+            <Link
+              to="/import"
+              data-tour="import-link"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Import
+            </Link>
             <ExportDropdown
               onExportView={handleExportView}
               onExportAll={handleExportAll}
@@ -255,7 +265,7 @@ export default function Inflows() {
         </div>
 
         {/* Filter bar */}
-        <Card>
+        <Card data-tour="data-controls">
           <div className="flex flex-wrap gap-3 items-end">
             <FilterGroup label="From">
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
@@ -387,7 +397,7 @@ export default function Inflows() {
           />
         )}
 
-        {infState.view === 'table' && <Card padding={false}>
+        {infState.view === 'table' && <Card padding={false} data-tour="data-table">
           <BulkActionBar
             count={selectedIds.size}
             onClear={clearAll}

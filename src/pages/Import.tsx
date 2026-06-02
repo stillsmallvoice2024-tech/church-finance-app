@@ -6,6 +6,7 @@ import {
   TrendingUp, TrendingDown, Sparkles,
 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
+import { HelpButton } from '../components/onboarding/HelpButton'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
@@ -233,11 +234,14 @@ export default function Import() {
     <div className="space-y-5">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Import Transactions</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Upload a bank statement or enter transactions manually
-        </p>
+      <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Import Transactions</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Upload a bank statement or enter transactions manually
+          </p>
+        </div>
+        <HelpButton tourId="importTour" size="sm" className="self-start" />
       </div>
 
       {/* Tab bar */}
@@ -265,6 +269,7 @@ export default function Import() {
           {/* Drop zone */}
           {!parseResult ? (
             <div
+              data-tour="upload-zone"
               onDragOver={e => { e.preventDefault(); setDragging(true) }}
               onDragLeave={() => setDragging(false)}
               onDrop={handleDrop}
@@ -311,7 +316,7 @@ export default function Import() {
               </div>
 
               {/* Duplicate detection results */}
-              <div className="px-5 py-4 space-y-3">
+              <div data-tour="duplicate-check" className="px-5 py-4 space-y-3">
                 {/* PDF — no dup check */}
                 {dupChecked && parseResult.fileName.match(/\.pdf$/i) && (
                   <div className="flex items-start gap-3 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
@@ -400,7 +405,7 @@ export default function Import() {
                     </div>
 
                     {/* Buttons */}
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div data-tour="import-confirm" className="flex flex-wrap items-center gap-3">
                       {duplicates.length > 0 ? (
                         <>
                           <button

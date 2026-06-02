@@ -6,6 +6,7 @@ import { useRole }  from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { useThemeStore } from '../store/themeStore'
 import { usePageTitle } from '../hooks/usePageTitle'
+import { HelpButton }  from '../components/onboarding/HelpButton'
 import { ROLE_LABELS } from '../utils/constants'
 import { BackupModal }     from '../components/modals/BackupModal'
 import { RestoreModal }    from '../components/modals/RestoreModal'
@@ -129,12 +130,16 @@ export default function Settings() {
   return (
     <div className="space-y-5 max-w-2xl">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your account and preferences</p>
+      <div data-tour="page-header" className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Manage your account and preferences</p>
+        </div>
+        <HelpButton tourId="settingsTour" size="sm" />
       </div>
 
       {/* ── My Profile ──────────────────────────────────────────────────── */}
+      <div data-tour="org-settings">
       <Section icon={User} title="My Profile">
         <div className="space-y-4">
           {/* Avatar + info row */}
@@ -215,6 +220,7 @@ export default function Settings() {
           </button>
         </div>
       </Section>
+      </div>
 
       {/* ── Change Password ──────────────────────────────────────────────── */}
       <Section icon={Lock} title="Change Password">
@@ -281,6 +287,7 @@ export default function Settings() {
       </Section>
 
       {/* ── Theme ───────────────────────────────────────────────────────── */}
+      <div data-tour="appearance-settings">
       <Section icon={Palette} title="Theme">
         <div className="space-y-4">
           <p className="text-sm text-gray-500">Choose your preferred colour scheme. Your preference is saved automatically.</p>
@@ -308,6 +315,7 @@ export default function Settings() {
           </div>
         </div>
       </Section>
+      </div>
 
       {/* ── Data Management ─────────────────────────────────────────────── */}
       <Section icon={Database} title="Data Management">

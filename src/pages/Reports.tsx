@@ -12,6 +12,7 @@ import { useOutflowTypes } from '../hooks/useOutflowTypes'
 import { useDepartments } from '../hooks/useDepartments'
 import { ReportDateFilter, useReportDateFilter } from '../components/ui/ReportDateFilter'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { HelpButton }    from '../components/onboarding/HelpButton'
 
 type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'departments' | 'fx' | 'audit'
 
@@ -374,7 +375,7 @@ function IncomeTypeBreakdownPanel() {
     <ReportSection
       title="Income Type Breakdown"
       onExport={rows.length > 0 ? handleExport : undefined}
-      extra={<ReportDateFilter hook={filter} />}
+      extra={<span data-tour="period-selector"><ReportDateFilter hook={filter} /></span>}
     >
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
@@ -1159,17 +1160,20 @@ export default function Reports() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between print:hidden">
+      <div data-tour="page-header" className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Reports</h1>
           <p className="text-sm text-gray-500 mt-0.5">Financial summaries and analytics</p>
         </div>
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
-        >
-          <Printer className="w-4 h-4" /> Print
-        </button>
+        <div className="flex items-center gap-2">
+          <HelpButton tourId="reportsTour" size="sm" />
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+          >
+            <Printer className="w-4 h-4" /> Print
+          </button>
+        </div>
       </div>
 
       {/* Print-only heading */}
@@ -1179,7 +1183,7 @@ export default function Reports() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit max-w-full print:hidden overflow-x-auto">
+      <div data-tour="report-template" className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit max-w-full print:hidden overflow-x-auto">
         {visibleTabs.map(t => (
           <button
             key={t.id}
