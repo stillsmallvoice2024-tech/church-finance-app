@@ -178,9 +178,28 @@ Toast container uses `.toast-safe-bottom` (CSS var `--tab-bar-height: 64px`) on 
 
 - **Mobile full-screen:** below `sm` the panel fills the viewport (`h-full`, no border-radius). Centred card layout at `sm`+.
 - **`footer` prop:** pass action buttons here — rendered in a sticky strip below the scrollable body, always visible regardless of form length. Give the `<form>` an `id` and use `form={id}` on the submit button.
-- **`isDirty` prop:** when `true`, ESC / backdrop / × show a "Discard changes?" overlay instead of closing immediately. Cancel buttons inside the form bypass this guard (explicit intent).
-  - react-hook-form modals: pass `formState.isDirty`
-  - Controlled-state modals: snapshot initial values in a `useRef` on open and compare
+- **`isDirty` prop:** when `true`, ESC / backdrop / × show a "Discard changes?" overlay instead of closing immediately. **Cancel buttons must also route through this guard** — use `modalRef.current?.requestClose()`, not `onClose()` directly.
+  - **RHF modals:** `isDirty={formState.isDirty}` — react-hook-form tracks field-level diffs automatically.
+  - **Controlled-state modals (simple):** snapshot initial values in `initialRef = useRef({...})` on open; compare current state to `initialRef.current` in the `isDirty` expression.
+  - **Async-loaded state (e.g. fetched mappings):** use a `wasModified` boolean — set `false` on open, `true` in every user-interaction handler. Avoids false positives from async state arriving after the snapshot.
+  - **Array state (e.g. rows[], rules[]):** `JSON.stringify(rows) !== JSON.stringify(initialRowsRef.current)` — snapshot a plain-value copy in a `useRef` at open time alongside the array state.
+  - **Mixed (RHF + extra state):** `isDirty = formIsDirty || extraDirty` where `extraDirty` uses one of the above strategies.
+
+- **`ModalHandle` ref pattern** — required for Cancel buttons to route through the guard:
+  ```tsx
+  import { Modal, type ModalHandle } from '../ui/Modal'
+  // (for modals that import ModalHandle but not other named exports, use a split import:)
+  // import type { ModalHandle } from '../ui/Modal'
+  // import { Modal } from '../ui/Modal'
+
+  const modalRef = useRef<ModalHandle>(null)
+
+  // Modal tag:
+  <Modal ref={modalRef} open={open} onClose={onClose} isDirty={isDirty} disableClose={loading} ...>
+
+  // Cancel / Close buttons:
+  <button onClick={() => modalRef.current?.requestClose()}>Cancel</button>
+  ```
 - **`disableClose` prop:** blocks ALL close paths — X button visually disabled (`text-gray-200 cursor-not-allowed`), ESC no-op, backdrop no-op. Use during async processing to prevent mid-operation dismissal.
 - **`disableBackdropClose` prop:** backdrop click does nothing; X and ESC still work (subject to `isDirty` guard). Use for wizards where accidental backdrop tap is a high risk.
 - **Custom confirm dialog text:** `confirmTitle`, `confirmMessage`, `confirmKeepLabel`, `confirmDiscardLabel` props override the default "Discard changes?" overlay copy. Pass these when the modal context needs domain-specific wording (e.g. "Discard import progress?" / "Continue Import").
