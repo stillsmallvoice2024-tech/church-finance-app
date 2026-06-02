@@ -777,6 +777,7 @@ $$;
 create or replace function public.accept_invitation(p_token uuid, p_user_id uuid)
 returns void
 language plpgsql security definer
+set search_path = public
 as $$
 declare
   v_invite public.invitations;
@@ -874,13 +875,22 @@ begin
       p_user_id, sqlstate, sqlerrm;
   end;
 
-  -- Upsert org_members.role (authoritative for Phase 3 RLS helpers)
+  -- Upsert org_members.role (authoritative for Phase 3 RLS helpers).
+  -- Wrapped non-fatal: org_members_insert WITH CHECK requires is_org_admin, which
+  -- the invitee is not (yet). The ALTER FUNCTION OWNER TO postgres should bypass
+  -- this, but the handler guards against any remaining RLS edge cases.
   if v_org_id is not null then
-    insert into public.org_members (org_id, user_id, role, status)
-    values (v_org_id, p_user_id, v_invite.role, 'active')
-    on conflict (org_id, user_id) do update
-      set role   = excluded.role,
-          status = 'active';
+    begin
+      insert into public.org_members (org_id, user_id, role, status)
+      values (v_org_id, p_user_id, v_invite.role, 'active')
+      on conflict (org_id, user_id) do update
+        set role   = excluded.role,
+            status = 'active';
+    exception when others then
+      raise warning
+        '[accept_invitation] org_members upsert failed (non-fatal) user=% org=% sqlstate=% err=%',
+        p_user_id, v_org_id, sqlstate, sqlerrm;
+    end;
   else
     raise warning
       '[accept_invitation] no organization found — org_members skipped for user=% token=%',

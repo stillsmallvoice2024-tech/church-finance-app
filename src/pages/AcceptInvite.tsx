@@ -190,7 +190,9 @@ export default function AcceptInvite() {
           ? 'This invitation was sent to a different email address.'
           : acceptErr.message.includes('expired')
           ? 'This invitation has expired.'
-          : 'Failed to accept invitation. Please try again or contact your administrator.',
+          : acceptErr.message.includes('already been used')
+          ? 'This invitation has already been used.'
+          : acceptErr.message,
       )
       return
     }
@@ -222,7 +224,9 @@ export default function AcceptInvite() {
           ? 'This invitation was sent to a different email address.'
           : acceptErr.message.includes('expired')
           ? 'This invitation has expired.'
-          : 'Failed to accept invitation. Please try again or contact your administrator.',
+          : acceptErr.message.includes('already been used')
+          ? 'This invitation has already been used.'
+          : acceptErr.message,
       )
       return
     }
