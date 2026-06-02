@@ -73,6 +73,7 @@ const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_na
 function SummaryStrip({ total, count, largest, average, loading }: {
   total: number; count: number; largest: number; average: number; loading: boolean
 }) {
+  const { baseCurrencyCode } = useOrgCurrency()
   const items = [
     { label: 'Total (page)', value: formatCurrencyCompact(total, baseCurrencyCode) },
     { label: 'Records',      value: count.toLocaleString() },

@@ -701,6 +701,7 @@ function SourceBadge({ source }: { source: DepositRow['source'] }) {
 }
 
 function ReconRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  const { baseCurrencyCode } = useOrgCurrency()
   const isNonZero = value !== 0
   return (
     <div className="flex items-center justify-between text-sm">
