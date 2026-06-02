@@ -64,6 +64,7 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
   editRecord: TransferRow | null
   banks: { id: string; name: string }[]
 }) {
+  const { baseCurrencySymbol } = useOrgCurrency()
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState<string | null>(null)
   const { user } = useAuthStore.getState()
