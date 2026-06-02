@@ -5,6 +5,7 @@ import { TopBar } from './TopBar'
 import { BottomTabBar } from './BottomTabBar'
 import { ToastContainer } from '../ui/Toast'
 import { FloatingCalculator } from '../ui/FloatingCalculator'
+import { TourEngine } from '../onboarding/TourEngine'
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -33,6 +34,7 @@ export function Layout() {
       <BottomTabBar />
       <ToastContainer />
       <FloatingCalculator />
+      <TourEngine />
     </div>
   )
 }
