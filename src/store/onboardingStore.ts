@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { TourId } from '../types/onboarding'
 
 interface OnboardingState {
+  // ── Tour ─────────────────────────────────────────────────────────────────────
   activeTourId: TourId | null
   activeTourStep: number
   isTourOpen: boolean
@@ -11,9 +12,15 @@ interface OnboardingState {
   prevStep: () => void
   setStep: (step: number) => void
   exitTour: () => void
+
+  // ── Setup Wizard ──────────────────────────────────────────────────────────────
+  isWizardOpen: boolean
+  openWizard: () => void
+  closeWizard: () => void
 }
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
+  // ── Tour ─────────────────────────────────────────────────────────────────────
   activeTourId: null,
   activeTourStep: 0,
   isTourOpen: false,
@@ -32,4 +39,9 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
 
   exitTour: () =>
     set({ isTourOpen: false, activeTourId: null, activeTourStep: 0 }),
+
+  // ── Setup Wizard ──────────────────────────────────────────────────────────────
+  isWizardOpen: false,
+  openWizard:  () => set({ isWizardOpen: true }),
+  closeWizard: () => set({ isWizardOpen: false }),
 }))
