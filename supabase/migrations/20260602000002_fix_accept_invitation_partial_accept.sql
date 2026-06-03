@@ -10,6 +10,12 @@
 --   2. Directly repairs any existing stuck invites for odunayoomitoyin@gmail.com.
 -- ============================================================
 
+-- accepted_at was in schema.sql from the start but was never backfilled via
+-- ALTER TABLE in any migration. Live DBs created before schema.sql was updated
+-- are missing this column, causing accept_invitation to crash on the final UPDATE.
+ALTER TABLE public.invitations
+  ADD COLUMN IF NOT EXISTS accepted_at timestamptz;
+
 CREATE OR REPLACE FUNCTION public.accept_invitation(p_token uuid, p_user_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
