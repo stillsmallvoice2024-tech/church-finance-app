@@ -35,7 +35,8 @@ import {
   handleCategoryDeleteCleanup,
 } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
-import { HelpButton }    from '../components/onboarding/HelpButton'
+import { HelpButton }      from '../components/onboarding/HelpButton'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -354,6 +355,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
 
 export default function Categories() {
   usePageTitle('Categories')
+  useFirstVisitTour('categories')
   const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
 
   const { categories, loading, error, refetch }    = useCategories()

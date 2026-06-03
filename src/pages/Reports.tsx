@@ -12,7 +12,8 @@ import { useOutflowTypes } from '../hooks/useOutflowTypes'
 import { useDepartments } from '../hooks/useDepartments'
 import { ReportDateFilter, useReportDateFilter } from '../components/ui/ReportDateFilter'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
-import { HelpButton }    from '../components/onboarding/HelpButton'
+import { HelpButton }      from '../components/onboarding/HelpButton'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'departments' | 'fx' | 'audit'
 
@@ -1144,6 +1145,7 @@ export default function Reports() {
   const { isAdmin }   = useRole()
 
   usePageTitle('Reports')
+  useFirstVisitTour('reports')
 
   const allTabs: { id: ReportTab; label: string; adminOnly?: boolean }[] = [
     { id: 'annual',        label: 'Annual Summary'         },

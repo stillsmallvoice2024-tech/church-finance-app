@@ -6,7 +6,8 @@ import { useRole }  from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { useThemeStore } from '../store/themeStore'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { HelpButton }  from '../components/onboarding/HelpButton'
+import { HelpButton }      from '../components/onboarding/HelpButton'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { ROLE_LABELS } from '../utils/constants'
 import { BackupModal }     from '../components/modals/BackupModal'
 import { RestoreModal }    from '../components/modals/RestoreModal'
@@ -67,6 +68,7 @@ export default function Settings() {
   const { status: dbStatus, latency, recheck } = useDbStatus()
 
   usePageTitle('Settings')
+  useFirstVisitTour('settings')
 
   const { theme, setTheme } = useThemeStore()
 

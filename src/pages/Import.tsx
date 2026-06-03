@@ -6,7 +6,8 @@ import {
   TrendingUp, TrendingDown, Sparkles,
 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
-import { HelpButton } from '../components/onboarding/HelpButton'
+import { HelpButton }       from '../components/onboarding/HelpButton'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
@@ -94,6 +95,7 @@ export default function Import() {
   const { banks } = useBanks()
   const fileInputRef = useRef<HTMLInputElement>(null)
   usePageTitle('Import')
+  useFirstVisitTour('import')
 
   // Bank name derived from the selected bank ID — used for scoped dup checks.
   const selectedBankName = useMemo(

@@ -29,7 +29,8 @@ import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeningBalance'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
-import { HelpButton }    from '../components/onboarding/HelpButton'
+import { HelpButton }      from '../components/onboarding/HelpButton'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ const BL_SORT_FIELDS = deriveSortFields(BL_COLUMNS)
 
 export default function BankLedger() {
   usePageTitle('Bank Ledger')
+  useFirstVisitTour('bank-ledger')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const { banks, loading: banksLoading, error: banksError } = useBanks()

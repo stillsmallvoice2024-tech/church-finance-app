@@ -19,7 +19,8 @@ import { usePageTitle }  from '../hooks/usePageTitle'
 import { supabase }     from '../lib/supabase'
 import { useOrgStore }  from '../store/orgStore'
 import type { UserRole } from '../types'
-import { HelpButton }   from '../components/onboarding/HelpButton'
+import { HelpButton }      from '../components/onboarding/HelpButton'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // Org-member row — flattened from org_members + profiles join.
 // Role and identity are sourced from org_members (not profiles.role).
@@ -479,6 +480,7 @@ export default function UserManagement() {
   const { orgId }         = useOrgStore()
 
   usePageTitle('User Management')
+  useFirstVisitTour('users')
 
   const [members,          setMembers]          = useState<OrgMember[]>([])
   const [loading,          setLoading]          = useState(true)

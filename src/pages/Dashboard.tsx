@@ -31,6 +31,7 @@ import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
 import { OnboardingChecklist }     from '../components/onboarding/OnboardingChecklist'
 import { HelpButton }              from '../components/onboarding/HelpButton'
+import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ export default function Dashboard() {
 
   usePageTitle('Dashboard')
   useWizardAutoShow()
+  useFirstVisitTour('dashboard')
 
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
