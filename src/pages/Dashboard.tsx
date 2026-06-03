@@ -31,6 +31,7 @@ import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
 import { OnboardingChecklist }     from '../components/onboarding/OnboardingChecklist'
 import { HelpButton }              from '../components/onboarding/HelpButton'
+import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBanner'
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -134,6 +135,9 @@ export default function Dashboard() {
   return (
     <>
       <div className="space-y-6">
+
+        {/* ── Announcement banner ───────────────────────────────────────────── */}
+        <AnnouncementBanner />
 
         {/* ── Welcome + Quick Actions ──────────────────────────────────────── */}
         <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

@@ -248,9 +248,10 @@ function FAQItem({ faq, isOpen, onToggle }: { faq: FAQEntry; isOpen: boolean; on
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function HelpCenter() {
-  const isOpen        = useOnboardingStore(s => s.isHelpCenterOpen)
-  const closeCenter   = useOnboardingStore(s => s.closeHelpCenter)
-  const startTour     = useOnboardingStore(s => s.startTour)
+  const isOpen           = useOnboardingStore(s => s.isHelpCenterOpen)
+  const closeCenter      = useOnboardingStore(s => s.closeHelpCenter)
+  const startTour        = useOnboardingStore(s => s.startTour)
+  const initialTab       = useOnboardingStore(s => s.helpCenterInitialTab)
 
   const [tab, setTab]         = useState<TabId>('articles')
   const [query, setQuery]     = useState('')
@@ -258,10 +259,10 @@ export function HelpCenter() {
   const [selectedArticle, setSelectedArticle] = useState<HelpArticle | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Reset state on open
+  // Reset state on open, respecting initialTab
   useEffect(() => {
     if (isOpen) {
-      setTab('articles')
+      setTab((initialTab as TabId | null) ?? 'articles')
       setQuery('')
       setSelectedArticle(null)
       setOpenFAQ(null)
