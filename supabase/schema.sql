@@ -333,7 +333,7 @@ create table public.ledger_entries (
 create table public.fx_transactions (
   id              uuid default gen_random_uuid() primary key,
   date            date not null,
-  currency        text not null check (currency in ('USD','GBP','EUR','CNY')),
+  currency        text not null,
   transaction_ref text,
   narration       text,
   deposit         numeric(15,4) default 0,
