@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Calculator, X, Copy, Check, History, Trash2, ChevronLeft } from 'lucide-react'
+import { Calculator, X, Copy, Check, History, Trash2, ChevronLeft, GripHorizontal } from 'lucide-react'
 import { useCalculatorStore } from '../../store/calculatorStore'
 import { useAuthStore } from '../../store/authStore'
 
@@ -47,13 +47,44 @@ const KEYBOARD_MAP: Record<string, string> = {
   '%': '%',
 }
 
+const PANEL_W = 288
+
 function formatDisplay(val: string): string {
   if (val === 'Error') return 'Error'
   if (val.length <= 9) return val
-  // For long values, try exponential notation
   const num = parseFloat(val)
   if (!isFinite(num)) return val
   return num.toExponential(3)
+}
+
+function parseClipboardNumber(text: string): string | null {
+  const t = text.trim()
+  if (!t) return null
+  // Strip everything except digits, dot, comma, leading minus
+  let cleaned = t.replace(/[^\d.,-]/g, '')
+  if (!cleaned) return null
+  // Detect decimal separator: if last separator is comma → European format
+  const lastComma = cleaned.lastIndexOf(',')
+  const lastDot = cleaned.lastIndexOf('.')
+  let normalized: string
+  if (lastComma > lastDot) {
+    normalized = cleaned.replace(/\./g, '').replace(',', '.')
+  } else {
+    normalized = cleaned.replace(/,/g, '')
+  }
+  if (t.startsWith('-') && !normalized.startsWith('-')) normalized = '-' + normalized
+  const num = parseFloat(normalized)
+  if (!isFinite(num) || isNaN(num)) return null
+  return normalized
+}
+
+function getDefaultPos() {
+  const margin = 16
+  const panelH = 420
+  return {
+    x: window.innerWidth - PANEL_W - margin,
+    y: Math.max(8, window.innerHeight - panelH - 80),
+  }
 }
 
 export function FloatingCalculator() {
@@ -68,12 +99,18 @@ export function FloatingCalculator() {
     clearPageHistory,
     recallFromHistory,
     handleKey,
+    pasteNumber,
     pages,
     currentPage,
   } = useCalculatorStore()
 
   const panelRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
+
+  // Drag state
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null)
+  const isDraggingRef = useRef(false)
+  const dragOffsetRef = useRef({ x: 0, y: 0 })
 
   const pageState = pages[currentPage] ?? {
     displayValue: '0',
@@ -85,17 +122,25 @@ export function FloatingCalculator() {
     justEvaluated: false,
   }
 
-  // Sync route → store current page key
   useEffect(() => {
     setCurrentPage(location.pathname)
   }, [location.pathname, setCurrentPage])
 
-  // Clear all histories on logout
   useEffect(() => {
-    if (!user) clearAllHistories()
+    if (!user) {
+      clearAllHistories()
+      setPanelPos(null)
+    }
   }, [user, clearAllHistories])
 
-  // Deactivate (fade) when clicking outside the panel
+  // Set default position when panel first opens
+  useEffect(() => {
+    if (isOpen && panelPos === null) {
+      setPanelPos(getDefaultPos())
+    }
+  }, [isOpen, panelPos])
+
+  // Deactivate when clicking outside
   useEffect(() => {
     if (!isOpen) return
     const handler = (e: MouseEvent) => {
@@ -107,15 +152,12 @@ export function FloatingCalculator() {
     return () => document.removeEventListener('mousedown', handler)
   }, [isOpen, setActive])
 
-  // Keyboard input handler
+  // Keyboard input
   useEffect(() => {
     if (!isOpen) return
     const handler = (e: KeyboardEvent) => {
-      // Don't intercept when a blocking modal is open
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
-
       const target = e.target as HTMLElement
-      // Don't intercept keys from external form elements
       const isExternalForm =
         !panelRef.current?.contains(target) &&
         (target.tagName === 'INPUT' ||
@@ -123,13 +165,9 @@ export function FloatingCalculator() {
           target.isContentEditable ||
           target.tagName === 'SELECT')
       if (isExternalForm) return
-
-      // Skip browser shortcuts
       if (e.altKey || e.ctrlKey || e.metaKey) return
-
       const calcKey = KEYBOARD_MAP[e.key]
       if (!calcKey) return
-
       e.preventDefault()
       setActive(true)
       handleKey(calcKey)
@@ -137,6 +175,57 @@ export function FloatingCalculator() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [isOpen, handleKey, setActive])
+
+  // Paste input
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: ClipboardEvent) => {
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
+      const target = e.target as HTMLElement
+      const isExternalForm =
+        !panelRef.current?.contains(target) &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.tagName === 'SELECT')
+      if (isExternalForm) return
+      const text = e.clipboardData?.getData('text') ?? ''
+      const num = parseClipboardNumber(text)
+      if (!num) return
+      e.preventDefault()
+      setActive(true)
+      pasteNumber(num)
+    }
+    window.addEventListener('paste', handler)
+    return () => window.removeEventListener('paste', handler)
+  }, [isOpen, pasteNumber, setActive])
+
+  // Drag: global pointer move/up
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!isDraggingRef.current) return
+      const x = Math.max(0, Math.min(window.innerWidth - PANEL_W, e.clientX - dragOffsetRef.current.x))
+      const y = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - dragOffsetRef.current.y))
+      setPanelPos({ x, y })
+    }
+    const onUp = () => { isDraggingRef.current = false }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [])
+
+  const handleHeaderPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    const rect = panelRef.current?.getBoundingClientRect()
+    if (!rect) return
+    e.preventDefault()
+    dragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    isDraggingRef.current = true
+    setActive(true)
+  }, [setActive])
 
   const handleCopy = useCallback(async () => {
     const val = pageState.displayValue
@@ -148,39 +237,49 @@ export function FloatingCalculator() {
     } catch { /* clipboard access denied */ }
   }, [pageState.displayValue])
 
-  // AC shows when display is '0' or waiting; CE shows when there's an active entry
   const acLabel = !pageState.waitingForOperand && pageState.displayValue !== '0' ? 'CE' : 'AC'
-
   const displayStr = formatDisplay(pageState.displayValue)
   const displayFontSize = displayStr.length > 8 ? 'text-2xl' : displayStr.length > 6 ? 'text-3xl' : 'text-4xl'
 
   if (!user) return null
 
+  const pos = panelPos ?? getDefaultPos()
+
   return (
-    <div
-      className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 flex flex-col items-end gap-2 z-[49]"
-      style={{ pointerEvents: 'none' }}
-    >
+    <>
       {/* Calculator Panel */}
       {isOpen && (
         <div
           ref={panelRef}
-          style={{ pointerEvents: 'auto' }}
+          style={{
+            position: 'fixed',
+            left: pos.x,
+            top: pos.y,
+            width: PANEL_W,
+            zIndex: 49,
+            pointerEvents: 'auto',
+          }}
           onMouseDown={() => setActive(true)}
           className={[
-            'w-72 rounded-2xl shadow-2xl border bg-white overflow-hidden',
-            'transition-all duration-200',
-            isActive
-              ? 'opacity-100 border-gray-200 shadow-2xl'
-              : 'opacity-60 border-gray-300 shadow-lg',
+            'rounded-2xl shadow-2xl border bg-white overflow-hidden',
+            'transition-opacity duration-200',
+            isActive ? 'opacity-100 border-gray-200' : 'opacity-60 border-gray-300',
           ].join(' ')}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
-            <span className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 select-none">
+          {/* Header / drag handle */}
+          <div
+            onPointerDown={handleHeaderPointerDown}
+            className={[
+              'flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100',
+              'select-none',
+              isDraggingRef.current ? 'cursor-grabbing' : 'cursor-grab',
+            ].join(' ')}
+          >
+            <span className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
               <Calculator className="w-3.5 h-3.5" />
               Calculator
             </span>
+            <GripHorizontal className="w-3.5 h-3.5 text-gray-300 flex-1 mx-2" />
             <div className="flex items-center gap-0.5">
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -208,7 +307,7 @@ export function FloatingCalculator() {
             </div>
           </div>
 
-          {/* Body: calculator face OR history */}
+          {/* Body */}
           {showHistory ? (
             <HistoryPanel
               history={pageState.history}
@@ -220,11 +319,9 @@ export function FloatingCalculator() {
             <>
               {/* Display */}
               <div className="bg-gray-900 px-4 pt-3 pb-4 select-none">
-                {/* Expression row */}
                 <div className="text-right text-xs text-gray-500 min-h-[18px] truncate mb-1">
                   {pageState.expression}
                 </div>
-                {/* Value row */}
                 <div className="flex items-end justify-end gap-2">
                   <button
                     onMouseDown={(e) => e.preventDefault()}
@@ -305,32 +402,36 @@ export function FloatingCalculator() {
       )}
 
       {/* FAB */}
-      <button
+      <div
+        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-[49]"
         style={{ pointerEvents: 'auto' }}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => {
-          if (isOpen) {
-            setOpen(false)
-            setShowHistory(false)
-          } else {
-            setOpen(true)
-          }
-        }}
-        title={isOpen ? 'Close calculator' : 'Open calculator'}
-        aria-label={isOpen ? 'Close calculator' : 'Open calculator'}
-        className={[
-          'w-10 h-10 rounded-full shadow-lg flex items-center justify-center',
-          'transition-all duration-300',
-          isOpen
-            ? 'opacity-100 bg-gray-700 hover:bg-gray-800 text-white'
-            : 'opacity-30 hover:opacity-100 focus:opacity-100 bg-primary hover:bg-primary-dark text-white',
-        ].join(' ')}
       >
-        {isOpen
-          ? <X className="w-4 h-4" />
-          : <Calculator className="w-4 h-4" />}
-      </button>
-    </div>
+        <button
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (isOpen) {
+              setOpen(false)
+              setShowHistory(false)
+            } else {
+              setOpen(true)
+            }
+          }}
+          title={isOpen ? 'Close calculator' : 'Open calculator'}
+          aria-label={isOpen ? 'Close calculator' : 'Open calculator'}
+          className={[
+            'w-10 h-10 rounded-full shadow-lg flex items-center justify-center',
+            'transition-all duration-300',
+            isOpen
+              ? 'opacity-100 bg-gray-700 hover:bg-gray-800 text-white'
+              : 'opacity-30 hover:opacity-100 focus:opacity-100 bg-primary hover:bg-primary-dark text-white',
+          ].join(' ')}
+        >
+          {isOpen
+            ? <X className="w-4 h-4" />
+            : <Calculator className="w-4 h-4" />}
+        </button>
+      </div>
+    </>
   )
 }
 
@@ -344,7 +445,6 @@ interface HistoryPanelProps {
 function HistoryPanel({ history, onRecall, onClear, onBack }: HistoryPanelProps) {
   return (
     <div className="flex flex-col" style={{ minHeight: '336px' }}>
-      {/* History header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -368,7 +468,6 @@ function HistoryPanel({ history, onRecall, onClear, onBack }: HistoryPanelProps)
         {history.length === 0 && <span className="w-12" />}
       </div>
 
-      {/* History list */}
       <div className="overflow-y-auto flex-1" style={{ maxHeight: '320px' }}>
         {history.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center px-4">

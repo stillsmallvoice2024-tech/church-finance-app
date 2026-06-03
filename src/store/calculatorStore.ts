@@ -63,6 +63,7 @@ interface CalculatorStore {
   clearPageHistory: () => void
   recallFromHistory: (value: string) => void
   handleKey: (key: string) => void
+  pasteNumber: (value: string) => void
 }
 
 export const useCalculatorStore = create<CalculatorStore>((set, get) => {
@@ -122,6 +123,14 @@ export const useCalculatorStore = create<CalculatorStore>((set, get) => {
           },
         },
         showHistory: false,
+      })
+    },
+
+    pasteNumber: (value: string) => {
+      setPage({
+        displayValue: value,
+        waitingForOperand: false,
+        justEvaluated: false,
       })
     },
 
