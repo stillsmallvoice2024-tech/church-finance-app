@@ -92,6 +92,7 @@ create table public.banks (
   starting_balance_budget_portion  text,
   starting_balance_alloc_type      text check (starting_balance_alloc_type in ('percentage', 'amount')),
   starting_balance_allocations     jsonb not null default '[]',
+  is_foreign_currency              bool not null default false,
   created_at                       timestamptz default now()
 );
 

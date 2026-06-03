@@ -21,6 +21,7 @@ export interface DbBank {
   starting_balance_budget_portion: string | null
   starting_balance_alloc_type:    string | null
   starting_balance_allocations:   StartingBalanceRow[]
+  is_foreign_currency:            boolean
   created_at:     string
 }
 

@@ -1035,14 +1035,15 @@ DO $\$ BEGIN
     FOR DELETE USING (auth.uid() IS NOT NULL);
 EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
 
--- Bank columns (currency + starting balance)
+-- Bank columns (currency + starting balance + foreign currency flag)
 ALTER TABLE banks
   ADD COLUMN IF NOT EXISTS currency                  text NOT NULL DEFAULT 'NGN',
   ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS starting_balance_category text,
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
   ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
-  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';
+  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS is_foreign_currency       bool NOT NULL DEFAULT false;
 -- Helper view: reads information_schema directly, bypasses PostgREST schema cache
 CREATE OR REPLACE VIEW public.bank_schema_check AS
   SELECT column_name::text
