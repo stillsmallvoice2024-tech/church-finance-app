@@ -17,6 +17,11 @@ interface OnboardingState {
   isWizardOpen: boolean
   openWizard: () => void
   closeWizard: () => void
+
+  // ── Help Center ──────────────────────────────────────────────────────────────
+  isHelpCenterOpen: boolean
+  openHelpCenter: () => void
+  closeHelpCenter: () => void
 }
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
@@ -44,4 +49,9 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   isWizardOpen: false,
   openWizard:  () => set({ isWizardOpen: true }),
   closeWizard: () => set({ isWizardOpen: false }),
+
+  // ── Help Center ──────────────────────────────────────────────────────────────
+  isHelpCenterOpen: false,
+  openHelpCenter:  () => set({ isHelpCenterOpen: true }),
+  closeHelpCenter: () => set({ isHelpCenterOpen: false }),
 }))

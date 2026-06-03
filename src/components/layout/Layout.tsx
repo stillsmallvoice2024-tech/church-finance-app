@@ -7,6 +7,7 @@ import { ToastContainer } from '../ui/Toast'
 import { FloatingCalculator } from '../ui/FloatingCalculator'
 import { TourEngine } from '../onboarding/TourEngine'
 import { SetupWizard } from '../onboarding/SetupWizard'
+import { HelpCenter } from '../onboarding/HelpCenter'
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -37,6 +38,7 @@ export function Layout() {
       <FloatingCalculator />
       <TourEngine />
       <SetupWizard />
+      <HelpCenter />
     </div>
   )
 }
