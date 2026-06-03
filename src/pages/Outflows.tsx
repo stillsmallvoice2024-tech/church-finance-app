@@ -38,6 +38,7 @@ import { filterInputCls } from '../components/ui/FormField'
 import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
+import { HelpButton }       from '../components/onboarding/HelpButton'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -262,12 +263,13 @@ export default function Outflows() {
       <div className="space-y-5">
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Outflow Transactions</h1>
             <p className="text-sm text-gray-500 mt-0.5">All disbursements and payments</p>
           </div>
           <div className="flex items-center gap-2">
+            <HelpButton tourId="outflowsTour" size="sm" />
             <ExportDropdown
               onExportView={handleExportView}
               onExportAll={handleExportAll}
@@ -277,7 +279,7 @@ export default function Outflows() {
         </div>
 
         {/* Filter bar */}
-        <Card>
+        <Card data-tour="data-controls">
           <div className="flex flex-wrap gap-3 items-end">
             <FilterGroup label="From">
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
@@ -432,7 +434,7 @@ export default function Outflows() {
           />
         )}
 
-        {outState.view === 'table' && <Card padding={false}>
+        {outState.view === 'table' && <Card padding={false} data-tour="data-table">
           <BulkActionBar
             count={selectedIds.size}
             onClear={clearAll}

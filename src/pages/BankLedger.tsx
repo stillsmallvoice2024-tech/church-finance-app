@@ -29,6 +29,7 @@ import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeningBalance'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { HelpButton }    from '../components/onboarding/HelpButton'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -232,22 +233,25 @@ export default function BankLedger() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Bank Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">Per-bank transaction history with running balance</p>
         </div>
-        <ExportDropdown
-          onExportView={handleExportView}
-          onExportAll={handleExportAll}
-          disabled={sortedRows.length === 0}
-        />
+        <div className="flex items-center gap-2" data-tour="export-button">
+          <HelpButton tourId="banksTour" size="sm" />
+          <ExportDropdown
+            onExportView={handleExportView}
+            onExportAll={handleExportAll}
+            disabled={sortedRows.length === 0}
+          />
+        </div>
       </div>
 
       {/* Bank selector + date filters */}
       <Card>
         <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[200px]">
+          <div data-tour="bank-selector" className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[200px]">
             <label className="text-xs font-medium text-gray-500">Bank</label>
             <SearchableSelect
               value={selectedBank}
@@ -368,7 +372,7 @@ export default function BankLedger() {
 
       {/* Ledger table / cards */}
       {selectedBank && !error && (
-        <Card padding={false}>
+        <Card padding={false} data-tour="ledger-table">
           {blState.view === 'cards' ? (
             <div className="p-4 space-y-3">
               {loading ? (

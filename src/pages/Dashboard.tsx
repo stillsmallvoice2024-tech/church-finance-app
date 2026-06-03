@@ -30,6 +30,7 @@ import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
 import { OnboardingChecklist }     from '../components/onboarding/OnboardingChecklist'
+import { HelpButton }              from '../components/onboarding/HelpButton'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -133,7 +134,7 @@ export default function Dashboard() {
       <div className="space-y-6">
 
         {/* ── Welcome + Quick Actions ──────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               {greeting()}, {firstName}
@@ -144,6 +145,7 @@ export default function Dashboard() {
           </div>
           <CanWrite>
             <div className="flex flex-wrap gap-2 shrink-0">
+              <HelpButton tourId="dashboardTour" size="sm" />
               <button
                 onClick={() => setShowAddInflow(true)}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors"
@@ -173,7 +175,7 @@ export default function Dashboard() {
         <OnboardingChecklist />
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div data-tour="summary-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {isLoading ? (
             <>
               <CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton />
@@ -209,7 +211,7 @@ export default function Dashboard() {
         </div>
 
         {/* ── Monthly area chart ───────────────────────────────────────────── */}
-        <Card>
+        <Card data-tour="dashboard-chart">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-700">
               Monthly Inflows vs Outflows
@@ -260,7 +262,7 @@ export default function Dashboard() {
         </Card>
 
         {/* ── Recent transactions ──────────────────────────────────────────── */}
-        <Card padding={false}>
+        <Card padding={false} data-tour="recent-transactions">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-700">Recent Transactions</h2>
             <span className="text-xs text-gray-400">Last 10 inflows</span>

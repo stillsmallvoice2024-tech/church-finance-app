@@ -35,6 +35,7 @@ import {
   handleCategoryDeleteCleanup,
 } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { HelpButton }    from '../components/onboarding/HelpButton'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -509,12 +510,13 @@ export default function Categories() {
     <div className="space-y-5">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Categories</h1>
           <p className="text-sm text-gray-500 mt-0.5">Manage income and allocation categories</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <HelpButton tourId="categoriesTour" size="sm" />
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={visibleSorted.length === 0} />
           {hiddenCt > 0 && (
             <button onClick={() => setShowHidden(v => !v)}
@@ -523,7 +525,7 @@ export default function Categories() {
               {showHidden ? 'Hide hidden' : `Show hidden (${hiddenCt})`}
             </button>
           )}
-          <button onClick={openAdd}
+          <button data-tour="add-button" onClick={openAdd}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
             <Plus className="w-4 h-4" />
             Add Category
@@ -531,6 +533,7 @@ export default function Categories() {
         </div>
       </div>
 
+      <div data-tour="data-controls">
       <DataControlsBar
         columns={CAT_COLUMNS}
         sortKey={catState.sortKey}
@@ -550,6 +553,7 @@ export default function Categories() {
         pageSize={catState.pageSize}
         onPageSizeChange={catState.setPageSize}
       />
+      </div>
 
       {(error || groupsError) && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
@@ -585,7 +589,7 @@ export default function Categories() {
 
       {/* Category cards */}
       {!loading && visible.length > 0 && catState.view === 'cards' && (
-        <div className="space-y-3">
+        <div data-tour="categories-list" className="space-y-3">
           {visibleSorted.map(cat => {
             const group = groups.find(g => g.id === cat.group_id)
             const displayBalances = allOpeningBalances.filter(b => b.category_id === cat.id)
@@ -645,7 +649,7 @@ export default function Categories() {
 
       {/* Category table — grouped */}
       {!loading && visible.length > 0 && catState.view === 'table' && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div data-tour="categories-list" className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
