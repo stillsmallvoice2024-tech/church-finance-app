@@ -91,6 +91,7 @@ function InviteUserModal({
   const [inviteEmail, setInviteEmail] = useState<string | null>(null)
   const [copied,      setCopied]      = useState(false)
   const [emailStatus, setEmailStatus] = useState<EmailStatus>(null)
+  const [emailError,  setEmailError]  = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -99,6 +100,7 @@ function InviteUserModal({
       setInviteEmail(null)
       setCopied(false)
       setEmailStatus(null)
+      setEmailError(null)
     }
   }, [open, reset])
 
@@ -112,11 +114,14 @@ function InviteUserModal({
 
   const sendEmail = async (invitationId: string) => {
     setEmailStatus('sending')
+    setEmailError(null)
     try {
       const { data, error } = await supabase.functions.invoke('send-invite-email', {
         body: { invitation_id: invitationId },
       })
       if (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        setEmailError(msg)
         setEmailStatus('failed')
         return
       }
@@ -126,9 +131,11 @@ function InviteUserModal({
       } else if (result.error?.includes('not configured')) {
         setEmailStatus('not_configured')
       } else {
+        setEmailError(result.error ?? 'Unknown error')
         setEmailStatus('failed')
       }
-    } catch {
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e))
       setEmailStatus('failed')
     }
   }
@@ -205,8 +212,11 @@ function InviteUserModal({
             </div>
           )}
           {emailStatus === 'failed' && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
-              Email delivery failed — share the link below manually.
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700 space-y-1">
+              <p>Email delivery failed — share the link below manually.</p>
+              {emailError && (
+                <p className="text-xs font-mono opacity-80 break-all">{emailError}</p>
+              )}
             </div>
           )}
           {emailStatus === 'not_configured' && (
