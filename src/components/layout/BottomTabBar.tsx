@@ -172,7 +172,7 @@ export function BottomTabBar() {
             to={path}
             end={end}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[56px] text-center transition-colors ${
+              `flex-1 flex flex-col items-center justify-center gap-1 py-1.5 min-h-[48px] text-center transition-colors ${
                 isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
               }`
             }
@@ -193,7 +193,7 @@ export function BottomTabBar() {
           onClick={() => setMoreOpen(v => !v)}
           aria-expanded={moreOpen}
           aria-label="More navigation options"
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[56px] transition-colors ${
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 min-h-[48px] transition-colors ${
             moreOpen ? 'text-primary' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
           }`}
         >
