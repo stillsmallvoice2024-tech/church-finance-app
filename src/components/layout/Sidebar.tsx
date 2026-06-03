@@ -7,12 +7,13 @@ import {
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
-  ChevronDown, X,
+  ChevronDown, X, HelpCircle,
 } from 'lucide-react'
 import { useRole } from '../../hooks/useRole'
 import { useOrgStore } from '../../store/orgStore'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
 import { ROLE_LABELS } from '../../utils/constants'
+import { useOnboardingStore } from '../../store/onboardingStore'
 
 interface NavItem {
   label: string
@@ -144,8 +145,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const orgName = useOrgStore(s => s.orgName)
   const orgRole = useOrgStore(s => s.orgRole)
 
-  const displayName = orgName ?? 'Finance'
-  const roleLabel   = orgRole ? ROLE_LABELS[orgRole] : null
+  const displayName  = orgName ?? 'Finance'
+  const roleLabel    = orgRole ? ROLE_LABELS[orgRole] : null
+  const openHelpCenter = useOnboardingStore(s => s.openHelpCenter)
 
   return (
     <>
@@ -256,8 +258,16 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-white/10">
-          <p className="text-[10px] text-white/30 text-center">
+        <div className="px-3 py-3 border-t border-white/10 space-y-2">
+          <button
+            type="button"
+            onClick={openHelpCenter}
+            className="w-full flex items-center gap-3 pl-[10px] pr-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            <HelpCircle className="w-4 h-4 shrink-0" />
+            <span>Help Center</span>
+          </button>
+          <p className="text-[10px] text-white/30 text-center pb-1">
             © {new Date().getFullYear()} {displayName}
           </p>
         </div>
