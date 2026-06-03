@@ -161,9 +161,9 @@ export function BottomTabBar() {
         </div>
       )}
 
-      {/* Bottom tab bar */}
+      {/* Bottom tab bar — height locked to h-12 (3rem = 48px); matches --tab-bar-height in index.css */}
       <nav
-        className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex lg:hidden safe-area-inset-bottom"
+        className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 h-12 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex lg:hidden"
         aria-label="Primary navigation"
       >
         {primaryTabs.map(({ label, path, icon: Icon, end }) => (
@@ -172,7 +172,7 @@ export function BottomTabBar() {
             to={path}
             end={end}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center gap-1 py-1.5 min-h-[48px] text-center transition-colors ${
+              `flex-1 flex flex-col items-center justify-center gap-0.5 h-full text-center transition-colors ${
                 isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
               }`
             }
@@ -193,7 +193,7 @@ export function BottomTabBar() {
           onClick={() => setMoreOpen(v => !v)}
           aria-expanded={moreOpen}
           aria-label="More navigation options"
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 min-h-[48px] transition-colors ${
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-colors ${
             moreOpen ? 'text-primary' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
           }`}
         >

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
@@ -27,8 +27,9 @@ export function Layout() {
       {/* Main content: offset by sidebar width on desktop */}
       <div className="flex flex-col flex-1 min-w-0 lg:ml-64">
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
-        {/* pb-14 provides clearance for the 48px bottom tab bar on mobile */}
-        <main id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-14 lg:p-6 lg:pb-6 dark:bg-gray-900">
+        {/* paddingBottom matches --tab-bar-height so content clears the bottom nav on mobile */}
+        <main id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 lg:pb-6 dark:bg-gray-900"
+          style={{ paddingBottom: 'var(--tab-bar-height)' } as React.CSSProperties}>
           <Outlet />
         </main>
       </div>
