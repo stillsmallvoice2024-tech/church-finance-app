@@ -37,16 +37,14 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <div className="hidden sm:block">
-          <OrgSwitcher />
-        </div>
+        <OrgSwitcher />
       </div>
 
       {/* Right: role badge + user avatar + sign out */}
       <div className="flex items-center gap-3">
         {roleLabel && (
           <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeClass}`}
+            className={`hidden sm:inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeClass}`}
           >
             {roleLabel}
           </span>
