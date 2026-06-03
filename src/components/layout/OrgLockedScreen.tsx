@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { AlertTriangle, Download, Loader2, RefreshCw, ShieldOff } from 'lucide-react'
-import { useOrgStore } from '../../store/orgStore'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { AlertTriangle, Building2, Download, Loader2, PlusCircle, RefreshCw, ShieldOff } from 'lucide-react'
+import { useOrgStore, type OrgMembership } from '../../store/orgStore'
 import { useOrgDeletion } from '../../hooks/useOrgDeletion'
+import { useOrgSwitch } from '../../hooks/useAuth'
 import { useRole } from '../../hooks/useRole'
 
 function daysUntil(iso: string | null): number {
@@ -15,10 +17,21 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+function downloadViaUrl(url: string, filename: string) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 export function OrgLockedScreen() {
-  const { orgName, orgPurgeAt, orgDeletedAt } = useOrgStore()
-  const { isOwner }                            = useRole()
-  const del                                    = useOrgDeletion()
+  const { orgName, orgPurgeAt, orgDeletedAt, orgId, memberships } = useOrgStore()
+  const { isOwner }   = useRole()
+  const del           = useOrgDeletion()
+  const { switchOrg } = useOrgSwitch()
+  const navigate      = useNavigate()
 
   const [restoring,  setRestoring]  = useState(false)
   const [restoreErr, setRestoreErr] = useState<string | null>(null)
@@ -28,13 +41,34 @@ export function OrgLockedScreen() {
   const dateStr = formatDate(orgPurgeAt)
   const owner   = isOwner()
 
+  // Other active orgs the user can switch to (excluding this locked org)
+  const activeOrgs: OrgMembership[] = memberships.filter(
+    m => m.org_id !== orgId && m.org_status !== 'pending_deletion'
+  )
+
+  // Fetch a signed URL for the stored backup so the download button works
+  useEffect(() => {
+    if (owner) del.fetchSignedBackupUrl()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSwitchOrg(m: OrgMembership) {
+    switchOrg(m)
+  }
+
+  function handleDownload() {
+    if (del.signedBackupUrl) {
+      downloadViaUrl(del.signedBackupUrl, `${orgName ?? 'backup'}-deletion-backup.json`)
+    } else if (del.backupReady) {
+      del.downloadBackupNow()
+    }
+  }
+
   async function handleRestore() {
     setRestoring(true)
     setRestoreErr(null)
     try {
       await del.restoreOrg()
       setRestored(true)
-      // Full page reload to re-initialise all data hooks
       setTimeout(() => window.location.reload(), 1200)
     } catch (e) {
       setRestoreErr(e instanceof Error ? e.message : 'Restore failed')
@@ -55,9 +89,12 @@ export function OrgLockedScreen() {
     )
   }
 
+  const downloadAvailable = !!(del.signedBackupUrl || del.backupReady)
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
       <div className="max-w-lg w-full">
+
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/50 mb-4">
@@ -67,6 +104,39 @@ export function OrgLockedScreen() {
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             <span className="font-semibold">{orgName}</span> has been scheduled for deletion
           </p>
+        </div>
+
+        {/* Switch / Create org panel */}
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden mb-6">
+          {activeOrgs.length > 0 && (
+            <div className="px-4 py-2">
+              <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+                Switch organisation
+              </p>
+            </div>
+          )}
+          {activeOrgs.map(m => (
+            <button
+              key={m.org_id}
+              onClick={() => handleSwitchOrg(m)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+              <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate flex-1">
+                {m.org_name}
+              </span>
+              <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0">Switch</span>
+            </button>
+          ))}
+          <button
+            onClick={() => navigate('/onboarding')}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <PlusCircle className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Create a new organisation
+            </span>
+          </button>
         </div>
 
         {/* Countdown */}
@@ -86,7 +156,7 @@ export function OrgLockedScreen() {
         </div>
 
         {owner ? (
-          /* Owner view: restore + download options */
+          /* Owner view: restore + download */
           <div className="space-y-3">
             <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-400">
               <p className="font-medium text-gray-800 dark:text-gray-200 mb-2">You requested this deletion.</p>
@@ -112,8 +182,8 @@ export function OrgLockedScreen() {
             </button>
 
             <button
-              onClick={del.downloadBackupNow}
-              disabled={!del.backupReady}
+              onClick={handleDownload}
+              disabled={!downloadAvailable}
               className="w-full flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
             >
               <Download className="w-4 h-4" />

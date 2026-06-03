@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
-import { AlertTriangle, Download, Eye, EyeOff, Loader2, ShieldAlert, Trash2 } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { AlertTriangle, Building2, Download, Eye, EyeOff, Loader2, PlusCircle, ShieldAlert, Trash2 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useOrgDeletion } from '../../hooks/useOrgDeletion'
-import { useOrgStore } from '../../store/orgStore'
+import { useOrgStore, type OrgMembership } from '../../store/orgStore'
+import { useOrgSwitch } from '../../hooks/useAuth'
 
 interface Props {
   open:    boolean
@@ -23,14 +25,23 @@ function formatDate(iso: string | null): string {
 }
 
 export function DeleteOrgModal({ open, onClose }: Props) {
-  const orgName = useOrgStore(s => s.orgName) ?? ''
-  const del     = useOrgDeletion()
+  const orgName      = useOrgStore(s => s.orgName) ?? ''
+  const currentOrgId = useOrgStore(s => s.orgId)
+  const memberships  = useOrgStore(s => s.memberships)
+  const del          = useOrgDeletion()
+  const { switchOrg } = useOrgSwitch()
+  const navigate     = useNavigate()
 
   const [phase,   setPhase]   = useState<Phase>('warning')
   const [pw,      setPw]      = useState('')
   const [showPw,  setShowPw]  = useState(false)
   const [typed,   setTyped]   = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Other active orgs the user can switch to after deletion
+  const activeAlternativeOrgs = memberships.filter(
+    m => m.org_id !== currentOrgId && m.org_status !== 'pending_deletion'
+  )
 
   // Reset all local state when modal opens/closes
   useEffect(() => {
@@ -61,9 +72,31 @@ export function DeleteOrgModal({ open, onClose }: Props) {
     del.step === 'backup_ready'      ||
     del.step === 'submitting'
 
-  const canClose = !isProcessing
+  // Disable close during processing and while showing the done state
+  // (force explicit navigation choice after deletion is confirmed)
+  const disableClose = isProcessing || del.step === 'done'
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  // ── Post-deletion navigation handlers ────────────────────────────────────────
+
+  const handleSwitchOrg = useCallback((m: OrgMembership) => {
+    del.applyDeletion()
+    switchOrg(m)
+    onClose()
+  }, [del, switchOrg, onClose])
+
+  const handleCreateOrg = useCallback(() => {
+    del.applyDeletion()
+    onClose()
+    navigate('/onboarding')
+  }, [del, onClose, navigate])
+
+  const handleViewLocked = useCallback(() => {
+    del.applyDeletion()
+    onClose()
+    // OrgLockedGuard will render OrgLockedScreen once orgStatus is pending_deletion
+  }, [del, onClose])
+
+  // ── Form handlers ─────────────────────────────────────────────────────────────
 
   async function handleReAuth(e: React.FormEvent) {
     e.preventDefault()
@@ -81,7 +114,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
     await del.generateAndSubmit(typed)
   }
 
-  // ── Title ────────────────────────────────────────────────────────────────────
+  // ── Derived display ───────────────────────────────────────────────────────────
 
   const title =
     phase === 'warning'     ? 'Delete Organisation'     :
@@ -91,8 +124,6 @@ export function DeleteOrgModal({ open, onClose }: Props) {
     del.step === 'error'    ? 'Deletion Failed'         :
                               'Preparing Deletion…'
 
-  // ── Render ───────────────────────────────────────────────────────────────────
-
   const nameMatches = typed === orgName
   const days        = daysUntil(del.purgeAt)
   const dateStr     = formatDate(del.purgeAt)
@@ -100,10 +131,11 @@ export function DeleteOrgModal({ open, onClose }: Props) {
   return (
     <Modal
       open={open}
-      onClose={canClose ? onClose : () => {}}
+      onClose={onClose}
       title={title}
       size="max-w-md"
       headerExtra={<Trash2 className="w-5 h-5 text-red-500" />}
+      disableClose={disableClose}
     >
       {/* ── Phase: Warning ─────────────────────────────────────────────────── */}
       {phase === 'warning' && (
@@ -124,7 +156,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
               <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">What happens immediately:</p>
               <ul className="list-disc pl-5 space-y-1">
                 <li>Organisation is locked — no member access</li>
-                <li>A full data backup is generated</li>
+                <li>A full data backup is generated and downloaded</li>
                 <li>30-day restore window begins</li>
               </ul>
             </div>
@@ -205,7 +237,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
         <form onSubmit={handleConfirm} className="space-y-4">
           <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 p-3">
             <p className="text-sm text-amber-800 dark:text-amber-300">
-              A full backup will be generated before deletion is submitted. Download it immediately — it will also be stored for 30 days.
+              A full backup will be generated and automatically downloaded to your device before deletion is submitted.
             </p>
           </div>
 
@@ -275,6 +307,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
 
           {del.step === 'done' && (
             <div className="space-y-5">
+              {/* Status banner */}
               <div className="rounded-lg border border-orange-200 bg-orange-50 dark:border-orange-900/40 dark:bg-orange-950/30 p-4">
                 <p className="font-semibold text-orange-800 dark:text-orange-300">
                   Organisation locked — deletion in {days} day{days !== 1 ? 's' : ''}
@@ -285,26 +318,58 @@ export function DeleteOrgModal({ open, onClose }: Props) {
                 </p>
               </div>
 
-              <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                <p>• Download your backup and keep it in a safe place.</p>
-                <p>• To restore, visit User Management before {dateStr}.</p>
+              {/* Backup download */}
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-2">
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Your backup was downloaded automatically.
+                </p>
+                <button
+                  onClick={del.downloadBackupNow}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <Download className="w-4 h-4" />
+                  Download again (.json)
+                </button>
               </div>
 
-              <button
-                onClick={del.downloadBackupNow}
-                disabled={!del.backupReady}
-                className="w-full flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-              >
-                <Download className="w-4 h-4" />
-                Download backup (.json)
-              </button>
+              {/* Navigation — switch org or create new */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  {activeAlternativeOrgs.length > 0 ? 'Continue with another organisation' : 'Next steps'}
+                </p>
 
-              <button
-                onClick={onClose}
-                className="w-full rounded-lg bg-gray-800 dark:bg-gray-200 px-4 py-2.5 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300"
-              >
-                Close
-              </button>
+                {activeAlternativeOrgs.map(m => (
+                  <button
+                    key={m.org_id}
+                    onClick={() => handleSwitchOrg(m)}
+                    className="w-full flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                      {m.org_name}
+                    </span>
+                  </button>
+                ))}
+
+                <button
+                  onClick={handleCreateOrg}
+                  className="w-full flex items-center gap-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <PlusCircle className="w-4 h-4 text-gray-400 shrink-0" />
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    Create a new organisation
+                  </span>
+                </button>
+
+                {activeAlternativeOrgs.length === 0 && (
+                  <button
+                    onClick={handleViewLocked}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    View locked organisation
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
