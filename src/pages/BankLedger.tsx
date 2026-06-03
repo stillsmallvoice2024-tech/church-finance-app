@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
+import { HelpTooltip }   from '../components/ui/HelpTooltip'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { useBanks }      from '../hooks/useBanks'
 import { useRole }       from '../hooks/useRole'
@@ -285,12 +286,16 @@ export default function BankLedger() {
       {selectedBank && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { label: 'Total Inflows',  value: formatCurrency(totalInflow, baseCurrencyCode),  color: 'text-green-700' },
-            { label: 'Total Outflows', value: formatCurrency(totalOutflow, baseCurrencyCode), color: 'text-red-700'   },
-            { label: 'Net Balance',    value: formatCurrency(netBalance, baseCurrencyCode),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700' },
-          ].map(({ label, value, color }) => (
+            { label: 'Total Inflows',  value: formatCurrency(totalInflow, baseCurrencyCode),  color: 'text-green-700', tip: undefined },
+            { label: 'Total Outflows', value: formatCurrency(totalOutflow, baseCurrencyCode), color: 'text-red-700',   tip: undefined },
+            { label: 'Net Balance',    value: formatCurrency(netBalance, baseCurrencyCode),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700',
+              tip: 'Total inflows minus total outflows for this bank account over the selected date range. The ledger table below shows a running balance updated after every transaction.' },
+          ].map(({ label, value, color, tip }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
-              <p className="text-xs text-gray-500 mb-1 truncate">{label}</p>
+              <div className="flex items-center gap-1 mb-1">
+                <p className="text-xs text-gray-500 truncate">{label}</p>
+                {tip && <HelpTooltip content={tip} placement="top" iconSize="w-3 h-3" />}
+              </div>
               {loading
                 ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
                 : <p className={`text-base font-bold tabular-nums ${color}`}>{value}</p>}

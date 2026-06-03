@@ -1,4 +1,5 @@
 import React, { useId, type ReactNode } from 'react'
+import { HelpTooltip } from './HelpTooltip'
 
 export function inputCls(hasError: boolean): string {
   return `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
@@ -11,11 +12,13 @@ export const filterInputCls = 'w-full px-3 py-2 text-sm border border-gray-300 r
 
 interface FieldProps {
   label: string
+  /** Optional tooltip shown next to the label. */
+  help?: string
   error?: string
   children: ReactNode
 }
 
-export function Field({ label, error, children }: FieldProps) {
+export function Field({ label, help, error, children }: FieldProps) {
   const uid = useId()
   const errorId = `${uid}-error`
 
@@ -35,9 +38,12 @@ export function Field({ label, error, children }: FieldProps) {
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600" htmlFor={uid}>
-        {label}
-      </label>
+      <div className="flex items-center gap-1">
+        <label className="text-xs font-medium text-gray-600" htmlFor={uid}>
+          {label}
+        </label>
+        {help && <HelpTooltip content={help} placement="right" iconSize="w-3 h-3" />}
+      </div>
       {enhanced}
       {error && (
         <p id={errorId} className="text-xs text-red-500" role="alert">

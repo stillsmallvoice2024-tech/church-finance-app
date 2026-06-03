@@ -20,6 +20,7 @@ import { supabase }     from '../lib/supabase'
 import { useOrgStore }  from '../store/orgStore'
 import type { UserRole } from '../types'
 import { HelpButton }      from '../components/onboarding/HelpButton'
+import { HelpTooltip }     from '../components/ui/HelpTooltip'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // Org-member row — flattened from org_members + profiles join.
@@ -673,15 +674,18 @@ export default function UserManagement() {
       {/* ── Stats ─────────────────────────────────────────────────────────── */}
       <div data-tour="role-info" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total Members', value: totalCount,      icon: <Users className="w-5 h-5 text-primary" /> },
-          { label: 'Owners',        value: ownerCount,      icon: <Shield className="w-5 h-5 text-purple-600" /> },
-          { label: 'Admins',        value: adminCount,      icon: <Shield className="w-5 h-5 text-primary" /> },
-          { label: 'Accountants',   value: accountantCount, icon: <User  className="w-5 h-5 text-amber-500" /> },
-        ].map(({ label, value, icon }) => (
+          { label: 'Total Members', value: totalCount,      icon: <Users  className="w-5 h-5 text-primary" />,       tip: undefined },
+          { label: 'Owners',        value: ownerCount,      icon: <Shield className="w-5 h-5 text-purple-600" />,    tip: 'Full control including ownership transfer. There can only be one owner at a time.' },
+          { label: 'Admins',        value: adminCount,      icon: <Shield className="w-5 h-5 text-primary" />,       tip: 'Full access to all data, settings, and team management. Cannot transfer ownership.' },
+          { label: 'Accountants',   value: accountantCount, icon: <User   className="w-5 h-5 text-amber-500" />,     tip: 'Can import statements and edit transactions. Cannot manage team members or settings.' },
+        ].map(({ label, value, icon, tip }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
             <div className="p-2 bg-gray-50 rounded-lg">{icon}</div>
             <div>
-              <div className="text-xs text-gray-500">{label}</div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">{label}</span>
+                {tip && <HelpTooltip content={tip} placement="top" iconSize="w-3 h-3" />}
+              </div>
               <div className="text-2xl font-bold text-gray-900">{value}</div>
             </div>
           </div>
