@@ -27,6 +27,7 @@ import { supabase }                from '../lib/supabase'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { HelpButton }              from '../components/onboarding/HelpButton'
 import { Link }                    from 'react-router-dom'
+import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -151,6 +152,7 @@ export default function Inflows() {
   const { incomeTypes }                             = useIncomeTypes()
 
   usePageTitle('Inflows')
+  useFirstVisitTour('inflows')
 
   // Clear selection when filters/page/sort change
   useEffect(() => { setPage(0); clearAll() }, [dateFrom, dateTo, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps

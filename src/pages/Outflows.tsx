@@ -39,6 +39,7 @@ import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { HelpButton }       from '../components/onboarding/HelpButton'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -163,6 +164,7 @@ export default function Outflows() {
   const { outflowTypes }                            = useOutflowTypes()
 
   usePageTitle('Outflows')
+  useFirstVisitTour('outflows')
 
   // Clear selection when filters/page/sort change
   useEffect(() => { setPage(0); clearAll() }, [dateFrom, dateTo, stageCode, outflowTypeFilter, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
