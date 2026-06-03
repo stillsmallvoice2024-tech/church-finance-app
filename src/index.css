@@ -4,8 +4,8 @@
 
 /* ── Global layout tokens ─────────────────────────────────────────────────── */
 :root {
-  /* Height of the mobile bottom tab bar — keep in sync with h-16 in BottomTabBar.tsx */
-  --tab-bar-height: 64px;
+  /* Height of the mobile bottom tab bar — keep in sync with h-12 in BottomTabBar.tsx */
+  --tab-bar-height: 3rem; /* 48px */
 }
 
 /* Toast container sits above the mobile tab bar */
