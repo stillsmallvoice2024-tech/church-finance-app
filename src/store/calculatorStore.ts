@@ -233,7 +233,7 @@ export const useCalculatorStore = create<CalculatorStore>((set, get) => {
           setPage({ displayValue: key, waitingForOperand: false, justEvaluated: false })
         } else {
           const digitCount = s.displayValue.replace(/[^0-9]/g, '').length
-          if (digitCount >= 12) return
+          if (digitCount >= 20) return
           const next = s.displayValue === '0' ? key : s.displayValue + key
           setPage({ displayValue: next, justEvaluated: false })
         }
