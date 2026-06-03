@@ -42,6 +42,7 @@ const REQUIRED_BANK_COLS = [
   'starting_balance_budget_portion',
   'starting_balance_alloc_type',
   'starting_balance_allocations',
+  'is_foreign_currency',
 ] as const
 
 export async function checkBankStartingBalanceMigration(): Promise<SchemaStatus> {
@@ -59,7 +60,7 @@ export async function checkBankStartingBalanceMigration(): Promise<SchemaStatus>
     // All columns exist in DB — verify PostgREST's SELECT cache is also current
     const { error: pgErr } = await supabase
       .from('banks')
-      .select('currency, starting_balance, starting_balance_category, starting_balance_budget_portion, starting_balance_alloc_type, starting_balance_allocations')
+      .select('currency, starting_balance, starting_balance_category, starting_balance_budget_portion, starting_balance_alloc_type, starting_balance_allocations, is_foreign_currency')
       .limit(0)
     if (pgErr) {
       console.warn('[bank-schema] PostgREST SELECT cache stale:', pgErr.message)

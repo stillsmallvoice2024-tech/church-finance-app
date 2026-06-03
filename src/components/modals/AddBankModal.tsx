@@ -31,7 +31,8 @@ const MIGRATION_SQL =
   ADD COLUMN IF NOT EXISTS starting_balance_category text,
   ADD COLUMN IF NOT EXISTS starting_balance_budget_portion text,
   ADD COLUMN IF NOT EXISTS starting_balance_alloc_type text,
-  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]';
+  ADD COLUMN IF NOT EXISTS starting_balance_allocations jsonb NOT NULL DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS is_foreign_currency       bool NOT NULL DEFAULT false;
 -- Helper view: reads information_schema directly, bypasses PostgREST schema cache
 CREATE OR REPLACE VIEW public.bank_schema_check AS
   SELECT column_name::text
@@ -426,7 +427,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <div className="flex-1 space-y-1">
-                <p>Starting balance allocations aren't available yet. Your administrator needs to complete a quick setup step.</p>
+                <p>Bank setup is not fully configured. Your administrator needs to reload the database schema cache.</p>
                 <button
                   type="button"
                   onClick={async () => {
@@ -446,7 +447,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <div className="flex-1 space-y-1">
-                <p>Starting balance allocations require a one-time setup. Ask your administrator to run the database migration, then click Re-check.</p>
+                <p>Bank setup requires a one-time database migration. Ask your administrator to run the SQL below, then click Re-check.</p>
                 <button
                   type="button"
                   onClick={async () => {
