@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   X, Search, BookOpen, HelpCircle, Compass, Megaphone,
@@ -307,16 +307,21 @@ export function HelpCenter() {
 
   if (!isOpen) return null
 
+  // Portal into #layout-safe-zone so the modal is structurally bounded by the
+  // safe area (viewport minus tab bar). absolute inset-0 covers that area exactly
+  // with no viewport arithmetic — the container's own height enforces the boundary.
+  const container = document.getElementById('layout-safe-zone')
+  if (!container) return null
+
   return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Help Center"
-      className="fixed inset-x-0 top-0 lg:inset-0 z-[9000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      style={{ bottom: 'var(--tab-bar-height)' } as React.CSSProperties}
+      className="absolute inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) closeCenter() }}
     >
-      <div className="w-full max-w-2xl max-h-full lg:max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-2xl max-h-full lg:max-h-[85vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
@@ -498,7 +503,7 @@ export function HelpCenter() {
         </div>
       </div>
     </div>,
-    document.body,
+    container,
   )
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
@@ -13,7 +13,7 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background">
       {/* Skip to main content — visible on keyboard focus only */}
       <a
         href="#main-content"
@@ -22,17 +22,28 @@ export function Layout() {
         Skip to main content
       </a>
 
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-      {/* Main content: offset by sidebar width on desktop */}
-      <div className="flex flex-col flex-1 min-w-0 lg:ml-64">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
-        {/* paddingBottom matches --tab-bar-height so content clears the bottom nav on mobile */}
-        <main id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 lg:pb-6 dark:bg-gray-900"
-          style={{ paddingBottom: 'var(--tab-bar-height)' } as React.CSSProperties}>
-          <Outlet />
-        </main>
+      {/*
+        Safe zone — height is structurally constrained to (viewport - tab bar).
+        The sibling spacer below reserves the tab bar height on mobile so this
+        div never extends behind the BottomTabBar. HelpCenter portals into this
+        element so it is geometrically bounded without any viewport arithmetic.
+      */}
+      <div id="layout-safe-zone" className="flex flex-1 min-h-0 relative overflow-hidden">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex flex-col flex-1 min-w-0 lg:ml-64">
+          <TopBar onMenuClick={() => setSidebarOpen(true)} />
+          <main id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 dark:bg-gray-900">
+            <Outlet />
+          </main>
+        </div>
       </div>
+
+      {/*
+        Tab bar height reservation — a non-visual spacer that takes up exactly
+        the tab bar height on mobile. This pushes the safe zone up so the fixed
+        BottomTabBar never overlaps it. Hidden on desktop (no tab bar).
+      */}
+      <div className="lg:hidden shrink-0" style={{ height: 'var(--tab-bar-height)' }} aria-hidden="true" />
 
       <BottomTabBar />
       <ToastContainer />
