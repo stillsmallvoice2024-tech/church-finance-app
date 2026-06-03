@@ -14,6 +14,7 @@ import { useOrgStore } from '../../store/orgStore'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
 import { ROLE_LABELS } from '../../utils/constants'
 import { useOnboardingStore } from '../../store/onboardingStore'
+import { useUnreadAnnouncements } from '../onboarding/AnnouncementBanner'
 
 interface NavItem {
   label: string
@@ -145,9 +146,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const orgName = useOrgStore(s => s.orgName)
   const orgRole = useOrgStore(s => s.orgRole)
 
-  const displayName  = orgName ?? 'Finance'
-  const roleLabel    = orgRole ? ROLE_LABELS[orgRole] : null
+  const displayName    = orgName ?? 'Finance'
+  const roleLabel      = orgRole ? ROLE_LABELS[orgRole] : null
   const openHelpCenter = useOnboardingStore(s => s.openHelpCenter)
+  const unread         = useUnreadAnnouncements()
 
   return (
     <>
@@ -264,8 +266,18 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             onClick={openHelpCenter}
             className="w-full flex items-center gap-3 pl-[10px] pr-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
           >
-            <HelpCircle className="w-4 h-4 shrink-0" />
+            <div className="relative shrink-0">
+              <HelpCircle className="w-4 h-4" />
+              {unread.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent border border-primary" />
+              )}
+            </div>
             <span>Help Center</span>
+            {unread.length > 0 && (
+              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-primary text-[10px] font-bold leading-none">
+                {unread.length}
+              </span>
+            )}
           </button>
           <p className="text-[10px] text-white/30 text-center pb-1">
             © {new Date().getFullYear()} {displayName}

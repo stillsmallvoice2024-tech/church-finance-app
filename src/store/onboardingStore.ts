@@ -20,7 +20,9 @@ interface OnboardingState {
 
   // ── Help Center ──────────────────────────────────────────────────────────────
   isHelpCenterOpen: boolean
+  helpCenterInitialTab: string | null
   openHelpCenter: () => void
+  openHelpCenterWhatsNew: () => void
   closeHelpCenter: () => void
 }
 
@@ -52,6 +54,8 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
 
   // ── Help Center ──────────────────────────────────────────────────────────────
   isHelpCenterOpen: false,
-  openHelpCenter:  () => set({ isHelpCenterOpen: true }),
-  closeHelpCenter: () => set({ isHelpCenterOpen: false }),
+  helpCenterInitialTab: null,
+  openHelpCenter:         () => set({ isHelpCenterOpen: true, helpCenterInitialTab: null }),
+  openHelpCenterWhatsNew: () => set({ isHelpCenterOpen: true, helpCenterInitialTab: 'whats-new' }),
+  closeHelpCenter:        () => set({ isHelpCenterOpen: false, helpCenterInitialTab: null }),
 }))
