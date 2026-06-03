@@ -857,6 +857,7 @@ export interface AddBankInput {
   account_number?: string
   account_type?:   string
   currency?:       string
+  is_foreign_currency?: boolean
   starting_balance?:               number
   starting_balance_category?:      string
   starting_balance_budget_portion?: string
@@ -895,6 +896,7 @@ export interface UpdateBankInput {
   account_number?: string
   account_type?:   string
   currency?:       string
+  is_foreign_currency?: boolean
   starting_balance?:               number
   starting_balance_category?:      string
   starting_balance_budget_portion?: string
@@ -919,6 +921,7 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
         account_number: input.account_number ?? null,
         account_type:   input.account_type   ?? null,
         currency:       input.currency        ?? useOrgStore.getState().defaultCurrency ?? '',
+        is_foreign_currency: input.is_foreign_currency ?? false,
         starting_balance:                input.starting_balance               ?? null,
         starting_balance_category:       input.starting_balance_category      ?? null,
         starting_balance_budget_portion: input.starting_balance_budget_portion ?? null,

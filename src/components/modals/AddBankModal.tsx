@@ -102,7 +102,13 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   })
 
   const startingBalance = watch('starting_balance')
+  const watchedCurrency = watch('currency')
   const hasBalance      = (startingBalance ?? 0) > 0
+
+  const isForeignCurrencyBank = !!watchedCurrency && watchedCurrency !== (defaultCurrency ?? 'NGN')
+
+  const selectedCurrencyMeta = currencies.find(c => c.code === watchedCurrency)
+  const selectedCurrencySymbol = selectedCurrencyMeta?.symbol ?? watchedCurrency ?? baseCurrencySymbol
 
   const allocsDirty =
     allocType !== initialAllocRef.current.type ||
@@ -266,11 +272,13 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     // Only send starting_balance_allocations when there is a balance; omitting it for
     // no-balance banks lets the DB default ('[]') apply and avoids requiring the migration
     // for basic bank creation.
+    const bankCurrency = values.currency || defaultCurrency || ''
     const payload: AddBankInput = {
-      name:           values.name,
-      account_number: values.account_number || undefined,
-      account_type:   values.account_type   || undefined,
-      currency:       values.currency       || defaultCurrency || '',
+      name:               values.name,
+      account_number:     values.account_number || undefined,
+      account_type:       values.account_type   || undefined,
+      currency:           bankCurrency,
+      is_foreign_currency: bankCurrency !== '' && bankCurrency !== (defaultCurrency ?? 'NGN'),
       starting_balance:             values.starting_balance || undefined,
       starting_balance_alloc_type:  hasBalance ? allocType : undefined,
       starting_balance_allocations: hasBalance ? allocations : undefined,
@@ -499,16 +507,18 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
               </option>
             ))}
           </select>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            Foreign-currency (domiciliary) accounts are tracked under Foreign Currency.
-          </p>
+          {isForeignCurrencyBank && (
+            <p className="text-[11px] text-amber-600 font-medium mt-0.5">
+              Foreign Currency Bank — import transactions will be restricted to FX Inflow / FX Outflow types.
+            </p>
+          )}
         </Field>
 
         {/* Opening Balance section */}
         <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balance (optional)</p>
 
-          <Field label={`Starting Balance (${baseCurrencySymbol})`} error={errors.starting_balance?.message}>
+          <Field label={`Starting Balance (${selectedCurrencySymbol})`} error={errors.starting_balance?.message}>
             <Controller control={control} name="starting_balance" render={({ field }) => (
               <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.00" className={inputCls(!!errors.starting_balance)} />
             )} />

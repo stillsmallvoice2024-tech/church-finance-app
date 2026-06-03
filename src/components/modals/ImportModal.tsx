@@ -147,7 +147,12 @@ const TXN_TYPE_OPTIONS = [
   { value: 'reversal',           label: 'Reversal' },
   { value: 'bank_deposit',       label: 'Bank Deposit' },
   { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
+  { value: 'fx_inflow',          label: 'FX Inflow' },
+  { value: 'fx_outflow',         label: 'FX Outflow' },
 ]
+
+const FX_INFLOW_TYPES  = TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_inflow')
+const FX_OUTFLOW_TYPES = TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_outflow')
 
 function autoMapColumn(header: string, fields: FieldDef[]): string {
   const h = header.toLowerCase().replace(/[\s_\-().]+/g, '')
@@ -287,6 +292,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   useEffect(() => {
     if (bank) setInternalBank(bank)
   }, [bank])
+
+  const isForeignCurrencyBank = !!internalBank &&
+    (bankList.find(b => b.id === internalBank.id)?.is_foreign_currency ?? false)
 
   // Per-row pending deduction (by sheet row index ri)
   const [rowPendingDeductions, setRowPendingDeductions] = useState<Set<number>>(new Set())
@@ -965,10 +973,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                          ? normalizeId(String(raw[refIdx])) || null : null
 
         const cfg = getConfigForDate(latestConfigs, date)
-        const txnType = rowTxnTypes[ri] ?? ''
+        const rowTxnType = rowTxnTypes[ri] ?? ''
         const origId  = rowOrigTxnIds[ri] ?? ''
 
         if (credit > 0) {
+          const txnType = isForeignCurrencyBank ? 'fx_inflow' : rowTxnType
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
           // Non-Normal transactions skip income type and allocation entirely
@@ -1010,6 +1019,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           inflowRows.push(row)
         }
         if (debit > 0) {
+          const txnType = isForeignCurrencyBank ? 'fx_outflow' : rowTxnType
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
           if (userId) row.created_by = userId
           if (!txnType && cfg) row.allocation_config_id = cfg.id
@@ -1551,6 +1561,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               )}
             </div>
 
+            {/* ── Foreign Currency Bank notice ─────────────────────────── */}
+            {isForeignCurrencyBank && (
+              <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-xs text-blue-700">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Foreign Currency Bank</strong> — Credit rows will be imported as <strong>FX Inflow</strong> and debit rows as <strong>FX Outflow</strong>. Standard transaction types are not available for this bank.
+                </span>
+              </div>
+            )}
+
             {/* ── Duplicate detection summary ───────────────────────────── */}
             {dupStats && (
               <div className={`rounded-lg border px-4 py-3 text-sm ${
@@ -1638,6 +1658,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
               const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
               const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
+
+              const availableInflowTypes  = isForeignCurrencyBank ? FX_INFLOW_TYPES  : TXN_TYPE_OPTIONS
+              const availableOutflowTypes = isForeignCurrencyBank ? FX_OUTFLOW_TYPES : TXN_TYPE_OPTIONS
 
               const allRows = (processedRows ?? sheet.rows).map((raw, ri) => {
                 const r = raw as unknown[]
@@ -1730,7 +1753,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
                         className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                         <option value="">— Type —</option>
-                        {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                       <button
                         type="button"
@@ -1920,8 +1943,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     )}
                                     <select value={txnType}
                                       onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                      disabled={isForeignCurrencyBank}
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                      {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                      {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                   </div>
                                   {(txnType === 'refund' || txnType === 'reversal') && (
@@ -2091,8 +2115,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
                                         <select value={txnType}
                                           onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                          disabled={isForeignCurrencyBank}
                                           className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                                          {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                          {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                         </select>
                                       </div>
                                       {/* Original Txn ID */}
@@ -2207,7 +2232,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
                       className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                       <option value="">— Type —</option>
-                      {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     <button
                       type="button"
@@ -2401,8 +2426,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                   </div>
                                   <select value={txnType}
                                     onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                    disabled={isForeignCurrencyBank}
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                    {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                   </select>
                                 </div>
                                 {outflowTypeOptions.length > 0 && (
@@ -2589,8 +2615,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
                                       <select value={txnType}
                                         onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
+                                        disabled={isForeignCurrencyBank}
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                                        {TXN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                       </select>
                                     </div>
                                     {/* Original Txn ID */}

@@ -52,6 +52,8 @@ const TXN_TYPE_OPTIONS = [
   { value: 'reversal',            label: 'Reversal' },
   { value: 'bank_deposit',        label: 'Bank Deposit' },
   { value: 'intrabank_transfer',  label: 'Intrabank Transfer' },
+  { value: 'fx_inflow',           label: 'FX Inflow' },
+  { value: 'fx_outflow',          label: 'FX Outflow' },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -599,6 +601,14 @@ function ManualEntryForm() {
 
   const v = (key: string) => fields[key] ?? ''
 
+  const selectedBank = banks.find(b => b.id === v('bank_id')) ?? null
+  const isForeignCurrencyBank = selectedBank?.is_foreign_currency ?? false
+  const availableTxnTypes = isForeignCurrencyBank
+    ? (direction === 'inflow'
+        ? TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_inflow')
+        : TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_outflow'))
+    : TXN_TYPE_OPTIONS.filter(o => o.value !== 'fx_inflow' && o.value !== 'fx_outflow')
+
   // ── Duplicate check helpers ──────────────────────────────────────────────
   // bankName scopes the check to the selected bank so the same ID in a
   // different bank is not treated as a duplicate.
@@ -946,11 +956,14 @@ function ManualEntryForm() {
 
           {/* Transaction Type */}
           <Field label="Transaction Type">
-            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
-              {TXN_TYPE_OPTIONS.map(o => (
+            <select value={txnType} onChange={e => setTxnType(e.target.value)} disabled={isForeignCurrencyBank} className={iCls}>
+              {availableTxnTypes.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+            {isForeignCurrencyBank && (
+              <p className="text-[11px] text-amber-600 mt-0.5">Foreign Currency Bank — only FX Inflow is allowed.</p>
+            )}
           </Field>
 
           {/* Original Transaction ID (refund / reversal only) */}
@@ -1103,11 +1116,14 @@ function ManualEntryForm() {
 
           {/* Transaction Type */}
           <Field label="Transaction Type">
-            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
-              {TXN_TYPE_OPTIONS.map(o => (
+            <select value={txnType} onChange={e => setTxnType(e.target.value)} disabled={isForeignCurrencyBank} className={iCls}>
+              {availableTxnTypes.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+            {isForeignCurrencyBank && (
+              <p className="text-[11px] text-amber-600 mt-0.5">Foreign Currency Bank — only FX Outflow is allowed.</p>
+            )}
           </Field>
 
           {/* Original Transaction ID (refund / reversal only) */}
