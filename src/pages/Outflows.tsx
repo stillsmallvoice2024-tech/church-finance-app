@@ -33,6 +33,7 @@ import { useYearRange }            from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { EmptyState } from '../components/ui/EmptyState'
+import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
@@ -361,7 +362,9 @@ export default function Outflows() {
                 </div>
               ))
             ) : data.length === 0 ? (
-              <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
+              searchInput
+                ? <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
+                : <PageEmptyState pageId="outflows" compact />
             ) : displayed.map(row => {
               const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
               const netDiffers = net !== Number(row.amount_disbursed)
@@ -482,7 +485,10 @@ export default function Outflows() {
                 ) : data.length === 0 ? (
                   <tr>
                     <td colSpan={10}>
-                      <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
+                      {searchInput
+                        ? <EmptyState icon={TrendingDown} title="No outflow transactions" message="No transactions match your filters." compact />
+                        : <PageEmptyState pageId="outflows" compact />
+                      }
                     </td>
                   </tr>
                 ) : (

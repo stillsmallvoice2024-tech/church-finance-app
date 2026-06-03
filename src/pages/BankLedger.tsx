@@ -17,6 +17,7 @@ import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransact
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { EmptyState } from '../components/ui/EmptyState'
+import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { inflowDetailItems, outflowDetailItems } from '../utils/rowDetailItems'
@@ -316,7 +317,7 @@ export default function BankLedger() {
       {/* Empty — no banks configured */}
       {!banksLoading && !banksError && banks.length === 0 && (
         <Card>
-          <EmptyState icon={BookOpen} title="No banks configured" message="Add a bank in Setup to get started." compact />
+          <PageEmptyState pageId="bank-ledger" compact />
         </Card>
       )}
 

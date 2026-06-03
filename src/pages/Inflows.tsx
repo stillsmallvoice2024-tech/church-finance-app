@@ -33,6 +33,7 @@ import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { EmptyState } from '../components/ui/EmptyState'
+import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
@@ -335,7 +336,9 @@ export default function Inflows() {
                 </div>
               ))
             ) : data.length === 0 ? (
-              <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
+              searchInput
+                ? <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
+                : <PageEmptyState pageId="inflows" compact />
             ) : displayed.map(row => {
               const it = incomeTypes.find(t => t.id === row.income_type_id)
               return (
@@ -442,7 +445,10 @@ export default function Inflows() {
                 ) : data.length === 0 ? (
                   <tr>
                     <td colSpan={10}>
-                      <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
+                      {searchInput
+                        ? <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
+                        : <PageEmptyState pageId="inflows" compact />
+                      }
                     </td>
                   </tr>
                 ) : (
