@@ -175,7 +175,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       initialAllocRef.current = { type: initType, rows: initRows }
     } else {
       const initRows: RowDraft[] = [{ category_name: '', budget_portion: '', value: '', apply_to_category: true }]
-      resetForm({ name: '', account_number: '', account_type: '' })
+      resetForm({ name: '', account_number: '', account_type: '', currency: defaultCurrency ?? 'NGN' })
       setAllocType('percentage')
       setRows(initRows)
       initialAllocRef.current = { type: 'percentage', rows: initRows }
@@ -251,7 +251,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         setAllocError(
           allocType === 'percentage'
             ? `Allocations total ${runningTotal.toFixed(1)}% — must equal 100%`
-            : `Allocations total ${baseCurrencySymbol}${runningTotal.toLocaleString()} — must equal starting balance ${baseCurrencySymbol}${(values.starting_balance ?? 0).toLocaleString()}`
+            : `Allocations total ${selectedCurrencySymbol}${runningTotal.toLocaleString()} — must equal starting balance ${selectedCurrencySymbol}${(values.starting_balance ?? 0).toLocaleString()}`
         )
         return
       }
@@ -542,7 +542,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                           : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
                       }`}
                     >
-                      {t === 'percentage' ? 'Percentage %' : `Amount ${baseCurrencySymbol}`}
+                      {t === 'percentage' ? 'Percentage %' : `Amount ${selectedCurrencySymbol}`}
                     </button>
                   ))}
                 </div>
@@ -555,7 +555,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
                     {allocType === 'percentage'
                       ? `${runningTotal.toFixed(1)} / 100%`
-                      : `${baseCurrencySymbol}${runningTotal.toLocaleString()} / ${baseCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`}
+                      : `${selectedCurrencySymbol}${runningTotal.toLocaleString()} / ${selectedCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`}
                   </span>
                 </div>
 
@@ -563,7 +563,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
                     <span>Category</span>
                     <span>Portion</span>
-                    <span>{allocType === 'percentage' ? '%' : baseCurrencySymbol}</span>
+                    <span>{allocType === 'percentage' ? '%' : selectedCurrencySymbol}</span>
                     <span title="Count in category balance" className="cursor-help">Count</span>
                     <span />
                   </div>
@@ -702,7 +702,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   {allocError ?? (
                     allocType === 'percentage'
                       ? `Total is ${runningTotal.toFixed(1)}% — must equal 100%`
-                      : `Total ${baseCurrencySymbol}${runningTotal.toLocaleString()} doesn't match starting balance ${baseCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`
+                      : `Total ${selectedCurrencySymbol}${runningTotal.toLocaleString()} doesn't match starting balance ${selectedCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`
                   )}
                 </div>
               )}
