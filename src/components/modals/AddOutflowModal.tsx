@@ -256,7 +256,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         </div>
 
         {/* Recorded Date — editable reporting/upload date */}
-        <Field label="Recorded Date" error={errors.recorded_at_date?.message}>
+        <Field label="Recorded Date" error={errors.recorded_at_date?.message}
+          help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
           <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
         </Field>
 
@@ -286,7 +287,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         </Field>
 
         {/* Transaction Type */}
-        <Field label="Transaction Type" error={errors.transaction_type?.message}>
+        <Field label="Transaction Type" error={errors.transaction_type?.message}
+          help="Normal is a regular outflow. Refund/Reversal corrects a prior entry. Bank Deposit and Intrabank Transfer are system types for inter-account movements.">
           <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
             {TXN_TYPES.map(t => (
               <option key={t.value} value={t.value}>{t.label}</option>
@@ -326,14 +328,16 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
         {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
+          <Field label="Stage Code 1" error={errors.stage_code_1?.message}
+            help="The fund or category this outflow is charged against. Used to match outflows to the correct budget line and allocation portion.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                 options={categories.map(c => ({ value: c.name, label: c.name }))}
                 placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
             )} />
           </Field>
-          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}>
+          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}
+            help="The allocation portion this outflow is drawn from: Percentage Allocation, Specific Seed, or Savings.">
             <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
               <option value="">— Select —</option>
               <option value="Percentage Allocation">Percentage Allocation</option>
@@ -345,7 +349,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
         {/* Outflow Type + Department — reporting/classification only, do not affect balances */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Outflow Type (reporting)" error={errors.outflow_type_id?.message}>
+          <Field label="Outflow Type (reporting)" error={errors.outflow_type_id?.message}
+            help="Classifies the nature of this expenditure for financial reports (e.g. Salaries, Utilities, Events). Does not affect balances — for reporting only.">
             <Controller name="outflow_type_id" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                 options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}

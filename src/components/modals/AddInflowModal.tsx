@@ -315,7 +315,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </div>
 
         {/* Recorded Date — editable reporting/upload date */}
-        <Field label="Recorded Date" error={errors.recorded_at_date?.message}>
+        <Field label="Recorded Date" error={errors.recorded_at_date?.message}
+          help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
           <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
         </Field>
 
@@ -341,7 +342,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </Field>
 
         {/* Transaction Type */}
-        <Field label="Transaction Type" error={errors.transaction_type?.message}>
+        <Field label="Transaction Type" error={errors.transaction_type?.message}
+          help="Normal is a regular inflow. Refund/Reversal corrects a prior outflow or entry. Bank Deposit, Intrabank Transfer, and Balance Brought Forward are system types used for reconciliation.">
           <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
             {TXN_TYPES.map(t => (
               <option key={t.value} value={t.value}>{t.label}</option>
@@ -363,7 +365,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
         {/* Income Type */}
         {incomeTypes.length > 0 && (
-          <Field label="Income Type">
+          <Field label="Income Type"
+            help="Classifies the source of this income (e.g. Tithes, Offerings, Rent). Used for income-type breakdown in financial reports. The system auto-suggests a type based on the description.">
             {transactionType ? (
               <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
                 {TXN_TYPES.find(t => t.value === transactionType)?.label ?? transactionType}
@@ -400,7 +403,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         )}
 
         {/* Allocation Config */}
-        <Field label="Allocation Config">
+        <Field label="Allocation Config"
+          help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the config active on the transaction date. Choose a specific config to override.">
           {transactionType ? (
             <p className="text-xs text-gray-400 italic">Not applicable for non-Normal transactions</p>
           ) : selectedIncomeType?.special_config_id && !configManuallySet ? (
@@ -441,14 +445,16 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
         {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Stage Code 1" error={errors.stage_code_1?.message}>
+          <Field label="Stage Code 1" error={errors.stage_code_1?.message}
+            help="The category assigned to this inflow. Used in reports to group income by type (e.g. Tithes, Offerings, Donations). Drives budget allocation.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                 options={categories.map(c => ({ value: c.name, label: c.name }))}
                 placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
             )} />
           </Field>
-          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}>
+          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}
+            help="Specifies how this inflow's allocation portion is handled: Percentage Allocation applies percentage splits, Specific Seed earmarks a fixed amount, Savings routes to a savings fund.">
             <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
               <option value="">— Select —</option>
               <option value="Percentage Allocation">Percentage Allocation</option>
