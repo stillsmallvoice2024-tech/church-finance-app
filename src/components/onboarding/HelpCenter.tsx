@@ -312,7 +312,7 @@ export function HelpCenter() {
       role="dialog"
       aria-modal="true"
       aria-label="Help Center"
-      className="fixed inset-x-0 top-0 bottom-14 lg:inset-0 z-[9000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-x-0 top-0 bottom-12 lg:inset-0 z-[9000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) closeCenter() }}
     >
       <div className="w-full max-w-2xl max-h-full lg:max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
