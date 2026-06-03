@@ -11,6 +11,7 @@ import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
+import { useOrgStore } from '../../store/orgStore'
 import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -238,6 +239,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
+  const orgId = useOrgStore.getState().orgId
 
   // Step state
   const [step,     setStep]    = useState(1)
@@ -1191,6 +1193,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '') row.narration = String(raw[narrIdx]).trim()
         if (refIdx  >= 0 && raw[refIdx]  != null && raw[refIdx]  !== '') row.transaction_ref = String(raw[refIdx]).trim()
         if (userId) row.created_by = userId
+        if (orgId)  row.org_id    = orgId
         if (internalBank) row.bank_name = internalBank.name
         fxRows.push(row)
       }
