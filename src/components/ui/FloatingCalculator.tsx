@@ -47,14 +47,30 @@ const KEYBOARD_MAP: Record<string, string> = {
   '%': '%',
 }
 
-const PANEL_W = 288
+const PANEL_W = 320
 
 function formatDisplay(val: string): string {
   if (val === 'Error') return 'Error'
-  if (val.length <= 9) return val
-  const num = parseFloat(val)
-  if (!isFinite(num)) return val
-  return num.toExponential(3)
+  // Already in exponential form (from store's fmt for huge/tiny results)
+  if (val.includes('e')) return val
+
+  const isNeg = val.startsWith('-')
+  const abs = isNeg ? val.slice(1) : val
+  const dotIdx = abs.indexOf('.')
+  const intPart = dotIdx >= 0 ? abs.slice(0, dotIdx) : abs
+  const decPart = dotIdx >= 0 ? abs.slice(dotIdx) : ''
+
+  // Count significant digits; go exponential only beyond 12
+  const sigDigits = abs.replace('.', '').replace(/^0+/, '').length || 1
+  if (sigDigits > 12) {
+    const num = parseFloat(val)
+    if (!isFinite(num)) return val
+    return (isNeg ? '-' : '') + Math.abs(num).toExponential(4)
+  }
+
+  // Thin-space (U+2009) thousands separator on the integer part
+  const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return (isNeg ? '-' : '') + intFormatted + decPart
 }
 
 function parseClipboardNumber(text: string): string | null {
@@ -239,7 +255,10 @@ export function FloatingCalculator() {
 
   const acLabel = !pageState.waitingForOperand && pageState.displayValue !== '0' ? 'CE' : 'AC'
   const displayStr = formatDisplay(pageState.displayValue)
-  const displayFontSize = displayStr.length > 8 ? 'text-2xl' : displayStr.length > 6 ? 'text-3xl' : 'text-4xl'
+  const displayFontSize =
+    displayStr.length > 15 ? 'text-xl' :
+    displayStr.length > 11 ? 'text-2xl' :
+    displayStr.length > 8  ? 'text-3xl' : 'text-4xl'
 
   if (!user) return null
 
