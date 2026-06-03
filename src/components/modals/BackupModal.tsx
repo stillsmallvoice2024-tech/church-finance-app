@@ -6,6 +6,7 @@ import {
 import { Modal } from '../ui/Modal'
 import { useAuth } from '../../hooks/useAuth'
 import { useToastStore } from '../../store/toastStore'
+import { useOrgStore } from '../../store/orgStore'
 import {
   MANAGED_TABLES,
   SCHEMA_DISCOVERY_MIGRATION_SQL,
@@ -33,6 +34,7 @@ const MANAGED_INITIAL: TableProgress[] = MANAGED_TABLES.filter(t => t.backupEnab
 export function BackupModal({ open, onClose }: Props) {
   const { user }         = useAuth()
   const { push: toast }  = useToastStore()
+  const orgId            = useOrgStore((s) => s.orgId)
 
   const [step,           setStep]           = useState<Step>('configuring')
   const [strictMode,     setStrictMode]     = useState(false)
@@ -99,6 +101,7 @@ export function BackupModal({ open, onClose }: Props) {
             : key
           upsertItem(section, key, label, status, count)
         },
+        orgId ?? undefined,
       )
       if (!cancelRef.current) {
         setBackup(result)
@@ -124,7 +127,7 @@ export function BackupModal({ open, onClose }: Props) {
     setSharing(true)
     setStep('sharing')
     try {
-      const url = await uploadBackupForLink(backup, user.id)
+      const url = await uploadBackupForLink(backup, user.id, orgId ?? undefined)
       setLink(url)
       setStep('link-ready')
     } catch (e) {

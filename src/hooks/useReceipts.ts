@@ -18,6 +18,7 @@ export interface Receipt {
 }
 
 export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
+  const orgId = useOrgStore((s) => s.orgId)
   const [receipts, setReceipts] = useState<Receipt[]>([])
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
@@ -25,29 +26,33 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
   const fetch = useCallback(async () => {
     if (!entityId) return
     setLoading(true); setError(null)
-    const { data, error: err } = await supabase
+    let q = supabase
       .from('receipts')
       .select('*')
       .eq('entity_type', entityType)
       .eq('entity_id', entityId)
       .order('created_at', { ascending: false })
+    if (orgId) q = q.eq('org_id', orgId)
+    const { data, error: err } = await q
     if (err) setError(err.message)
     else setReceipts((data ?? []) as Receipt[])
     setLoading(false)
-  }, [entityType, entityId])
+  }, [entityType, entityId, orgId])
 
   useEffect(() => { fetch() }, [fetch])
 
   const upload = useCallback(async (file: File): Promise<void> => {
     const { user } = useAuthStore.getState()
+    const { orgId: currentOrgId } = useOrgStore.getState()
+    if (!currentOrgId) throw new Error('No active organisation.')
     const ext  = file.name.split('.').pop() ?? 'bin'
-    const path = `${entityType}/${entityId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    // Org-prefixed path: {orgId}/{entityType}/{entityId}/{ts}-{random}.{ext}
+    const path = `${currentOrgId}/${entityType}/${entityId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
     const { error: storageErr } = await supabase.storage
       .from('receipts').upload(path, file)
     if (storageErr) throw new Error(storageErr.message)
 
-    const { orgId } = useOrgStore.getState()
     const { error: dbErr } = await supabase.from('receipts').insert({
       entity_type: entityType,
       entity_id:   entityId,
@@ -56,7 +61,7 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
       file_size:   file.size,
       mime_type:   file.type || null,
       uploaded_by: user?.id ?? null,
-      ...(orgId ? { org_id: orgId } : {}),
+      org_id:      currentOrgId,
     })
     if (dbErr) {
       console.error('[receipts] db insert failed:', dbErr)

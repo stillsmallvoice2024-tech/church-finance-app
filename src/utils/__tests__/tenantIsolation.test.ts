@@ -1,0 +1,464 @@
+/**
+ * Tenant isolation regression tests.
+ *
+ * These tests verify that:
+ * 1. All data-fetching hooks require an active org_id before querying
+ * 2. All mutations include org_id in inserts
+ * 3. Audit log writes include org_id
+ * 4. ResetDataModal scopes all operations to the current org
+ * 5. Org-switching clears cached state
+ *
+ * These are pure-logic / structural tests — no DB connection required.
+ */
+
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+const ROOT = resolve(__dirname, '../../..')
+const src  = (rel: string) => readFileSync(resolve(ROOT, 'src', rel), 'utf-8')
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+
+describe('useAuditLog tenant isolation', () => {
+  const code = src('hooks/useAuditLog.ts')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../store/orgStore'")
+  })
+
+  it('reads orgId from store', () => {
+    expect(code).toContain('useOrgStore')
+    expect(code).toContain('orgId')
+  })
+
+  it('guards fetch on orgId presence', () => {
+    expect(code).toContain('if (!orgId)')
+  })
+
+  it('filters audit_log query by org_id', () => {
+    expect(code).toContain(".eq('org_id', orgId)")
+  })
+
+  it('includes orgId in useCallback deps', () => {
+    expect(code).toMatch(/useCallback\(.*orgId.*\[orgId/s)
+  })
+})
+
+// ── Field changes ─────────────────────────────────────────────────────────────
+
+describe('useFieldChanges tenant isolation', () => {
+  const code = src('hooks/useFieldChanges.ts')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../store/orgStore'")
+  })
+
+  it('reads orgId from store', () => {
+    expect(code).toContain('useOrgStore')
+    expect(code).toContain('orgId')
+  })
+
+  it('guards fetch on orgId presence', () => {
+    expect(code).toContain('if (!orgId)')
+  })
+
+  it('filters field_changes query by org_id', () => {
+    expect(code).toContain(".eq('org_id', orgId)")
+  })
+
+  it('includes orgId in useCallback deps', () => {
+    expect(code).toContain('[orgId,')
+  })
+})
+
+// ── Mutations: audit + field-change writes ────────────────────────────────────
+
+describe('useMutations audit org_id inclusion', () => {
+  const code = src('hooks/useMutations.ts')
+
+  it('logAudit reads orgId from store', () => {
+    expect(code).toContain('useOrgStore.getState().orgId')
+  })
+
+  it('logAudit includes org_id in insert payload', () => {
+    const logAuditSection = code.slice(
+      code.indexOf('async function logAudit'),
+      code.indexOf('async function batchLogAudit'),
+    )
+    expect(logAuditSection).toContain('org_id')
+  })
+
+  it('logFieldChanges includes org_id in insert rows', () => {
+    const logFCSection = code.slice(
+      code.indexOf('async function logFieldChanges'),
+      code.indexOf('async function logAudit'),
+    )
+    expect(logFCSection).toContain('org_id')
+  })
+
+  it('batchLogAudit tags rows with org_id', () => {
+    const batchSection = code.slice(
+      code.indexOf('async function batchLogAudit'),
+      code.indexOf('async function batchLogFieldChanges'),
+    )
+    expect(batchSection).toContain('org_id')
+  })
+
+  it('batchLogFieldChanges tags rows with org_id', () => {
+    const batchFCSection = code.slice(
+      code.indexOf('async function batchLogFieldChanges'),
+      code.indexOf('// ── Input types'),
+    )
+    expect(batchFCSection).toContain('org_id')
+  })
+})
+
+// ── ResetDataModal: export and delete scoping ─────────────────────────────────
+
+describe('ResetDataModal tenant isolation', () => {
+  const code = src('components/modals/ResetDataModal.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../../store/orgStore'")
+  })
+
+  it('Q helper includes org_id filter', () => {
+    expect(code).toContain('.eq(\'org_id\', orgId)')
+  })
+
+  it('runExport accepts orgId parameter', () => {
+    expect(code).toContain('async function runExport(key: string, sym: string, orgId: string)')
+  })
+
+  it('deleteAllData accepts orgId parameter', () => {
+    expect(code).toContain('async function deleteAllData(orgId: string)')
+  })
+
+  it('deleteAllData scopes receipts select by org_id', () => {
+    const deleteSection = code.slice(
+      code.indexOf('async function deleteAllData'),
+      code.indexOf('// ── Component'),
+    )
+    expect(deleteSection).toContain('.eq(\'org_id\', orgId)')
+  })
+
+  it('deleteAllData scopes table deletes by org_id', () => {
+    const deleteSection = code.slice(
+      code.indexOf('async function deleteAllData'),
+      code.indexOf('// ── Component'),
+    )
+    expect(deleteSection).toContain('.delete().eq(\'org_id\', orgId)')
+  })
+
+  it('handleDelete guards on orgId', () => {
+    expect(code).toContain('if (!orgId) return')
+  })
+
+  it('audit-log export filters by org_id', () => {
+    const auditSection = code.slice(
+      code.indexOf("key === 'audit-log'"),
+      code.indexOf("key === 'audit-log'") + 400,
+    )
+    expect(auditSection).toContain(".eq('org_id', orgId)")
+  })
+})
+
+// ── All data hooks guard on orgId ─────────────────────────────────────────────
+
+describe('all data hooks guard before querying', () => {
+  const hooks = [
+    'hooks/useBanks.ts',
+    'hooks/useCategories.ts',
+    'hooks/useDashboard.ts',
+    'hooks/useDepartments.ts',
+    'hooks/useDynamicReports.ts',
+    'hooks/useFX.ts',
+    'hooks/useFXConversions.ts',
+    'hooks/useIncomeTypes.ts',
+    'hooks/useLedger.ts',
+    'hooks/useOutflowTypes.ts',
+    'hooks/useReportEngine.ts',
+    'hooks/useReportTemplates.ts',
+    'hooks/useAuditLog.ts',
+    'hooks/useFieldChanges.ts',
+  ]
+
+  hooks.forEach(hook => {
+    it(`${hook} checks orgId before fetching`, () => {
+      const code = src(hook)
+      expect(code).toContain('orgId')
+      // Guard pattern: `if (!orgId)` or combined `if (!x || !orgId)` or `if (!orgId ||`
+      expect(code).toMatch(/if \(!orgId\)|if \(![^)]+\|\|\s*!orgId\)|if \(!orgId\s*\|\|/)
+    })
+  })
+})
+
+// ── Org-switching clears all caches ──────────────────────────────────────────
+
+describe('org switching cache invalidation', () => {
+  const authCode = src('hooks/useAuth.ts')
+
+  it('switchOrg resets allocation store', () => {
+    const switchSection = authCode.slice(
+      authCode.indexOf('const switchOrg'),
+      authCode.indexOf('return { switchOrg }'),
+    )
+    expect(switchSection).toContain('useAllocationStore.getState().reset()')
+  })
+
+  it('switchOrg resets account codes store', () => {
+    const switchSection = authCode.slice(
+      authCode.indexOf('const switchOrg'),
+      authCode.indexOf('return { switchOrg }'),
+    )
+    expect(switchSection).toContain('useAccountCodesStore.getState().reset()')
+  })
+
+  it('signOut clears org state', () => {
+    const signOutSection = authCode.slice(
+      authCode.indexOf('const signOut'),
+      authCode.indexOf('return {') + 200,
+    )
+    expect(signOutSection).toContain('useOrgStore.getState().clearOrg()')
+  })
+})
+
+// ── Migration: audit_log and field_changes get org_id ────────────────────────
+
+describe('security migration: audit log org isolation', () => {
+  const migration = readFileSync(
+    resolve(ROOT, 'supabase/migrations/20260602000002_audit_log_org_isolation.sql'),
+    'utf-8',
+  )
+
+  it('adds org_id to audit_log', () => {
+    expect(migration).toContain('ALTER TABLE public.audit_log')
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS org_id')
+  })
+
+  it('adds org_id to field_changes', () => {
+    expect(migration).toContain('ALTER TABLE public.field_changes')
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS org_id')
+  })
+
+  it('drops old cross-org is_admin() SELECT policy', () => {
+    expect(migration).toContain("DROP POLICY IF EXISTS \"audit_admin_read\"")
+  })
+
+  it('replaces audit_log SELECT with org-scoped policy', () => {
+    expect(migration).toContain('CREATE POLICY "audit_select" ON public.audit_log')
+    expect(migration).toContain('is_org_member(org_id)')
+  })
+
+  it('replaces field_changes SELECT with org-scoped policy', () => {
+    expect(migration).toContain('CREATE POLICY "field_changes_select" ON public.field_changes')
+    expect(migration).toContain('is_org_member(org_id)')
+  })
+
+  it('adds DELETE policy so org admins can clear own logs', () => {
+    expect(migration).toContain('CREATE POLICY "audit_delete" ON public.audit_log')
+    expect(migration).toContain('CREATE POLICY "field_changes_delete" ON public.field_changes')
+  })
+
+  it('fixes profiles_update_admin cross-org leak', () => {
+    expect(migration).toContain("DROP POLICY IF EXISTS \"profiles_update_admin\"")
+    expect(migration).toContain('CREATE POLICY "profiles_update_admin" ON public.profiles')
+    // New policy must use org-scoped join, not the global is_admin()
+    expect(migration).toContain('org_members caller')
+    expect(migration).toContain('JOIN   public.org_members target')
+  })
+
+  it('fixes profiles_delete cross-org leak', () => {
+    expect(migration).toContain("DROP POLICY IF EXISTS \"profiles_delete\"")
+    expect(migration).toContain('CREATE POLICY "profiles_delete" ON public.profiles')
+  })
+
+  it('backfills audit_log org_id for existing rows', () => {
+    expect(migration).toContain('UPDATE public.audit_log')
+    expect(migration).toContain('SET    org_id = COALESCE')
+  })
+
+  it('backfills field_changes org_id for existing rows', () => {
+    expect(migration).toContain('UPDATE public.field_changes')
+    expect(migration).toContain('SET    org_id = COALESCE')
+  })
+})
+
+// ── Storage: receipt file paths include org prefix ────────────────────────────
+
+describe('useReceipts storage org isolation', () => {
+  const code = src('hooks/useReceipts.ts')
+
+  it('upload path uses org prefix {orgId}/{entityType}/{entityId}/...', () => {
+    expect(code).toContain('`${currentOrgId}/${entityType}/${entityId}/')
+  })
+
+  it('upload throws when no active org', () => {
+    expect(code).toContain("if (!currentOrgId) throw new Error('No active organisation.')")
+  })
+
+  it('upload always sets org_id in DB insert', () => {
+    const uploadSection = code.slice(
+      code.indexOf('const upload = useCallback'),
+      code.indexOf('const remove = useCallback'),
+    )
+    expect(uploadSection).toContain('org_id:      currentOrgId')
+    expect(uploadSection).not.toContain('...(orgId ?')
+  })
+
+  it('per-entity fetch adds org_id filter when available', () => {
+    const fetchSection = code.slice(
+      code.indexOf('const fetch = useCallback'),
+      code.indexOf('const upload = useCallback'),
+    )
+    expect(fetchSection).toContain("q.eq('org_id', orgId)")
+  })
+})
+
+// ── Storage: migration hardens bucket policies ────────────────────────────────
+
+describe('storage isolation migration', () => {
+  const migration = readFileSync(
+    resolve(ROOT, 'supabase/migrations/20260602000003_storage_org_isolation.sql'),
+    'utf-8',
+  )
+
+  it('sets receipts bucket to private (not public)', () => {
+    expect(migration).toContain("'receipts', false")
+  })
+
+  it('sets backups bucket to private', () => {
+    expect(migration).toContain("'backups', false")
+  })
+
+  it('drops old permissive receipts storage policies', () => {
+    expect(migration).toContain("DROP POLICY IF EXISTS \"receipts_objects_insert\"")
+    expect(migration).toContain("DROP POLICY IF EXISTS \"receipts_objects_select\"")
+  })
+
+  it('new receipts INSERT checks org membership via path prefix', () => {
+    const insertSection = migration.slice(
+      migration.indexOf('receipts_storage_insert'),
+      migration.indexOf('receipts_storage_select'),
+    )
+    expect(insertSection).toContain('is_org_member')
+    expect(insertSection).toContain('is_org_finance_user')
+    expect(insertSection).toContain('storage.foldername(name)')
+  })
+
+  it('new receipts SELECT checks org membership via path prefix', () => {
+    const selectSection = migration.slice(
+      migration.indexOf('receipts_storage_select'),
+      migration.indexOf('receipts_storage_delete'),
+    )
+    expect(selectSection).toContain('is_org_member')
+    expect(selectSection).toContain('storage.foldername(name)')
+  })
+
+  it('backups INSERT enforces caller-owned path prefix', () => {
+    const insertSection = migration.slice(
+      migration.indexOf('backups_storage_insert'),
+      migration.indexOf('backups_storage_select'),
+    )
+    expect(insertSection).toContain("auth.uid()::text")
+    expect(insertSection).toContain('storage.foldername(name)')
+  })
+
+  it('backups SELECT enforces caller-owned path prefix', () => {
+    const selectSection = migration.slice(
+      migration.indexOf('backups_storage_select'),
+      migration.indexOf('backups_storage_delete'),
+    )
+    expect(selectSection).toContain("auth.uid()::text")
+  })
+})
+
+// ── Backup: explicit org scoping, not RLS-only ────────────────────────────────
+
+describe('backupRestore explicit org scoping', () => {
+  const code = src('utils/backupRestore.ts')
+
+  it('ManagedTableConfig has orgScoped field', () => {
+    expect(code).toContain('orgScoped?: boolean')
+  })
+
+  it('fetchTableData accepts optional orgId and filters', () => {
+    const fnSection = code.slice(
+      code.indexOf('export async function fetchTableData'),
+      code.indexOf('export type BackupProgressCallback'),
+    )
+    expect(fnSection).toContain('orgId?: string')
+    expect(fnSection).toContain("q.eq('org_id', orgId)")
+  })
+
+  it('createBackup accepts optional orgId parameter', () => {
+    const fnSig = code.slice(
+      code.indexOf('export async function createBackup'),
+      code.indexOf('): Promise<BackupFileV2>'),
+    )
+    expect(fnSig).toContain('orgId?: string')
+  })
+
+  it('createBackup passes orgId to fetchTableData for orgScoped tables', () => {
+    const bodySection = code.slice(
+      code.indexOf('// 2. Export managed tables'),
+      code.indexOf('// 3. Export unmanaged tables'),
+    )
+    expect(bodySection).toContain('def.orgScoped && orgId')
+  })
+
+  it('uploadBackupForLink accepts orgId and scopes storage path', () => {
+    const fnSection = code.slice(
+      code.indexOf('export async function uploadBackupForLink'),
+      code.indexOf('// ── Validation'),
+    )
+    expect(fnSection).toContain('orgId?: string')
+    expect(fnSection).toContain('orgSegment')
+    expect(fnSection).toContain('`${userId}/${orgSegment}/')
+  })
+
+  it('all major transaction tables are orgScoped: true', () => {
+    const orgScopedTables = [
+      'inflow_transactions', 'outflow_transactions', 'intra_flows',
+      'bank_deposits', 'intrabank_transfers', 'fx_transactions',
+      'banks', 'categories', 'category_groups', 'allocation_configs',
+    ]
+    orgScopedTables.forEach(t => {
+      const idx = code.indexOf(`key: '${t}'`)
+      const block = code.slice(idx, idx + 300)
+      expect(block).toContain('orgScoped: true')
+    })
+  })
+
+  it('non-org tables are orgScoped: false', () => {
+    const nonOrgTables = ['organizations', 'currencies']
+    nonOrgTables.forEach(t => {
+      const idx = code.indexOf(`key: '${t}'`)
+      const block = code.slice(idx, idx + 300)
+      expect(block).toContain('orgScoped: false')
+    })
+  })
+})
+
+// ── BackupModal passes orgId ──────────────────────────────────────────────────
+
+describe('BackupModal org scoping', () => {
+  const code = src('components/modals/BackupModal.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../../store/orgStore'")
+  })
+
+  it('reads orgId from store', () => {
+    expect(code).toContain('useOrgStore((s) => s.orgId)')
+  })
+
+  it('passes orgId to createBackup', () => {
+    expect(code).toContain('orgId ?? undefined,')
+  })
+
+  it('passes orgId to uploadBackupForLink', () => {
+    expect(code).toContain('uploadBackupForLink(backup, user.id, orgId ?? undefined)')
+  })
+})
