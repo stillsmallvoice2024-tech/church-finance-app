@@ -399,6 +399,22 @@ create table public.invitations (
 );
 
 -- ============================================================
+-- INVITATION EMAILS
+-- ============================================================
+create table if not exists public.invitation_emails (
+  id            uuid        primary key default gen_random_uuid(),
+  invitation_id uuid        not null references public.invitations(id) on delete cascade,
+  email         text        not null,
+  status        text        not null check (status in ('sent', 'failed')),
+  error_msg     text,
+  resend_id     text,
+  sent_at       timestamptz not null default now()
+);
+
+create index if not exists idx_invitation_emails_invitation on public.invitation_emails(invitation_id);
+create index if not exists idx_invitation_emails_sent_at   on public.invitation_emails(sent_at desc);
+
+-- ============================================================
 -- AUDIT LOG
 -- ============================================================
 create table public.audit_log (
@@ -724,6 +740,12 @@ create policy "receipts_insert" on public.receipts
   for insert with check (public.is_org_finance_user(org_id));
 create policy "receipts_delete" on public.receipts
   for delete using (public.is_org_finance_user(org_id));
+
+-- ── Invitation emails ──────────────────────────────────────────────────────────
+alter table public.invitation_emails enable row level security;
+
+create policy "invitation_emails_admin_read" on public.invitation_emails
+  for select using (is_admin());
 
 -- ── Invitations ────────────────────────────────────────────────────────────────
 -- Token reads via get_invitation_by_token() SECURITY DEFINER RPC only.

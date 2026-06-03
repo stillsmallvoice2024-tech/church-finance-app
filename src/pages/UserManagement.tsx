@@ -70,6 +70,8 @@ const inviteSchema = z.object({
 })
 type InviteForm = z.infer<typeof inviteSchema>
 
+type EmailStatus = 'sending' | 'sent' | 'failed' | 'not_configured' | null
+
 function InviteUserModal({
   open,
   onClose,
@@ -84,12 +86,20 @@ function InviteUserModal({
   const { push: toast } = useToastStore()
   const { register, handleSubmit, formState: { errors }, reset } =
     useForm<InviteForm>({ resolver: zodResolver(inviteSchema), defaultValues: { role: 'accountant' } })
-  const [loading,   setLoading]   = useState(false)
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
-  const [copied,    setCopied]    = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const [inviteUrl,   setInviteUrl]   = useState<string | null>(null)
+  const [inviteEmail, setInviteEmail] = useState<string | null>(null)
+  const [copied,      setCopied]      = useState(false)
+  const [emailStatus, setEmailStatus] = useState<EmailStatus>(null)
 
   useEffect(() => {
-    if (open) { reset({ role: 'accountant' }); setInviteUrl(null); setCopied(false) }
+    if (open) {
+      reset({ role: 'accountant' })
+      setInviteUrl(null)
+      setInviteEmail(null)
+      setCopied(false)
+      setEmailStatus(null)
+    }
   }, [open, reset])
 
   const handleCopy = () => {
@@ -100,6 +110,29 @@ function InviteUserModal({
     })
   }
 
+  const sendEmail = async (invitationId: string) => {
+    setEmailStatus('sending')
+    try {
+      const { data, error } = await supabase.functions.invoke('send-invite-email', {
+        body: { invitation_id: invitationId },
+      })
+      if (error) {
+        setEmailStatus('failed')
+        return
+      }
+      const result = data as { ok: boolean; duplicate?: boolean; error?: string }
+      if (result.ok) {
+        setEmailStatus('sent')
+      } else if (result.error?.includes('not configured')) {
+        setEmailStatus('not_configured')
+      } else {
+        setEmailStatus('failed')
+      }
+    } catch {
+      setEmailStatus('failed')
+    }
+  }
+
   const onSubmit = async (values: InviteForm) => {
     setLoading(true)
     const { orgId } = useOrgStore.getState()
@@ -107,7 +140,7 @@ function InviteUserModal({
     // Check for an existing pending invite for this email+org to avoid duplicates.
     let existingQuery = supabase
       .from('invitations')
-      .select('token')
+      .select('id, token')
       .eq('email', values.email)
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
@@ -117,28 +150,37 @@ function InviteUserModal({
     if (existing) {
       setLoading(false)
       setInviteUrl(`${window.location.origin}/invite/${existing.token}`)
+      setInviteEmail(values.email)
       onSuccess()
+      await sendEmail(existing.id)
       return
     }
 
     const token      = crypto.randomUUID()
     const expiresAt  = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
-    const { error } = await supabase.from('invitations').insert({
-      email:      values.email,
-      role:       values.role,
-      invited_by: invitedById,
-      status:     'pending',
-      token,
-      expires_at: expiresAt,
-      ...(orgId ? { org_id: orgId } : {}),
-    })
+    const { data: created, error } = await supabase
+      .from('invitations')
+      .insert({
+        email:      values.email,
+        role:       values.role,
+        invited_by: invitedById,
+        status:     'pending',
+        token,
+        expires_at: expiresAt,
+        ...(orgId ? { org_id: orgId } : {}),
+      })
+      .select('id')
+      .single()
+
     setLoading(false)
     if (error) {
       toast(error.message, 'error')
     } else {
       setInviteUrl(`${window.location.origin}/invite/${token}`)
+      setInviteEmail(values.email)
       onSuccess()
+      await sendEmail(created.id)
     }
   }
 
@@ -149,6 +191,30 @@ function InviteUserModal({
           <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
             Invitation created! Share this link with the user. It expires in 7 days.
           </div>
+
+          {/* Email delivery status */}
+          {emailStatus === 'sending' && (
+            <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+              <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
+              Sending invitation email to {inviteEmail}…
+            </div>
+          )}
+          {emailStatus === 'sent' && (
+            <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+              Invitation email sent to <strong>{inviteEmail}</strong>.
+            </div>
+          )}
+          {emailStatus === 'failed' && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+              Email delivery failed — share the link below manually.
+            </div>
+          )}
+          {emailStatus === 'not_configured' && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+              Email service not configured (RESEND_API_KEY missing) — share the link below manually.
+            </div>
+          )}
+
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Invite Link</label>
             <div className="flex gap-2">
@@ -180,8 +246,8 @@ function InviteUserModal({
           <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700 flex gap-2">
             <MailOpen className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              A unique invite link will be generated. Share it with the user so they can
-              create their account and set a password.
+              An invitation email will be sent automatically. A unique invite link will also
+              be generated for manual sharing.
             </span>
           </div>
 
@@ -224,7 +290,7 @@ function InviteUserModal({
               className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
             >
               {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {loading ? 'Generating…' : 'Generate Invite Link'}
+              {loading ? 'Generating…' : 'Send Invitation'}
             </button>
           </div>
         </form>
