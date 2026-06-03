@@ -28,6 +28,7 @@ import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { EmptyState } from '../components/ui/EmptyState'
+import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
@@ -527,7 +528,7 @@ export default function BankDeposits() {
                 </div>
               ))
             ) : sortedRows.length === 0 ? (
-              <EmptyState icon={Landmark} title="No bank deposits found." compact />
+              <PageEmptyState pageId="bank-deposits" compact />
             ) : pagedRows.map(row => (
               <div key={`${row.source}-${row.id}`} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                 {/* Card header */}
@@ -595,11 +596,8 @@ export default function BankDeposits() {
                     ))}</tr>
                   ))
                 ) : sortedRows.length === 0 ? (
-                  <tr><td colSpan={colCount} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-2 text-gray-400">
-                      <Landmark className="w-10 h-10 text-gray-200" />
-                      <p className="text-sm">No bank deposits found.</p>
-                    </div>
+                  <tr><td colSpan={colCount}>
+                    <PageEmptyState pageId="bank-deposits" compact />
                   </td></tr>
                 ) : pagedRows.flatMap(row => {
                   const isExpanded = expandedId === `${row.source}-${row.id}`

@@ -19,8 +19,9 @@ import { usePageTitle }  from '../hooks/usePageTitle'
 import { supabase }     from '../lib/supabase'
 import { useOrgStore }  from '../store/orgStore'
 import type { UserRole } from '../types'
-import { HelpButton }      from '../components/onboarding/HelpButton'
-import { HelpTooltip }     from '../components/ui/HelpTooltip'
+import { HelpButton }       from '../components/onboarding/HelpButton'
+import { HelpTooltip }      from '../components/ui/HelpTooltip'
+import { PageEmptyState }   from '../components/onboarding/PageEmptyState'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // Org-member row — flattened from org_members + profiles join.
@@ -708,7 +709,7 @@ export default function UserManagement() {
         ) : !orgId ? (
           <div className="py-16 text-center text-sm text-gray-400">No organisation loaded. Please refresh.</div>
         ) : members.length === 0 ? (
-          <div className="py-16 text-center text-sm text-gray-400">No members found.</div>
+          <PageEmptyState pageId="users" compact />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

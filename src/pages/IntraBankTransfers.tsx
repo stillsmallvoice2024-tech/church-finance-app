@@ -25,7 +25,8 @@ import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
-import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgCurrency }  from '../hooks/useOrgCurrency'
+import { PageEmptyState }  from '../components/onboarding/PageEmptyState'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -364,10 +365,7 @@ export default function IntraBankTransfers() {
                   </div>
                 ))
               ) : filtered.length === 0 ? (
-                <div className="py-12 text-center text-gray-400">
-                  <ArrowRightLeft className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm">No intrabank transfers found.</p>
-                </div>
+                <PageEmptyState pageId="intrabank-transfers" compact />
               ) : filtered.map(row => (
                 <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                   {/* Card header */}
@@ -418,11 +416,8 @@ export default function IntraBankTransfers() {
                       ))}</tr>
                     ))
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={8} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2 text-gray-400">
-                        <ArrowRightLeft className="w-10 h-10 text-gray-200" />
-                        <p className="text-sm">No intrabank transfers found.</p>
-                      </div>
+                    <tr><td colSpan={8}>
+                      <PageEmptyState pageId="intrabank-transfers" compact />
                     </td></tr>
                   ) : filtered.flatMap(row => {
                     const isExpanded = expandedId === row.id
