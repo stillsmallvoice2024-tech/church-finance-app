@@ -271,7 +271,14 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
                 <tbody className="divide-y divide-gray-100">
                   {visible.map(bank => (
                     <tr key={bank.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-gray-900">{bank.name}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        <span className="flex items-center gap-2">
+                          {bank.name}
+                          {bank.is_foreign_currency && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-100 text-amber-700 border border-amber-200 shrink-0">FX</span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">
                         {bank.account_number ?? <span className="text-gray-300">—</span>}
                       </td>

@@ -296,6 +296,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const isForeignCurrencyBank = !!internalBank &&
     (bankList.find(b => b.id === internalBank.id)?.is_foreign_currency ?? false)
 
+  const bankLabel = (b: { name: string; is_foreign_currency: boolean }) =>
+    b.is_foreign_currency ? `${b.name} [FX]` : b.name
+
+  // When a Foreign Currency Bank is selected: lock target table to fx_transactions
+  // and auto-populate fxCurrency from the bank's own currency.
+  useEffect(() => {
+    if (!isForeignCurrencyBank) return
+    setTargetTable('fx_transactions')
+    const bankCurrency = bankList.find(b => b.id === internalBank?.id)?.currency
+    if (bankCurrency) setFxCurrency(bankCurrency)
+  }, [isForeignCurrencyBank, internalBank?.id, bankList])
+
   // Per-row pending deduction (by sheet row index ri)
   const [rowPendingDeductions, setRowPendingDeductions] = useState<Set<number>>(new Set())
 
@@ -1328,18 +1340,25 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               {/* Target table selector */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-gray-600">Import into table</label>
-                <select
-                  value={targetTable}
-                  onChange={e => setTargetTable(e.target.value as TargetTable)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                >
-                  <option value="">— Select target table —</option>
-                  {(Object.entries(TABLE_CONFIG) as [TargetTable, typeof TABLE_CONFIG[TargetTable]][]).map(
-                    ([key, cfg]) => (
-                      <option key={key} value={key}>{cfg.label}</option>
-                    ),
-                  )}
-                </select>
+                {isForeignCurrencyBank ? (
+                  <div className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                    {TABLE_CONFIG.fx_transactions.label}
+                    <span className="ml-2 text-[10px] font-semibold text-amber-600">(FX Bank — locked)</span>
+                  </div>
+                ) : (
+                  <select
+                    value={targetTable}
+                    onChange={e => setTargetTable(e.target.value as TargetTable)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                  >
+                    <option value="">— Select target table —</option>
+                    {(Object.entries(TABLE_CONFIG) as [TargetTable, typeof TABLE_CONFIG[TargetTable]][]).map(
+                      ([key, cfg]) => (
+                        <option key={key} value={key}>{cfg.label}</option>
+                      ),
+                    )}
+                  </select>
+                )}
               </div>
             </div>
 
@@ -1357,7 +1376,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 }`}
               >
                 <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {bankList.map(b => <option key={b.id} value={b.id}>{bankLabel(b)}</option>)}
               </select>
             </div>
 
@@ -1466,7 +1485,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 }`}
               >
                 <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {bankList.map(b => <option key={b.id} value={b.id}>{bankLabel(b)}</option>)}
               </select>
               {internalBank && (
                 <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
@@ -1509,7 +1528,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             {/* Required field check */}
             {(() => {
               const mappedFields = new Set(Object.values(mapping))
-              const missing = config.fields.filter(f => f.required && !mappedFields.has(f.key))
+              const missing = config.fields.filter(f => {
+                if (!f.required) return false
+                if (f.key === 'currency' && fxCurrency) return false
+                return !mappedFields.has(f.key)
+              })
               return missing.length > 0 ? (
                 <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1524,7 +1547,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               onNext={targetTable === 'bank_statement' ? proceedToRowConfig : proceedToImport}
               nextDisabled={(() => {
                 const mappedFields = new Set(Object.values(mapping))
-                return config.fields.some(f => f.required && !mappedFields.has(f.key)) || dupCheckLoading
+                return config.fields.some(f => {
+                  if (!f.required) return false
+                  if (f.key === 'currency' && fxCurrency) return false
+                  return !mappedFields.has(f.key)
+                }) || dupCheckLoading
               })()}
               nextLoading={dupCheckLoading}
               nextLabel={targetTable === 'bank_statement'
@@ -1554,7 +1581,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 }`}
               >
                 <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {bankList.map(b => <option key={b.id} value={b.id}>{bankLabel(b)}</option>)}
               </select>
               {internalBank && (
                 <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
@@ -2691,7 +2718,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 }`}
               >
                 <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {bankList.map(b => <option key={b.id} value={b.id}>{bankLabel(b)}</option>)}
               </select>
               {internalBank && (
                 <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>

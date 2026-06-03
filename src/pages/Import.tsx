@@ -402,7 +402,7 @@ export default function Import() {
                         >
                           <option value="">— No bank —</option>
                           {banks.map(b => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
+                            <option key={b.id} value={b.id}>{b.is_foreign_currency ? `${b.name} [FX]` : b.name}</option>
                           ))}
                         </select>
                       )}
@@ -863,7 +863,7 @@ function ManualEntryForm() {
               >
                 <option value="">— None —</option>
                 {banks.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
+                  <option key={b.id} value={b.id}>{b.is_foreign_currency ? `${b.name} [FX]` : b.name}</option>
                 ))}
               </select>
             )}
@@ -1053,7 +1053,7 @@ function ManualEntryForm() {
               >
                 <option value="">— None —</option>
                 {banks.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
+                  <option key={b.id} value={b.id}>{b.is_foreign_currency ? `${b.name} [FX]` : b.name}</option>
                 ))}
               </select>
             )}
