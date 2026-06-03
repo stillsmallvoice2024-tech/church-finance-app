@@ -1,5 +1,5 @@
 import { formatCurrency } from '../../utils/formatters'
-import type { Currency } from '../../types'
+import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 type AmountMode = 'inflow' | 'outflow' | 'balance' | 'neutral'
 
@@ -16,7 +16,7 @@ export function amountColorCls(value: number, mode: AmountMode): string {
 interface AmountCellProps {
   value: number
   mode?: AmountMode
-  currency?: Currency
+  currency?: string
   showZero?: boolean
   bold?: boolean
   className?: string
@@ -31,6 +31,8 @@ export function AmountCell({
   bold = true,
   className = '',
 }: AmountCellProps) {
+  const { baseCurrencyCode } = useOrgCurrency()
+  const currencyCode = currency ?? baseCurrencyCode
   const isEmpty = value === 0 && !showZero
   return (
     <td
@@ -38,7 +40,7 @@ export function AmountCell({
         bold ? 'font-semibold' : 'font-medium'
       } ${isEmpty ? 'text-gray-300' : amountColorCls(value, mode)} ${className}`}
     >
-      {isEmpty ? '—' : formatCurrency(value, currency)}
+      {isEmpty ? '—' : formatCurrency(value, currencyCode)}
     </td>
   )
 }
