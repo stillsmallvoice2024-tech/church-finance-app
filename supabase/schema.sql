@@ -1570,3 +1570,106 @@ $$;
 alter table public.fx_transactions add column if not exists bank_name text;
 
 grant execute on function public.transfer_org_ownership(uuid, uuid) to authenticated;
+
+-- ── LB-2/E-C2: Atomic FX Conversion ──────────────────────────────────────────
+create or replace function public.perform_fx_conversion(
+  p_org_id               uuid,
+  p_user_id              uuid,
+  p_date                 date,
+  p_fx_currency          text,
+  p_fx_amount            numeric,
+  p_exchange_rate        numeric,
+  p_naira_amount         numeric,
+  p_bank_name            text,
+  p_base_currency        text default 'NGN',
+  p_notes                text default null,
+  p_allocation_config_id uuid default null,
+  p_stage_code_1         text default null,
+  p_stage_code_2         text default 'Percentage Allocation'
+)
+returns jsonb
+language plpgsql
+security invoker
+as $$
+declare
+  v_prev_balance  numeric(15,4);
+  v_new_balance   numeric(15,4);
+  v_fx_tx_id      uuid;
+  v_inflow_id     uuid;
+  v_conversion_id uuid;
+begin
+  if p_org_id is null then
+    raise exception 'org_id is required';
+  end if;
+  if p_bank_name is null or trim(p_bank_name) = '' then
+    raise exception 'bank_name is required for FX conversion inflows';
+  end if;
+  if p_fx_amount <= 0 then
+    raise exception 'fx_amount must be positive';
+  end if;
+  if p_exchange_rate <= 0 then
+    raise exception 'exchange_rate must be positive';
+  end if;
+
+  select coalesce(running_balance, 0)
+  into   v_prev_balance
+  from   public.fx_transactions
+  where  org_id   = p_org_id
+    and  currency = p_fx_currency
+  order  by date desc, created_at desc
+  limit  1;
+
+  v_prev_balance := coalesce(v_prev_balance, 0);
+  v_new_balance  := v_prev_balance - p_fx_amount;
+
+  insert into public.fx_transactions (
+    date, currency, withdrawal, deposit, running_balance,
+    narration, created_by, org_id
+  ) values (
+    p_date, p_fx_currency, p_fx_amount, 0, v_new_balance,
+    coalesce(p_notes, 'Converted to ' || p_base_currency || ' @ ' || p_exchange_rate::text),
+    p_user_id, p_org_id
+  )
+  returning id into v_fx_tx_id;
+
+  insert into public.inflow_transactions (
+    date, amount, description, bank_name,
+    stage_code_1, stage_code_2, allocation_config_id,
+    fx_currency, fx_amount, fx_rate,
+    transaction_type, created_by, org_id
+  ) values (
+    p_date, p_naira_amount,
+    coalesce(p_notes, 'FX Conversion: ' || p_fx_currency || ' → ' || p_base_currency),
+    p_bank_name, p_stage_code_1,
+    coalesce(p_stage_code_2, 'Percentage Allocation'),
+    p_allocation_config_id, p_fx_currency, p_fx_amount, p_exchange_rate,
+    'fx_conversion', p_user_id, p_org_id
+  )
+  returning id into v_inflow_id;
+
+  insert into public.fx_conversions (
+    date, fx_currency, fx_amount, exchange_rate, naira_amount,
+    fx_withdrawal_id, naira_inflow_id, notes,
+    allocation_config_id, is_partial, created_by, org_id
+  ) values (
+    p_date, p_fx_currency, p_fx_amount, p_exchange_rate, p_naira_amount,
+    v_fx_tx_id, v_inflow_id, p_notes,
+    p_allocation_config_id, (p_fx_amount < v_prev_balance),
+    p_user_id, p_org_id
+  )
+  returning id into v_conversion_id;
+
+  return jsonb_build_object(
+    'fx_transaction_id', v_fx_tx_id,
+    'inflow_id',         v_inflow_id,
+    'conversion_id',     v_conversion_id
+  );
+
+exception
+  when others then raise;
+end;
+$$;
+
+grant execute on function public.perform_fx_conversion(
+  uuid, uuid, date, text, numeric, numeric, numeric, text, text, text, uuid, text, text
+) to authenticated;
