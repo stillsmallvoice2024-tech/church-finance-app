@@ -1855,7 +1855,16 @@ GRANT EXECUTE ON FUNCTION public.perform_fx_conversion(
   uuid, uuid, date, text, numeric, numeric, numeric, text, text, text, uuid, text, text
 ) TO authenticated;
 
-NOTIFY pgrst, 'reload schema';`
+NOTIFY pgrst, 'reload schema';
+
+-- ── LB-8 / E-H6: Block NaN and negative amounts in category_opening_balances ──
+DELETE FROM public.category_opening_balances
+  WHERE amount < 0 OR amount = 'NaN'::numeric;
+DO $$ BEGIN
+  ALTER TABLE public.category_opening_balances
+    ADD CONSTRAINT cob_amount_valid
+    CHECK (amount >= 0 AND amount != 'NaN'::numeric);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
 

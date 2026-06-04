@@ -344,7 +344,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           const amount = allocType === 'percentage'
             ? allocatePercent(totalBalance, row.percentage ?? 0)
             : (row.amount ?? 0)
-          if (amount <= 0) continue
+          if (!isFinite(amount) || isNaN(amount) || amount <= 0) continue
           try {
             await upsertCategoryOpeningBalance(cat.id, row.budget_portion as BudgetPortion, amount)
           } catch (e: unknown) {
