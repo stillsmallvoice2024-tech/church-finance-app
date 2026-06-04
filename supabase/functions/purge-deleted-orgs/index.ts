@@ -4,14 +4,31 @@
 //
 // Deploy: supabase functions deploy purge-deleted-orgs
 // Schedule via Supabase dashboard → Database → Extensions → pg_cron, or
-// call via an external scheduler with the service-role key.
+// call via an external scheduler.
+//
+// REQUIRED env var: CRON_SECRET — callers must send "Authorization: Bearer <CRON_SECRET>"
+// Set via: supabase secrets set CRON_SECRET=<generated-secret>
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const CRON_SECRET          = Deno.env.get('CRON_SECRET')
 const MAX_RETRIES          = 3
 const RETRY_BASE_MS        = 2000
+
+// Constant-time string comparison — prevents timing-based secret enumeration.
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc    = new TextEncoder()
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  if (aBytes.byteLength !== bBytes.byteLength) return false
+  let diff = 0
+  for (let i = 0; i < aBytes.byteLength; i++) {
+    diff |= aBytes[i] ^ bBytes[i]
+  }
+  return diff === 0
+}
 
 interface PurgeResult {
   org_id:    string
@@ -25,6 +42,26 @@ async function sleep(ms: number) {
 }
 
 Deno.serve(async (req) => {
+  // ── Authorization ─────────────────────────────────────────────────────────
+  // Fail closed: CRON_SECRET must be provisioned before the function can run.
+  if (!CRON_SECRET) {
+    console.error('[purge-job] CRON_SECRET env var is not configured')
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Service misconfigured' }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const authHeader = req.headers.get('Authorization') ?? ''
+  const token      = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+
+  if (!token || !timingSafeEqual(token, CRON_SECRET)) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
   // Allow GET (for cron pings) and POST
   if (req.method !== 'GET' && req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 })
