@@ -3,9 +3,11 @@ import { Plus, RefreshCw, TrendingUp, TrendingDown, Pencil, ChevronRight, Chevro
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
+import { useFXConversions, type FXConversion } from '../hooks/useFXConversions'
 import { useBanks } from '../hooks/useBanks'
 import { AddFXModal } from '../components/modals/AddFXModal'
 import { AddFXConversionModal } from '../components/modals/AddFXConversionModal'
+import { EditFXConversionModal } from '../components/modals/EditFXConversionModal'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -48,6 +50,10 @@ export default function ForeignCurrency() {
   const fxState = useDataViewState({ storageKey: 'fx', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [rates, setRates]               = useState<Record<string, number>>({})
+  const [editConversion,  setEditConversion]  = useState<FXConversion | null>(null)
+  const [convCurrency,    setConvCurrency]    = useState<string>('')
+  const { conversions, loading: convLoading, refetch: refetchConversions } = useFXConversions(convCurrency || undefined)
+  const { isAdmin } = useRole()
 
   const { canWrite }                                = useRole()
   const { transactions, summaries, loading, error, refetch } =
@@ -401,6 +407,67 @@ export default function ForeignCurrency() {
         )}
       </div>
 
+      {/* Conversion History */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-gray-700">Conversion History</h2>
+          <div className="flex gap-1">
+            <button onClick={() => setConvCurrency('')} className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${!convCurrency ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>All</button>
+            {FX_META.map(m => (
+              <button key={m.code} onClick={() => setConvCurrency(prev => prev === m.code ? '' : m.code)}
+                className={`px-2 py-1 text-xs rounded-md font-mono transition-colors ${convCurrency === m.code ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {m.code}
+              </button>
+            ))}
+          </div>
+        </div>
+        {convLoading ? (
+          <div className="space-y-2 p-5">{[1,2,3].map(i => <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />)}</div>
+        ) : conversions.length === 0 ? (
+          <div className="py-10 text-center text-sm text-gray-400">No conversions recorded.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-left font-medium">Date</th>
+                  <th className="px-4 py-3 text-left font-medium">Currency</th>
+                  <th className="px-4 py-3 text-right font-medium">FX Amount</th>
+                  <th className="px-4 py-3 text-right font-medium">Rate</th>
+                  <th className="px-4 py-3 text-right font-medium">{baseCurrencyCode} Amount</th>
+                  <th className="px-4 py-3 text-left font-medium">Notes</th>
+                  {isAdmin() && <th className="px-4 py-3 w-10" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {conversions.map(c => {
+                  const meta = FX_META.find(m => m.code === c.fx_currency)
+                  const sym  = meta?.symbol ?? c.fx_currency
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{c.date}</td>
+                      <td className="px-4 py-3"><span className="font-mono text-xs font-semibold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{c.fx_currency}</span></td>
+                      <td className="px-4 py-3 text-right font-mono text-danger">{sym}{fmtFX(c.fx_amount, c.fx_currency, 2)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-gray-600 text-xs">{baseCurrencySymbol}{c.exchange_rate.toLocaleString(formatLocale, { minimumFractionDigits: 4 })}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-success">{baseCurrencySymbol}{fmtBase(c.naira_amount)}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px] truncate">{c.notes ?? '—'}</td>
+                      {isAdmin() && (
+                        <td className="px-2 py-3">
+                          <button onClick={() => setEditConversion(c)}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit conversion">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <DescriptionTooltip tooltip={descTooltip} />
       <AddFXModal
         open={addOpen}
@@ -423,6 +490,12 @@ export default function ForeignCurrency() {
         onSuccess={refetch}
         summaries={summaries}
         banks={ngnBanks}
+      />
+      <EditFXConversionModal
+        open={!!editConversion}
+        onClose={() => setEditConversion(null)}
+        onSuccess={() => { setEditConversion(null); refetch(); refetchConversions() }}
+        conversion={editConversion}
       />
     </div>
   )
