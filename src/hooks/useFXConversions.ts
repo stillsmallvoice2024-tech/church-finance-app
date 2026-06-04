@@ -56,6 +56,7 @@ export interface AddFXConversionInput {
   fx_amount:            number
   exchange_rate:        number
   naira_amount:         number
+  bank_name?:           string
   notes?:               string
   allocation_config_id?: string
   stage_code_1?:        string
@@ -106,12 +107,14 @@ export function useAddFXConversion() {
       if (fxErr) throw fxErr
 
       // 2. Record NGN inflow (the converted naira)
+      //    bank_name must be set — NULL makes the row invisible to BankLedger
       const { data: inflowRow, error: inflowErr } = await supabase
         .from('inflow_transactions')
         .insert({
           date:                 input.date,
           amount:               input.naira_amount,
           description:          input.notes ?? `FX Conversion: ${input.fx_currency} → ${baseCurrency}`,
+          bank_name:            input.bank_name ?? null,
           stage_code_1:         input.stage_code_1 ?? null,
           stage_code_2:         input.stage_code_2 ?? 'Percentage Allocation',
           allocation_config_id: input.allocation_config_id ?? null,

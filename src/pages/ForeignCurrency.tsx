@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Plus, TrendingUp, TrendingDown, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
+import { Plus, RefreshCw, TrendingUp, TrendingDown, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
 import { useBanks } from '../hooks/useBanks'
 import { AddFXModal } from '../components/modals/AddFXModal'
+import { AddFXConversionModal } from '../components/modals/AddFXConversionModal'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -40,6 +41,7 @@ export default function ForeignCurrency() {
     return n.toLocaleString(formatLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   const [addOpen, setAddOpen]           = useState(false)
+  const [convertOpen, setConvertOpen]   = useState(false)
   const [editRecord, setEditRecord]     = useState<FXTransaction | null>(null)
   const [filterCcy, setFilterCcy]       = useState<string>('')
   const [expandedId, setExpandedId]     = useState<string | null>(null)
@@ -51,7 +53,8 @@ export default function ForeignCurrency() {
   const { transactions, summaries, loading, error, refetch } =
     useFXTransactions(filterCcy || undefined)
   const { banks } = useBanks()
-  const fxBanks = useMemo(() => banks.filter(b => b.is_foreign_currency).map(b => ({ id: b.id, name: b.name })), [banks])
+  const fxBanks  = useMemo(() => banks.filter(b =>  b.is_foreign_currency).map(b => ({ id: b.id, name: b.name })), [banks])
+  const ngnBanks = useMemo(() => banks.filter(b => !b.is_foreign_currency).map(b => ({ id: b.id, name: b.name })), [banks])
 
   usePageTitle('Foreign Currency')
 
@@ -129,12 +132,20 @@ export default function ForeignCurrency() {
           <p className="text-sm text-gray-500 mt-0.5">FX holdings in foreign currencies</p>
         </div>
         {canWrite() && (
-          <button
-            onClick={() => setAddOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light"
-          >
-            <Plus className="w-4 h-4" /> Add Transaction
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setConvertOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-success/10 text-success border border-success/30 text-sm font-medium rounded-lg hover:bg-success/20"
+            >
+              <RefreshCw className="w-4 h-4" /> Convert to {baseCurrencyCode}
+            </button>
+            <button
+              onClick={() => setAddOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light"
+            >
+              <Plus className="w-4 h-4" /> Add Transaction
+            </button>
+          </div>
         )}
       </div>
 
@@ -405,6 +416,13 @@ export default function ForeignCurrency() {
         currentBalances={currentBalances}
         editRecord={editRecord}
         fxBanks={fxBanks}
+      />
+      <AddFXConversionModal
+        open={convertOpen}
+        onClose={() => setConvertOpen(false)}
+        onSuccess={refetch}
+        summaries={summaries}
+        banks={ngnBanks}
       />
     </div>
   )
