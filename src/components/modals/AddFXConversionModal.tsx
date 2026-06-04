@@ -17,9 +17,11 @@ interface Props {
   onSuccess:         () => void
   summaries:         FXCurrencySummary[]
   defaultCurrency?:  string
+  /** NGN (non-FX) banks available to receive the converted amount */
+  banks:             { id: string; name: string }[]
 }
 
-export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defaultCurrency }: Props) {
+export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defaultCurrency, banks }: Props) {
   const { mutate, loading, error, reset } = useAddFXConversion()
   const { configs } = useAllocationStore()
   const { baseCurrencyCode, baseCurrencySymbol, formatLocale, foreignCurrencies: fxCurrencies, getCurrencySymbol } = useOrgCurrency()
@@ -28,13 +30,14 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
   const [fxAmount,    setFxAmount]    = useState('')
   const [rate,        setRate]        = useState('')
   const [date,        setDate]        = useState('')
+  const [bankName,    setBankName]    = useState('')
   const [notes,       setNotes]       = useState('')
   const [configId,    setConfigId]    = useState('')
   const [stageCode1,  setStageCode1]  = useState('')
   const [formError,   setFormError]   = useState<string | null>(null)
 
   const modalRef = useRef<ModalHandle>(null)
-  const isDirty = fxAmount !== '' || rate !== '' || notes !== '' || stageCode1 !== ''
+  const isDirty = fxAmount !== '' || rate !== '' || notes !== '' || stageCode1 !== '' || bankName !== ''
 
   const summary    = summaries.find(s => s.currency === currency)
   const balance    = summary?.currentBalance ?? 0
@@ -50,12 +53,13 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
     setFormError(null)
     setFxAmount('')
     setRate('')
+    setBankName(banks[0]?.name ?? '')
     setNotes('')
     setConfigId('')
     setStageCode1('')
     setDate(new Date().toISOString().slice(0, 10))
     if (defaultCurrency) setCurrency(defaultCurrency)
-  }, [open, defaultCurrency]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, defaultCurrency, banks]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const availableCurrencies = useMemo(
     () => fxCurrencies.filter(m => (summaries.find(s => s.currency === m.code)?.currentBalance ?? 0) > 0),
@@ -70,6 +74,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
     if (fxAmt > balance)    { setFormError(`Amount exceeds available balance (${meta.symbol}${fmtFX(balance, getCurrencyLocale(currency))}).`); return }
     if (exchangeRate <= 0)  { setFormError('Enter a valid exchange rate.'); return }
     if (!date)              { setFormError('Select a date.'); return }
+    if (!bankName.trim())   { setFormError('Select a bank to receive the converted amount.'); return }
 
     const input: AddFXConversionInput = {
       date,
@@ -77,6 +82,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
       fx_amount:            fxAmt,
       exchange_rate:        exchangeRate,
       naira_amount:         baseAmt,
+      bank_name:            bankName.trim(),
       notes:                notes.trim() || undefined,
       allocation_config_id: configId || undefined,
       stage_code_1:         stageCode1.trim() || undefined,
@@ -206,6 +212,29 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
             onChange={e => setDate(e.target.value)}
             className={iCls}
           />
+        </div>
+
+        {/* Receiving Bank */}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-600">Receiving Bank ({baseCurrencyCode}) *</label>
+          {banks.length > 0 ? (
+            <select
+              value={bankName}
+              onChange={e => setBankName(e.target.value)}
+              className={`${iCls} bg-white`}
+            >
+              <option value="">— Select bank —</option>
+              {banks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={bankName}
+              onChange={e => setBankName(e.target.value)}
+              placeholder="Bank name"
+              className={iCls}
+            />
+          )}
         </div>
 
         {/* Notes */}
