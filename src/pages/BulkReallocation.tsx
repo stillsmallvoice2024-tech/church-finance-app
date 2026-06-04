@@ -15,6 +15,7 @@ import { formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
 import type { ReportCategoryBalance } from '../types'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { allocatePercent } from '../utils/financeMath'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ function getPortionBalance(bal: ReportCategoryBalance, portion: BudgetPortion): 
 function computeAmount(srcBalance: number, mode: Mode, pct: number, fixed: number): number {
   const raw =
     mode === 'full'       ? srcBalance :
-    mode === 'percentage' ? Math.round(srcBalance * pct / 100 * 100) / 100 :
+    mode === 'percentage' ? allocatePercent(srcBalance, pct) :
     fixed
   return Math.max(0, Math.min(raw, srcBalance))
 }

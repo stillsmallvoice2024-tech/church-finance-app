@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { allocatePercent } from './financeMath'
 
 export interface DateRange {
   from: string
@@ -122,7 +123,7 @@ async function getCategoryConfigInflows(
         if (normalized !== portionFilter) continue
       }
 
-      total += Number(inflow.amount) * (Number(row.percentage) / 100)
+      total += allocatePercent(Number(inflow.amount), Number(row.percentage))
     }
   }
 

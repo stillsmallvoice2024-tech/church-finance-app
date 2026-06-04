@@ -12,6 +12,7 @@ import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useOrgStore } from '../store/orgStore'
 import { useCategories } from './useCategories'
 import type { ReportCategoryBalance, ReportBasis, OperationalBalanceMap } from '../types'
+import { allocatePercent } from '../utils/financeMath'
 
 export function useReportEngine(
   reportDate: string | null,
@@ -183,7 +184,7 @@ export function useReportEngine(
       if (!cfg) continue
       for (const catRow of cfg.rows) {
         if (!catRow.percentage) continue
-        const allocated = Number(r.amount) * (catRow.percentage / 100)
+        const allocated = allocatePercent(Number(r.amount), catRow.percentage)
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
         } else if (catRow.budget_portion === 'Savings') {

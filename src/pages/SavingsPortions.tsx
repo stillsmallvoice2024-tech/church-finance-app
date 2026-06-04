@@ -12,6 +12,7 @@ import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
+import { allocatePercent } from '../utils/financeMath'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
@@ -122,7 +123,7 @@ export default function SavingsPortions() {
           if (row.budget_portion !== 'Savings') continue
           const pct = Number(row.percentage ?? 0)
           if (pct <= 0) continue
-          const allocAmount = Math.round(Number(inflow.amount) * pct / 100 * 100) / 100
+          const allocAmount = allocatePercent(Number(inflow.amount), pct)
           if (allocAmount <= 0) continue
           const cat = row.category_name || '(Uncategorised)'
           ensure(cat).deposited += allocAmount

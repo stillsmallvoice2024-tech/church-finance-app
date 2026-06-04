@@ -14,6 +14,7 @@ import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { allocatePercent } from '../utils/financeMath'
 
 interface SpecificRow {
   id:                       string
@@ -161,7 +162,7 @@ export default function SpecificGivings() {
           if (row.budget_portion !== 'Specific Seed') continue
           const pct = Number(row.percentage ?? 0)
           if (pct <= 0) continue
-          const allocAmount = Math.round(Number(inflow.amount) * pct / 100 * 100) / 100
+          const allocAmount = allocatePercent(Number(inflow.amount), pct)
           if (allocAmount <= 0) continue
           configSpecificRows.push({
             id:                        `cs-${inflow.id}-${row.category_name}`,

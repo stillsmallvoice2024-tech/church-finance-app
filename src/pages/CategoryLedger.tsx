@@ -23,6 +23,7 @@ import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
+import { allocatePercent } from '../utils/financeMath'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
@@ -214,7 +215,7 @@ export default function CategoryLedger() {
       if (!cfg) continue
       for (const catRow of cfg.rows) {
         if (!catRow.percentage) continue
-        const allocated = Number(r.amount) * (catRow.percentage / 100)
+        const allocated = allocatePercent(Number(r.amount), catRow.percentage)
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
         } else if (catRow.budget_portion === 'Savings') {
@@ -315,7 +316,7 @@ export default function CategoryLedger() {
             : getConfigForDate(configs, r.date as string)
           const catRow = cfg?.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || !c.budget_portion))
           if (!catRow?.percentage) continue
-          const allocated = Number(r.amount) * (catRow.percentage / 100)
+          const allocated = allocatePercent(Number(r.amount), catRow.percentage)
           if (allocated <= 0) continue
           inRows.push({
             id:          r.id as string,
@@ -389,7 +390,7 @@ export default function CategoryLedger() {
           const cfg = configs.find(c => c.id === (r.allocation_config_id as string))
           const catRow = cfg?.rows.find(c => c.category_name === activeCategory && c.budget_portion === sc2)
           if (!catRow?.percentage) continue
-          const allocated = Number(r.amount) * (catRow.percentage / 100)
+          const allocated = allocatePercent(Number(r.amount), catRow.percentage)
           if (allocated <= 0) continue
           inRows.push({
             id:          r.id as string,

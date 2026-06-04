@@ -18,6 +18,7 @@ import { CurrencyInput } from '../ui/CurrencyInput'
 import { formatCurrency, parseCurrency } from '../../utils/currency'
 import { useToastStore } from '../../store/toastStore'
 import { propagateBankOpeningBalance } from '../../utils/bankOpeningBalance'
+import { allocatePercent } from '../../utils/financeMath'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -341,7 +342,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             continue
           }
           const amount = allocType === 'percentage'
-            ? Math.round(((row.percentage ?? 0) / 100) * totalBalance * 100) / 100
+            ? allocatePercent(totalBalance, row.percentage ?? 0)
             : (row.amount ?? 0)
           if (amount <= 0) continue
           try {
