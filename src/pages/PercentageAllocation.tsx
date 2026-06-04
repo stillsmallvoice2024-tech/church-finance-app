@@ -54,7 +54,7 @@ export default function PercentageAllocation() {
         .eq('stage_code_2', 'Percentage Allocation'),
       supabase
         .from('outflow_transactions')
-        .select('stage_code_1, actual_amount, amount_disbursed')
+        .select('stage_code_1, amount_disbursed')
         .eq('stage_code_2', 'Percentage Allocation'),
       supabase
         .from('category_opening_balances')
@@ -92,7 +92,7 @@ export default function PercentageAllocation() {
     }
     for (const r of outflowRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      ensure(cat).withdrawn += Number(r.actual_amount || r.amount_disbursed || 0)
+      ensure(cat).withdrawn += Number(r.amount_disbursed || 0)
     }
     for (const ob of cobData) {
       const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''

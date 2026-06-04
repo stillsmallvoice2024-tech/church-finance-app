@@ -132,7 +132,7 @@ async function runExport(key: string, sym: string, orgId: string): Promise<void>
     type R = Record<string, unknown>
     const merged = [
       ...(inflowRes.data ?? []).map((r: R) => ({ date: r.date, description: r.description, inflow: r.amount, outflow: 0, category: r.stage_code_1, type: 'Inflow' })),
-      ...(outflowRes.data ?? []).map((r: R) => ({ date: r.date, description: r.description, inflow: 0, outflow: r.amount_disbursed, category: r.stage_code_1, type: 'Outflow' })),
+      ...(outflowRes.data ?? []).map((r: R) => ({ date: r.date, description: r.description, inflow: 0, outflow: Number(r.amount_disbursed || 0), category: r.stage_code_1, type: 'Outflow' })),
     ].sort((a, b) => String(a.date).localeCompare(String(b.date)))
     exportCSV(`bank-ledger-${date}.csv`,
       ['Date','Description',`Inflow (${sym})`,`Outflow (${sym})`,'Category','Type'],
@@ -147,7 +147,7 @@ async function runExport(key: string, sym: string, orgId: string): Promise<void>
     type R = Record<string, unknown>
     const rows = [
       ...(inflowRes.data ?? []).map((r: R) => ({ date: r.date, category: r.stage_code_1 ?? '(none)', description: r.description, inflow: r.amount, outflow: '', type: 'Inflow' })),
-      ...(outflowRes.data ?? []).map((r: R) => ({ date: r.date, category: r.stage_code_1 ?? '(none)', description: r.description, inflow: '', outflow: r.amount_disbursed, type: 'Outflow' })),
+      ...(outflowRes.data ?? []).map((r: R) => ({ date: r.date, category: r.stage_code_1 ?? '(none)', description: r.description, inflow: '', outflow: Number(r.amount_disbursed || 0), type: 'Outflow' })),
     ].sort((a, b) => String(a.category).localeCompare(String(b.category)) || String(a.date).localeCompare(String(b.date)))
     exportCSV(`category-ledger-${date}.csv`,
       ['Category','Date','Description',`Inflow (${sym})`,`Outflow (${sym})`,'Type'],

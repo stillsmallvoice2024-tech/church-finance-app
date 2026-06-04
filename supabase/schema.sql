@@ -221,7 +221,6 @@ create table public.outflow_transactions (
   amount_disbursed         numeric(15,2) default 0,
   amount_refunded          numeric(15,2) default 0,
   transfer_charge          numeric(15,2) default 0,
-  actual_amount            numeric(15,2) default 0,
   bank_total               numeric(15,2) default 0,
   stage_code_1             text,
   stage_code_2             text,
