@@ -80,7 +80,10 @@ async function getCategoryConfigInflows(
   let inflowQ = supabase
     .from('inflow_transactions')
     .select('amount, allocation_config_id, date, transaction_type, stage_code_2')
-    .is('transaction_type', null)   // reversals/refunds/bank_deposits are never allocated
+    // Allow null (normal inflows) and fx_conversion (converted naira). All other tagged
+    // types (reversal, refund, bank_deposit, intrabank_transfer, balance_brought_forward)
+    // are pass-through entries that carry no allocatable income.
+    .or('transaction_type.is.null,transaction_type.eq.fx_conversion')
 
   if (dateRange) {
     const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to

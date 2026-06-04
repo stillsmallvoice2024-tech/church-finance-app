@@ -48,9 +48,14 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   bank_deposit:             'Bank Deposit',
   intrabank_transfer:       'Intrabank Transfer',
   balance_brought_forward:  'Balance Brought Forward',
+  fx_conversion:            'FX Conversion',
 }
 
 const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
+
+// Rows with these transaction_types must not be edited, deleted, or bulk-selected
+// from the Inflows page — they are managed exclusively through their own workflows.
+const PROTECTED_TYPES = new Set(['balance_brought_forward', 'fx_conversion'])
 
 const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
   { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
@@ -141,7 +146,9 @@ export default function Inflows() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
 
-  const { selectedIds, toggleRow, clearAll, selectAllRows, allSelected } = useBulkSelection(data)
+  const { selectedIds, toggleRow, clearAll, selectAllRows, allSelected } = useBulkSelection(
+    data.filter(r => !PROTECTED_TYPES.has(r.transaction_type ?? '')),
+  )
 
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
@@ -375,12 +382,12 @@ export default function Inflows() {
                       <p className="text-sm font-mono font-bold tabular-nums text-success">{formatCurrency(Number(row.amount), baseCurrencyCode)}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                      {canWrite() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
+                      {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
                         <button onClick={() => openEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      {canDelete() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
+                      {canDelete() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
                         <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -462,8 +469,9 @@ export default function Inflows() {
                         <td className="pl-4 pr-2 py-3 w-10">
                           <input
                             type="checkbox"
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-4 h-4 rounded border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
                             checked={selectedIds.has(row.id)}
+                            disabled={PROTECTED_TYPES.has(row.transaction_type ?? '')}
                             onChange={() => toggleRow(row.id)}
                           />
                         </td>
@@ -512,12 +520,12 @@ export default function Inflows() {
                         <AmountCell value={Number(row.amount)} mode="inflow" />
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
-                            {canWrite() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
+                            {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
                               <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                                 <Pencil className="w-4 h-4" />
                               </button>
                             )}
-                            {canDelete() && row.transaction_type !== BALANCE_BROUGHT_FORWARD_TYPE && (
+                            {canDelete() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
                               <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                                 <Trash2 className="w-4 h-4" />
                               </button>

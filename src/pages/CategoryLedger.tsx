@@ -1,4 +1,14 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
+
+// Types that carry no allocatable income — skipped in all category allocation passes.
+// fx_conversion is intentionally absent: converted naira IS allocatable income.
+const NON_ALLOCATABLE_TYPES = new Set([
+  'balance_brought_forward',
+  'reversal',
+  'refund',
+  'bank_deposit',
+  'intrabank_transfer',
+])
 import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown } from 'lucide-react'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
@@ -196,7 +206,7 @@ export default function CategoryLedger() {
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-      if (r.transaction_type) continue
+      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
@@ -298,7 +308,7 @@ export default function CategoryLedger() {
 
         for (const r of inflowRes.data ?? []) {
           if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-          if (r.transaction_type) continue
+          if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
           const configId = r.allocation_config_id as string | null
           const cfg = configId
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
