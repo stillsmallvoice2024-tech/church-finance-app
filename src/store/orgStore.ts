@@ -31,6 +31,7 @@ interface OrgState {
   setOnboardingComplete:(v: boolean | null) => void
   setOrgStatus:         (status: OrgStatus, deletedAt?: string | null, purgeAt?: string | null) => void
   setSwitching:         (v: boolean) => void
+  setDefaultCurrency:   (code: string) => void
   clearOrg:             () => void
   persistActive:        (userId: string, orgId: string) => void
   getPersistedOrgId:    (userId: string) => string | null
@@ -67,6 +68,13 @@ export const useOrgStore = create<OrgState>((set) => ({
     set({ orgStatus: status, orgDeletedAt: deletedAt, orgPurgeAt: purgeAt }),
 
   setSwitching: (v) => set({ switching: v }),
+
+  setDefaultCurrency: (code) => set(state => ({
+    defaultCurrency: code,
+    memberships: state.memberships.map(m =>
+      m.org_id === state.orgId ? { ...m, default_currency: code } : m
+    ),
+  })),
 
   clearOrg: () => set({
     orgId: null, orgName: null, orgRole: null,

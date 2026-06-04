@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Star } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -22,6 +22,7 @@ import { AddDepartmentModal }        from '../components/modals/AddDepartmentMod
 import { useDepartments, deleteDepartment, type Department } from '../hooks/useDepartments'
 import { useCategories } from '../hooks/useCategories'
 import { useCurrencies, useAddCurrency, useDeleteCurrency } from '../hooks/useCurrencies'
+import { useOrgStore } from '../store/orgStore'
 import {
   useLockAllocationConfig,
   useUnlockAllocationConfig,
@@ -734,6 +735,10 @@ function CurrenciesTab() {
   const { mutate: addCurrency, loading: adding, error: addError, reset: resetAdd } = useAddCurrency()
   const { mutate: deleteCurrency } = useDeleteCurrency()
   const { push: toast } = useToastStore()
+  const { isOwner } = useRole()
+  const orgId            = useOrgStore(s => s.orgId)
+  const currentDefault   = useOrgStore(s => s.defaultCurrency) ?? 'NGN'
+  const setDefaultCurrency = useOrgStore(s => s.setDefaultCurrency)
 
   const [code,   setCode]   = useState('')
   const [name,   setName]   = useState('')
@@ -742,6 +747,13 @@ function CurrenciesTab() {
   const [formErr, setFormErr] = useState<string | null>(null)
   const [showMigration, setShowMigration] = useState(false)
   const isMigrationError = !!error && /relation.*does not exist|does not exist/i.test(error)
+
+  // Default-currency confirmation state
+  const [confirmCurrency, setConfirmCurrency] = useState<{ code: string; name: string; symbol: string } | null>(null)
+  const [settingDefault, setSettingDefault] = useState(false)
+
+  const currentMeta = currencies.find(c => c.code === currentDefault)
+  const currentLabel = currentMeta ? `${currentMeta.name} (${currentMeta.code})` : currentDefault
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -766,6 +778,20 @@ function CurrenciesTab() {
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Delete failed', 'error')
     }
+  }
+
+  const handleConfirmSetDefault = async () => {
+    if (!confirmCurrency || !orgId) return
+    setSettingDefault(true)
+    const { error: err } = await supabase
+      .from('organizations')
+      .update({ default_currency: confirmCurrency.code })
+      .eq('id', orgId)
+    setSettingDefault(false)
+    if (err) { toast(err.message, 'error'); return }
+    setDefaultCurrency(confirmCurrency.code)
+    toast(`${confirmCurrency.code} is now the default currency`, 'success')
+    setConfirmCurrency(null)
   }
 
   const iCls = 'px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
@@ -848,31 +874,93 @@ function CurrenciesTab() {
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Symbol</th>
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Flag</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Default</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {currencies.map(c => (
-                <tr key={c.code} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-mono font-semibold text-gray-800">{c.code}</td>
-                  <td className="px-4 py-2.5 text-gray-700">{c.name}</td>
-                  <td className="px-4 py-2.5 font-mono text-gray-600">{c.symbol}</td>
-                  <td className="px-4 py-2.5 text-lg">{c.flag ?? '—'}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => handleDelete(c.code)}
-                      className="p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-danger transition-colors"
-                      title={`Remove ${c.code}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {currencies.map(c => {
+                const isDefault = c.code === currentDefault
+                return (
+                  <tr key={c.code} className={`hover:bg-gray-50 ${isDefault ? 'bg-amber-50/40' : ''}`}>
+                    <td className="px-4 py-2.5 font-mono font-semibold text-gray-800">{c.code}</td>
+                    <td className="px-4 py-2.5 text-gray-700">{c.name}</td>
+                    <td className="px-4 py-2.5 font-mono text-gray-600">{c.symbol}</td>
+                    <td className="px-4 py-2.5 text-lg">{c.flag ?? '—'}</td>
+                    <td className="px-4 py-2.5">
+                      {isDefault ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold whitespace-nowrap">
+                          <Star className="w-3 h-3 fill-current" /> Default
+                        </span>
+                      ) : isOwner() ? (
+                        <button
+                          onClick={() => setConfirmCurrency({ code: c.code, name: c.name, symbol: c.symbol })}
+                          className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-amber-600 transition-colors whitespace-nowrap"
+                          title={`Set ${c.code} as default currency`}
+                        >
+                          <Star className="w-3 h-3" /> Set as default
+                        </button>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        onClick={() => handleDelete(c.code)}
+                        className="p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-danger transition-colors"
+                        title={`Remove ${c.code}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Confirm default currency change modal */}
+      <Modal
+        open={!!confirmCurrency}
+        onClose={() => setConfirmCurrency(null)}
+        title="Change Default Currency?"
+        size="max-w-md"
+        disableClose={settingDefault}
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setConfirmCurrency(null)}
+              disabled={settingDefault}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmSetDefault}
+              disabled={settingDefault}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-60"
+            >
+              {settingDefault && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {settingDefault ? 'Setting…' : 'Set as Default'}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <p>
+              All existing figures across the app are currently labeled in <strong>{currentLabel}</strong>.
+              Changing to <strong>{confirmCurrency?.name} ({confirmCurrency?.code})</strong> will update
+              the currency label on all pages going forward — <strong>the amounts themselves will not change</strong>.
+            </p>
+          </div>
+          <p className="text-sm text-gray-600">
+            New transactions, banks, and reports will use <strong>{confirmCurrency?.symbol} {confirmCurrency?.code}</strong> as the base currency.
+          </p>
+          <p className="text-sm text-gray-500">Do you want to proceed?</p>
+        </div>
+      </Modal>
     </div>
   )
 }
