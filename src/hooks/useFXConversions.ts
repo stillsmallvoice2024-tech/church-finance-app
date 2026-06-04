@@ -155,7 +155,7 @@ export function useUpdateFXConversion() {
       }).then(({ error: e }) => { if (e) console.warn('[audit_log] fx_conversion update:', e.message) })
       void result
     } catch (err) {
-      const msg = (err instanceof Error ? err.message : String(err))
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err)
       setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
@@ -190,7 +190,7 @@ export function useRevertFXConversion() {
         org_id: orgId,
       }).then(({ error: e }) => { if (e) console.warn('[audit_log] fx_conversion revert:', e.message) })
     } catch (err) {
-      const msg = (err instanceof Error ? err.message : String(err))
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err)
       setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
   }, [])
