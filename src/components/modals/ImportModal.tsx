@@ -148,12 +148,7 @@ const TXN_TYPE_OPTIONS = [
   { value: 'reversal',           label: 'Reversal' },
   { value: 'bank_deposit',       label: 'Bank Deposit' },
   { value: 'intrabank_transfer', label: 'Intrabank Transfer' },
-  { value: 'fx_inflow',          label: 'FX Inflow' },
-  { value: 'fx_outflow',         label: 'FX Outflow' },
 ]
-
-const FX_INFLOW_TYPES  = TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_inflow')
-const FX_OUTFLOW_TYPES = TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_outflow')
 
 function autoMapColumn(header: string, fields: FieldDef[]): string {
   const h = header.toLowerCase().replace(/[\s_\-().]+/g, '')
@@ -991,7 +986,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const origId  = rowOrigTxnIds[ri] ?? ''
 
         if (credit > 0) {
-          const txnType = isForeignCurrencyBank ? 'fx_inflow' : rowTxnType
+          const txnType = rowTxnType
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
           // Non-Normal transactions skip income type and allocation entirely
@@ -1033,7 +1028,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           inflowRows.push(row)
         }
         if (debit > 0) {
-          const txnType = isForeignCurrencyBank ? 'fx_outflow' : rowTxnType
+          const txnType = rowTxnType
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
           if (userId) row.created_by = userId
           if (!txnType && cfg) row.allocation_config_id = cfg.id
@@ -1689,8 +1684,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
               const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
 
-              const availableInflowTypes  = isForeignCurrencyBank ? FX_INFLOW_TYPES  : TXN_TYPE_OPTIONS
-              const availableOutflowTypes = isForeignCurrencyBank ? FX_OUTFLOW_TYPES : TXN_TYPE_OPTIONS
+              const availableInflowTypes  = TXN_TYPE_OPTIONS
+              const availableOutflowTypes = TXN_TYPE_OPTIONS
 
               const allRows = (processedRows ?? sheet.rows).map((raw, ri) => {
                 const r = raw as unknown[]

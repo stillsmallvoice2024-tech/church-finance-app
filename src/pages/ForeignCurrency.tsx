@@ -3,6 +3,7 @@ import { Plus, TrendingUp, TrendingDown, Pencil, ChevronRight, ChevronDown } fro
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
+import { useBanks } from '../hooks/useBanks'
 import { AddFXModal } from '../components/modals/AddFXModal'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
@@ -49,6 +50,8 @@ export default function ForeignCurrency() {
   const { canWrite }                                = useRole()
   const { transactions, summaries, loading, error, refetch } =
     useFXTransactions(filterCcy || undefined)
+  const { banks } = useBanks()
+  const fxBanks = useMemo(() => banks.filter(b => b.is_foreign_currency).map(b => ({ id: b.id, name: b.name })), [banks])
 
   usePageTitle('Foreign Currency')
 
@@ -393,6 +396,7 @@ export default function ForeignCurrency() {
         onClose={() => setAddOpen(false)}
         onSuccess={refetch}
         currentBalances={currentBalances}
+        fxBanks={fxBanks}
       />
       <AddFXModal
         open={!!editRecord}
@@ -400,6 +404,7 @@ export default function ForeignCurrency() {
         onSuccess={() => { setEditRecord(null); refetch() }}
         currentBalances={currentBalances}
         editRecord={editRecord}
+        fxBanks={fxBanks}
       />
     </div>
   )

@@ -15,6 +15,7 @@ const schema = z.object({
   amount:          z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   narration:       z.string().optional(),
   transaction_ref: z.string().optional(),
+  bank_name:       z.string().min(1, 'Bank is required'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -26,9 +27,11 @@ interface Props {
   /** Current running balance per currency — used to preview new balance */
   currentBalances: Map<string, number>
   editRecord?: FXTransaction | null
+  /** FX-tagged banks available for selection */
+  fxBanks: { id: string; name: string }[]
 }
 
-export function AddFXModal({ open, onClose, onSuccess, currentBalances, editRecord }: Props) {
+export function AddFXModal({ open, onClose, onSuccess, currentBalances, editRecord, fxBanks }: Props) {
   const isEdit = !!editRecord
   const addMutation    = useAddFXTransaction()
   const updateMutation = useUpdateFXTransaction()
@@ -44,6 +47,8 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
     defaultValues: { currency: defaultFxCurrency, type: 'deposit' },
   })
 
+  const defaultBankName = fxBanks[0]?.name ?? ''
+
   useEffect(() => {
     if (!open) return
     reset()
@@ -55,11 +60,12 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
         amount:          editRecord.deposit > 0 ? editRecord.deposit : editRecord.withdrawal,
         narration:       editRecord.narration       ?? '',
         transaction_ref: editRecord.transaction_ref ?? '',
+        bank_name:       (editRecord as FXTransaction & { bank_name?: string }).bank_name ?? defaultBankName,
       })
     } else {
-      resetForm({ date: new Date().toISOString().slice(0, 10), currency: defaultFxCurrency, type: 'deposit', amount: undefined })
+      resetForm({ date: new Date().toISOString().slice(0, 10), currency: defaultFxCurrency, type: 'deposit', amount: undefined, bank_name: defaultBankName })
     }
-  }, [open, reset, resetForm, editRecord, defaultFxCurrency])
+  }, [open, reset, resetForm, editRecord, defaultFxCurrency, defaultBankName])
 
   const selectedCurrency = watch('currency')
   const txType    = watch('type')
@@ -78,23 +84,25 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
         const input: UpdateFXTransactionInput = {
           id:              editRecord.id,
           date:            values.date,
-          currency:        values.currency,
+          currency:        values.currency as UpdateFXTransactionInput['currency'],
           deposit,
           withdrawal,
           running_balance: newBal,
           narration:       values.narration       || undefined,
           transaction_ref: values.transaction_ref || undefined,
+          bank_name:       values.bank_name       || undefined,
         }
         await (updateMutation.mutate as unknown as (i: UpdateFXTransactionInput) => Promise<void>)(input)
       } else {
         const input: AddFXTransactionInput = {
           date:            values.date,
-          currency:        values.currency,
+          currency:        values.currency as AddFXTransactionInput['currency'],
           deposit,
           withdrawal,
           running_balance: newBal,
           narration:       values.narration       || undefined,
           transaction_ref: values.transaction_ref || undefined,
+          bank_name:       values.bank_name       || undefined,
         }
         await (addMutation.mutate as unknown as (i: AddFXTransactionInput) => Promise<void>)(input)
       }
@@ -122,6 +130,17 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
             </select>
           </Field>
         </div>
+
+        <Field label="Bank *" error={errors.bank_name?.message}>
+          {fxBanks.length > 0 ? (
+            <select {...register('bank_name')} className={`${iCls(!!errors.bank_name)} bg-white`}>
+              <option value="">— Select bank —</option>
+              {fxBanks.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+            </select>
+          ) : (
+            <input type="text" placeholder="Foreign currency bank name" {...register('bank_name')} className={iCls(!!errors.bank_name)} />
+          )}
+        </Field>
 
         <Field label="Transaction Type" error={errors.type?.message}>
           <div className="flex gap-3">

@@ -220,6 +220,8 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
   const mutate = useCallback(async (input: AddInflowInput): Promise<string> => {
     const { user } = useAuthStore.getState()
     if (!user?.id) throw new Error('You must be signed in to add transactions.')
+    if (input.transaction_type === 'fx_inflow' || input.transaction_type === 'fx_outflow')
+      throw new Error('FX transactions must be entered through the Foreign Currency module.')
 
     setLoading(true)
     setError(null)
@@ -264,6 +266,8 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
   const mutate = useCallback(async (input: AddOutflowInput): Promise<string> => {
     const { user } = useAuthStore.getState()
     if (!user?.id) throw new Error('You must be signed in to add transactions.')
+    if (input.transaction_type === 'fx_inflow' || input.transaction_type === 'fx_outflow')
+      throw new Error('FX transactions must be entered through the Foreign Currency module.')
 
     setLoading(true)
     setError(null)
@@ -786,6 +790,7 @@ export interface AddFXTransactionInput {
   running_balance: number
   narration?: string
   transaction_ref?: string
+  bank_name?: string
 }
 
 export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, string> {
@@ -797,10 +802,21 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
-      const { data, error: err } = await supabase
+      let payload: Record<string, unknown> = { ...input, created_by: user.id, ...orgPayload() }
+      let { data, error: err } = await supabase
         .from('fx_transactions')
-        .insert({ ...input, created_by: user.id, ...orgPayload() })
+        .insert(payload)
         .select('id').single()
+      if (err) {
+        const col = err.message.match(MISSING_COL_RE)?.[1]
+        if (col && col in payload) {
+          payload = { ...payload }
+          delete payload[col]
+          const retry = await supabase.from('fx_transactions').insert(payload).select('id').single()
+          data = retry.data
+          err  = retry.error
+        }
+      }
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'fx_transactions', recordId: data.id, newData: input as unknown as Record<string, unknown> })
@@ -824,6 +840,7 @@ export interface UpdateFXTransactionInput {
   running_balance: number
   narration?:      string
   transaction_ref?: string
+  bank_name?:      string
 }
 
 export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput> {
