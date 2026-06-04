@@ -154,24 +154,24 @@ export default function ForeignCurrency() {
             <div
               key={meta.code}
               onClick={() => setFilterCcy(prev => prev === meta.code ? '' : meta.code)}
-              className={`rounded-xl border-2 p-3 sm:p-4 cursor-pointer transition-all select-none overflow-hidden ${
+              className={`rounded-xl border-2 p-3 sm:p-4 cursor-pointer transition-all select-none overflow-hidden min-w-0 ${
                 filterCcy === meta.code
                   ? 'border-primary bg-primary/5'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               } ${!active ? 'opacity-60' : ''}`}
             >
-              <div className="flex items-start justify-between mb-2 sm:mb-3 gap-1 min-w-0">
-                <span className="text-xl sm:text-2xl shrink-0">{meta.flag}</span>
-                <span className="text-xs font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+              <div className="flex items-start justify-between mb-2 sm:mb-3 gap-1">
+                <span className="text-xl sm:text-2xl shrink-0 leading-none">{meta.flag}</span>
+                <span className="text-[10px] sm:text-xs font-mono font-semibold text-gray-400 bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded shrink-0">
                   {meta.code}
                 </span>
               </div>
-              <div className={`text-sm sm:text-lg font-bold break-all leading-tight ${active ? 'text-gray-900' : 'text-gray-400'}`}>
-                {meta.symbol}{fmtFX(balance, meta.code)}
+              <div className={`text-sm sm:text-base font-bold break-all leading-snug ${active ? 'text-gray-900' : 'text-gray-400'}`}>
+                {meta.symbol}{fmtFX(balance, meta.code, 2)}
               </div>
-              <div className="text-xs text-gray-400 mt-0.5 truncate">{meta.name}</div>
+              <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 truncate">{meta.name}</div>
               {s && (
-                <div className="mt-2 sm:mt-3 flex flex-col gap-0.5 text-xs">
+                <div className="mt-2 sm:mt-3 space-y-0.5 text-[10px] sm:text-xs">
                   <div className="text-success truncate">↑ {meta.symbol}{fmtFX(s.totalDeposits, meta.code, 2)}</div>
                   <div className="text-danger truncate">↓ {meta.symbol}{fmtFX(s.totalWithdrawals, meta.code, 2)}</div>
                 </div>
