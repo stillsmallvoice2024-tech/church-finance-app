@@ -191,6 +191,24 @@ Each `AllocationRow` carries `budget_portion: 'Percentage' | 'Specific Seed' | '
 
 ---
 
+## FX Transaction Entry (Single Authoritative Path)
+
+**All FX transactions must be entered through the Foreign Currency page (`ForeignCurrency.tsx`) via `AddFXModal`.** This is the sole creation path.
+
+Enforcement is 3-layer:
+
+| Layer | Mechanism |
+|---|---|
+| UI | `ManualEntryForm` in `Import.tsx` filters out `is_foreign_currency` banks from all bank dropdowns; shows amber redirect notice linking to `/foreign-currency`. No FX amount/rate/currency fields on the manual entry form. |
+| Service | `useAddInflow` and `useAddOutflow` throw `'FX transactions must be entered through the Foreign Currency module.'` if `transaction_type === 'fx_inflow'` or `'fx_outflow'`. |
+| Schema | `fx_transactions.bank_name text` column records the originating FX bank; `AddFXTransactionInput` / `UpdateFXTransactionInput` include `bank_name?: string`; insert uses strip-and-retry (`MISSING_COL_RE`) for DBs not yet migrated. |
+
+`TXN_TYPE_OPTIONS` in both `Import.tsx` and `ImportModal.tsx` no longer includes `fx_inflow` or `fx_outflow`. The `ImportModal` batch wizard's FX bank path previously locked imports to `fx_transactions` — that special-casing was removed; FX banks in file imports are treated as normal banks directing to the standard inflow/outflow tables.
+
+`AddFXModal` requires a `fxBanks` prop (`{ id: string; name: string }[]` — banks with `is_foreign_currency = true`) and renders a Bank selector as a required field. `ForeignCurrency.tsx` derives `fxBanks` from `useBanks()` filtered by `b.is_foreign_currency`.
+
+---
+
 ## FX Conversion (3-step sequential insert)
 
 `useAddFXConversion()` in `useFXConversions.ts`:
@@ -329,7 +347,7 @@ Uses `delete({ count: 'exact' })`; throws if `count === 0` — catches silent Su
 | FX conversion NGN inflow missing `bank_name` | `useAddFXConversion` doesn't accept a bank; created inflow won't appear in any bank ledger |
 | Intrabank transfers invisible to BankLedger | `intrabank_transfers` not queried by BankLedger |
 | Bank deposits invisible to BankLedger | `bank_deposits` table rows not queried by BankLedger |
-| FX inflow fields not synced to `fx_transactions` | Inflows with `fx_currency` set do NOT auto-create an `fx_transactions` row |
+| FX inflow fields not synced to `fx_transactions` | Legacy: inflows with `fx_currency` set do NOT auto-create an `fx_transactions` row. Since the FX entry refactor, new FX transactions are entered exclusively through the FX module — this gap only affects pre-refactor records. |
 | Project entries not linked to transactions | `project_entries` amounts are a parallel ledger; excluded from Reports and CategoryLedger totals |
 | Dashboard doesn't react to deletes | `useDashboard` subscribes to INSERT events only; delete won't update KPI cards until page reload |
 
