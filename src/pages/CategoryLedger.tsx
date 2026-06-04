@@ -133,13 +133,13 @@ export default function CategoryLedger() {
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed'),
-      supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Specific Seed'),
+      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed'),
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings'),
-      supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed').eq('stage_code_2', 'Savings'),
+      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings'),
       supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type'),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
       supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active'),
-      supabase.from('outflow_transactions').select('stage_code_1, actual_amount, amount_disbursed')
+      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings'),
     ])
@@ -176,13 +176,13 @@ export default function CategoryLedger() {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed += Number(r.amount)
     }
     for (const r of seedOutRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed -= Number(r.actual_amount || r.amount_disbursed || 0)
+      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed -= Number(r.amount_disbursed || 0)
     }
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
     }
     for (const r of savOutRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.actual_amount || r.amount_disbursed || 0)
+      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.amount_disbursed || 0)
     }
 
     for (const ob of cobRows) {
@@ -246,7 +246,7 @@ export default function CategoryLedger() {
     const pctOutMap = new Map<string, number>()
     for (const r of pctOutRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.actual_amount || r.amount_disbursed || 0))
+      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.amount_disbursed || 0))
     }
 
     const allNames = new Set<string>([
@@ -289,7 +289,7 @@ export default function CategoryLedger() {
             .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type')
             .order('date'),
           supabase.from('outflow_transactions')
-            .select('id, date, description, actual_amount, amount_disbursed, stage_code_2')
+            .select('id, date, description, amount_disbursed, stage_code_2')
             .eq('stage_code_1', activeCategory)
             .order('date'),
         ])
@@ -319,7 +319,7 @@ export default function CategoryLedger() {
 
         for (const r of outflowRes.data ?? []) {
           if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-          const amt = Number(r.actual_amount || r.amount_disbursed || 0)
+          const amt = Number(r.amount_disbursed || 0)
           if (amt <= 0) continue
           outRows.push({
             id:          r.id as string,
@@ -339,7 +339,7 @@ export default function CategoryLedger() {
             .eq('stage_code_1', activeCategory)
             .order('date'),
           supabase.from('outflow_transactions')
-            .select('id, date, description, actual_amount, amount_disbursed')
+            .select('id, date, description, amount_disbursed')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
             .order('date'),
@@ -364,7 +364,7 @@ export default function CategoryLedger() {
           })
         }
         for (const r of outflowRes.data ?? []) {
-          const amt = Number(r.actual_amount || r.amount_disbursed || 0)
+          const amt = Number(r.amount_disbursed || 0)
           outRows.push({
             id:          r.id as string,
             date:        r.date as string,

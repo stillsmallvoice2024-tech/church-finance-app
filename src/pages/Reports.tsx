@@ -101,7 +101,7 @@ function AnnualSummaryPanel() {
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions').select('date, amount')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
-      supabase.from('outflow_transactions').select('date, actual_amount, amount_disbursed')
+      supabase.from('outflow_transactions').select('date, amount_disbursed')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
     ])
 
@@ -121,7 +121,7 @@ function AnnualSummaryPanel() {
       ensure(parseInt((r.date as string).slice(0, 4))).totalInflow += Number(r.amount)
     }
     for (const r of outflowRes.data ?? []) {
-      ensure(parseInt((r.date as string).slice(0, 4))).totalOutflow += Number(r.actual_amount || r.amount_disbursed || 0)
+      ensure(parseInt((r.date as string).slice(0, 4))).totalOutflow += Number(r.amount_disbursed || 0)
     }
     for (const row of byYear.values()) row.net = row.totalInflow - row.totalOutflow
 
@@ -200,7 +200,7 @@ function MonthlyBreakdownPanel() {
         .lte('date', `${y}-12-31`),
       supabase
         .from('outflow_transactions')
-        .select('date, actual_amount, amount_disbursed')
+        .select('date, amount_disbursed')
         .gte('date', `${y}-01-01`)
         .lte('date', `${y}-12-31`),
     ])
@@ -221,7 +221,7 @@ function MonthlyBreakdownPanel() {
     }
     for (const r of outflowRes.data ?? []) {
       const m = parseInt((r.date as string).slice(5, 7)) - 1
-      byMonth[m].totalOutflow += Number(r.actual_amount || r.amount_disbursed || 0)
+      byMonth[m].totalOutflow += Number(r.amount_disbursed || 0)
     }
     for (const row of byMonth) row.net = row.totalInflow - row.totalOutflow
 
@@ -472,7 +472,7 @@ function OutflowTypeBreakdownPanel() {
 
     const { data, error: err } = await supabase
       .from('outflow_transactions')
-      .select('actual_amount, amount_disbursed, outflow_type_id')
+      .select('amount_disbursed, outflow_type_id')
       .gte(col, lo)
       .lte(col, queryHi)
 
@@ -481,7 +481,7 @@ function OutflowTypeBreakdownPanel() {
     const agg = new Map<string | null, { amount: number; count: number }>()
     for (const r of data ?? []) {
       const id  = (r.outflow_type_id as string | null) ?? null
-      const amt = Number((r as { actual_amount?: number }).actual_amount || r.amount_disbursed || 0)
+      const amt = Number(r.amount_disbursed || 0)
       const cur = agg.get(id) ?? { amount: 0, count: 0 }
       cur.amount += amt
       cur.count  += 1
@@ -610,7 +610,6 @@ interface DrillTxn {
   description:      string | null
   bank_description: string | null
   amount_disbursed: number
-  actual_amount:    number
   outflow_type_id:  string | null
   department_id:    string | null
 }
@@ -645,7 +644,7 @@ function DepartmentBreakdownPanel() {
 
     const { data, error: err } = await supabase
       .from('outflow_transactions')
-      .select('actual_amount, amount_disbursed, department_id')
+      .select('amount_disbursed, department_id')
       .gte(col, lo)
       .lte(col, queryHi)
 
@@ -654,7 +653,7 @@ function DepartmentBreakdownPanel() {
     const agg = new Map<string | null, { amount: number; count: number }>()
     for (const r of data ?? []) {
       const id  = (r as { department_id: string | null }).department_id ?? null
-      const amt = Number((r as { actual_amount?: number }).actual_amount || r.amount_disbursed || 0)
+      const amt = Number(r.amount_disbursed || 0)
       const cur = agg.get(id) ?? { amount: 0, count: 0 }
       cur.amount += amt
       cur.count  += 1
@@ -684,7 +683,7 @@ function DepartmentBreakdownPanel() {
     const { lo, queryHi, col } = filter.range
     let q = supabase
       .from('outflow_transactions')
-      .select('id, date, description, bank_description, amount_disbursed, actual_amount, outflow_type_id, department_id')
+      .select('id, date, description, bank_description, amount_disbursed, outflow_type_id, department_id')
       .gte(col, lo)
       .lte(col, queryHi)
       .order('date', { ascending: false })
@@ -724,7 +723,7 @@ function DepartmentBreakdownPanel() {
     const { lo, queryHi, col } = filter.range
     let q = supabase
       .from('outflow_transactions')
-      .select('id, date, description, bank_description, amount_disbursed, actual_amount, outflow_type_id, department_id')
+      .select('id, date, description, bank_description, amount_disbursed, outflow_type_id, department_id')
       .gte(col, lo)
       .lte(col, queryHi)
       .order('date', { ascending: false })
@@ -768,7 +767,7 @@ function DepartmentBreakdownPanel() {
       <td className="px-4 py-2 text-gray-700 max-w-[200px] truncate">{t.description ?? t.bank_description ?? '—'}</td>
       <td className="px-4 py-2 text-gray-500">{getTypeName(t.outflow_type_id)}</td>
       <td className="px-4 py-2 text-gray-500">{getDeptName(t.department_id)}</td>
-      <td className="px-4 py-2 text-right font-medium text-danger">{sym}{fmtAmt(t.actual_amount || t.amount_disbursed, formatLocale)}</td>
+      <td className="px-4 py-2 text-right font-medium text-danger">{sym}{fmtAmt(t.amount_disbursed, formatLocale)}</td>
     </tr>
   )
 
@@ -876,7 +875,7 @@ function DepartmentBreakdownPanel() {
                                         {drillTxns.length === 200 && ' (capped at 200)'}
                                       </td>
                                       <td className="px-4 py-2 text-right text-danger">
-                                        {sym}{fmtAmt(drillTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0), formatLocale)}
+                                        {sym}{fmtAmt(drillTxns.reduce((s, t) => s + t.amount_disbursed, 0), formatLocale)}
                                       </td>
                                     </tr>
                                   </tfoot>
@@ -974,7 +973,7 @@ function DepartmentBreakdownPanel() {
                       {crossTxns.length === 500 && ' (capped at 500)'}
                     </td>
                     <td className="px-4 py-3 text-right text-danger">
-                      {sym}{fmtAmt(crossTxns.reduce((s, t) => s + (t.actual_amount || t.amount_disbursed), 0), formatLocale)}
+                      {sym}{fmtAmt(crossTxns.reduce((s, t) => s + t.amount_disbursed, 0), formatLocale)}
                     </td>
                   </tr>
                 </tfoot>

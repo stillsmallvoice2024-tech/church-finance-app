@@ -164,7 +164,6 @@ export interface AddOutflowInput {
   transaction_id?: string
   amount_refunded?: number
   transfer_charge?: number
-  actual_amount?: number
   bank_total?: number
   stage_code_1?: string
   stage_code_2?: string

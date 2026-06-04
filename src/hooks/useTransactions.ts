@@ -41,7 +41,6 @@ export interface OutflowTransaction {
   amount_disbursed: number
   amount_refunded: number
   transfer_charge: number
-  actual_amount: number
   bank_total: number
   stage_code_1: string | null
   stage_code_2: string | null

@@ -285,7 +285,7 @@ export async function getCategoryOutflows(
 
   let q = supabase
     .from('outflow_transactions')
-    .select('actual_amount, amount_disbursed')
+    .select('amount_disbursed')
     .eq('stage_code_1', category)
 
   let intraQ = supabase
@@ -317,7 +317,7 @@ export async function getCategoryOutflows(
   const [{ data, error }, intraRes] = await Promise.all([q, intraQ])
   if (error) return { value: 0, error: error.message }
   const baseTotal  = (data ?? []).reduce(
-    (sum, r) => sum + Number(r.actual_amount || r.amount_disbursed || 0),
+    (sum, r) => sum + Number(r.amount_disbursed || 0),
     0,
   )
   const intraDebit = intraRes.error
@@ -347,7 +347,7 @@ export async function getCategoryBalance(
 export async function getNetMovement(dateRange?: DateRange, dateField?: string): Promise<QueryResult> {
   const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
   let inflowQ  = supabase.from('inflow_transactions').select('amount')
-  let outflowQ = supabase.from('outflow_transactions').select('actual_amount, amount_disbursed')
+  let outflowQ = supabase.from('outflow_transactions').select('amount_disbursed')
   if (dateRange) {
     const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to
     inflowQ  = inflowQ.gte(col, dateRange.from).lte(col, to)
@@ -358,7 +358,7 @@ export async function getNetMovement(dateRange?: DateRange, dateField?: string):
   if (outflowRes.error) return { value: 0, error: outflowRes.error.message }
   const totalIn  = (inflowRes.data  ?? []).reduce((s, r) => s + Number(r.amount), 0)
   const totalOut = (outflowRes.data ?? []).reduce(
-    (s, r) => s + Number(r.actual_amount || r.amount_disbursed || 0),
+    (s, r) => s + Number(r.amount_disbursed || 0),
     0,
   )
   return { value: totalIn - totalOut, error: null }
