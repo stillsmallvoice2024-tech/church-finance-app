@@ -56,7 +56,7 @@ export interface AddFXConversionInput {
   fx_amount:            number
   exchange_rate:        number
   naira_amount:         number
-  bank_name?:           string
+  bank_name:            string   // required — NULL makes inflow invisible to BankLedger
   notes?:               string
   allocation_config_id?: string
   stage_code_1?:        string
@@ -74,6 +74,7 @@ export function useAddFXConversion() {
     const baseCurrency = defaultCurrency ?? 'NGN'
     if (!user?.id) throw new Error('You must be signed in.')
     if (!orgId) throw new Error('No active organisation.')
+    if (!input.bank_name?.trim()) throw new Error('bank_name is required for FX conversion inflows.')
     setLoading(true); setError(null)
 
     try {
@@ -82,6 +83,7 @@ export function useAddFXConversion() {
       const { data: lastRows } = await supabase
         .from('fx_transactions')
         .select('running_balance')
+        .eq('org_id',   orgId)
         .eq('currency', input.fx_currency)
         .order('date',       { ascending: false })
         .order('created_at', { ascending: false })
