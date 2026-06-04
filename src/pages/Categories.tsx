@@ -151,6 +151,17 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     setObSaving(true)
     setObError(null)
     try {
+      // Reject rows where a portion is selected but the amount is missing, NaN, or non-positive
+      const partialRows = obRows.filter(r => {
+        if (!r.budget_portion) return false
+        const amt = parseFloat(r.amount)
+        return !r.amount || isNaN(amt) || !isFinite(amt) || amt <= 0
+      })
+      if (partialRows.length > 0) {
+        setObError('Enter a valid amount greater than zero for each selected budget portion.')
+        setObSaving(false)
+        return
+      }
       const validRows = obRows.filter(r => r.budget_portion && r.amount && parseFloat(r.amount) > 0)
 
       let savedId = editRecord?.id ?? ''

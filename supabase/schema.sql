@@ -961,7 +961,7 @@ create table if not exists public.category_opening_balances (
   id             uuid default gen_random_uuid() primary key,
   category_id    uuid not null references categories(id) on delete cascade,
   budget_portion text not null check (budget_portion in ('Percentage Allocation','Specific Seed','Savings')),
-  amount         numeric(15,2) not null default 0,
+  amount         numeric(15,2) not null default 0 check (amount >= 0 and amount != 'NaN'::numeric),
   created_at     timestamptz default now(),
   unique (category_id, budget_portion)
 );
