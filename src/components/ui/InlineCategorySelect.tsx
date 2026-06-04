@@ -229,7 +229,7 @@ export function InlineCategorySelect({
           id={listId}
           role="listbox"
           aria-label="Categories"
-          className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+          className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
           {filtered.length === 0 && (
             <li className="px-3 py-2 text-sm text-gray-400 italic" role="presentation">
@@ -245,16 +245,16 @@ export function InlineCategorySelect({
               aria-selected={c.name === value}
               onMouseDown={e => { e.preventDefault(); pick(c.name) }}
               onMouseEnter={() => setHighlighted(i)}
-              className={`flex items-center px-3 py-2 text-sm cursor-pointer select-none ${
+              className={`flex items-start px-3 py-2 text-sm cursor-pointer select-none ${
                 i === highlighted
                   ? 'bg-primary/10 text-primary'
                   : 'text-gray-800 hover:bg-gray-50'
               }`}
             >
               {c.name === value
-                ? <Check className="w-3.5 h-3.5 text-primary shrink-0 mr-2" />
-                : <span className="w-3.5 shrink-0 mr-2" />}
-              <span className="truncate">{c.name}</span>
+                ? <Check className="w-3.5 h-3.5 text-primary shrink-0 mr-2 mt-0.5" />
+                : <span className="w-3.5 shrink-0 mr-2 mt-0.5" />}
+              <span className="min-w-0 break-words leading-snug">{c.name}</span>
             </li>
           ))}
 

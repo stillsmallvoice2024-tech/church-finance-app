@@ -159,7 +159,7 @@ export function SearchableSelect({
           id={listId}
           role="listbox"
           aria-label="Options"
-          className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+          className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
           {/* Placeholder / clear option — only when not filtering */}
           {!hasQuery && (
@@ -193,16 +193,16 @@ export function SearchableSelect({
                 aria-selected={opt.value === value}
                 onMouseDown={e => { e.preventDefault(); pick(opt.value) }}
                 onMouseEnter={() => setHighlighted(idx)}
-                className={`flex items-center px-3 py-2 ${textCls} cursor-pointer select-none ${
+                className={`flex items-start px-3 py-2 ${textCls} cursor-pointer select-none ${
                   idx === highlighted
                     ? 'bg-primary/10 text-primary'
                     : 'text-gray-800 hover:bg-gray-50'
                 }`}
               >
                 {opt.value === value
-                  ? <Check className="w-3.5 h-3.5 text-primary shrink-0 mr-2" />
-                  : <span className="w-3.5 shrink-0 mr-2" />}
-                <span className="truncate">{opt.label}</span>
+                  ? <Check className="w-3.5 h-3.5 text-primary shrink-0 mr-2 mt-0.5" />
+                  : <span className="w-3.5 shrink-0 mr-2 mt-0.5" />}
+                <span className="min-w-0 break-words leading-snug">{opt.label}</span>
               </li>
             )
           })}
