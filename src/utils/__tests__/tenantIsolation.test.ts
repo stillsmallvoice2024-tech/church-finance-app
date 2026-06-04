@@ -462,3 +462,37 @@ describe('BackupModal org scoping', () => {
     expect(code).toContain('uploadBackupForLink(backup, user.id, orgId ?? undefined)')
   })
 })
+
+// ── LB-2/E-C2: Atomic FX Conversion ──────────────────────────────────────────
+
+describe('useAddFXConversion atomicity (LB-2/E-C2)', () => {
+  const code = src('hooks/useFXConversions.ts')
+
+  it('uses supabase.rpc for the conversion (single atomic call)', () => {
+    expect(code).toContain("supabase.rpc('perform_fx_conversion'")
+  })
+
+  it('does not make separate insert calls for fx_transactions', () => {
+    expect(code).not.toContain(".from('fx_transactions').insert(")
+  })
+
+  it('does not make separate insert calls for inflow_transactions inside useAddFXConversion', () => {
+    const mutationSection = code.slice(
+      code.indexOf('export function useAddFXConversion'),
+      code.lastIndexOf('}'),
+    )
+    expect(mutationSection).not.toContain(".from('inflow_transactions').insert(")
+  })
+
+  it('does not make separate insert calls for fx_conversions', () => {
+    expect(code).not.toContain(".from('fx_conversions').insert(")
+  })
+
+  it('passes p_org_id to RPC', () => {
+    expect(code).toContain('p_org_id:')
+  })
+
+  it('passes p_bank_name to RPC (required for BankLedger visibility)', () => {
+    expect(code).toContain('p_bank_name:')
+  })
+})

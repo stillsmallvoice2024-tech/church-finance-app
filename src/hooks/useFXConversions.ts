@@ -78,75 +78,24 @@ export function useAddFXConversion() {
     setLoading(true); setError(null)
 
     try {
-      // 1. Record FX withdrawal (reduces fx_transactions running balance)
-      //    We compute the new running balance from the most recent row for this currency.
-      const { data: lastRows } = await supabase
-        .from('fx_transactions')
-        .select('running_balance')
-        .eq('org_id',   orgId)
-        .eq('currency', input.fx_currency)
-        .order('date',       { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      const prevBalance = Number(lastRows?.[0]?.running_balance ?? 0)
-      const newBalance  = prevBalance - input.fx_amount
-
-      const { data: fxRow, error: fxErr } = await supabase
-        .from('fx_transactions')
-        .insert({
-          date:            input.date,
-          currency:        input.fx_currency,
-          withdrawal:      input.fx_amount,
-          deposit:         0,
-          running_balance: newBalance,
-          narration:       input.notes ?? `Converted to ${baseCurrency} @ ${input.exchange_rate}`,
-          created_by:      user.id,
-          org_id:          orgId,
-        })
-        .select('id')
-        .single()
-      if (fxErr) throw fxErr
-
-      // 2. Record NGN inflow (the converted naira)
-      //    bank_name must be set — NULL makes the row invisible to BankLedger
-      const { data: inflowRow, error: inflowErr } = await supabase
-        .from('inflow_transactions')
-        .insert({
-          date:                 input.date,
-          amount:               input.naira_amount,
-          description:          input.notes ?? `FX Conversion: ${input.fx_currency} → ${baseCurrency}`,
-          bank_name:            input.bank_name ?? null,
-          stage_code_1:         input.stage_code_1 ?? null,
-          stage_code_2:         input.stage_code_2 ?? 'Percentage Allocation',
-          allocation_config_id: input.allocation_config_id ?? null,
-          fx_currency:          input.fx_currency,
-          fx_amount:            input.fx_amount,
-          fx_rate:              input.exchange_rate,
-          transaction_type:     'fx_conversion',
-          created_by:           user.id,
-          org_id:               orgId,
-        })
-        .select('id')
-        .single()
-      if (inflowErr) throw inflowErr
-
-      // 3. Record the conversion link record
-      const { error: convErr } = await supabase.from('fx_conversions').insert({
-        date:                 input.date,
-        fx_currency:          input.fx_currency,
-        fx_amount:            input.fx_amount,
-        exchange_rate:        input.exchange_rate,
-        naira_amount:         input.naira_amount,
-        fx_withdrawal_id:     fxRow?.id  ?? null,
-        naira_inflow_id:      inflowRow?.id ?? null,
-        notes:                input.notes ?? null,
-        allocation_config_id: input.allocation_config_id ?? null,
-        is_partial:           input.is_partial ?? (input.fx_amount < prevBalance),
-        created_by:           user.id,
-        org_id:               orgId,
+      // Single atomic RPC — all three inserts (fx_transactions, inflow_transactions,
+      // fx_conversions) execute in one Postgres transaction. Any failure rolls back all.
+      const { error: rpcErr } = await supabase.rpc('perform_fx_conversion', {
+        p_org_id:               orgId,
+        p_user_id:              user.id,
+        p_date:                 input.date,
+        p_fx_currency:          input.fx_currency,
+        p_fx_amount:            input.fx_amount,
+        p_exchange_rate:        input.exchange_rate,
+        p_naira_amount:         input.naira_amount,
+        p_bank_name:            input.bank_name,
+        p_base_currency:        baseCurrency,
+        p_notes:                input.notes ?? null,
+        p_allocation_config_id: input.allocation_config_id ?? null,
+        p_stage_code_1:         input.stage_code_1 ?? null,
+        p_stage_code_2:         input.stage_code_2 ?? 'Percentage Allocation',
       })
-      if (convErr) throw convErr
+      if (rpcErr) throw rpcErr
 
     } catch (err) {
       const msg = (err instanceof Error ? err.message : String(err))
