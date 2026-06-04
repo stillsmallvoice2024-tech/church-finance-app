@@ -1565,4 +1565,8 @@ begin
 end;
 $$;
 
+-- ── FX Transaction Entry Refactor ─────────────────────────────────────────────
+-- Bank provenance for FX transactions: which foreign-currency bank originated it.
+alter table public.fx_transactions add column if not exists bank_name text;
+
 grant execute on function public.transfer_org_ownership(uuid, uuid) to authenticated;

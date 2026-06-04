@@ -52,8 +52,6 @@ const TXN_TYPE_OPTIONS = [
   { value: 'reversal',            label: 'Reversal' },
   { value: 'bank_deposit',        label: 'Bank Deposit' },
   { value: 'intrabank_transfer',  label: 'Intrabank Transfer' },
-  { value: 'fx_inflow',           label: 'FX Inflow' },
-  { value: 'fx_outflow',          label: 'FX Outflow' },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -80,7 +78,6 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Import() {
-  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
   const { canImportTransactions } = useRole()
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
@@ -499,7 +496,7 @@ export default function Import() {
 // ── Manual Entry Form ──────────────────────────────────────────────────────────
 
 function ManualEntryForm() {
-  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { categories }                                 = useCategories()
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
@@ -601,13 +598,10 @@ function ManualEntryForm() {
 
   const v = (key: string) => fields[key] ?? ''
 
-  const selectedBank = banks.find(b => b.id === v('bank_id')) ?? null
-  const isForeignCurrencyBank = selectedBank?.is_foreign_currency ?? false
-  const availableTxnTypes = isForeignCurrencyBank
-    ? (direction === 'inflow'
-        ? TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_inflow')
-        : TXN_TYPE_OPTIONS.filter(o => o.value === 'fx_outflow'))
-    : TXN_TYPE_OPTIONS.filter(o => o.value !== 'fx_inflow' && o.value !== 'fx_outflow')
+  // FX banks are excluded from Manual Entry — all FX transactions go through the FX module.
+  const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
+  const hasFxBanks = banks.some(b => b.is_foreign_currency)
+  const availableTxnTypes = TXN_TYPE_OPTIONS
 
   // ── Duplicate check helpers ──────────────────────────────────────────────
   // bankName scopes the check to the selected bank so the same ID in a
@@ -657,9 +651,6 @@ function ManualEntryForm() {
         income_type_id:             txnType ? undefined : (incomeTypeId || undefined),
         transaction_type:           txnType                        || undefined,
         original_transaction_id:    v('original_transaction_id')   || undefined,
-        fx_currency:                v('fx_currency')               || undefined,
-        fx_amount:                  v('fx_amount')  ? parseFloat(v('fx_amount'))  : undefined,
-        fx_rate:                    v('fx_rate')    ? parseFloat(v('fx_rate'))    : undefined,
         recorded_at:                new Date().toISOString(),
       }
       try {
@@ -710,9 +701,6 @@ function ManualEntryForm() {
         remarks:                 v('remarks')          || undefined,
         transaction_type:        txnType               || undefined,
         original_transaction_id: v('original_transaction_id') || undefined,
-        fx_currency:             v('fx_currency')      || undefined,
-        fx_amount:               v('fx_amount') ? parseFloat(v('fx_amount')) : undefined,
-        fx_rate:                 v('fx_rate')   ? parseFloat(v('fx_rate'))   : undefined,
         recorded_at:             new Date().toISOString(),
       }
       try {
@@ -855,17 +843,25 @@ function ManualEntryForm() {
                 <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
               </p>
             ) : (
-              <select
-                value={v('bank_id')}
-                onChange={e => set('bank_id', e.target.value)}
-                disabled={banksLoading}
-                className={iCls}
-              >
-                <option value="">— None —</option>
-                {banks.map(b => (
-                  <option key={b.id} value={b.id}>{b.is_foreign_currency ? `${b.name} [FX]` : b.name}</option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={v('bank_id')}
+                  onChange={e => set('bank_id', e.target.value)}
+                  disabled={banksLoading}
+                  className={iCls}
+                >
+                  <option value="">— None —</option>
+                  {nonFxBanks.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+                {hasFxBanks && (
+                  <p className="text-[11px] text-amber-600 mt-0.5">
+                    Foreign currency banks are managed in the{' '}
+                    <Link to="/foreign-currency" className="underline hover:text-amber-700">FX module</Link>.
+                  </p>
+                )}
+              </>
             )}
           </Field>
 
@@ -956,14 +952,11 @@ function ManualEntryForm() {
 
           {/* Transaction Type */}
           <Field label="Transaction Type">
-            <select value={txnType} onChange={e => setTxnType(e.target.value)} disabled={isForeignCurrencyBank} className={iCls}>
+            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
               {availableTxnTypes.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-            {isForeignCurrencyBank && (
-              <p className="text-[11px] text-amber-600 mt-0.5">Foreign Currency Bank — only FX Inflow is allowed.</p>
-            )}
           </Field>
 
           {/* Original Transaction ID (refund / reversal only) */}
@@ -982,27 +975,6 @@ function ManualEntryForm() {
           <Field label="Remark">
             <textarea rows={2} placeholder="Additional notes…" value={v('remark')} onChange={e => set('remark', e.target.value)} className={`${iCls} resize-none`} />
           </Field>
-
-          {/* Foreign Currency */}
-          <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Foreign Currency (optional)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Field label="Currency">
-                <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
-              </Field>
-              <Field label="FX Amount">
-                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_amount')} onChange={e => setCurrency('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
-              </Field>
-              <Field label="FX Rate">
-                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_rate')} onChange={e => setCurrency('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
-              </Field>
-            </div>
-            {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
-              <p className="text-xs text-gray-500">
-                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString(formatLocale, { minimumFractionDigits: 2 })}
-              </p>
-            )}
-          </div>
 
           <div className="flex justify-end pt-1">
             <button
@@ -1045,17 +1017,25 @@ function ManualEntryForm() {
                 <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
               </p>
             ) : (
-              <select
-                value={v('bank_id')}
-                onChange={e => set('bank_id', e.target.value)}
-                disabled={banksLoading}
-                className={iCls}
-              >
-                <option value="">— None —</option>
-                {banks.map(b => (
-                  <option key={b.id} value={b.id}>{b.is_foreign_currency ? `${b.name} [FX]` : b.name}</option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={v('bank_id')}
+                  onChange={e => set('bank_id', e.target.value)}
+                  disabled={banksLoading}
+                  className={iCls}
+                >
+                  <option value="">— None —</option>
+                  {nonFxBanks.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+                {hasFxBanks && (
+                  <p className="text-[11px] text-amber-600 mt-0.5">
+                    Foreign currency banks are managed in the{' '}
+                    <Link to="/foreign-currency" className="underline hover:text-amber-700">FX module</Link>.
+                  </p>
+                )}
+              </>
             )}
           </Field>
 
@@ -1116,14 +1096,11 @@ function ManualEntryForm() {
 
           {/* Transaction Type */}
           <Field label="Transaction Type">
-            <select value={txnType} onChange={e => setTxnType(e.target.value)} disabled={isForeignCurrencyBank} className={iCls}>
+            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
               {availableTxnTypes.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-            {isForeignCurrencyBank && (
-              <p className="text-[11px] text-amber-600 mt-0.5">Foreign Currency Bank — only FX Outflow is allowed.</p>
-            )}
           </Field>
 
           {/* Original Transaction ID (refund / reversal only) */}
@@ -1132,27 +1109,6 @@ function ManualEntryForm() {
               <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
             </Field>
           )}
-
-          {/* Foreign Currency */}
-          <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Foreign Currency (optional)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Field label="Currency">
-                <input type="text" placeholder="e.g. USD" value={v('fx_currency')} onChange={e => set('fx_currency', e.target.value)} className={iCls} />
-              </Field>
-              <Field label="FX Amount">
-                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_amount')} onChange={e => setCurrency('fx_amount', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
-              </Field>
-              <Field label="FX Rate">
-                <input type="text" inputMode="decimal" placeholder="0.00" value={vCurrency('fx_rate')} onChange={e => setCurrency('fx_rate', e.target.value)} disabled={!v('fx_currency')} className={`${iCls} disabled:opacity-50`} />
-              </Field>
-            </div>
-            {v('fx_amount') && v('fx_rate') && parseFloat(v('fx_amount')) > 0 && parseFloat(v('fx_rate')) > 0 && (
-              <p className="text-xs text-gray-500">
-                ≈ {baseCurrencySymbol}{(parseFloat(v('fx_amount')) * parseFloat(v('fx_rate'))).toLocaleString(formatLocale, { minimumFractionDigits: 2 })}
-              </p>
-            )}
-          </div>
 
           <div className="flex justify-end pt-1">
             <button
