@@ -42,6 +42,7 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   bank_deposit:             'Bank Deposit',
   intrabank_transfer:       'Intrabank Transfer',
   balance_brought_forward:  'Balance Brought Forward',
+  fx_conversion:            'FX Conversion',
 }
 
 interface LedgerRow {

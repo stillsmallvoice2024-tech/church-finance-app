@@ -1,4 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
+
+const NON_ALLOCATABLE_TYPES = new Set([
+  'balance_brought_forward',
+  'reversal',
+  'refund',
+  'bank_deposit',
+  'intrabank_transfer',
+])
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useOrgStore } from '../store/orgStore'
@@ -167,7 +175,7 @@ export function useReportEngine(
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-      if (r.transaction_type) continue
+      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))

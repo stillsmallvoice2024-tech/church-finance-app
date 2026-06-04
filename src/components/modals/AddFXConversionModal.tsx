@@ -59,7 +59,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
     setStageCode1('')
     setDate(new Date().toISOString().slice(0, 10))
     if (defaultCurrency) setCurrency(defaultCurrency)
-  }, [open, defaultCurrency, banks]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, defaultCurrency]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const availableCurrencies = useMemo(
     () => fxCurrencies.filter(m => (summaries.find(s => s.currency === m.code)?.currentBalance ?? 0) > 0),
@@ -290,7 +290,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
           </button>
           <button
             type="submit"
-            disabled={loading || fxAmt <= 0 || exchangeRate <= 0 || !date}
+            disabled={loading || fxAmt <= 0 || exchangeRate <= 0 || !date || !bankName.trim()}
             className="px-5 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
           >
             {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
