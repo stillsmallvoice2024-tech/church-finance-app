@@ -424,11 +424,14 @@ BEGIN
   v_step := 'recalculation_logs';
   DELETE FROM public.recalculation_logs             WHERE org_id = p_org_id;
 
+  -- blocks/snapshots have no org_id — delete via parent dynamic_reports
   v_step := 'dynamic_report_snapshots';
-  DELETE FROM public.dynamic_report_snapshots       WHERE org_id = p_org_id;
+  DELETE FROM public.dynamic_report_snapshots
+    WHERE report_id IN (SELECT id FROM public.dynamic_reports WHERE org_id = p_org_id);
 
   v_step := 'dynamic_report_blocks';
-  DELETE FROM public.dynamic_report_blocks          WHERE org_id = p_org_id;
+  DELETE FROM public.dynamic_report_blocks
+    WHERE report_id IN (SELECT id FROM public.dynamic_reports WHERE org_id = p_org_id);
 
   v_step := 'dynamic_reports';
   DELETE FROM public.dynamic_reports                WHERE org_id = p_org_id;
@@ -502,8 +505,9 @@ BEGIN
   v_step := 'org_deletion_backups';
   DELETE FROM public.org_deletion_backups           WHERE org_id = p_org_id;
 
-  v_step := 'audit_log (org entries)';
-  DELETE FROM public.audit_log                      WHERE org_id = p_org_id;
+  -- audit_log.org_id has ON DELETE SET NULL — FK cascade handles nullification
+  -- when organizations row is deleted below. Explicit DELETE would be blocked
+  -- by trg_audit_log_no_delete.
 
   v_step := 'org_members';
   DELETE FROM public.org_members                    WHERE org_id = p_org_id;
