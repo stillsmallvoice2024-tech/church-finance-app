@@ -26,6 +26,7 @@ AS $$
 DECLARE
   v_prev_balance  numeric(15,4);
   v_new_balance   numeric(15,4);
+  v_naira_amount  numeric(15,2);
   v_fx_tx_id      uuid;
   v_inflow_id     uuid;
   v_conversion_id uuid;
@@ -54,7 +55,14 @@ BEGIN
   LIMIT  1;
 
   v_prev_balance := COALESCE(v_prev_balance, 0);
+
+  IF v_prev_balance < p_fx_amount THEN
+    RAISE EXCEPTION 'Insufficient FX balance: available % but requested %',
+      v_prev_balance, p_fx_amount;
+  END IF;
+
   v_new_balance  := v_prev_balance - p_fx_amount;
+  v_naira_amount := ROUND(p_fx_amount * p_exchange_rate, 2);
 
   INSERT INTO public.fx_transactions (
     date, currency, withdrawal, deposit, running_balance,
@@ -72,7 +80,7 @@ BEGIN
     fx_currency, fx_amount, fx_rate,
     transaction_type, created_by, org_id
   ) VALUES (
-    p_date, p_naira_amount,
+    p_date, v_naira_amount,
     COALESCE(p_notes, 'FX Conversion: ' || p_fx_currency || ' → ' || p_base_currency),
     p_bank_name, p_stage_code_1,
     COALESCE(p_stage_code_2, 'Percentage Allocation'),
@@ -86,7 +94,7 @@ BEGIN
     fx_withdrawal_id, naira_inflow_id, notes,
     allocation_config_id, is_partial, created_by, org_id
   ) VALUES (
-    p_date, p_fx_currency, p_fx_amount, p_exchange_rate, p_naira_amount,
+    p_date, p_fx_currency, p_fx_amount, p_exchange_rate, v_naira_amount,
     v_fx_tx_id, v_inflow_id, p_notes,
     p_allocation_config_id, (p_fx_amount < v_prev_balance),
     p_user_id, p_org_id

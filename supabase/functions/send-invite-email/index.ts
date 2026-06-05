@@ -11,6 +11,7 @@ const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const RESEND_API_KEY       = Deno.env.get('RESEND_API_KEY')
 const FROM_ADDRESS         = Deno.env.get('INVITE_FROM_ADDRESS') ?? 'Church Finance <noreply@churchfinance.app>'
+const APP_URL              = Deno.env.get('APP_URL') ?? 'https://churchfinance.app'
 
 // Duplicate suppression window: skip re-send if a successful email was logged within this many ms
 const DEDUP_WINDOW_MS = 60_000
@@ -236,7 +237,7 @@ Deno.serve(async (req) => {
   }
 
   // ── Build and send email ──────────────────────────────────────────────────
-  const invite_url  = `${req.headers.get('origin') ?? 'https://churchfinance.app'}/invite/${row.token}`
+  const invite_url  = `${APP_URL}/invite/${row.token}`
   const org_name    = row.org_name    ?? 'your organisation'
   const inviter_name = row.inviter_name ?? 'An administrator'
 
