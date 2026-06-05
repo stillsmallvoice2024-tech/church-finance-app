@@ -634,7 +634,7 @@ create table public.invitation_emails (
 -- ── Audit Log ─────────────────────────────────────────────────────────────────
 create table public.audit_log (
   id         uuid        default gen_random_uuid() primary key,
-  user_id    uuid        references public.profiles(id),
+  user_id    uuid        references public.profiles(id) on delete set null,
   action     text        not null,
   table_name text,
   record_id  uuid,
@@ -655,6 +655,31 @@ create table public.field_changes (
   new_value  text,
   org_id     uuid        references public.organizations(id) on delete set null,
   changed_at timestamptz default now()
+);
+
+-- ── Audit Maintenance Log (N-3) ───────────────────────────────────────────────
+create table public.audit_maintenance_log (
+  id                        uuid        default gen_random_uuid() primary key,
+  run_at                    timestamptz default now() not null,
+  retention_interval        interval    not null,
+  audit_rows_deleted        bigint      not null default 0,
+  field_change_rows_deleted bigint      not null default 0,
+  performed_by              uuid        references public.profiles(id) on delete set null
+);
+
+-- ── GDPR Erasure Requests (N-4) ───────────────────────────────────────────────
+create table public.gdpr_erasure_requests (
+  id                            uuid        default gen_random_uuid() primary key,
+  org_id                        uuid        not null default public.get_current_org_id()
+                                references public.organizations(id) on delete cascade,
+  requested_by                  uuid        references public.profiles(id) on delete set null,
+  -- plain uuid, not FK: the profile may be deleted as part of erasure
+  target_user_id                uuid        not null,
+  requested_at                  timestamptz default now() not null,
+  completed_at                  timestamptz,
+  notes                         text,
+  anonymized_audit_count        bigint      default 0 not null,
+  anonymized_field_change_count bigint      default 0 not null
 );
 
 -- ── Category Opening Balances ─────────────────────────────────────────────────
@@ -817,6 +842,8 @@ alter table public.invitations                    enable row level security;
 alter table public.invitation_emails              enable row level security;
 alter table public.audit_log                      enable row level security;
 alter table public.field_changes                  enable row level security;
+alter table public.audit_maintenance_log          enable row level security;
+alter table public.gdpr_erasure_requests          enable row level security;
 alter table public.category_opening_balances      enable row level security;
 alter table public.report_templates               enable row level security;
 alter table public.transaction_allocation_snapshots enable row level security;
@@ -1198,6 +1225,19 @@ create policy "field_changes_delete" on public.field_changes
     org_id is not null and public.is_org_admin(org_id)
   );
 
+-- ── audit_maintenance_log (N-3) ───────────────────────────────────────────────
+
+create policy "aml_admin_read" on public.audit_maintenance_log
+  for select using (public.is_admin());
+
+-- ── gdpr_erasure_requests (N-4) ──────────────────────────────────────────────
+
+create policy "gdpr_req_select" on public.gdpr_erasure_requests
+  for select using (public.is_org_admin(org_id));
+
+create policy "gdpr_req_insert" on public.gdpr_erasure_requests
+  for insert with check (public.is_org_admin(org_id));
+
 -- ── category_opening_balances ──────────────────────────────────────────────────
 
 create policy "cob_select" on public.category_opening_balances
@@ -1396,6 +1436,8 @@ create index if not exists idx_audit_log_org_id       on public.audit_log(org_id
 create index if not exists idx_audit_log_org_date     on public.audit_log(org_id, created_at desc);
 create index if not exists idx_field_changes_org_id   on public.field_changes(org_id);
 create index if not exists idx_field_changes_org_date on public.field_changes(org_id, changed_at desc);
+create index if not exists idx_gdpr_erasure_org        on public.gdpr_erasure_requests(org_id);
+create index if not exists idx_gdpr_erasure_user       on public.gdpr_erasure_requests(target_user_id);
 create index if not exists idx_cotm_category          on public.category_outflow_type_map(category_id);
 create index if not exists idx_cotm_type              on public.category_outflow_type_map(outflow_type_id);
 
@@ -1661,6 +1703,11 @@ declare
   v_old_json  jsonb;
   v_new_json  jsonb;
   v_key       text;
+  -- Metadata-only fields skipped to avoid noise rows on every touch-update
+  v_skip      constant text[] := array[
+    'updated_at', 'created_at', 'recorded_at',
+    'recalculated_at', 'sent_at', 'snapshot_at', 'changed_at'
+  ];
 begin
   if TG_OP <> 'UPDATE' then return NEW; end if;
   v_user_id   := auth.uid();
@@ -1669,6 +1716,7 @@ begin
   v_record_id := v_new_json->>'id';
   begin v_org_id := (v_new_json->>'org_id')::uuid; exception when others then v_org_id := null; end;
   for v_key in select key from jsonb_object_keys(v_new_json) as key loop
+    continue when v_key = any(v_skip);
     if (v_old_json->>v_key) is distinct from (v_new_json->>v_key) then
       insert into public.field_changes(user_id, table_name, record_id, field_name, old_value, new_value, org_id)
       values (v_user_id, TG_TABLE_NAME, v_record_id, v_key, v_old_json->>v_key, v_new_json->>v_key, v_org_id);
@@ -1725,9 +1773,13 @@ create trigger trg_audit_ledger_entries
 
 -- Audit log delete immutability: rows can never be destroyed.
 -- UPDATE is allowed so GDPR erasure can SET user_id = NULL.
+-- purge_old_audit_logs() bypasses this guard via transaction-local session variable.
 create or replace function public.audit_log_no_delete_fn()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
+  if current_setting('app.audit_maintenance', true) = 'true' then
+    return OLD;
+  end if;
   raise exception 'audit_log rows cannot be deleted';
 end;
 $$;
@@ -2785,6 +2837,101 @@ drop trigger if exists user_preferences_updated_at on public.user_preferences;
 create trigger user_preferences_updated_at
   before update on public.user_preferences
   for each row execute function public.set_user_preferences_updated_at();
+
+-- ── purge_old_audit_logs() (N-3) ─────────────────────────────────────────────
+
+create or replace function public.purge_old_audit_logs(
+  p_retention_interval interval default '7 years'
+)
+returns table(audit_rows_deleted bigint, field_change_rows_deleted bigint)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_audit_deleted bigint := 0;
+  v_fc_deleted    bigint := 0;
+  v_cutoff        timestamptz;
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    raise exception 'purge_old_audit_logs: caller must be an org admin';
+  end if;
+  v_cutoff := now() - p_retention_interval;
+  set local app.audit_maintenance = 'true';
+  delete from public.audit_log where created_at < v_cutoff;
+  get diagnostics v_audit_deleted = row_count;
+  delete from public.field_changes where changed_at < v_cutoff;
+  get diagnostics v_fc_deleted = row_count;
+  insert into public.audit_maintenance_log
+    (retention_interval, audit_rows_deleted, field_change_rows_deleted, performed_by)
+  values
+    (p_retention_interval, v_audit_deleted, v_fc_deleted, auth.uid());
+  return query select v_audit_deleted, v_fc_deleted;
+end;
+$$;
+
+revoke all   on function public.purge_old_audit_logs(interval) from public;
+grant execute on function public.purge_old_audit_logs(interval) to authenticated;
+
+-- ── request_gdpr_erasure() (N-4) ─────────────────────────────────────────────
+
+create or replace function public.request_gdpr_erasure(
+  p_target_user_id uuid,
+  p_notes          text default null
+)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_org_id      uuid;
+  v_audit_count bigint := 0;
+  v_fc_count    bigint := 0;
+  v_request_id  uuid;
+  v_pii_keys    constant text[] := array[
+    'email', 'full_name', 'username', 'phone', 'avatar_url'
+  ];
+begin
+  if not public.is_admin() then
+    raise exception 'request_gdpr_erasure: caller must be an org admin';
+  end if;
+  select om.org_id into v_org_id
+  from   public.org_members om
+  where  om.user_id = auth.uid()
+    and  om.role    in ('owner', 'admin')
+    and  om.status  = 'active'
+  limit 1;
+  if v_org_id is null then
+    raise exception 'request_gdpr_erasure: no active admin membership found for caller';
+  end if;
+  with updated as (
+    update public.audit_log
+    set
+      user_id  = null,
+      old_data = case when old_data is not null then old_data - v_pii_keys else null end,
+      new_data = case when new_data is not null then new_data - v_pii_keys else null end
+    where user_id = p_target_user_id and org_id = v_org_id
+    returning 1
+  )
+  select count(*) into v_audit_count from updated;
+  with updated as (
+    update public.field_changes
+    set
+      user_id   = null,
+      old_value = case when field_name = any(v_pii_keys) then null else old_value end,
+      new_value = case when field_name = any(v_pii_keys) then null else new_value end
+    where user_id = p_target_user_id and org_id = v_org_id
+    returning 1
+  )
+  select count(*) into v_fc_count from updated;
+  insert into public.gdpr_erasure_requests
+    (org_id, requested_by, target_user_id, completed_at, notes,
+     anonymized_audit_count, anonymized_field_change_count)
+  values
+    (v_org_id, auth.uid(), p_target_user_id, now(), p_notes,
+     v_audit_count, v_fc_count)
+  returning id into v_request_id;
+  return v_request_id;
+end;
+$$;
+
+revoke all   on function public.request_gdpr_erasure(uuid, text) from public;
+grant execute on function public.request_gdpr_erasure(uuid, text) to authenticated;
 
 -- ================================================================
 -- 12. SCHEMA RELOAD
