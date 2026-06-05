@@ -266,9 +266,8 @@ export function exportReportExcel(
   orgName = 'Financial Report',
   opBalances: OperationalBalanceMap = new Map(),
   currencySymbol = '₦',
-  numberLocale = 'en-NG',
+  _numberLocale = 'en-NG',
 ): void {
-  const fmt = makeFmt(numberLocale)
   const wb = XLSX.utils.book_new()
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {

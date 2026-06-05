@@ -10,7 +10,7 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   balance_brought_forward: 'Balance Brought Forward',
 }
 
-export function inflowDetailItems(row: InflowTransaction, currency: string): DetailItem[] {
+export function inflowDetailItems(row: InflowTransaction, _currency: string): DetailItem[] {
   return [
     { label: 'Txn Ref',         value: row.transaction_ref,          mono: true, breakAll: true },
     { label: 'Recorded',        value: row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null },

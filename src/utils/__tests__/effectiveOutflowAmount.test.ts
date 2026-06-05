@@ -38,6 +38,8 @@ describe('effectiveOutflowAmount', () => {
     //   0 ?? amount_disbursed = 0  ← the original bug
     //   0 || amount_disbursed = amount_disbursed ← the fix
     const amount_disbursed = 750
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    // @ts-expect-error — left side is intentionally a non-nullish literal to document the old ?? bug
     expect(0 ?? amount_disbursed).toBe(0)   // documents the old bug
     expect(0 || amount_disbursed).toBe(750) // documents the fix
   })
