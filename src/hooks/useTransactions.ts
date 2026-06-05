@@ -91,7 +91,8 @@ export interface TransactionFilters {
   stageCode?: string    // filters on stage_code_1
   search?: string       // ilike search value
   searchCol?: string    // 'all' (default) or specific DB column key
-  pendingOnly?: boolean // filter outflows by is_pending_deduction = true
+  pendingOnly?: boolean    // filter outflows by is_pending_deduction = true
+  outflowTypeId?: string  // server-side filter on outflow_type_id
   page?: number         // 0-indexed; not used when fetchAll is true
   pageSize?: number     // not used when fetchAll is true
   fetchAll?: boolean    // fetch all rows (up to 10 000) so the caller can filter/paginate client-side
@@ -208,7 +209,7 @@ const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_na
 export function useOutflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<OutflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
+  const { dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
 
   const orgId = useOrgStore((s) => s.orgId)
 
@@ -245,10 +246,11 @@ export function useOutflowTransactions(
       query = query.range(page * pageSize, page * pageSize + pageSize - 1)
     }
 
-    if (dateFrom)  query = query.gte('date', dateFrom)
-    if (dateTo)    query = query.lte('date', dateTo)
-    if (stageCode) query = query.eq('stage_code_1', stageCode)
-    if (pendingOnly) query = query.eq('is_pending_deduction', true)
+    if (dateFrom)      query = query.gte('date', dateFrom)
+    if (dateTo)        query = query.lte('date', dateTo)
+    if (stageCode)     query = query.eq('stage_code_1', stageCode)
+    if (pendingOnly)   query = query.eq('is_pending_deduction', true)
+    if (outflowTypeId) query = query.eq('outflow_type_id', outflowTypeId)
 
     // Server-side search
     if (search && !fetchAll) {
@@ -286,7 +288,7 @@ export function useOutflowTransactions(
       setCount(total ?? 0)
     }
     setLoading(false)
-  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
+  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
 
   useEffect(() => { fetch() }, [fetch])
 

@@ -7,6 +7,7 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { usePageTitle }    from '../hooks/usePageTitle'
 import { supabase }        from '../lib/supabase'
+import { useOrgStore }     from '../store/orgStore'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
@@ -23,13 +24,17 @@ interface TxnRow {
   remarks:                 string | null
 }
 
+const REVERSAL_LIMIT = 5_000
+
 export default function ReversalTransactions() {
   usePageTitle('Reversals')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
+  const orgId = useOrgStore((s) => s.orgId)
 
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState<string | null>(null)
+  const [truncated,   setTruncated]   = useState(false)
   const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
@@ -47,18 +52,24 @@ export default function ReversalTransactions() {
   }
 
   const load = async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
+    setTruncated(false)
 
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions')
-        .select('id, date, amount, description, original_transaction_id, bank_name, remark')
+        .select('id, date, amount, description, original_transaction_id, bank_name, remark', { count: 'exact' })
+        .eq('org_id', orgId)
         .eq('transaction_type', 'reversal')
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .limit(REVERSAL_LIMIT),
       supabase.from('outflow_transactions')
-        .select('id, date, amount_disbursed, description, original_transaction_id, bank_name, remarks')
+        .select('id, date, amount_disbursed, description, original_transaction_id, bank_name, remarks', { count: 'exact' })
+        .eq('org_id', orgId)
         .eq('transaction_type', 'reversal')
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .limit(REVERSAL_LIMIT),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -66,6 +77,11 @@ export default function ReversalTransactions() {
       setLoading(false)
       return
     }
+
+    const isCapped =
+      (inflowRes.count ?? 0) > REVERSAL_LIMIT ||
+      (outflowRes.count ?? 0) > REVERSAL_LIMIT
+    setTruncated(isCapped)
 
     const merged: TxnRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -90,7 +106,7 @@ export default function ReversalTransactions() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [orgId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = rows.filter(r => {
     if (dateFrom && r.date < dateFrom) return false
@@ -117,6 +133,13 @@ export default function ReversalTransactions() {
 
   return (
     <div className="space-y-5">
+      {truncated && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          Showing first {REVERSAL_LIMIT.toLocaleString()} reversals. Use a database export for the full dataset.
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

@@ -496,3 +496,231 @@ describe('useAddFXConversion atomicity (LB-2/E-C2)', () => {
     expect(code).toContain('p_bank_name:')
   })
 })
+
+// ── LB-11 / SC-H1: server-side pagination + export org scoping ────────────────
+
+describe('LB-11: export functions include org_id filter (Inflows)', () => {
+  const code = src('pages/Inflows.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../store/orgStore'")
+  })
+
+  it('imports fetchAllPaginated utility', () => {
+    expect(code).toContain('fetchAllPaginated')
+  })
+
+  it('handleExportAll filters by org_id', () => {
+    const exportSection = code.slice(
+      code.indexOf('handleExportAll'),
+      code.indexOf('handleExportAll') + 2000,
+    )
+    expect(exportSection).toContain(".eq('org_id', orgId)")
+  })
+
+  it('handleExportAll does not use raw .limit(10000)', () => {
+    expect(code).not.toContain('.limit(10000)')
+  })
+})
+
+describe('LB-11: export functions include org_id filter (Outflows)', () => {
+  const code = src('pages/Outflows.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../store/orgStore'")
+  })
+
+  it('imports fetchAllPaginated utility', () => {
+    expect(code).toContain('fetchAllPaginated')
+  })
+
+  it('handleExportAll filters by org_id', () => {
+    const exportSection = code.slice(
+      code.indexOf('handleExportAll'),
+      code.indexOf('handleExportAll') + 2000,
+    )
+    expect(exportSection).toContain(".eq('org_id', orgId)")
+  })
+
+  it('handleExportAll does not use raw .limit(10000)', () => {
+    expect(code).not.toContain('.limit(10000)')
+  })
+
+  it('outflow_type_id filter is passed to hook (server-side), not applied client-side', () => {
+    expect(code).toContain('outflowTypeId:')
+    expect(code).not.toContain("data.filter(r => r.outflow_type_id")
+  })
+})
+
+describe('LB-11: export functions include org_id filter (PendingDeductions)', () => {
+  const code = src('pages/PendingDeductions.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../store/orgStore'")
+  })
+
+  it('imports fetchAllPaginated utility', () => {
+    expect(code).toContain('fetchAllPaginated')
+  })
+
+  it('handleExportAll filters by org_id', () => {
+    const exportSection = code.slice(
+      code.indexOf('handleExportAll'),
+      code.indexOf('handleExportAll') + 1500,
+    )
+    expect(exportSection).toContain(".eq('org_id', orgId)")
+  })
+
+  it('handleExportAll does not use raw .limit(10000)', () => {
+    expect(code).not.toContain('.limit(10000)')
+  })
+})
+
+describe('LB-11: RefundTransactions scoped to org and limited', () => {
+  const code = src('pages/RefundTransactions.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../store/orgStore'")
+  })
+
+  it('load() guards on orgId', () => {
+    expect(code).toContain('if (!orgId)')
+  })
+
+  it('both queries in load() filter by org_id', () => {
+    const loadSection = code.slice(
+      code.indexOf('const load = async'),
+      code.indexOf('const handleEdit'),
+    )
+    const orgIdOccurrences = (loadSection.match(/\.eq\('org_id', orgId\)/g) ?? []).length
+    expect(orgIdOccurrences).toBeGreaterThanOrEqual(2)
+  })
+
+  it('both queries apply a safety limit', () => {
+    const loadSection = code.slice(
+      code.indexOf('const load = async'),
+      code.indexOf('const handleEdit'),
+    )
+    const limitOccurrences = (loadSection.match(/\.limit\(/g) ?? []).length
+    expect(limitOccurrences).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows truncation banner when limit is hit', () => {
+    expect(code).toContain('truncated')
+    expect(code).toContain('REFUND_LIMIT')
+  })
+})
+
+describe('LB-11: ReversalTransactions scoped to org and limited', () => {
+  const code = src('pages/ReversalTransactions.tsx')
+
+  it('imports useOrgStore', () => {
+    expect(code).toContain("from '../store/orgStore'")
+  })
+
+  it('load() guards on orgId', () => {
+    expect(code).toContain('if (!orgId)')
+  })
+
+  it('both queries in load() filter by org_id', () => {
+    const start = code.indexOf('const load = async')
+    const loadSection = code.slice(start, start + 3000)
+    const orgIdOccurrences = (loadSection.match(/\.eq\('org_id', orgId\)/g) ?? []).length
+    expect(orgIdOccurrences).toBeGreaterThanOrEqual(2)
+  })
+
+  it('both queries apply a safety limit', () => {
+    const start = code.indexOf('const load = async')
+    const loadSection = code.slice(start, start + 3000)
+    const limitOccurrences = (loadSection.match(/\.limit\(/g) ?? []).length
+    expect(limitOccurrences).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows truncation banner when limit is hit', () => {
+    expect(code).toContain('truncated')
+    expect(code).toContain('REVERSAL_LIMIT')
+  })
+})
+
+describe('LB-11: BankDeposits scoped to org in load() and loadRecon()', () => {
+  const code = src('pages/BankDeposits.tsx')
+
+  it('uses useOrgStore hook in main component', () => {
+    const mainComponent = code.slice(code.indexOf('export default function BankDeposits'))
+    expect(mainComponent).toContain("useOrgStore((s) => s.orgId)")
+  })
+
+  it('load() guards on orgId', () => {
+    const loadFn = code.slice(
+      code.indexOf('const load = useCallback'),
+      code.indexOf('}, [orgId])'),
+    )
+    expect(loadFn).toContain('if (!orgId)')
+  })
+
+  it('bank_deposits query in load() filters by org_id', () => {
+    const loadFn = code.slice(
+      code.indexOf('const load = useCallback'),
+      code.indexOf('}, [orgId])'),
+    )
+    expect(loadFn).toContain(".eq('org_id', orgId)")
+  })
+
+  it('inflow/outflow queries in load() filter by org_id', () => {
+    const loadFn = code.slice(
+      code.indexOf('const load = useCallback'),
+      code.indexOf('}, [orgId])'),
+    )
+    const orgIdOccurrences = (loadFn.match(/\.eq\('org_id', orgId\)/g) ?? []).length
+    expect(orgIdOccurrences).toBeGreaterThanOrEqual(3)
+  })
+
+  it('loadRecon() guards on orgId', () => {
+    const reconFn = code.slice(
+      code.indexOf('const loadRecon = async'),
+      code.indexOf('const toggleRecon'),
+    )
+    expect(reconFn).toContain('if (!orgId)')
+    expect(reconFn).toContain(".eq('org_id', orgId)")
+  })
+})
+
+describe('LB-11: useOutflowTransactions supports server-side outflowTypeId filter', () => {
+  const code = src('hooks/useTransactions.ts')
+
+  it('TransactionFilters includes outflowTypeId', () => {
+    expect(code).toContain('outflowTypeId?: string')
+  })
+
+  it('applies outflow_type_id filter to query', () => {
+    expect(code).toContain(".eq('outflow_type_id', outflowTypeId)")
+  })
+
+  it('outflowTypeId is in useCallback dependencies', () => {
+    const outflowHook = code.slice(
+      code.indexOf('export function useOutflowTransactions'),
+      code.indexOf('// ── useIntraFlows'),
+    )
+    expect(outflowHook).toContain('outflowTypeId')
+  })
+})
+
+describe('LB-11: paginatedExport utility prevents silent truncation', () => {
+  const code = src('utils/paginatedExport.ts')
+
+  it('exports EXPORT_MAX constant', () => {
+    expect(code).toContain('export const EXPORT_MAX')
+  })
+
+  it('exports fetchAllPaginated function', () => {
+    expect(code).toContain('export async function fetchAllPaginated')
+  })
+
+  it('throws on error instead of silently returning empty', () => {
+    expect(code).toContain('throw new Error')
+  })
+
+  it('returns truncated flag so callers can warn users', () => {
+    expect(code).toContain('truncated')
+  })
+})

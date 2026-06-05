@@ -7,6 +7,7 @@ import { DescriptionCell, DescriptionTooltip } from '../components/ui/Descriptio
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { usePageTitle }    from '../hooks/usePageTitle'
 import { supabase }        from '../lib/supabase'
+import { useOrgStore }     from '../store/orgStore'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { AddInflowModal }  from '../components/modals/AddInflowModal'
 import { AddOutflowModal } from '../components/modals/AddOutflowModal'
@@ -29,9 +30,12 @@ interface TxnRow {
   outflowData?:            OutflowTransaction
 }
 
+const REFUND_LIMIT = 5_000
+
 export default function RefundTransactions() {
   usePageTitle('Refunds')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
+  const orgId = useOrgStore((s) => s.orgId)
 
   const { canWrite } = useRole()
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
@@ -39,6 +43,7 @@ export default function RefundTransactions() {
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState<string | null>(null)
+  const [truncated,   setTruncated]   = useState(false)
   const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
@@ -55,18 +60,24 @@ export default function RefundTransactions() {
   ]
 
   const load = async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
+    setTruncated(false)
 
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions')
-        .select('*')
+        .select('*', { count: 'exact' })
+        .eq('org_id', orgId)
         .eq('transaction_type', 'refund')
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .limit(REFUND_LIMIT),
       supabase.from('outflow_transactions')
-        .select('*')
+        .select('*', { count: 'exact' })
+        .eq('org_id', orgId)
         .eq('transaction_type', 'refund')
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .limit(REFUND_LIMIT),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -74,6 +85,11 @@ export default function RefundTransactions() {
       setLoading(false)
       return
     }
+
+    const isCapped =
+      (inflowRes.count ?? 0) > REFUND_LIMIT ||
+      (outflowRes.count ?? 0) > REFUND_LIMIT
+    setTruncated(isCapped)
 
     const merged: TxnRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -105,7 +121,7 @@ export default function RefundTransactions() {
     else if (row.direction === 'out' && row.outflowData) setEditOutflow(row.outflowData)
   }
 
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [orgId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = rows.filter(r => {
     if (dateFrom && r.date < dateFrom) return false
@@ -132,6 +148,13 @@ export default function RefundTransactions() {
 
   return (
     <div className="space-y-5">
+      {truncated && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          Showing first {REFUND_LIMIT.toLocaleString()} refunds. Use a database export for the full dataset.
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

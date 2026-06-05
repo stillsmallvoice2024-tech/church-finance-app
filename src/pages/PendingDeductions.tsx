@@ -25,6 +25,8 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { outflowDetailItems } from '../utils/rowDetailItems'
 import { supabase }                 from '../lib/supabase'
+import { useOrgStore }             from '../store/orgStore'
+import { fetchAllPaginated, EXPORT_MAX } from '../utils/paginatedExport'
 import { exportCSV }               from '../utils/csvExport'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -45,6 +47,7 @@ const PD_SORT_FIELDS = deriveSortFields(PD_COLUMNS)
 export default function PendingDeductions() {
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { dateFrom, dateTo } = useYearRange()
+  const orgId = useOrgStore((s) => s.orgId)
 
   const pdState = useDataViewState({ storageKey: 'pd', defaultSortKey: 'date', defaultSortDir: 'desc' })
 
@@ -110,21 +113,28 @@ export default function PendingDeductions() {
   const handleExportView = () => exportCSV(PD_CSV_FILE, PD_CSV_HEADERS, displayed.map(pdCsvRow))
 
   const handleExportAll = async () => {
-    let query = supabase
-      .from('outflow_transactions')
-      .select('*')
-      .eq('is_pending_deduction', true)
-      .order('date', { ascending: false })
-      .limit(10000)
-    if (dateFrom) query = query.gte('date', dateFrom)
-    if (dateTo)   query = query.lte('date', dateTo)
-    const { data: rows } = await query
-    if (!rows) return
-    const adv = pdState.advancedSort
-    const allSorted = adv.length > 0
-      ? multiSortRows(rows as OutflowTransaction[], getPdValue, adv, PD_SORT_FIELDS)
-      : sortRows(rows as OutflowTransaction[], getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
-    exportCSV(PD_CSV_FILE, PD_CSV_HEADERS, allSorted.map(pdCsvRow))
+    if (!orgId) return
+    try {
+      const { rows, truncated } = await fetchAllPaginated<OutflowTransaction>((from, to) => {
+        let q = supabase
+          .from('outflow_transactions')
+          .select('*', { count: 'exact' })
+          .eq('org_id', orgId)
+          .eq('is_pending_deduction', true)
+          .order('date', { ascending: false })
+        if (dateFrom) q = q.gte('date', dateFrom)
+        if (dateTo)   q = q.lte('date', dateTo)
+        return q.range(from, to)
+      })
+      if (truncated) toast(`Export capped at ${EXPORT_MAX.toLocaleString()} records`, 'warning')
+      const adv = pdState.advancedSort
+      const allSorted = adv.length > 0
+        ? multiSortRows(rows, getPdValue, adv, PD_SORT_FIELDS)
+        : sortRows(rows, getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
+      exportCSV(PD_CSV_FILE, PD_CSV_HEADERS, allSorted.map(pdCsvRow))
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Export failed', 'error')
+    }
   }
 
   const handleBulkResolve = async () => {

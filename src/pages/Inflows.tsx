@@ -25,6 +25,8 @@ import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
 import { supabase }                from '../lib/supabase'
+import { useOrgStore }             from '../store/orgStore'
+import { fetchAllPaginated, EXPORT_MAX } from '../utils/paginatedExport'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { HelpButton }              from '../components/onboarding/HelpButton'
 import { Link }                    from 'react-router-dom'
@@ -105,6 +107,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 export default function Inflows() {
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
+  const orgId = useOrgStore((s) => s.orgId)
 
   // Filters
   const [dateFrom,        setDateFrom]        = useState(yearStart)
@@ -217,31 +220,41 @@ export default function Inflows() {
   }
 
   const handleExportAll = async () => {
-    let query = supabase.from('inflow_transactions').select('*').limit(10000)
-    const adv = infState.advancedSort
-    if (adv.length > 0) {
-      for (const l of adv) {
-        if (INFLOW_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
-      }
-    } else if (INFLOW_SORT_COLS.has(infState.sortKey)) {
-      query = query.order(infState.sortKey, { ascending: infState.sortDir === 'asc' })
-      if (infState.sortKey !== 'recorded_at') query = query.order('recorded_at', { ascending: false })
-    } else {
-      query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+    if (!orgId) return
+    try {
+      const { rows, truncated } = await fetchAllPaginated<InflowTransaction>((from, to) => {
+        const adv = infState.advancedSort
+        let q = supabase
+          .from('inflow_transactions')
+          .select('*', { count: 'exact' })
+          .eq('org_id', orgId)
+        if (adv.length > 0) {
+          for (const l of adv) {
+            if (INFLOW_SORT_COLS.has(l.key)) q = q.order(l.key, { ascending: l.dir === 'asc' })
+          }
+        } else if (INFLOW_SORT_COLS.has(infState.sortKey)) {
+          q = q.order(infState.sortKey, { ascending: infState.sortDir === 'asc' })
+          if (infState.sortKey !== 'recorded_at') q = q.order('recorded_at', { ascending: false })
+        } else {
+          q = q.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+        }
+        if (dateFrom) q = q.gte('date', dateFrom)
+        if (dateTo)   q = q.lte('date', dateTo)
+        if (debouncedSearch) {
+          const safeSearch = debouncedSearch.replace(/[(),]/g, '')
+          if (!infState.searchCol || infState.searchCol === 'all') {
+            q = q.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_ref.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
+          } else if (INFLOW_SEARCH_COLS.has(infState.searchCol)) {
+            q = q.ilike(infState.searchCol, `%${debouncedSearch}%`)
+          }
+        }
+        return q.range(from, to)
+      })
+      if (truncated) toast(`Export capped at ${EXPORT_MAX.toLocaleString()} records — use a full database export for larger datasets`, 'warning')
+      exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, rows.map(inflowCsvRow))
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Export failed', 'error')
     }
-    if (dateFrom) query = query.gte('date', dateFrom)
-    if (dateTo)   query = query.lte('date', dateTo)
-    if (debouncedSearch) {
-      const safeSearch = debouncedSearch.replace(/[(),]/g, '')
-      if (!infState.searchCol || infState.searchCol === 'all') {
-        query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_ref.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
-      } else if (INFLOW_SEARCH_COLS.has(infState.searchCol)) {
-        query = query.ilike(infState.searchCol, `%${debouncedSearch}%`)
-      }
-    }
-    const { data: rows } = await query
-    if (!rows) return
-    exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, (rows as InflowTransaction[]).map(inflowCsvRow))
   }
 
   if (error) return (

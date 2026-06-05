@@ -26,6 +26,8 @@ import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/form
 import { exportCSV }               from '../utils/csvExport'
 import { supabase }                from '../lib/supabase'
 import { normalizeNarration }      from '../utils/normalizeNarration'
+import { useOrgStore }             from '../store/orgStore'
+import { fetchAllPaginated, EXPORT_MAX } from '../utils/paginatedExport'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useCategories }           from '../hooks/useCategories'
 import { useOutflowTypes }         from '../hooks/useOutflowTypes'
@@ -102,6 +104,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 export default function Outflows() {
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
+  const orgId = useOrgStore((s) => s.orgId)
 
   // Filters
   const [dateFrom,          setDateFrom]          = useState(yearStart)
@@ -121,22 +124,20 @@ export default function Outflows() {
   const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE, persistSort: false })
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
-    dateFrom:     dateFrom  || undefined,
-    dateTo:       dateTo    || undefined,
-    stageCode:    stageCode || undefined,
-    search:       debouncedSearch || undefined,
-    searchCol:    outState.searchCol,
+    dateFrom:       dateFrom          || undefined,
+    dateTo:         dateTo            || undefined,
+    stageCode:      stageCode         || undefined,
+    outflowTypeId:  outflowTypeFilter || undefined,
+    search:         debouncedSearch   || undefined,
+    searchCol:      outState.searchCol,
     page,
-    pageSize:     outState.pageSize,
-    sortColumn:   outState.advancedSort.length === 0 ? outState.sortKey : undefined,
-    sortAscending: outState.advancedSort.length === 0 ? (outState.sortDir === 'asc') : undefined,
-    advancedSort: outState.advancedSort.length > 0 ? outState.advancedSort : undefined,
+    pageSize:       outState.pageSize,
+    sortColumn:     outState.advancedSort.length === 0 ? outState.sortKey : undefined,
+    sortAscending:  outState.advancedSort.length === 0 ? (outState.sortDir === 'asc') : undefined,
+    advancedSort:   outState.advancedSort.length > 0 ? outState.advancedSort : undefined,
   })
 
-  // Client-side outflow type filter (server doesn't filter by outflow_type_id yet)
-  const displayed = outflowTypeFilter
-    ? data.filter(r => r.outflow_type_id === outflowTypeFilter)
-    : data
+  const displayed = data
 
   // Summary (current page, disbursed amounts)
   const total   = displayed.reduce((s, r) => s + Number(r.amount_disbursed), 0)
@@ -216,38 +217,49 @@ export default function Outflows() {
   }
 
   const handleExportAll = async () => {
-    let query = supabase.from('outflow_transactions').select('*').limit(10000)
-    const adv = outState.advancedSort
-    if (adv.length > 0) {
-      for (const l of adv) {
-        if (OUTFLOW_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
-      }
-    } else if (OUTFLOW_SORT_COLS.has(outState.sortKey)) {
-      query = query.order(outState.sortKey, { ascending: outState.sortDir === 'asc' })
-      if (outState.sortKey !== 'recorded_at') query = query.order('recorded_at', { ascending: false })
-    } else {
-      query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+    if (!orgId) return
+    try {
+      const { rows, truncated } = await fetchAllPaginated<Omit<OutflowTransaction, 'display_description'>>((from, to) => {
+        const adv = outState.advancedSort
+        let q = supabase
+          .from('outflow_transactions')
+          .select('*', { count: 'exact' })
+          .eq('org_id', orgId)
+        if (adv.length > 0) {
+          for (const l of adv) {
+            if (OUTFLOW_SORT_COLS.has(l.key)) q = q.order(l.key, { ascending: l.dir === 'asc' })
+          }
+        } else if (OUTFLOW_SORT_COLS.has(outState.sortKey)) {
+          q = q.order(outState.sortKey, { ascending: outState.sortDir === 'asc' })
+          if (outState.sortKey !== 'recorded_at') q = q.order('recorded_at', { ascending: false })
+        } else {
+          q = q.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+        }
+        if (dateFrom)          q = q.gte('date', dateFrom)
+        if (dateTo)            q = q.lte('date', dateTo)
+        if (stageCode)         q = q.eq('stage_code_1', stageCode)
+        if (outflowTypeFilter) q = q.eq('outflow_type_id', outflowTypeFilter)
+        if (debouncedSearch) {
+          const safeSearch = debouncedSearch.replace(/[(),]/g, '')
+          if (!outState.searchCol || outState.searchCol === 'all') {
+            q = q.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_id.ilike.%${safeSearch}%,stage_code_1.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
+          } else if (outState.searchCol === 'description') {
+            q = q.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%`)
+          } else if (OUTFLOW_SEARCH_COLS.has(outState.searchCol)) {
+            q = q.ilike(outState.searchCol, `%${debouncedSearch}%`)
+          }
+        }
+        return q.range(from, to)
+      })
+      if (truncated) toast(`Export capped at ${EXPORT_MAX.toLocaleString()} records — use a full database export for larger datasets`, 'warning')
+      const allRows = rows.map(r => ({
+        ...r,
+        display_description: normalizeNarration(r.description ?? r.bank_description),
+      })) as OutflowTransaction[]
+      exportCSV(OUT_CSV_FILE, OUT_CSV_HEADERS, allRows.map(outflowCsvRow))
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Export failed', 'error')
     }
-    if (dateFrom)  query = query.gte('date', dateFrom)
-    if (dateTo)    query = query.lte('date', dateTo)
-    if (stageCode) query = query.eq('stage_code_1', stageCode)
-    if (debouncedSearch) {
-      const safeSearch = debouncedSearch.replace(/[(),]/g, '')
-      if (!outState.searchCol || outState.searchCol === 'all') {
-        query = query.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_id.ilike.%${safeSearch}%,stage_code_1.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
-      } else if (outState.searchCol === 'description') {
-        query = query.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%`)
-      } else if (OUTFLOW_SEARCH_COLS.has(outState.searchCol)) {
-        query = query.ilike(outState.searchCol, `%${debouncedSearch}%`)
-      }
-    }
-    const { data: rows } = await query
-    if (!rows) return
-    const allRows = (rows as Omit<OutflowTransaction, 'display_description'>[]).map(r => ({
-      ...r,
-      display_description: normalizeNarration(r.description ?? r.bank_description),
-    })) as OutflowTransaction[]
-    exportCSV(OUT_CSV_FILE, OUT_CSV_HEADERS, allRows.map(outflowCsvRow))
   }
 
   if (error) return (
