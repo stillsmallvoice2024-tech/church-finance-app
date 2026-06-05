@@ -927,6 +927,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   const runImport = useCallback(async () => {
     if (!sheet || !config || !targetTable) return
+    if (!orgId) {
+      setResult({ imported: 0, skipped: 0, errors: ['No active organisation — please reload and try again.'], collisions: [] })
+      return
+    }
     setImporting(true)
     setProgress(0)
     setResult(null)
@@ -989,6 +993,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const txnType = rowTxnType
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
+          row.org_id = orgId
           // Non-Normal transactions skip income type and allocation entirely
           if (!txnType) {
             const effIncomeTypeId = rowIncomeTypes[ri]
@@ -1031,6 +1036,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const txnType = rowTxnType
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
           if (userId) row.created_by = userId
+          row.org_id = orgId
           if (!txnType && cfg) row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_id) {
@@ -1188,7 +1194,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '') row.narration = String(raw[narrIdx]).trim()
         if (refIdx  >= 0 && raw[refIdx]  != null && raw[refIdx]  !== '') row.transaction_ref = String(raw[refIdx]).trim()
         if (userId) row.created_by = userId
-        if (orgId)  row.org_id    = orgId
+        row.org_id = orgId
         if (internalBank) row.bank_name = internalBank.name
         fxRows.push(row)
       }

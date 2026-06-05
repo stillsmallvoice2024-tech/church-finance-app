@@ -53,6 +53,7 @@ async function logFieldChanges(
   newData:   Record<string, unknown>,
 ): Promise<void> {
   const orgId = useOrgStore.getState().orgId
+  if (!orgId) { console.warn('[field_changes] write skipped: no active org'); return }
   const rows = Object.keys(newData)
     .filter(k => String(oldData[k] ?? '') !== String(newData[k] ?? ''))
     .map(k => ({
@@ -62,7 +63,7 @@ async function logFieldChanges(
       field_name: k,
       old_value:  oldData[k] != null ? String(oldData[k]) : null,
       new_value:  newData[k] != null ? String(newData[k]) : null,
-      ...(orgId ? { org_id: orgId } : {}),
+      org_id:     orgId,
     }))
   if (rows.length === 0) return
   const { error } = await supabase.from('field_changes').insert(rows)
@@ -85,6 +86,7 @@ async function logAudit({
   newData?: Record<string, unknown> | null
 }): Promise<void> {
   const orgId = useOrgStore.getState().orgId
+  if (!orgId) { console.warn('[audit_log] write skipped: no active org'); return }
   const { error } = await supabase.from('audit_log').insert({
     user_id:    userId,
     action,
@@ -92,7 +94,7 @@ async function logAudit({
     record_id:  recordId,
     old_data:   oldData,
     new_data:   newData,
-    ...(orgId ? { org_id: orgId } : {}),
+    org_id:     orgId,
   })
   if (error) console.warn('[audit_log] write failed:', error.message)
 }
@@ -109,7 +111,8 @@ async function batchLogAudit(
 ): Promise<void> {
   if (rows.length === 0) return
   const orgId = useOrgStore.getState().orgId
-  const tagged = orgId ? rows.map(r => ({ ...r, org_id: orgId })) : rows
+  if (!orgId) { console.warn('[audit_log] batch write skipped: no active org'); return }
+  const tagged = rows.map(r => ({ ...r, org_id: orgId }))
   const { error } = await supabase.from('audit_log').insert(tagged)
   if (error) console.warn('[audit_log] batch write failed:', error.message)
 }
@@ -126,7 +129,8 @@ async function batchLogFieldChanges(
 ): Promise<void> {
   if (rows.length === 0) return
   const orgId = useOrgStore.getState().orgId
-  const tagged = orgId ? rows.map(r => ({ ...r, org_id: orgId })) : rows
+  if (!orgId) { console.warn('[field_changes] batch write skipped: no active org'); return }
+  const tagged = rows.map(r => ({ ...r, org_id: orgId }))
   const { error } = await supabase.from('field_changes').insert(tagged)
   if (error) console.warn('[field_changes] batch write failed:', error.message)
 }
