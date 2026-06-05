@@ -123,66 +123,122 @@ CREATE INDEX IF NOT EXISTS idx_org_deletion_backups_org ON public.org_deletion_b
 
 -- ── 4. Fix purge_org: remove broken explicit deletes of tables with no org_id ─
 -- dynamic_report_blocks and dynamic_report_snapshots have no org_id column.
--- Cascade delete from dynamic_reports (which has org_id) handles both via FK.
+-- Drop + recreate preserves the original RETURNS jsonb / service-role-only contract.
 
+DROP FUNCTION IF EXISTS public.purge_org(uuid);
 CREATE OR REPLACE FUNCTION public.purge_org(p_org_id uuid)
-RETURNS void
+RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
 AS $$
+DECLARE
+  v_org     record;
+  v_step    text := 'init';
+  v_snap    jsonb;
 BEGIN
-  IF NOT public.is_org_owner(p_org_id) THEN
-    RAISE EXCEPTION 'Only org owners can purge organisations';
+  -- Only callable by service role (auth.uid() is NULL for service_role JWT)
+  IF auth.uid() IS NOT NULL THEN
+    RAISE EXCEPTION 'purge_org may only be called by the service role';
   END IF;
 
-  -- Verify the org is in pending_deletion status
-  IF NOT EXISTS (
-    SELECT 1 FROM public.organizations
-    WHERE id = p_org_id AND status = 'pending_deletion'
-  ) THEN
-    RAISE EXCEPTION 'Organisation is not in pending_deletion status';
+  SELECT * INTO v_org FROM public.organizations WHERE id = p_org_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Organisation not found');
   END IF;
 
-  -- Delete all org data. FKs with ON DELETE CASCADE handle child rows.
-  -- dynamic_report_blocks / dynamic_report_snapshots are deleted via cascade
-  -- from dynamic_reports (they have no org_id column of their own).
-  DELETE FROM public.inflow_transactions           WHERE org_id = p_org_id;
-  DELETE FROM public.outflow_transactions          WHERE org_id = p_org_id;
-  DELETE FROM public.intra_flows                   WHERE org_id = p_org_id;
-  DELETE FROM public.fx_transactions               WHERE org_id = p_org_id;
-  DELETE FROM public.fx_conversions                WHERE org_id = p_org_id;
-  DELETE FROM public.bank_deposits                 WHERE org_id = p_org_id;
-  DELETE FROM public.intrabank_transfers           WHERE org_id = p_org_id;
-  DELETE FROM public.ledger_entries                WHERE org_id = p_org_id;
-  DELETE FROM public.project_entries               WHERE org_id = p_org_id;
-  DELETE FROM public.special_projects              WHERE org_id = p_org_id;
-  DELETE FROM public.receipts                      WHERE org_id = p_org_id;
-  DELETE FROM public.transaction_allocation_snapshots WHERE org_id = p_org_id;
-  DELETE FROM public.recalculation_logs            WHERE org_id = p_org_id;
-  DELETE FROM public.dynamic_reports               WHERE org_id = p_org_id;  -- cascades blocks+snapshots
-  DELETE FROM public.report_templates              WHERE org_id = p_org_id;
-  DELETE FROM public.category_opening_balances     WHERE org_id = p_org_id;
-  DELETE FROM public.income_type_rules             WHERE org_id = p_org_id;
-  DELETE FROM public.category_outflow_type_map     WHERE org_id = p_org_id;
-  DELETE FROM public.allocation_configs            WHERE org_id = p_org_id;
-  DELETE FROM public.income_types                  WHERE org_id = p_org_id;
-  DELETE FROM public.outflow_types                 WHERE org_id = p_org_id;
-  DELETE FROM public.categories                    WHERE org_id = p_org_id;
-  DELETE FROM public.category_groups               WHERE org_id = p_org_id;
-  DELETE FROM public.banks                         WHERE org_id = p_org_id;
-  DELETE FROM public.accounts                      WHERE org_id = p_org_id;
-  DELETE FROM public.departments                   WHERE org_id = p_org_id;
-  DELETE FROM public.special_config_groups         WHERE org_id = p_org_id;
-  DELETE FROM public.user_preferences              WHERE org_id = p_org_id;
-  DELETE FROM public.org_deletion_backups          WHERE org_id = p_org_id;
-  DELETE FROM public.org_members                   WHERE org_id = p_org_id;
-  DELETE FROM public.invitations                   WHERE org_id = p_org_id;
-  DELETE FROM public.audit_log                     WHERE org_id = p_org_id;
-  DELETE FROM public.organizations                 WHERE id     = p_org_id;
+  IF v_org.status != 'pending_deletion' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Organisation is not pending deletion');
+  END IF;
+
+  IF v_org.purge_at IS NULL OR v_org.purge_at > now() THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error', format('Purge window has not passed yet (purge_at = %s)', v_org.purge_at)
+    );
+  END IF;
+
+  v_snap := row_to_json(v_org)::jsonb;
+
+  v_step := 'receipts';
+  DELETE FROM public.receipts                          WHERE org_id = p_org_id;
+  v_step := 'transaction_allocation_snapshots';
+  DELETE FROM public.transaction_allocation_snapshots  WHERE org_id = p_org_id;
+  v_step := 'recalculation_logs';
+  DELETE FROM public.recalculation_logs                WHERE org_id = p_org_id;
+  -- dynamic_report_blocks / dynamic_report_snapshots have no org_id column;
+  -- deleting dynamic_reports cascades both child tables automatically.
+  v_step := 'dynamic_reports';
+  DELETE FROM public.dynamic_reports                   WHERE org_id = p_org_id;
+  v_step := 'report_templates';
+  DELETE FROM public.report_templates                  WHERE org_id = p_org_id;
+  v_step := 'project_entries';
+  DELETE FROM public.project_entries                   WHERE org_id = p_org_id;
+  v_step := 'special_projects';
+  DELETE FROM public.special_projects                  WHERE org_id = p_org_id;
+  v_step := 'fx_conversions';
+  DELETE FROM public.fx_conversions                    WHERE org_id = p_org_id;
+  v_step := 'fx_transactions';
+  DELETE FROM public.fx_transactions                   WHERE org_id = p_org_id;
+  v_step := 'intrabank_transfers';
+  DELETE FROM public.intrabank_transfers               WHERE org_id = p_org_id;
+  v_step := 'bank_deposits';
+  DELETE FROM public.bank_deposits                     WHERE org_id = p_org_id;
+  v_step := 'intra_flows';
+  DELETE FROM public.intra_flows                       WHERE org_id = p_org_id;
+  v_step := 'outflow_transactions';
+  DELETE FROM public.outflow_transactions              WHERE org_id = p_org_id;
+  v_step := 'inflow_transactions';
+  DELETE FROM public.inflow_transactions               WHERE org_id = p_org_id;
+  v_step := 'income_type_rules';
+  DELETE FROM public.income_type_rules                 WHERE org_id = p_org_id;
+  v_step := 'income_types';
+  DELETE FROM public.income_types                      WHERE org_id = p_org_id;
+  v_step := 'category_outflow_type_map';
+  DELETE FROM public.category_outflow_type_map         WHERE org_id = p_org_id;
+  v_step := 'outflow_types';
+  DELETE FROM public.outflow_types                     WHERE org_id = p_org_id;
+  v_step := 'allocation_configs';
+  DELETE FROM public.allocation_configs                WHERE org_id = p_org_id;
+  v_step := 'special_config_groups';
+  DELETE FROM public.special_config_groups             WHERE org_id = p_org_id;
+  v_step := 'category_opening_balances';
+  DELETE FROM public.category_opening_balances         WHERE org_id = p_org_id;
+  v_step := 'categories';
+  DELETE FROM public.categories                        WHERE org_id = p_org_id;
+  v_step := 'category_groups';
+  DELETE FROM public.category_groups                   WHERE org_id = p_org_id;
+  v_step := 'banks';
+  DELETE FROM public.banks                             WHERE org_id = p_org_id;
+  v_step := 'departments';
+  DELETE FROM public.departments                       WHERE org_id = p_org_id;
+  v_step := 'user_preferences';
+  DELETE FROM public.user_preferences                  WHERE org_id = p_org_id;
+  v_step := 'invitations';
+  DELETE FROM public.invitations                       WHERE org_id = p_org_id;
+  v_step := 'org_deletion_backups';
+  DELETE FROM public.org_deletion_backups              WHERE org_id = p_org_id;
+  v_step := 'audit_log (org entries)';
+  DELETE FROM public.audit_log                         WHERE org_id = p_org_id;
+  v_step := 'org_members';
+  DELETE FROM public.org_members                       WHERE org_id = p_org_id;
+  v_step := 'organizations';
+  DELETE FROM public.organizations                     WHERE id = p_org_id;
+
+  INSERT INTO public.audit_log (
+    table_name, record_id, action, old_data, new_data, user_id, created_at
+  ) VALUES (
+    'organizations', p_org_id, 'PURGED', v_snap, NULL, NULL, now()
+  );
+
+  RETURN jsonb_build_object('ok', true, 'org_id', p_org_id, 'purged_at', now());
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'ok', false, 'error', SQLERRM, 'step', v_step, 'sqlstate', SQLSTATE
+  );
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.purge_org(uuid) TO authenticated;
+-- purge_org is NOT granted to authenticated — service-role only via Edge Function
 
 NOTIFY pgrst, 'reload schema';
