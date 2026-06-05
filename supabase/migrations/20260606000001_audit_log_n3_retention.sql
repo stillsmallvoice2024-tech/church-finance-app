@@ -166,7 +166,7 @@ BEGIN
     PERFORM cron.schedule(
       'purge-old-audit-logs',
       '0 2 1 * *',
-      $$SELECT public.purge_old_audit_logs('7 years')$$
+      $cmd$SELECT public.purge_old_audit_logs('7 years')$cmd$
     );
   END IF;
 END $$;
