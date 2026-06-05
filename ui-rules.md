@@ -282,6 +282,44 @@ Quick action button hierarchy:
 
 ---
 
+## FX Currency Cards (`ForeignCurrency.tsx`)
+
+The currency summary card grid uses `grid grid-cols-2 lg:grid-cols-4` so cards are always 2-wide on mobile (never 1-wide or overflowing).
+
+**Mobile layout rules (avoid overlap / overflow):**
+- Card container: `overflow-hidden min-w-0` — prevents card from expanding beyond its grid cell
+- Balance value: `break-all leading-snug` — wraps long numbers at any character boundary; prevents horizontal overflow
+- Stats row (deposits/withdrawals): `space-y-0.5` stacked vertically, not side-by-side — avoids cramped two-column grid on narrow cards
+- Deposit/withdrawal lines: `truncate` — clips if still too long after stacking
+- Currency code badge: `shrink-0` — never squished by balance text
+- Flag emoji: `shrink-0 leading-none` — keeps emoji from affecting line-height of adjacent text
+
+**Decimal places on cards:** `fmtFX(value, code, 2)` — 2dp on currency cards for compactness. The full transaction table uses 4dp. Dashboard FX strip also uses 2dp.
+
+**Responsive font sizing pattern:**
+```tsx
+// Balance value
+className="text-sm sm:text-base font-bold break-all leading-snug ..."
+// Stats (deposits/withdrawals)
+className="mt-2 sm:mt-3 space-y-0.5 text-[10px] sm:text-xs"
+// Currency code badge
+className="text-[10px] sm:text-xs font-mono font-semibold ..."
+// Currency name label
+className="text-[10px] sm:text-xs text-gray-400 mt-0.5 truncate"
+```
+
+### `AddFXModal` (`src/components/modals/AddFXModal.tsx`)
+
+Requires a `fxBanks` prop (`{ id: string; name: string }[]`). `ForeignCurrency.tsx` derives this from `useBanks()` filtered to `b.is_foreign_currency = true`.
+
+- `bank_name` is a **required** field (Zod: `z.string().min(1, 'Bank is required')`)
+- When `fxBanks.length > 0`: renders a `<select>` with a "— Select bank —" placeholder option
+- When `fxBanks.length === 0`: falls back to a free-text `<input>` (no FX banks configured yet)
+- `bank_name` is included in both `AddFXTransactionInput` and `UpdateFXTransactionInput`; passed as `values.bank_name || undefined` to the mutation
+- Default `bank_name` on open: `fxBanks[0]?.name ?? ''`; on edit: `editRecord.bank_name ?? defaultBankName`
+
+---
+
 ## StatCard (`src/components/ui/StatCard.tsx`)
 
 - Label: `text-xs font-medium text-gray-400 uppercase tracking-wide` — intentionally small/quiet

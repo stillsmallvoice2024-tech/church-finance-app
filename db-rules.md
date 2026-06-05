@@ -28,7 +28,7 @@
 | `intra_flows` | Internal fund movements between categories; `account_from`/`account_to` text (name snapshot), `account_from_stage2`/`account_to_stage2` text (portion label), `total_amount`, `from_category_id`/`to_category_id` UUID FK → `categories(id) ON DELETE SET NULL` (authoritative ID), `status text DEFAULT 'active' CHECK (status IN ('active','reversed','void'))`, `reversal_of_id` UUID FK → `intra_flows(id)`, `transfer_type text` (e.g. `'bulk_reallocation'`), `batch_id uuid` (groups rows from the same bulk operation) |
 | `bank_deposits` | Physical cash deposits; `currency`, `fx_amount`, `fx_rate` |
 | `intrabank_transfers` | Bank-to-bank transfers |
-| `fx_transactions` | FX ledger; running balance per currency |
+| `fx_transactions` | FX ledger; running balance per currency; `bank_name text` — which FX bank originated the transaction |
 | `fx_conversions` | Links FX withdrawal → NGN inflow; `is_partial`, `exchange_rate` |
 | `special_projects` | Named fundraising projects |
 | `project_entries` | Entries per project |
@@ -74,6 +74,7 @@
 | `special_config_group_id uuid` | `income_types` | Links income type to a config group (replaces per-version `special_config_id` link) |
 | `from_category_id uuid`, `to_category_id uuid`, `status text`, `reversal_of_id uuid` | `intra_flows` | Intraflow traceability — run `supabase/add_intraflow_traceability.sql`; backfills IDs from name text for existing rows; `status DEFAULT 'active'` |
 | `transfer_type text`, `batch_id uuid` | `intra_flows` | Bulk reallocation tagging — run `supabase/add_bulk_reallocation_support.sql`; adds `idx_intra_batch` index on `batch_id` |
+| `bank_name text` | `fx_transactions` | FX Transaction Entry Refactor — records which foreign-currency bank originated the FX entry; applied via `schema.sql` `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`; strip-and-retry in `useAddFXTransaction` handles DBs not yet migrated |
 
 `recorded_at` migration is already in `MIGRATION_SQL` in `Setup.tsx` and backfills from `created_at` for existing rows. If adding manually:
 ```sql

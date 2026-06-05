@@ -108,3 +108,92 @@ export function useAddFXConversion() {
 
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
+
+export interface UpdateFXConversionInput {
+  id:                    string
+  exchange_rate:         number
+  naira_amount:          number
+  notes:                 string | null
+  allocation_config_id:  string | null
+  stage_code_1:          string | null
+  stage_code_2:          string | null
+  bank_name:             string | null
+}
+
+export function useUpdateFXConversion() {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: UpdateFXConversionInput): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    const { orgId } = useOrgStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    if (!orgId) throw new Error('No active organisation.')
+    setLoading(true); setError(null)
+    try {
+      const { data: oldData } = await supabase
+        .from('fx_conversions').select('*').eq('id', input.id).single()
+      const { data: result, error: rpcErr } = await supabase.rpc('update_fx_conversion', {
+        p_conversion_id:        input.id,
+        p_org_id:               orgId,
+        p_user_id:              user.id,
+        p_exchange_rate:        input.exchange_rate,
+        p_naira_amount:         input.naira_amount,
+        p_notes:                input.notes ?? null,
+        p_allocation_config_id: input.allocation_config_id ?? null,
+        p_stage_code_1:         input.stage_code_1 ?? null,
+        p_stage_code_2:         input.stage_code_2 ?? null,
+        p_bank_name:            input.bank_name ?? null,
+      })
+      if (rpcErr) throw rpcErr
+      // Audit trail (fire-and-forget)
+      const orgId2 = orgId
+      supabase.from('audit_log').insert({
+        user_id: user.id, action: 'UPDATE', table_name: 'fx_conversions',
+        record_id: input.id, old_data: (oldData ?? null) as Record<string,unknown> | null,
+        new_data: input as unknown as Record<string,unknown>, org_id: orgId2,
+      }).then(({ error: e }) => { if (e) console.warn('[audit_log] fx_conversion update:', e.message) })
+      void result
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err)
+      setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
+export function useRevertFXConversion() {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (conversionId: string): Promise<void> => {
+    const { user } = useAuthStore.getState()
+    const { orgId } = useOrgStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    if (!orgId) throw new Error('No active organisation.')
+    setLoading(true); setError(null)
+    try {
+      const { data: oldData } = await supabase
+        .from('fx_conversions').select('*').eq('id', conversionId).single()
+      const { data: result, error: rpcErr } = await supabase.rpc('revert_fx_conversion', {
+        p_conversion_id: conversionId,
+        p_org_id:        orgId,
+        p_user_id:       user.id,
+      })
+      if (rpcErr) throw rpcErr
+      supabase.from('audit_log').insert({
+        user_id: user.id, action: 'DELETE', table_name: 'fx_conversions',
+        record_id: conversionId,
+        old_data: (oldData ?? null) as Record<string,unknown> | null,
+        new_data: { reverted_by: user.id, ...result as object },
+        org_id: orgId,
+      }).then(({ error: e }) => { if (e) console.warn('[audit_log] fx_conversion revert:', e.message) })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err)
+      setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}

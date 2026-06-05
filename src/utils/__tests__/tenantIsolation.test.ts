@@ -274,7 +274,7 @@ describe('org switching cache invalidation', () => {
 
 describe('security migration: audit log org isolation', () => {
   const migration = readFileSync(
-    resolve(ROOT, 'supabase/migrations/20260602000002_audit_log_org_isolation.sql'),
+    resolve(ROOT, 'supabase/migrations/20260602000003_audit_log_org_isolation.sql'),
     'utf-8',
   )
 
@@ -366,7 +366,7 @@ describe('useReceipts storage org isolation', () => {
 
 describe('storage isolation migration', () => {
   const migration = readFileSync(
-    resolve(ROOT, 'supabase/migrations/20260602000003_storage_org_isolation.sql'),
+    resolve(ROOT, 'supabase/migrations/20260602000005_storage_org_isolation.sql'),
     'utf-8',
   )
 
@@ -506,6 +506,134 @@ describe('BackupModal org scoping', () => {
 
   it('passes orgId to uploadBackupForLink', () => {
     expect(code).toContain('uploadBackupForLink(backup, user.id, orgId ?? undefined)')
+  })
+})
+
+// ── LB-5 / S-C2: NULL org_id prevention ──────────────────────────────────────
+
+describe('LB-5 / S-C2: get_current_org_id() cannot silently supply NULL', () => {
+  it('migration replaces get_current_org_id() with exception-raising stub', () => {
+    const migration = readFileSync(
+      resolve(ROOT, 'supabase/migrations/20260605000001_fix_null_org_id.sql'),
+      'utf-8',
+    )
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.get_current_org_id()')
+    expect(migration).toContain('RAISE EXCEPTION')
+    expect(migration).not.toContain('SELECT id FROM public.organizations WHERE slug')
+  })
+
+  it('migration adds NOT NULL to audit_log.org_id', () => {
+    const migration = readFileSync(
+      resolve(ROOT, 'supabase/migrations/20260605000001_fix_null_org_id.sql'),
+      'utf-8',
+    )
+    expect(migration).toContain('ALTER TABLE public.audit_log')
+    expect(migration).toContain('ALTER COLUMN org_id SET NOT NULL')
+  })
+
+  it('migration adds NOT NULL to field_changes.org_id', () => {
+    const migration = readFileSync(
+      resolve(ROOT, 'supabase/migrations/20260605000001_fix_null_org_id.sql'),
+      'utf-8',
+    )
+    expect(migration).toContain('ALTER TABLE public.field_changes')
+    expect(migration).toContain('ALTER COLUMN org_id SET NOT NULL')
+  })
+
+  it('migration backfills audit_log NULL rows before adding NOT NULL', () => {
+    const migration = readFileSync(
+      resolve(ROOT, 'supabase/migrations/20260605000001_fix_null_org_id.sql'),
+      'utf-8',
+    )
+    const backfillIdx = migration.indexOf('UPDATE public.audit_log')
+    const notNullIdx  = migration.indexOf("ALTER TABLE public.audit_log\n  ALTER COLUMN org_id SET NOT NULL")
+    expect(backfillIdx).toBeGreaterThanOrEqual(0)
+    expect(notNullIdx).toBeGreaterThan(backfillIdx)
+  })
+})
+
+// LB-5 / S-C2 superseded by LB-9: audit functions are now complete no-ops
+// (DB triggers are the sole writers); no conditional org_id or DB inserts exist.
+describe('LB-5 / S-C2 + LB-9: audit functions make no DB calls', () => {
+  const code = src('hooks/useMutations.ts')
+
+  it('logAudit makes no DB call and uses no conditional org_id', () => {
+    const section = code.slice(
+      code.indexOf('async function logAudit'),
+      code.indexOf('async function batchLogAudit'),
+    )
+    expect(section).not.toContain("supabase.from('audit_log')")
+    expect(section).not.toContain("...(orgId ?")
+  })
+
+  it('logFieldChanges makes no DB call and uses no conditional org_id', () => {
+    const section = code.slice(
+      code.indexOf('async function logFieldChanges'),
+      code.indexOf('async function logAudit'),
+    )
+    expect(section).not.toContain("supabase.from('field_changes')")
+    expect(section).not.toContain("...(orgId ?")
+  })
+
+  it('batchLogAudit makes no DB call and uses no conditional org_id', () => {
+    const section = code.slice(
+      code.indexOf('async function batchLogAudit'),
+      code.indexOf('async function batchLogFieldChanges'),
+    )
+    expect(section).not.toContain("supabase.from('audit_log')")
+    expect(section).not.toContain("...(orgId ?")
+  })
+
+  it('batchLogFieldChanges makes no DB call and uses no conditional org_id', () => {
+    const section = code.slice(
+      code.indexOf('async function batchLogFieldChanges'),
+      code.indexOf('// ── Input types'),
+    )
+    expect(section).not.toContain("supabase.from('field_changes')")
+    expect(section).not.toContain("...(orgId ?")
+  })
+})
+
+describe('LB-5 / S-C2: ImportModal always tags rows with org_id', () => {
+  const code = src('components/modals/ImportModal.tsx')
+
+  it('runImport guards on orgId before any DB work', () => {
+    const runImportSection = code.slice(
+      code.indexOf('const runImport = useCallback'),
+      code.indexOf('setImporting(true)'),
+    )
+    expect(runImportSection).toMatch(/if \(!orgId\)/)
+  })
+
+  it('inflow rows always receive org_id (not conditional)', () => {
+    expect(code).toContain("row.org_id = orgId")
+  })
+
+  it('FX rows no longer use conditional if(orgId) guard', () => {
+    expect(code).not.toContain('if (orgId)  row.org_id')
+    expect(code).not.toContain('if (orgId) row.org_id')
+  })
+})
+
+describe('LB-5 / S-C2: income_type_rules always tagged with org_id', () => {
+  const code = src('hooks/useIncomeTypes.ts')
+
+  it('income_type_rules insert includes org_id', () => {
+    const rulesInsertSection = code.slice(
+      code.indexOf("from('income_type_rules').insert"),
+      code.indexOf("from('income_type_rules').insert") + 300,
+    )
+    expect(rulesInsertSection).toContain('org_id')
+  })
+
+  it('saveIncomeType throws on null orgId regardless of existingId', () => {
+    // Guard must fire for both create and update paths since rules insert always needs org_id
+    expect(code).not.toContain('if (!existingId && !orgId)')
+    const guardSection = code.slice(
+      code.indexOf('const { orgId } = useOrgStore.getState()'),
+      code.indexOf('const { orgId } = useOrgStore.getState()') + 100,
+    )
+    expect(guardSection).toContain("if (!orgId) throw new Error('No active organisation.')")
   })
 })
 

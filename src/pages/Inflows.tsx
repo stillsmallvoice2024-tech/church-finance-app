@@ -7,6 +7,7 @@ import { Card }                    from '../components/ui/Card'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { BulkActionBar }           from '../components/ui/BulkActionBar'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
+import { EditFXInflowModal }       from '../components/modals/EditFXInflowModal'
 import { BulkEditInflowModal }     from '../components/modals/BulkEditInflowModal'
 import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
@@ -55,7 +56,7 @@ const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 
 // Rows with these transaction_types must not be edited, deleted, or bulk-selected
 // from the Inflows page — they are managed exclusively through their own workflows.
-const PROTECTED_TYPES = new Set(['balance_brought_forward', 'fx_conversion'])
+const PROTECTED_TYPES = new Set(['balance_brought_forward'])
 
 const INF_COLUMNS: TableColumnDef<InflowTransaction>[] = [
   { key: 'date',             label: 'Date',        sortType: 'date',    primary: true, noSearch: true },
@@ -141,6 +142,7 @@ export default function Inflows() {
 
   const [editRecord,        setEditRecord]        = useState<InflowTransaction | null>(null)
   const [modalOpen,         setModalOpen]         = useState(false)
+  const [fxInflowEditRecord, setFxInflowEditRecord] = useState<InflowTransaction | null>(null)
   const [deleteId,          setDeleteId]          = useState<string | null>(null)
   const [expandedId,        setExpandedId]        = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
@@ -168,7 +170,13 @@ export default function Inflows() {
   useEffect(() => { clearAll() }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(0); clearAll() }, [infState.sortKey, infState.sortDir, infState.searchCol, infState.advancedSort, infState.pageSize]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openEdit = (r: InflowTransaction) => { setEditRecord(r); setModalOpen(true) }
+  const openEdit = (r: InflowTransaction) => {
+    if (r.transaction_type === 'fx_conversion') {
+      setFxInflowEditRecord(r)
+    } else {
+      setEditRecord(r); setModalOpen(true)
+    }
+  }
 
   const handleModalSuccess = () => {
     toast('Transaction updated', 'success')
@@ -583,6 +591,12 @@ export default function Inflows() {
         onSuccess={() => { clearAll(); refetch() }}
       />
       <DescriptionTooltip tooltip={descTooltip} />
+      <EditFXInflowModal
+        open={!!fxInflowEditRecord}
+        onClose={() => setFxInflowEditRecord(null)}
+        onSuccess={() => { toast('FX inflow updated', 'success'); setFxInflowEditRecord(null); refetch() }}
+        record={fxInflowEditRecord}
+      />
     </>
   )
 }
