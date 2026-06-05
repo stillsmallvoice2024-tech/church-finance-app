@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
+import { useOrgStore } from '../store/orgStore'
 
 export const BALANCE_BROUGHT_FORWARD_TYPE = 'balance_brought_forward'
 export const BF_DESCRIPTION = 'Balance Brought Forward'
@@ -26,6 +27,8 @@ export async function propagateBankOpeningBalance(
 ): Promise<void> {
   const { user } = useAuthStore.getState()
   if (!user?.id) throw new Error('Not authenticated')
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) throw new Error('No active organisation.')
 
   // On bank rename: purge the entry filed under the old name
   if (previousBankName && previousBankName !== bankName) {
@@ -85,6 +88,7 @@ export async function propagateBankOpeningBalance(
         bank_name:        bankName,
         transaction_type: BALANCE_BROUGHT_FORWARD_TYPE,
         created_by:       user.id,
+        org_id:           orgId,
       })
     if (error) throw error
   }
