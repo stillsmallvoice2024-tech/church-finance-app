@@ -918,17 +918,13 @@ begin
 end;
 $$;
 
--- ── Audit Log (written by triggers only — no client INSERT policy) ────────────
+-- ── Audit Log (written by triggers only — no client INSERT or DELETE) ─────────
 
 create policy "audit_select" on public.audit_log
   for select using (
     org_id is not null
     and public.is_org_member(org_id)
     and public.is_org_admin(org_id)
-  );
-create policy "audit_delete" on public.audit_log
-  for delete using (
-    org_id is not null and public.is_org_admin(org_id)
   );
 
 -- ── Field Changes (written by triggers only — no client INSERT policy) ─────────
@@ -1044,6 +1040,19 @@ create trigger trg_audit_accounts
   after insert or update or delete on public.accounts for each row execute function public.audit_trigger_fn();
 create trigger trg_audit_ledger_entries
   after insert or update or delete on public.ledger_entries for each row execute function public.audit_trigger_fn();
+
+-- Audit log delete immutability: rows can never be destroyed.
+-- UPDATE is allowed so GDPR erasure can SET user_id = NULL.
+create or replace function public.audit_log_no_delete_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  raise exception 'audit_log rows cannot be deleted';
+end;
+$$;
+
+create trigger trg_audit_log_no_delete
+  before delete on public.audit_log
+  for each row execute function public.audit_log_no_delete_fn();
 
 -- ============================================================
 -- USEFUL INDEXES
