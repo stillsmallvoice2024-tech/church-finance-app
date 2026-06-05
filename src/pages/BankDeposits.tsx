@@ -216,22 +216,28 @@ export default function BankDeposits() {
   const [reconLoading, setReconLoading] = useState(false)
   const [expandedId,   setExpandedId]   = useState<string | null>(null)
 
+  const orgId = useOrgStore((s) => s.orgId)
+
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     const [depRes, inflowRes, outflowRes] = await Promise.all([
       supabase
         .from('bank_deposits')
         .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks')
+        .eq('org_id', orgId)
         .order('date', { ascending: false }),
       supabase
         .from('inflow_transactions')
         .select('id, date, bank_name, amount, description, transaction_ref, remark')
+        .eq('org_id', orgId)
         .eq('transaction_type', 'bank_deposit')
         .order('date', { ascending: false }),
       supabase
         .from('outflow_transactions')
         .select('id, date, bank_name, amount_disbursed, description, transaction_id, remarks')
+        .eq('org_id', orgId)
         .eq('transaction_type', 'bank_deposit')
         .order('date', { ascending: false }),
     ])
@@ -271,15 +277,16 @@ export default function BankDeposits() {
 
     setRows(merged)
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { load() }, [load])
 
   const loadRecon = async () => {
+    if (!orgId) return
     setReconLoading(true)
     const [infRes, outRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('amount').eq('transaction_type', 'bank_deposit'),
-      supabase.from('outflow_transactions').select('amount_disbursed').eq('transaction_type', 'bank_deposit'),
+      supabase.from('inflow_transactions').select('amount').eq('org_id', orgId).eq('transaction_type', 'bank_deposit'),
+      supabase.from('outflow_transactions').select('amount_disbursed').eq('org_id', orgId).eq('transaction_type', 'bank_deposit'),
     ])
     const inflowTaggedTotal  = (infRes.data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0)
     const outflowTaggedTotal = (outRes.data ?? []).reduce((s, r) => s + (r.amount_disbursed ?? 0), 0)
