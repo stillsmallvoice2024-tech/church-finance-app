@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   X, ChevronRight, ChevronLeft, Check, Clock, Building2, Landmark,
   ArrowDownCircle, ArrowUpCircle, Users, Upload, Sparkles, Loader2,
-  Plus, Trash2, AlertCircle, CheckCircle2, ExternalLink, SkipForward,
+  Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
@@ -18,7 +18,7 @@ import { useOutflowTypes, saveOutflowType } from '../../hooks/useOutflowTypes'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
 import { useToastStore } from '../../store/toastStore'
-import { WIZARD_STEPS, WIZARD_TOTAL_MINUTES } from '../../onboarding/wizard/definitions'
+import { WIZARD_STEPS } from '../../onboarding/wizard/definitions'
 import type { WizardStepId } from '../../types/onboarding'
 
 // ── Colour palette for types ──────────────────────────────────────────────────
@@ -79,58 +79,6 @@ function ItemBadge({ label, onRemove }: { label: string; onRemove?: () => void }
           <X className="w-3 h-3" />
         </button>
       )}
-    </div>
-  )
-}
-
-// ── Step 1: Welcome ───────────────────────────────────────────────────────────
-
-function WelcomeStep() {
-  const orgName = useOrgStore(s => s.orgName)
-  const currency = useOrgStore(s => s.defaultCurrency)
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-center">
-        <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center">
-          <Sparkles className="w-8 h-8 text-white" />
-        </div>
-      </div>
-      <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-          Welcome to {orgName || 'your organisation'}!
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Let's get your finances set up. This takes about {WIZARD_TOTAL_MINUTES} minutes.
-        </p>
-      </div>
-
-      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
-        {[
-          { label: 'Organisation', value: orgName ?? '—' },
-          { label: 'Default Currency', value: currency ?? '—' },
-        ].map(row => (
-          <div key={row.label} className="flex justify-between px-4 py-2.5 text-sm">
-            <span className="text-gray-500 dark:text-gray-400">{row.label}</span>
-            <span className="font-medium text-gray-900 dark:text-white">{row.value}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-          What we'll set up:
-        </p>
-        {WIZARD_STEPS.filter(s => s.id !== 'org-details' && s.id !== 'finish').map(s => (
-          <div key={s.id} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-            {s.title}
-            {s.skippable && (
-              <span className="text-xs text-gray-400">(optional)</span>
-            )}
-          </div>
-        ))}
-      </div>
     </div>
   )
 }

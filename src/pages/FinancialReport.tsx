@@ -1694,7 +1694,7 @@ export default function FinancialReport() {
                           return (
                             <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                               <td className="px-8 py-2 text-gray-700 dark:text-gray-300">{item.displayLabel}</td>
-                              <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{baseCurrencySymbol}{fmt(val)}</td>
+                              <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{baseCurrencySymbol}{fmt(val, formatLocale)}</td>
                             </tr>
                           )
                         } else {
@@ -1713,7 +1713,7 @@ export default function FinancialReport() {
                                 return (
                                   <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800">
                                     <td className="px-12 py-2 text-gray-600 dark:text-gray-400">{item.displayLabel}</td>
-                                    <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{baseCurrencySymbol}{fmt(val)}</td>
+                                    <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{baseCurrencySymbol}{fmt(val, formatLocale)}</td>
                                   </tr>
                                 )
                               })}
