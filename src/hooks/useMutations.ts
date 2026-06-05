@@ -40,96 +40,44 @@ function handleAuthError(err: unknown): void {
   }
 }
 
-/**
- * Write an audit entry. Fire-and-forget so it never blocks the main operation.
- * Console-warns on failure but does NOT surface to the user.
- */
+// Audit writes are now handled by server-side AFTER triggers (audit_trigger_fn /
+// field_changes_trigger_fn). These stubs preserve call-sites; the DB layer
+// captures auth.uid(), now(), and row data — none can be forged by the client.
 
 async function logFieldChanges(
-  userId:    string,
-  tableName: string,
-  recordId:  string,
-  oldData:   Record<string, unknown>,
-  newData:   Record<string, unknown>,
-): Promise<void> {
-  const orgId = useOrgStore.getState().orgId
-  const rows = Object.keys(newData)
-    .filter(k => String(oldData[k] ?? '') !== String(newData[k] ?? ''))
-    .map(k => ({
-      user_id:    userId,
-      table_name: tableName,
-      record_id:  recordId,
-      field_name: k,
-      old_value:  oldData[k] != null ? String(oldData[k]) : null,
-      new_value:  newData[k] != null ? String(newData[k]) : null,
-      ...(orgId ? { org_id: orgId } : {}),
-    }))
-  if (rows.length === 0) return
-  const { error } = await supabase.from('field_changes').insert(rows)
-  if (error) console.warn('[field_changes] write failed:', error.message)
-}
+  _userId:    string,
+  _tableName: string,
+  _recordId:  string,
+  _oldData:   Record<string, unknown>,
+  _newData:   Record<string, unknown>,
+): Promise<void> {}
 
-async function logAudit({
-  userId,
-  action,
-  tableName,
-  recordId,
-  oldData = null,
-  newData = null,
-}: {
+async function logAudit(_: {
   userId: string
   action: 'INSERT' | 'UPDATE' | 'DELETE'
   tableName: string
   recordId: string
   oldData?: Record<string, unknown> | null
   newData?: Record<string, unknown> | null
-}): Promise<void> {
-  const orgId = useOrgStore.getState().orgId
-  const { error } = await supabase.from('audit_log').insert({
-    user_id:    userId,
-    action,
-    table_name: tableName,
-    record_id:  recordId,
-    old_data:   oldData,
-    new_data:   newData,
-    ...(orgId ? { org_id: orgId } : {}),
-  })
-  if (error) console.warn('[audit_log] write failed:', error.message)
-}
+}): Promise<void> {}
 
-async function batchLogAudit(
-  rows: Array<{
-    user_id: string
-    action: 'INSERT' | 'UPDATE' | 'DELETE'
-    table_name: string
-    record_id: string
-    old_data: Record<string, unknown> | null
-    new_data: Record<string, unknown> | null
-  }>
-): Promise<void> {
-  if (rows.length === 0) return
-  const orgId = useOrgStore.getState().orgId
-  const tagged = orgId ? rows.map(r => ({ ...r, org_id: orgId })) : rows
-  const { error } = await supabase.from('audit_log').insert(tagged)
-  if (error) console.warn('[audit_log] batch write failed:', error.message)
-}
+async function batchLogAudit(_rows: Array<{
+  user_id: string
+  action: 'INSERT' | 'UPDATE' | 'DELETE'
+  table_name: string
+  record_id: string
+  old_data: Record<string, unknown> | null
+  new_data: Record<string, unknown> | null
+}>): Promise<void> {}
 
-async function batchLogFieldChanges(
-  rows: Array<{
-    user_id: string
-    table_name: string
-    record_id: string
-    field_name: string
-    old_value: string | null
-    new_value: string | null
-  }>
-): Promise<void> {
-  if (rows.length === 0) return
-  const orgId = useOrgStore.getState().orgId
-  const tagged = orgId ? rows.map(r => ({ ...r, org_id: orgId })) : rows
-  const { error } = await supabase.from('field_changes').insert(tagged)
-  if (error) console.warn('[field_changes] batch write failed:', error.message)
-}
+async function batchLogFieldChanges(_rows: Array<{
+  user_id: string
+  table_name: string
+  record_id: string
+  field_name: string
+  old_value: string | null
+  new_value: string | null
+}>): Promise<void> {}
 
 // ── Input types ────────────────────────────────────────────────────────────────
 

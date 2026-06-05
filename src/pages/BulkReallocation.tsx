@@ -99,17 +99,6 @@ async function executeBulkReallocation(params: {
 
   if (error) throw new Error(error.message)
 
-  // Audit — fire-and-forget
-  const auditRows = (inserted ?? []).map((rec: { id: string }, i: number) => ({
-    user_id:    user.id,
-    action:     'INSERT',
-    table_name: 'intra_flows',
-    record_id:  rec.id,
-    old_data:   null,
-    new_data:   insertRows[i],
-  }))
-  supabase.from('audit_log').insert(auditRows).then()
-
   return (inserted ?? []).length
 }
 

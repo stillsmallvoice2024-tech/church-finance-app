@@ -425,6 +425,7 @@ create table public.audit_log (
   record_id  uuid,
   old_data   jsonb,
   new_data   jsonb,
+  org_id     uuid references public.organizations(id) on delete set null,
   created_at timestamptz default now()
 );
 
@@ -439,6 +440,7 @@ create table public.field_changes (
   field_name text not null,
   old_value  text,
   new_value  text,
+  org_id     uuid references public.organizations(id) on delete set null,
   changed_at timestamptz default now()
 );
 
@@ -916,23 +918,132 @@ begin
 end;
 $$;
 
--- ── Audit Log (no org_id) ──────────────────────────────────────────────────────
+-- ── Audit Log (written by triggers only — no client INSERT policy) ────────────
 
-create policy "audit_admin_read" on public.audit_log
-  for select using (public.is_admin());
-create policy "audit_insert" on public.audit_log
-  for insert with check (
-    exists (select 1 from public.org_members where user_id = auth.uid() and status = 'active')
+create policy "audit_select" on public.audit_log
+  for select using (
+    org_id is not null
+    and public.is_org_member(org_id)
+    and public.is_org_admin(org_id)
+  );
+create policy "audit_delete" on public.audit_log
+  for delete using (
+    org_id is not null and public.is_org_admin(org_id)
   );
 
--- ── Field Changes (no org_id) ──────────────────────────────────────────────────
+-- ── Field Changes (written by triggers only — no client INSERT policy) ─────────
 
-create policy "field_changes_admin_read" on public.field_changes
-  for select using (public.is_admin());
-create policy "field_changes_insert" on public.field_changes
-  for insert with check (
-    exists (select 1 from public.org_members where user_id = auth.uid() and status = 'active')
+create policy "field_changes_select" on public.field_changes
+  for select using (
+    org_id is not null
+    and public.is_org_member(org_id)
+    and public.is_org_admin(org_id)
   );
+create policy "field_changes_delete" on public.field_changes
+  for delete using (
+    org_id is not null and public.is_org_admin(org_id)
+  );
+
+-- ── Server-side audit trigger functions (LB-9) ───────────────────────────────
+-- SECURITY DEFINER: runs as postgres, bypasses RLS.
+-- Captures auth.uid() + now() server-side; client cannot forge these.
+
+create or replace function public.audit_trigger_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_user_id   uuid;
+  v_org_id    uuid;
+  v_record_id uuid;
+  v_old_data  jsonb;
+  v_new_data  jsonb;
+  v_row_json  jsonb;
+begin
+  v_user_id := auth.uid();
+  if TG_OP = 'DELETE' then
+    v_row_json := row_to_json(OLD)::jsonb; v_old_data := v_row_json; v_new_data := null;
+  elsif TG_OP = 'INSERT' then
+    v_row_json := row_to_json(NEW)::jsonb; v_old_data := null; v_new_data := v_row_json;
+  else
+    v_row_json := row_to_json(NEW)::jsonb; v_old_data := row_to_json(OLD)::jsonb; v_new_data := v_row_json;
+  end if;
+  begin v_record_id := (v_row_json->>'id')::uuid; exception when others then v_record_id := null; end;
+  begin v_org_id    := (v_row_json->>'org_id')::uuid; exception when others then v_org_id := null; end;
+  insert into public.audit_log(user_id, action, table_name, record_id, old_data, new_data, org_id)
+  values (v_user_id, TG_OP, TG_TABLE_NAME, v_record_id, v_old_data, v_new_data, v_org_id);
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+create or replace function public.field_changes_trigger_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_user_id   uuid;
+  v_org_id    uuid;
+  v_record_id text;
+  v_old_json  jsonb;
+  v_new_json  jsonb;
+  v_key       text;
+begin
+  if TG_OP <> 'UPDATE' then return NEW; end if;
+  v_user_id   := auth.uid();
+  v_old_json  := row_to_json(OLD)::jsonb;
+  v_new_json  := row_to_json(NEW)::jsonb;
+  v_record_id := v_new_json->>'id';
+  begin v_org_id := (v_new_json->>'org_id')::uuid; exception when others then v_org_id := null; end;
+  for v_key in select key from jsonb_object_keys(v_new_json) as key loop
+    if (v_old_json->>v_key) is distinct from (v_new_json->>v_key) then
+      insert into public.field_changes(user_id, table_name, record_id, field_name, old_value, new_value, org_id)
+      values (v_user_id, TG_TABLE_NAME, v_record_id, v_key, v_old_json->>v_key, v_new_json->>v_key, v_org_id);
+    end if;
+  end loop;
+  return NEW;
+end;
+$$;
+
+-- Audit triggers on all financial tables
+create trigger trg_audit_inflow_transactions
+  after insert or update or delete on public.inflow_transactions for each row execute function public.audit_trigger_fn();
+create trigger trg_field_changes_inflow_transactions
+  after update on public.inflow_transactions for each row execute function public.field_changes_trigger_fn();
+
+create trigger trg_audit_outflow_transactions
+  after insert or update or delete on public.outflow_transactions for each row execute function public.audit_trigger_fn();
+create trigger trg_field_changes_outflow_transactions
+  after update on public.outflow_transactions for each row execute function public.field_changes_trigger_fn();
+
+create trigger trg_audit_intra_flows
+  after insert or update or delete on public.intra_flows for each row execute function public.audit_trigger_fn();
+create trigger trg_field_changes_intra_flows
+  after update on public.intra_flows for each row execute function public.field_changes_trigger_fn();
+
+create trigger trg_audit_banks
+  after insert or update or delete on public.banks for each row execute function public.audit_trigger_fn();
+create trigger trg_field_changes_banks
+  after update on public.banks for each row execute function public.field_changes_trigger_fn();
+
+create trigger trg_audit_categories
+  after insert or update or delete on public.categories for each row execute function public.audit_trigger_fn();
+create trigger trg_field_changes_categories
+  after update on public.categories for each row execute function public.field_changes_trigger_fn();
+
+create trigger trg_audit_allocation_configs
+  after insert or update or delete on public.allocation_configs for each row execute function public.audit_trigger_fn();
+create trigger trg_field_changes_allocation_configs
+  after update on public.allocation_configs for each row execute function public.field_changes_trigger_fn();
+
+create trigger trg_audit_fx_transactions
+  after insert or update or delete on public.fx_transactions for each row execute function public.audit_trigger_fn();
+create trigger trg_field_changes_fx_transactions
+  after update on public.fx_transactions for each row execute function public.field_changes_trigger_fn();
+
+create trigger trg_audit_bank_deposits
+  after insert or update or delete on public.bank_deposits for each row execute function public.audit_trigger_fn();
+create trigger trg_audit_intrabank_transfers
+  after insert or update or delete on public.intrabank_transfers for each row execute function public.audit_trigger_fn();
+create trigger trg_audit_accounts
+  after insert or update or delete on public.accounts for each row execute function public.audit_trigger_fn();
+create trigger trg_audit_ledger_entries
+  after insert or update or delete on public.ledger_entries for each row execute function public.audit_trigger_fn();
 
 -- ============================================================
 -- USEFUL INDEXES

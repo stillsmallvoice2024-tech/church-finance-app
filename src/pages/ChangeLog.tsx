@@ -96,23 +96,9 @@ export default function ChangeLog() {
       <p className="text-xs text-gray-400 max-w-md">
         If this is a new installation, run the following SQL in Supabase:
       </p>
-      <pre className="bg-gray-900 text-green-300 text-xs rounded-lg px-4 py-3 text-left max-w-2xl overflow-x-auto">{`CREATE TABLE IF NOT EXISTS public.field_changes (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  table_name text NOT NULL,
-  record_id  text NOT NULL,
-  field_name text NOT NULL,
-  old_value  text,
-  new_value  text,
-  changed_at timestamptz DEFAULT now()
-);
-ALTER TABLE public.field_changes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins read field_changes" ON public.field_changes
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-  );
-CREATE POLICY "Auth insert field_changes" ON public.field_changes
-  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);`}</pre>
+      <pre className="bg-gray-900 text-green-300 text-xs rounded-lg px-4 py-3 text-left max-w-2xl overflow-x-auto">{`-- Run the full schema.sql or apply migrations in order.
+-- field_changes is written by server-side DB triggers only.
+-- See supabase/migrations/20260605000001_server_side_audit_triggers.sql`}</pre>
       <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
         <RefreshCw className="w-4 h-4" /> Retry
       </button>
