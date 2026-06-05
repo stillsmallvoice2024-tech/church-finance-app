@@ -234,7 +234,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
-  const orgId = useOrgStore.getState().orgId
 
   // Step state
   const [step,     setStep]    = useState(1)
@@ -927,8 +926,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   const runImport = useCallback(async () => {
     if (!sheet || !config || !targetTable) return
+    const orgId = useOrgStore.getState().orgId
     if (!orgId) {
-      setResult({ imported: 0, skipped: 0, errors: ['No active organisation — please reload and try again.'], collisions: [] })
+      setResult({ imported: 0, skipped: 0, errors: ['No active organisation — please reload and try again.'], fallbackIdCount: 0, collisions: [] })
       return
     }
     setImporting(true)
