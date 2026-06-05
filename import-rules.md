@@ -2,7 +2,9 @@
 
 ## Import is the Sole Entry Point
 
-**All transaction creation goes through `Import.tsx`.** Inflows and Outflows pages are display-only — no Add buttons, no import triggers. Edit and delete remain on those pages.
+**All standard transaction creation goes through `Import.tsx`.** Inflows and Outflows pages are display-only — no Add buttons, no import triggers. Edit and delete remain on those pages.
+
+**Exception — FX transactions:** All foreign currency transactions are entered exclusively through `ForeignCurrency.tsx` via `AddFXModal`. `Import.tsx` ManualEntryForm filters out FX banks and shows a redirect notice. See `ledger-rules.md → FX Transaction Entry` for enforcement details.
 
 ---
 
@@ -46,6 +48,8 @@ Also contains `ManualEntryForm` for single-transaction entry.
 - `ManualEntryForm` — `doSaveInflow` and `doSaveOutflow` resolve `bank_id` → `bank_name` before calling mutation
 - `ImportModal.tsx` batch wizard — sets `bank_name` from the `bank` prop passed in from `Import.tsx` (the bank selected on the import page before opening the wizard)
 - Transactions without `bank_name` set will **not appear in BankLedger**
+- **FX banks excluded from ManualEntryForm bank dropdowns** — banks with `is_foreign_currency = true` are filtered out of both inflow and outflow bank selectors. An amber notice links to `/foreign-currency` when at least one FX bank exists.
+- **No FX amount/rate/currency fields** in ManualEntryForm — the previously present "Foreign Currency (optional)" panels (`fx_currency`, `fx_amount`, `fx_rate`) have been removed entirely.
 
 ## `stage_code_1` / `stage_code_2` in ManualEntryForm Outflow
 
@@ -377,6 +381,8 @@ Called from `extractTargetName()`. Handles the pattern `To <bank>/Description/Pa
 ## Non-Normal Transaction Import Rule
 
 **Transaction types:** `''` = Normal | `'refund'` | `'reversal'` | `'bank_deposit'` | `'intrabank_transfer'`
+
+> `fx_inflow` and `fx_outflow` have been **removed** from `TXN_TYPE_OPTIONS` in both `Import.tsx` and `ImportModal.tsx`. FX transactions are entered exclusively through the FX module (`ForeignCurrency.tsx`).
 
 **Rule:** If `transactionType !== ''` (i.e. any non-Normal type):
 - Skip all allocation — do **not** set `allocation_config_id` (no general config, no income-type-linked config, no date-based fallback)
