@@ -213,7 +213,7 @@ export interface IncomeTypeInput {
 
 export async function saveIncomeType(input: IncomeTypeInput, existingId?: string): Promise<string> {
   const { orgId } = useOrgStore.getState()
-  if (!existingId && !orgId) throw new Error('No active organisation.')
+  if (!orgId) throw new Error('No active organisation.')
   let id = existingId ?? ''
 
   if (existingId) {
@@ -251,7 +251,7 @@ export async function saveIncomeType(input: IncomeTypeInput, existingId?: string
     const { error } = await supabase.from('income_type_rules').insert(
       input.rules
         .filter(r => r.rule_value.trim())
-        .map(r => ({ income_type_id: id, rule_type: r.rule_type, rule_value: r.rule_value.trim() }))
+        .map(r => ({ income_type_id: id, rule_type: r.rule_type, rule_value: r.rule_value.trim(), org_id: orgId }))
     )
     if (error) throw new Error(error.message)
   }
