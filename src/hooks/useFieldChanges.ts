@@ -78,10 +78,11 @@ export function useFieldChanges(opts: UseFieldChangesOptions = {}) {
 
     // Server-side search
     if (search) {
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
       if (!searchCol || searchCol === 'all') {
-        query = query.or(`field_name.ilike.%${search}%,table_name.ilike.%${search}%,old_value.ilike.%${search}%,new_value.ilike.%${search}%`)
+        query = query.or(`field_name.ilike.%${safeSearch}%,table_name.ilike.%${safeSearch}%,old_value.ilike.%${safeSearch}%,new_value.ilike.%${safeSearch}%`)
       } else if (FC_SEARCH_COLS.has(searchCol)) {
-        query = query.ilike(searchCol, `%${search}%`)
+        query = query.ilike(searchCol, `%${safeSearch}%`)
       }
     }
 

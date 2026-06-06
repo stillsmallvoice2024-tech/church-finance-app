@@ -299,6 +299,9 @@ create table public.allocation_configs (
   start_date       date        not null,
   status           text        not null default 'draft' check (status in ('draft', 'locked')),
   rows             jsonb       not null default '[]',
+  is_special       boolean     not null default false,
+  allocation_type  text,
+  total_amount     numeric(15,2),
   config_group_id  uuid        references public.special_config_groups(id) on delete cascade,
   effective_from   date,
   effective_to     date,
@@ -877,9 +880,23 @@ create policy "profiles_update_self" on public.profiles
   );
 
 -- Admin can update a profile only if they share an active org with the target.
+-- WITH CHECK prevents role escalation: admin cannot change another user's role column.
 create policy "profiles_update_admin" on public.profiles
   for update using (
     exists (
+      select 1 from public.org_members caller
+      join   public.org_members target
+        on   target.org_id  = caller.org_id
+        and  target.user_id = profiles.id
+        and  target.status  = 'active'
+      where  caller.user_id = auth.uid()
+        and  caller.role    in ('owner', 'admin')
+        and  caller.status  = 'active'
+    )
+  )
+  with check (
+    role = (select p2.role from public.profiles p2 where p2.id = profiles.id)
+    and exists (
       select 1 from public.org_members caller
       join   public.org_members target
         on   target.org_id  = caller.org_id
@@ -911,7 +928,7 @@ create policy "orgs_select" on public.organizations
   for select using (public.is_org_member(id));
 
 create policy "orgs_insert" on public.organizations
-  for insert with check (public.is_admin());
+  for insert with check (false);
 
 create policy "orgs_update" on public.organizations
   for update using (public.is_org_admin(id));
@@ -1566,10 +1583,15 @@ begin
 
   v_org_id := v_invite.org_id;
   if v_org_id is null then
-    select id into v_org_id from public.organizations where slug = 'primary' limit 1;
+    select id into v_org_id from public.organizations where slug = 'primary' and status = 'active' limit 1;
   end if;
   if v_org_id is null then
-    select id into v_org_id from public.organizations limit 1;
+    raise exception 'No active organisation found for invitation';
+  end if;
+
+  -- Verify the target org is still active before adding the member
+  if not exists (select 1 from public.organizations where id = v_org_id and status = 'active') then
+    raise exception 'The organisation for this invitation is no longer active';
   end if;
 
   if v_invite.status = 'accepted' then
@@ -1641,28 +1663,6 @@ begin
   where token = p_token;
 end;
 $$;
-
--- ── Audit Log (written by triggers only — no client INSERT or DELETE) ─────────
-
-create policy "audit_select" on public.audit_log
-  for select using (
-    org_id is not null
-    and public.is_org_member(org_id)
-    and public.is_org_admin(org_id)
-  );
-
--- ── Field Changes (written by triggers only — no client INSERT policy) ─────────
-
-create policy "field_changes_select" on public.field_changes
-  for select using (
-    org_id is not null
-    and public.is_org_member(org_id)
-    and public.is_org_admin(org_id)
-  );
-create policy "field_changes_delete" on public.field_changes
-  for delete using (
-    org_id is not null and public.is_org_admin(org_id)
-  );
 
 -- ── Server-side audit trigger functions (LB-9) ───────────────────────────────
 -- SECURITY DEFINER: runs as postgres, bypasses RLS.
@@ -1788,437 +1788,7 @@ create trigger trg_audit_log_no_delete
   before delete on public.audit_log
   for each row execute function public.audit_log_no_delete_fn();
 
--- ============================================================
--- USEFUL INDEXES
--- ============================================================
-create index if not exists idx_inflow_date      on public.inflow_transactions(date);
-create index if not exists idx_outflow_date     on public.outflow_transactions(date);
-create index if not exists idx_intra_date       on public.intra_flows(date);
-create index if not exists idx_bank_dep_date    on public.bank_deposits(date);
-create index if not exists idx_intrabank_date   on public.intrabank_transfers(date);
-create index if not exists idx_fx_date          on public.fx_transactions(date);
-create index if not exists idx_project_entries  on public.project_entries(project_id);
-create index if not exists idx_receipts_entity  on public.receipts(entity_type, entity_id);
-create index if not exists idx_field_changes    on public.field_changes(table_name, record_id);
-create index if not exists idx_income_type_rules on public.income_type_rules(income_type_id);
-create index if not exists idx_inflow_income_type   on public.inflow_transactions(income_type_id);
-create index if not exists idx_inflow_txn_type     on public.inflow_transactions(transaction_type);
-create index if not exists idx_outflow_txn_type    on public.outflow_transactions(transaction_type);
-create index if not exists idx_categories_group        on public.categories(group_id);
-create index if not exists idx_invitations_token       on public.invitations(token);
-create index if not exists idx_outflow_department_id   on public.outflow_transactions(department_id);
-
--- ============================================================
--- CATEGORY OPENING BALANCES
--- ============================================================
-create table if not exists public.category_opening_balances (
-  id             uuid default gen_random_uuid() primary key,
-  category_id    uuid not null references categories(id) on delete cascade,
-  budget_portion text not null check (budget_portion in ('Percentage Allocation','Specific Seed','Savings')),
-  amount         numeric(15,2) not null default 0 check (amount >= 0 and amount != 'NaN'::numeric),
-  created_at     timestamptz default now(),
-  unique (category_id, budget_portion)
-);
-
-alter table public.category_opening_balances enable row level security;
-
-create policy "cob_select" on public.category_opening_balances
-  for select using (public.is_org_member(org_id));
-create policy "cob_insert" on public.category_opening_balances
-  for insert with check (public.is_org_finance_user(org_id));
-create policy "cob_update" on public.category_opening_balances
-  for update using (public.is_org_finance_user(org_id));
-create policy "cob_delete" on public.category_opening_balances
-  for delete using (public.is_org_admin(org_id));
-
-create index if not exists idx_cob_category on public.category_opening_balances(category_id);
-
--- ============================================================
--- REPORT TEMPLATES
--- ============================================================
-create table if not exists public.report_templates (
-  id          uuid default gen_random_uuid() primary key,
-  name        text not null,
-  description text,
-  layout      jsonb not null default '{}',
-  created_by  uuid references profiles(id) on delete set null,
-  created_at  timestamptz default now(),
-  updated_at  timestamptz default now()
-);
-
-alter table public.report_templates enable row level security;
-
-create policy "report_templates_select" on public.report_templates
-  for select using (public.is_org_member(org_id));
-create policy "report_templates_insert" on public.report_templates
-  for insert with check (public.is_org_finance_user(org_id));
-create policy "report_templates_update" on public.report_templates
-  for update using (public.is_org_finance_user(org_id));
-create policy "report_templates_delete" on public.report_templates
-  for delete using (public.is_org_admin(org_id));
-
--- ============================================================
--- SPECIAL CONFIG GROUPS (versioned special allocation configs)
--- ============================================================
-create table if not exists public.special_config_groups (
-  id         uuid primary key default gen_random_uuid(),
-  name       text not null,
-  created_at timestamptz not null default now()
-);
-
-alter table public.special_config_groups enable row level security;
-
-create policy "scg_select" on public.special_config_groups
-  for select using (public.is_org_member(org_id));
-create policy "scg_insert" on public.special_config_groups
-  for insert with check (public.is_org_admin(org_id));
-create policy "scg_update" on public.special_config_groups
-  for update using (public.is_org_admin(org_id));
-create policy "scg_delete" on public.special_config_groups
-  for delete using (public.is_org_admin(org_id));
-
-alter table public.allocation_configs
-  add column if not exists config_group_id uuid references public.special_config_groups(id) on delete cascade,
-  add column if not exists effective_from  date,
-  add column if not exists effective_to    date,
-  add column if not exists version_number  integer not null default 1;
-
-alter table public.income_types
-  add column if not exists special_config_group_id uuid references public.special_config_groups(id) on delete set null;
-
-create index if not exists idx_alloc_config_group on public.allocation_configs(config_group_id);
-
--- ============================================================
--- TRANSACTION ALLOCATION SNAPSHOTS
--- ============================================================
-create table if not exists public.transaction_allocation_snapshots (
-  id                 uuid primary key default gen_random_uuid(),
-  transaction_id     uuid not null references public.inflow_transactions(id) on delete cascade,
-  config_version_id  uuid references public.allocation_configs(id) on delete restrict,
-  config_group_id    uuid references public.special_config_groups(id) on delete set null,
-  resolved_rows      jsonb not null default '[]',
-  allocation_type    text,
-  created_at         timestamptz not null default now(),
-  is_recalculated    boolean not null default false,
-  recalculated_at    timestamptz,
-  unique(transaction_id)
-);
-
-alter table public.transaction_allocation_snapshots enable row level security;
-
-create policy "tas_select" on public.transaction_allocation_snapshots
-  for select using (public.is_org_member(org_id));
-create policy "tas_insert" on public.transaction_allocation_snapshots
-  for insert with check (public.is_org_finance_user(org_id));
-create policy "tas_update" on public.transaction_allocation_snapshots
-  for update using (public.is_org_finance_user(org_id));
-create policy "tas_delete" on public.transaction_allocation_snapshots
-  for delete using (public.is_org_admin(org_id));
-
--- ============================================================
--- RECALCULATION LOGS
--- ============================================================
-create table if not exists public.recalculation_logs (
-  id                 uuid primary key default gen_random_uuid(),
-  config_group_id    uuid references public.special_config_groups(id) on delete set null,
-  config_version_id  uuid references public.allocation_configs(id) on delete set null,
-  performed_by       uuid references public.profiles(id) on delete set null,
-  performed_at       timestamptz not null default now(),
-  affected_count     integer not null default 0,
-  reason             text,
-  action_summary     text not null
-);
-
-alter table public.recalculation_logs enable row level security;
-
-create policy "rl_select" on public.recalculation_logs
-  for select using (public.is_org_member(org_id));
--- Append-only: no update/delete policy intentionally (immutable audit trail).
-create policy "rl_insert" on public.recalculation_logs
-  for insert with check (public.is_org_finance_user(org_id));
-
-create index if not exists idx_report_templates_user on public.report_templates(created_by);
-
-
--- Balance Brought Forward deduplication + uniqueness constraint
-create unique index if not exists idx_inflow_bf_unique_bank
-  on inflow_transactions (bank_name)
-  where transaction_type = 'balance_brought_forward';
-
-create index if not exists idx_inflow_bank_name  on inflow_transactions(bank_name);
-create index if not exists idx_outflow_bank_name on outflow_transactions(bank_name);
-
--- Dynamic Reports
-create table if not exists public.dynamic_reports (
-  id         uuid primary key default gen_random_uuid(),
-  title      text not null default 'Untitled Report',
-  created_by uuid references profiles(id) on delete set null,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-alter table public.dynamic_reports enable row level security;
-create policy "dr_select" on public.dynamic_reports for select using (public.is_org_member(org_id));
-create policy "dr_insert" on public.dynamic_reports for insert with check (public.is_org_finance_user(org_id));
-create policy "dr_update" on public.dynamic_reports for update using (public.is_org_finance_user(org_id));
-create policy "dr_delete" on public.dynamic_reports for delete using (public.is_org_admin(org_id));
-
--- Dynamic Report Blocks
-create table if not exists public.dynamic_report_blocks (
-  id          uuid primary key default gen_random_uuid(),
-  report_id   uuid not null references dynamic_reports(id) on delete cascade,
-  block_type  text not null check (block_type in ('text', 'metric', 'table', 'formula')),
-  position    integer not null default 0,
-  config_json jsonb not null default '{}',
-  created_at  timestamptz default now()
-);
-alter table public.dynamic_report_blocks enable row level security;
--- dynamic_report_blocks has no org_id — isolate via parent dynamic_reports
-create policy "drb_select" on public.dynamic_report_blocks for select using (
-  exists (
-    select 1 from public.dynamic_reports dr
-    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid() and m.status = 'active'
-    where dr.id = report_id
-  )
-);
-create policy "drb_insert" on public.dynamic_report_blocks for insert with check (
-  exists (
-    select 1 from public.dynamic_reports dr
-    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
-      and m.role in ('admin', 'accountant') and m.status = 'active'
-    where dr.id = report_id
-  )
-);
-create policy "drb_update" on public.dynamic_report_blocks for update using (
-  exists (
-    select 1 from public.dynamic_reports dr
-    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
-      and m.role in ('admin', 'accountant') and m.status = 'active'
-    where dr.id = report_id
-  )
-);
-create policy "drb_delete" on public.dynamic_report_blocks for delete using (
-  exists (
-    select 1 from public.dynamic_reports dr
-    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
-      and m.role = 'admin' and m.status = 'active'
-    where dr.id = report_id
-  )
-);
-create index if not exists idx_drb_report_position on public.dynamic_report_blocks(report_id, position);
-
--- ── Dynamic Report Snapshots ──────────────────────────────────────────────────
-create table if not exists public.dynamic_report_snapshots (
-  id          uuid primary key default gen_random_uuid(),
-  report_id   uuid not null references dynamic_reports(id) on delete cascade,
-  label       text not null,
-  snapshot_at timestamptz not null default now(),
-  data        jsonb not null default '{}',
-  created_at  timestamptz default now()
-);
-alter table public.dynamic_report_snapshots enable row level security;
--- dynamic_report_snapshots has no org_id — isolate via parent dynamic_reports
-create policy "drs_select" on public.dynamic_report_snapshots for select using (
-  exists (
-    select 1 from public.dynamic_reports dr
-    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid() and m.status = 'active'
-    where dr.id = report_id
-  )
-);
-create policy "drs_insert" on public.dynamic_report_snapshots for insert with check (
-  exists (
-    select 1 from public.dynamic_reports dr
-    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
-      and m.role in ('admin', 'accountant') and m.status = 'active'
-    where dr.id = report_id
-  )
-);
-create policy "drs_delete" on public.dynamic_report_snapshots for delete using (
-  exists (
-    select 1 from public.dynamic_reports dr
-    join public.org_members m on m.org_id = dr.org_id and m.user_id = auth.uid()
-      and m.role = 'admin' and m.status = 'active'
-    where dr.id = report_id
-  )
-);
-create index if not exists idx_drs_report_at on public.dynamic_report_snapshots(report_id, snapshot_at desc);
-
--- ============================================================
--- ORGANIZATIONS & MULTI-TENANT FOUNDATION (Phase 1)
--- ============================================================
-create table if not exists public.organizations (
-  id                   uuid        primary key default gen_random_uuid(),
-  name                 text        not null,
-  slug                 text        not null unique,
-  created_by           uuid        references public.profiles(id) on delete set null,
-  metadata             jsonb       not null default '{}',
-  default_currency     text,
-  fiscal_year_start    int         not null default 1 check (fiscal_year_start between 1 and 12),
-  timezone             text        not null default 'Africa/Lagos',
-  onboarding_complete  boolean     not null default true,
-  created_at           timestamptz not null default now(),
-  updated_at           timestamptz not null default now()
-);
-
-alter table public.organizations enable row level security;
-
-create index if not exists idx_organizations_slug       on public.organizations(slug);
-create index if not exists idx_organizations_created_by on public.organizations(created_by);
-
-create policy "orgs_select" on public.organizations for select using (public.is_org_member(id));
-create policy "orgs_insert" on public.organizations for insert with check (public.is_admin());
-create policy "orgs_update" on public.organizations for update using (public.is_org_admin(id));
-create policy "orgs_delete" on public.organizations for delete using (public.is_org_admin(id));
-
--- Seed the primary (bootstrap) organization.
--- On a fresh install all business tables are empty, so the NOT NULL defaults below
--- are satisfied by this row existing before any data is inserted.
-insert into public.organizations (name, slug, metadata)
-values ('My Church', 'primary', '{"bootstrap": true}'::jsonb)
-on conflict (slug) do nothing;
-
--- ── Org Members ───────────────────────────────────────────────
-create table if not exists public.org_members (
-  id         uuid        primary key default gen_random_uuid(),
-  org_id     uuid        not null references public.organizations(id) on delete cascade,
-  user_id    uuid        not null references public.profiles(id)      on delete cascade,
-  role       text        not null default 'viewer'
-                         check (role in ('owner', 'admin', 'accountant', 'viewer')),
-  joined_at  timestamptz not null default now(),
-  invited_by uuid        references public.profiles(id) on delete set null,
-  status     text        not null default 'active'
-                         check (status in ('active', 'invited', 'suspended')),
-  unique (org_id, user_id)
-);
-
-alter table public.org_members enable row level security;
-
-create index if not exists idx_org_members_org_id  on public.org_members(org_id);
-create index if not exists idx_org_members_user_id on public.org_members(user_id);
-
-create policy "org_members_select" on public.org_members for select using (public.is_org_member(org_id));
-create policy "org_members_insert" on public.org_members for insert with check (public.is_org_admin(org_id));
-create policy "org_members_update" on public.org_members for update using (public.is_org_admin(org_id));
-create policy "org_members_delete" on public.org_members for delete using (public.is_org_admin(org_id));
-
--- ── org_id on all business tables (NOT NULL + DEFAULT after Phase 2 backfill) ─
--- Fresh installs: tables are empty when these run, so NOT NULL + DEFAULT is safe.
--- Existing installs: run 20260528000001_org_backfill.sql instead of re-applying this.
-
-alter table public.category_groups           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.categories                add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.banks                     add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.allocation_configs        add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.income_types              add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.income_type_rules         add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.inflow_transactions       add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.outflow_transactions      add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.intra_flows               add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.bank_deposits             add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.intrabank_transfers       add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.accounts                  add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.ledger_entries            add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.fx_transactions           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.special_projects          add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.project_entries           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.receipts                  add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.invitations               add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.report_templates          add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.special_config_groups     add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.transaction_allocation_snapshots add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.recalculation_logs        add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.dynamic_reports           add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.outflow_types             add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-
--- Multi-tenant outflow_types: scope uniqueness to (org_id, name) instead of global name.
-do $$ begin
-  alter table public.outflow_types add constraint outflow_types_org_name_unique unique (org_id, name);
-exception when duplicate_object then null;
-end $$;
-alter table public.category_outflow_type_map add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-alter table public.category_opening_balances add column if not exists org_id uuid not null default public.get_current_org_id() references public.organizations(id) on delete set null;
-
--- Standalone org_id indexes (high-volume tables — Phase 1)
-create index if not exists idx_inflow_org        on public.inflow_transactions(org_id);
-create index if not exists idx_outflow_org       on public.outflow_transactions(org_id);
-create index if not exists idx_intra_flows_org   on public.intra_flows(org_id);
-create index if not exists idx_banks_org         on public.banks(org_id);
-create index if not exists idx_categories_org    on public.categories(org_id);
-create index if not exists idx_alloc_configs_org on public.allocation_configs(org_id);
-create index if not exists idx_fx_org            on public.fx_transactions(org_id);
-create index if not exists idx_bank_deposits_org on public.bank_deposits(org_id);
-
--- Composite (org_id, date) indexes for org-scoped date-range queries (Phase 2)
-create index if not exists idx_inflow_org_date       on public.inflow_transactions(org_id, date);
-create index if not exists idx_outflow_org_date      on public.outflow_transactions(org_id, date);
-create index if not exists idx_intra_org_date        on public.intra_flows(org_id, date);
-create index if not exists idx_bank_dep_org_date     on public.bank_deposits(org_id, date);
-create index if not exists idx_intrabank_org_date    on public.intrabank_transfers(org_id, date);
-create index if not exists idx_fx_org_date           on public.fx_transactions(org_id, date);
-create index if not exists idx_proj_entries_org_date on public.project_entries(org_id, date);
-create index if not exists idx_ledger_org_date       on public.ledger_entries(org_id, date);
-
--- Standalone org_id indexes (remaining tables — Phase 2)
-create index if not exists idx_category_groups_org    on public.category_groups(org_id);
-create index if not exists idx_income_types_org       on public.income_types(org_id);
-create index if not exists idx_income_type_rules_org  on public.income_type_rules(org_id);
-create index if not exists idx_intrabank_org          on public.intrabank_transfers(org_id);
-create index if not exists idx_accounts_org           on public.accounts(org_id);
-create index if not exists idx_ledger_entries_org     on public.ledger_entries(org_id);
-create index if not exists idx_special_projects_org   on public.special_projects(org_id);
-create index if not exists idx_project_entries_org    on public.project_entries(org_id);
-create index if not exists idx_receipts_org           on public.receipts(org_id);
-create index if not exists idx_invitations_org        on public.invitations(org_id);
-create index if not exists idx_report_templates_org   on public.report_templates(org_id);
-create index if not exists idx_special_config_groups_org on public.special_config_groups(org_id);
-create index if not exists idx_tas_org                on public.transaction_allocation_snapshots(org_id);
-create index if not exists idx_recalc_logs_org        on public.recalculation_logs(org_id);
-create index if not exists idx_dynamic_reports_org    on public.dynamic_reports(org_id);
-create index if not exists idx_outflow_types_org      on public.outflow_types(org_id);
-create index if not exists idx_cotm_org               on public.category_outflow_type_map(org_id);
-create index if not exists idx_departments_org        on public.departments(org_id);
-create index if not exists idx_cob_org                on public.category_opening_balances(org_id);
-
--- ── Org-aware helper functions ────────────────────────────────
-
-create or replace function public.get_current_org_id()
-returns uuid language sql security definer stable as $$
-  select id from public.organizations where slug = 'primary' limit 1;
-$$;
-
-create or replace function public.is_org_admin(p_org_id uuid)
-returns boolean language sql security definer stable as $$
-  select exists (
-    select 1 from public.org_members
-    where org_id  = p_org_id
-      and user_id = auth.uid()
-      and role    in ('owner', 'admin')
-      and status  = 'active'
-  );
-$$;
-
-create or replace function public.is_org_finance_user(p_org_id uuid)
-returns boolean language sql security definer stable as $$
-  select exists (
-    select 1 from public.org_members
-    where org_id  = p_org_id
-      and user_id = auth.uid()
-      and role    in ('owner', 'admin', 'accountant')
-      and status  = 'active'
-  );
-$$;
-
-create or replace function public.is_org_member(p_org_id uuid)
-returns boolean language sql security definer stable as $$
-  select exists (
-    select 1 from public.org_members
-    where org_id  = p_org_id
-      and user_id = auth.uid()
-      and status  = 'active'
-  );
-$$;
-
 -- ── Org management RPCs ───────────────────────────────────────────────────────
-
 
 create or replace function public.create_organization(p_name text)
 returns uuid language plpgsql security definer as $$
@@ -2613,13 +2183,12 @@ grant execute on function public.restore_org(uuid) to authenticated;
 
 -- purge_org: permanently deletes all org data.
 -- Called by service-role Edge Function after purge_at.
--- dynamic_report_blocks and dynamic_report_snapshots are cascade-deleted
--- via dynamic_reports FK — no explicit delete needed (they have no org_id column).
+-- Audit entry written BEFORE deletions so it survives even after org rows are gone.
+-- No EXCEPTION WHEN OTHERS: errors propagate and roll back the transaction.
 create or replace function public.purge_org(p_org_id uuid)
 returns jsonb language plpgsql security definer as $$
 declare
   v_org  record;
-  v_step text := 'init';
   v_snap jsonb;
 begin
   if auth.uid() is not null then
@@ -2644,82 +2213,58 @@ begin
 
   v_snap := row_to_json(v_org)::jsonb;
 
-  v_step := 'receipts';
-  delete from public.receipts                          where org_id = p_org_id;
-  v_step := 'transaction_allocation_snapshots';
-  delete from public.transaction_allocation_snapshots  where org_id = p_org_id;
-  v_step := 'recalculation_logs';
-  delete from public.recalculation_logs                where org_id = p_org_id;
-  -- dynamic_report_blocks and dynamic_report_snapshots are cascade-deleted below
-  v_step := 'dynamic_reports';
-  delete from public.dynamic_reports                   where org_id = p_org_id;
-  v_step := 'report_templates';
-  delete from public.report_templates                  where org_id = p_org_id;
-  v_step := 'project_entries';
-  delete from public.project_entries                   where org_id = p_org_id;
-  v_step := 'special_projects';
-  delete from public.special_projects                  where org_id = p_org_id;
-  v_step := 'fx_conversions';
-  delete from public.fx_conversions                    where org_id = p_org_id;
-  v_step := 'fx_transactions';
-  delete from public.fx_transactions                   where org_id = p_org_id;
-  v_step := 'intrabank_transfers';
-  delete from public.intrabank_transfers               where org_id = p_org_id;
-  v_step := 'bank_deposits';
-  delete from public.bank_deposits                     where org_id = p_org_id;
-  v_step := 'intra_flows';
-  delete from public.intra_flows                       where org_id = p_org_id;
-  v_step := 'outflow_transactions';
-  delete from public.outflow_transactions              where org_id = p_org_id;
-  v_step := 'inflow_transactions';
-  delete from public.inflow_transactions               where org_id = p_org_id;
-  v_step := 'income_type_rules';
-  delete from public.income_type_rules                 where org_id = p_org_id;
-  v_step := 'income_types';
-  delete from public.income_types                      where org_id = p_org_id;
-  v_step := 'category_outflow_type_map';
-  delete from public.category_outflow_type_map         where org_id = p_org_id;
-  v_step := 'outflow_types';
-  delete from public.outflow_types                     where org_id = p_org_id;
-  v_step := 'allocation_configs';
-  delete from public.allocation_configs                where org_id = p_org_id;
-  v_step := 'special_config_groups';
-  delete from public.special_config_groups             where org_id = p_org_id;
-  v_step := 'category_opening_balances';
-  delete from public.category_opening_balances         where org_id = p_org_id;
-  v_step := 'categories';
-  delete from public.categories                        where org_id = p_org_id;
-  v_step := 'category_groups';
-  delete from public.category_groups                   where org_id = p_org_id;
-  v_step := 'banks';
-  delete from public.banks                             where org_id = p_org_id;
-  v_step := 'departments';
-  delete from public.departments                       where org_id = p_org_id;
-  v_step := 'ledger_entries';
-  delete from public.ledger_entries                    where org_id = p_org_id;
-  v_step := 'accounts';
-  delete from public.accounts                          where org_id = p_org_id;
-  v_step := 'invitations';
-  delete from public.invitations                       where org_id = p_org_id;
-  v_step := 'org_deletion_backups';
-  delete from public.org_deletion_backups              where org_id = p_org_id;
-  v_step := 'audit_log';
-  delete from public.audit_log                         where org_id = p_org_id;
-  v_step := 'org_members';
-  delete from public.org_members                       where org_id = p_org_id;
-  v_step := 'organizations';
-  delete from public.organizations                     where id     = p_org_id;
-
+  -- Audit written first so it is preserved regardless of FK cascades below
   insert into public.audit_log (
     table_name, record_id, action, old_data, new_data, user_id, created_at
   ) values (
-    'organizations', p_org_id, 'PURGED', v_snap, null, null, now()
+    'organizations', p_org_id, 'PURGE_INITIATED', v_snap, null, null, now()
   );
 
-  return jsonb_build_object('ok', true, 'org_id', p_org_id, 'purged_at', now());
+  delete from public.receipts                          where org_id = p_org_id;
+  delete from public.transaction_allocation_snapshots  where org_id = p_org_id;
+  delete from public.recalculation_logs                where org_id = p_org_id;
 
-exception when others then
-  return jsonb_build_object('ok', false, 'error', sqlerrm, 'step', v_step, 'sqlstate', sqlstate);
+  -- dynamic_report_blocks/snapshots have no org_id; delete via parent report_id
+  delete from public.dynamic_report_snapshots
+    where report_id in (select id from public.dynamic_reports where org_id = p_org_id);
+  delete from public.dynamic_report_blocks
+    where report_id in (select id from public.dynamic_reports where org_id = p_org_id);
+  delete from public.dynamic_reports                   where org_id = p_org_id;
+
+  delete from public.report_templates                  where org_id = p_org_id;
+  delete from public.project_entries                   where org_id = p_org_id;
+  delete from public.special_projects                  where org_id = p_org_id;
+  delete from public.fx_conversions                    where org_id = p_org_id;
+  delete from public.fx_transactions                   where org_id = p_org_id;
+  delete from public.intrabank_transfers               where org_id = p_org_id;
+  delete from public.bank_deposits                     where org_id = p_org_id;
+  delete from public.intra_flows                       where org_id = p_org_id;
+  delete from public.outflow_transactions              where org_id = p_org_id;
+  delete from public.inflow_transactions               where org_id = p_org_id;
+  delete from public.income_type_rules                 where org_id = p_org_id;
+  delete from public.income_types                      where org_id = p_org_id;
+  delete from public.category_outflow_type_map         where org_id = p_org_id;
+  delete from public.outflow_types                     where org_id = p_org_id;
+  delete from public.allocation_configs                where org_id = p_org_id;
+  delete from public.special_config_groups             where org_id = p_org_id;
+  delete from public.category_opening_balances         where org_id = p_org_id;
+  delete from public.categories                        where org_id = p_org_id;
+  delete from public.category_groups                   where org_id = p_org_id;
+  delete from public.banks                             where org_id = p_org_id;
+  delete from public.departments                       where org_id = p_org_id;
+  delete from public.ledger_entries                    where org_id = p_org_id;
+  delete from public.accounts                          where org_id = p_org_id;
+  delete from public.invitations                       where org_id = p_org_id;
+  delete from public.org_deletion_backups              where org_id = p_org_id;
+
+  -- audit_log.org_id has ON DELETE SET NULL — FK cascade nullifies org_id
+  -- when the organizations row is deleted below. Explicit DELETE is blocked by
+  -- trg_audit_log_no_delete and is not needed.
+
+  delete from public.org_members                       where org_id = p_org_id;
+  delete from public.organizations                     where id     = p_org_id;
+
+  return jsonb_build_object('ok', true, 'org_id', p_org_id, 'purged_at', now());
 end;
 $$;
 
@@ -2849,16 +2394,41 @@ declare
   v_audit_deleted bigint := 0;
   v_fc_deleted    bigint := 0;
   v_cutoff        timestamptz;
+  v_caller_org    uuid;
 begin
-  if auth.uid() is not null and not public.is_admin() then
-    raise exception 'purge_old_audit_logs: caller must be an org admin';
+  if auth.uid() is not null then
+    -- Authenticated caller must be an org admin; scope deletion to their org only
+    if not public.is_admin() then
+      raise exception 'purge_old_audit_logs: caller must be an org admin';
+    end if;
+    select org_id into v_caller_org
+    from public.org_members
+    where user_id = auth.uid() and role in ('owner', 'admin') and status = 'active'
+    order by joined_at
+    limit 1;
+    if v_caller_org is null then
+      raise exception 'purge_old_audit_logs: no active admin membership found for caller';
+    end if;
   end if;
+  -- v_caller_org = NULL means pg_cron service role: delete across all orgs
+
   v_cutoff := now() - p_retention_interval;
   set local app.audit_maintenance = 'true';
-  delete from public.audit_log where created_at < v_cutoff;
+
+  if v_caller_org is not null then
+    delete from public.audit_log where created_at < v_cutoff and org_id = v_caller_org;
+  else
+    delete from public.audit_log where created_at < v_cutoff;
+  end if;
   get diagnostics v_audit_deleted = row_count;
-  delete from public.field_changes where changed_at < v_cutoff;
+
+  if v_caller_org is not null then
+    delete from public.field_changes where changed_at < v_cutoff and org_id = v_caller_org;
+  else
+    delete from public.field_changes where changed_at < v_cutoff;
+  end if;
   get diagnostics v_fc_deleted = row_count;
+
   insert into public.audit_maintenance_log
     (retention_interval, audit_rows_deleted, field_change_rows_deleted, performed_by)
   values
@@ -2873,13 +2443,13 @@ grant execute on function public.purge_old_audit_logs(interval) to authenticated
 -- ── request_gdpr_erasure() (N-4) ─────────────────────────────────────────────
 
 create or replace function public.request_gdpr_erasure(
+  p_org_id         uuid,
   p_target_user_id uuid,
   p_notes          text default null
 )
 returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
-  v_org_id      uuid;
   v_audit_count bigint := 0;
   v_fc_count    bigint := 0;
   v_request_id  uuid;
@@ -2887,17 +2457,9 @@ declare
     'email', 'full_name', 'username', 'phone', 'avatar_url'
   ];
 begin
-  if not public.is_admin() then
-    raise exception 'request_gdpr_erasure: caller must be an org admin';
-  end if;
-  select om.org_id into v_org_id
-  from   public.org_members om
-  where  om.user_id = auth.uid()
-    and  om.role    in ('owner', 'admin')
-    and  om.status  = 'active'
-  limit 1;
-  if v_org_id is null then
-    raise exception 'request_gdpr_erasure: no active admin membership found for caller';
+  -- Caller must be an admin of the specified org (not just any org)
+  if not public.is_org_admin(p_org_id) then
+    raise exception 'request_gdpr_erasure: caller must be an admin of the specified org';
   end if;
   with updated as (
     update public.audit_log
@@ -2905,7 +2467,7 @@ begin
       user_id  = null,
       old_data = case when old_data is not null then old_data - v_pii_keys else null end,
       new_data = case when new_data is not null then new_data - v_pii_keys else null end
-    where user_id = p_target_user_id and org_id = v_org_id
+    where user_id = p_target_user_id and org_id = p_org_id
     returning 1
   )
   select count(*) into v_audit_count from updated;
@@ -2915,7 +2477,7 @@ begin
       user_id   = null,
       old_value = case when field_name = any(v_pii_keys) then null else old_value end,
       new_value = case when field_name = any(v_pii_keys) then null else new_value end
-    where user_id = p_target_user_id and org_id = v_org_id
+    where user_id = p_target_user_id and org_id = p_org_id
     returning 1
   )
   select count(*) into v_fc_count from updated;
@@ -2923,15 +2485,17 @@ begin
     (org_id, requested_by, target_user_id, completed_at, notes,
      anonymized_audit_count, anonymized_field_change_count)
   values
-    (v_org_id, auth.uid(), p_target_user_id, now(), p_notes,
+    (p_org_id, auth.uid(), p_target_user_id, now(), p_notes,
      v_audit_count, v_fc_count)
   returning id into v_request_id;
   return v_request_id;
 end;
 $$;
 
-revoke all   on function public.request_gdpr_erasure(uuid, text) from public;
-grant execute on function public.request_gdpr_erasure(uuid, text) to authenticated;
+-- Drop old 2-arg signature so callers must supply p_org_id explicitly
+drop function if exists public.request_gdpr_erasure(uuid, text);
+revoke all   on function public.request_gdpr_erasure(uuid, uuid, text) from public;
+grant execute on function public.request_gdpr_erasure(uuid, uuid, text) to authenticated;
 
 -- ================================================================
 -- 12. SCHEMA RELOAD

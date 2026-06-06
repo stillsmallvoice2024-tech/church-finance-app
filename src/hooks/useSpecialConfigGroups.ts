@@ -143,55 +143,21 @@ export async function createNewVersion(params: {
   effective_from:  string
   status:          'draft' | 'locked'
 }): Promise<string> {
-  const { group, effective_from } = params
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) throw new Error('No active organisation.')
 
-  const covering = group.versions.find(v =>
-    v.effective_from != null &&
-    v.effective_from <= effective_from &&
-    (v.effective_to == null || v.effective_to >= effective_from)
-  )
-
-  const sorted = group.versions
-    .filter(v => v.effective_from != null && v.effective_from > effective_from)
-    .sort((a, b) => a.effective_from!.localeCompare(b.effective_from!))
-  const nextVersion = sorted.length > 0 ? sorted[0] : null
-
-  const newEffectiveTo = nextVersion
-    ? subtractOneDay(nextVersion.effective_from!)
-    : null
-
-  if (covering) {
-    const newCoveringTo = subtractOneDay(effective_from)
-    const { error: closeErr } = await supabase
-      .from('allocation_configs')
-      .update({ effective_to: newCoveringTo })
-      .eq('id', covering.id)
-    if (closeErr) throw new Error(closeErr.message)
-  }
-
-  const maxVer = group.versions.reduce((m, v) => Math.max(m, v.version_number ?? 1), 0)
-
-  const { data: newVer, error: vErr } = await supabase
-    .from('allocation_configs')
-    .insert({
-      name:            group.name,
-      is_special:      true,
-      allocation_type: params.allocation_type,
-      total_amount:    params.total_amount ?? null,
-      rows:            params.rows,
-      effective_from:  effective_from,
-      effective_to:    newEffectiveTo,
-      version_number:  maxVer + 1,
-      config_group_id: group.id,
-      start_date:      effective_from,
-      status:          params.status,
-      ...orgPayload(),
-    })
-    .select('id')
-    .single()
-  if (vErr) throw new Error(vErr.message)
-
-  return (newVer as { id: string }).id
+  const { data, error } = await supabase.rpc('create_special_config_version', {
+    p_group_id:        params.group.id,
+    p_org_id:          orgId,
+    p_name:            params.group.name,
+    p_allocation_type: params.allocation_type,
+    p_total_amount:    params.total_amount ?? null,
+    p_rows:            params.rows,
+    p_effective_from:  params.effective_from,
+    p_status:          params.status,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
 }
 
 export async function setGroupIncomeTypeLink(
@@ -322,10 +288,3 @@ export async function createTransactionSnapshot(
     }, { onConflict: 'transaction_id' })
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function subtractOneDay(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00Z')
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
-}

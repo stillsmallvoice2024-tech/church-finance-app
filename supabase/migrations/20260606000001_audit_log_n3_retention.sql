@@ -115,6 +115,8 @@ CREATE POLICY "aml_admin_read" ON public.audit_maintenance_log
 -- Example manual call:
 --   SELECT * FROM public.purge_old_audit_logs('7 years');
 
+-- purge_old_audit_logs with org scoping is defined in 20260606000003_security_fixes.sql.
+-- This stub keeps the migration idempotent: the final correct definition is applied last.
 CREATE OR REPLACE FUNCTION public.purge_old_audit_logs(
   p_retention_interval interval DEFAULT '7 years'
 )
@@ -127,21 +129,37 @@ DECLARE
   v_audit_deleted bigint := 0;
   v_fc_deleted    bigint := 0;
   v_cutoff        timestamptz;
+  v_caller_org    uuid;
 BEGIN
-  -- Authenticated callers must be org admins; service role (pg_cron) has uid = NULL
-  IF auth.uid() IS NOT NULL AND NOT public.is_admin() THEN
-    RAISE EXCEPTION 'purge_old_audit_logs: caller must be an org admin';
+  IF auth.uid() IS NOT NULL THEN
+    IF NOT public.is_admin() THEN
+      RAISE EXCEPTION 'purge_old_audit_logs: caller must be an org admin';
+    END IF;
+    SELECT org_id INTO v_caller_org
+    FROM   public.org_members
+    WHERE  user_id = auth.uid() AND role IN ('owner', 'admin') AND status = 'active'
+    ORDER BY joined_at
+    LIMIT 1;
+    IF v_caller_org IS NULL THEN
+      RAISE EXCEPTION 'purge_old_audit_logs: no active admin membership found for caller';
+    END IF;
   END IF;
 
   v_cutoff := now() - p_retention_interval;
-
-  -- Authorise this transaction to bypass the audit_log immutability trigger
   SET LOCAL app.audit_maintenance = 'true';
 
-  DELETE FROM public.audit_log WHERE created_at < v_cutoff;
+  IF v_caller_org IS NOT NULL THEN
+    DELETE FROM public.audit_log WHERE created_at < v_cutoff AND org_id = v_caller_org;
+  ELSE
+    DELETE FROM public.audit_log WHERE created_at < v_cutoff;
+  END IF;
   GET DIAGNOSTICS v_audit_deleted = ROW_COUNT;
 
-  DELETE FROM public.field_changes WHERE changed_at < v_cutoff;
+  IF v_caller_org IS NOT NULL THEN
+    DELETE FROM public.field_changes WHERE changed_at < v_cutoff AND org_id = v_caller_org;
+  ELSE
+    DELETE FROM public.field_changes WHERE changed_at < v_cutoff;
+  END IF;
   GET DIAGNOSTICS v_fc_deleted = ROW_COUNT;
 
   INSERT INTO public.audit_maintenance_log

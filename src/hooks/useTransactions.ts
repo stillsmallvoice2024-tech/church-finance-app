@@ -177,11 +177,11 @@ export function useInflowTransactions(
 
     // Server-side search
     if (search && !fetchAll) {
-      const safeSearch = search.replace(/[(),]/g, '')
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
       if (!searchCol || searchCol === 'all') {
         query = query.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_ref.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
       } else if (INFLOW_SEARCH_COLS.has(searchCol)) {
-        query = query.ilike(searchCol, `%${search}%`)
+        query = query.ilike(searchCol, `%${safeSearch}%`)
       }
     }
 
@@ -254,13 +254,13 @@ export function useOutflowTransactions(
 
     // Server-side search
     if (search && !fetchAll) {
-      const safeSearch = search.replace(/[(),]/g, '')
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
       if (!searchCol || searchCol === 'all') {
         query = query.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_id.ilike.%${safeSearch}%,stage_code_1.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
       } else if (searchCol === 'description') {
         query = query.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%`)
       } else if (OUTFLOW_SEARCH_COLS.has(searchCol)) {
-        query = query.ilike(searchCol, `%${search}%`)
+        query = query.ilike(searchCol, `%${safeSearch}%`)
       }
     }
 
@@ -345,11 +345,11 @@ export function useIntraFlows(
 
     // Server-side search
     if (search) {
-      const safeSearch = search.replace(/[(),]/g, '')
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
       if (!searchCol || searchCol === 'all') {
         query = query.or(`description.ilike.%${safeSearch}%,account_from.ilike.%${safeSearch}%,account_to.ilike.%${safeSearch}%`)
       } else if (INTRAFLOW_SEARCH_COLS.has(searchCol)) {
-        query = query.ilike(searchCol, `%${search}%`)
+        query = query.ilike(searchCol, `%${safeSearch}%`)
       }
     }
 
