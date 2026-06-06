@@ -193,6 +193,7 @@ function useMeasureTarget(selector: string, stepKey: string) {
 
   useEffect(() => {
     const measure = () => {
+      if (!selector) { setRect(null); return }
       const el = document.querySelector<HTMLElement>(selector)
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -217,6 +218,7 @@ function useMeasureTarget(selector: string, stepKey: string) {
   // Re-measure on resize
   useEffect(() => {
     const onResize = () => {
+      if (!selector) return
       const el = document.querySelector<HTMLElement>(selector)
       if (el) setRect(el.getBoundingClientRect())
     }
