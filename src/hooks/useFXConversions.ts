@@ -131,9 +131,7 @@ export function useUpdateFXConversion() {
     if (!orgId) throw new Error('No active organisation.')
     setLoading(true); setError(null)
     try {
-      const { data: oldData } = await supabase
-        .from('fx_conversions').select('*').eq('id', input.id).single()
-      const { data: result, error: rpcErr } = await supabase.rpc('update_fx_conversion', {
+      const { error: rpcErr } = await supabase.rpc('update_fx_conversion', {
         p_conversion_id:        input.id,
         p_org_id:               orgId,
         p_user_id:              user.id,
@@ -146,7 +144,6 @@ export function useUpdateFXConversion() {
         p_bank_name:            input.bank_name ?? null,
       })
       if (rpcErr) throw rpcErr
-      void result
     } catch (err) {
       const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err)
       setError(msg); throw new Error(msg)
@@ -167,9 +164,7 @@ export function useRevertFXConversion() {
     if (!orgId) throw new Error('No active organisation.')
     setLoading(true); setError(null)
     try {
-      const { data: oldData } = await supabase
-        .from('fx_conversions').select('*').eq('id', conversionId).single()
-      const { data: result, error: rpcErr } = await supabase.rpc('revert_fx_conversion', {
+      const { error: rpcErr } = await supabase.rpc('revert_fx_conversion', {
         p_conversion_id: conversionId,
         p_org_id:        orgId,
         p_user_id:       user.id,
