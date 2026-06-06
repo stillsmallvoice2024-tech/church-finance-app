@@ -122,7 +122,7 @@ export default function PercentageAllocation() {
         const cfgRows = configMap.get(inflow.allocation_config_id) ?? []
         for (const row of cfgRows) {
           // Unset budget_portion defaults to Percentage; skip Specific Seed / Savings rows
-          if (row.budget_portion && row.budget_portion !== 'Percentage') continue
+          if (row.budget_portion && row.budget_portion !== 'Percentage' && row.budget_portion !== 'Percentage Allocation') continue
           const pct = Number(row.percentage ?? 0)
           if (pct <= 0) continue
           const allocAmount = allocatePercent(Number(inflow.amount), pct)

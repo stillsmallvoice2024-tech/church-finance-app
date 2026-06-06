@@ -107,7 +107,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           src.rows.length > 0
             ? src.rows.map(r => ({
                 category_name:  r.category_name,
-                budget_portion: r.budget_portion ?? '',
+                budget_portion: r.budget_portion === 'Percentage Allocation' ? 'Percentage' : (r.budget_portion ?? ''),
                 value: String(
                   (src.allocation_type ?? 'percentage') === 'amount'
                     ? (r.amount ?? '')
@@ -369,7 +369,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                   >
                     <option value="">— Portion —</option>
-                    <option value="Percentage Allocation">Percentage Allocation</option>
+                    <option value="Percentage">Percentage Allocation</option>
                     <option value="Specific Seed">Specific Seed</option>
                     <option value="Savings">Savings</option>
                   </select>
