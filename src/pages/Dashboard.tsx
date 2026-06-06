@@ -193,24 +193,28 @@ export default function Dashboard() {
                 value={formatCurrencyCompact(stats.totalInflow, baseCurrencyCode)}
                 icon={<TrendingUp className="w-5 h-5 text-success" />}
                 iconBgClass="bg-green-50"
+                href="/inflows"
               />
               <StatCard
                 title={`Total Outflows (${year})`}
                 value={formatCurrencyCompact(stats.totalOutflow, baseCurrencyCode)}
                 icon={<TrendingDown className="w-5 h-5 text-danger" />}
                 iconBgClass="bg-red-50"
+                href="/outflows"
               />
               <StatCard
                 title="Net Balance"
                 value={formatCurrencyCompact(stats.netBalance, baseCurrencyCode)}
                 icon={<Wallet className="w-5 h-5 text-primary" />}
                 iconBgClass="bg-primary-100"
+                href="/bank-ledger"
               />
               <StatCard
                 title="Categories"
                 value={String(categories.length)}
                 icon={<Layers className="w-5 h-5 text-accent" />}
                 iconBgClass="bg-yellow-50"
+                href="/categories"
               />
             </>
           )}

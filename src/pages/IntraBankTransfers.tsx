@@ -22,6 +22,7 @@ import { useOrgStore }   from '../store/orgStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
 import { Field, inputCls, filterInputCls } from '../components/ui/FormField'
+import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
@@ -199,6 +200,7 @@ export default function IntraBankTransfers() {
   const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
+  const [datePreset,  setDatePreset]  = useState<DatePreset | null>(null)
   const [bankFilter,  setBankFilter]  = useState('')
 
   const [modalOpen,   setModalOpen]   = useState(false)
@@ -309,27 +311,34 @@ export default function IntraBankTransfers() {
 
         {/* Filters */}
         <Card>
-          <div className="flex flex-wrap gap-3 items-end">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">From</label>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
+          <div className="space-y-3">
+            <DatePresetBar
+              activePreset={datePreset}
+              onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+              onCustom={() => setDatePreset('custom')}
+            />
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">From</label>
+                <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">To</label>
+                <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+              </div>
+              <div className="flex flex-col gap-1 min-w-[160px]">
+                <label className="text-xs font-medium text-gray-500">Bank</label>
+                <SearchableSelect value={bankFilter} onChange={setBankFilter}
+                  options={banks.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder="All banks" className={filterInputCls} />
+              </div>
+              {(dateFrom || dateTo || bankFilter || datePreset) && (
+                <button onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setBankFilter('') }}
+                  className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-1">
+                  <X className="w-3.5 h-3.5" /> Clear
+                </button>
+              )}
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">To</label>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
-            </div>
-            <div className="flex flex-col gap-1 min-w-[160px]">
-              <label className="text-xs font-medium text-gray-500">Bank</label>
-              <SearchableSelect value={bankFilter} onChange={setBankFilter}
-                options={banks.map(b => ({ value: b.id, label: b.name }))}
-                placeholder="All banks" className={filterInputCls} />
-            </div>
-            {(dateFrom || dateTo || bankFilter) && (
-              <button onClick={() => { setDateFrom(''); setDateTo(''); setBankFilter('') }}
-                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-1">
-                <X className="w-3.5 h-3.5" /> Clear
-              </button>
-            )}
           </div>
         </Card>
 

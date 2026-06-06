@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
+import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { HelpTooltip }   from '../components/ui/HelpTooltip'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { useBanks }      from '../hooks/useBanks'
@@ -88,6 +89,7 @@ export default function BankLedger() {
   const [error,        setError]        = useState<string | null>(null)
   const [dateFrom,     setDateFrom]     = useState('')
   const [dateTo,       setDateTo]       = useState('')
+  const [datePreset,   setDatePreset]   = useState<DatePreset | null>(null)
   const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
   const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
   const [expandedId,   setExpandedId]   = useState<string | null>(null)
@@ -255,32 +257,39 @@ export default function BankLedger() {
 
       {/* Bank selector + date filters */}
       <Card>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div data-tour="bank-selector" className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[200px]">
-            <label className="text-xs font-medium text-gray-500">Bank</label>
-            <SearchableSelect
-              value={selectedBank}
-              onChange={v => { didAutoSelect.current = true; setSelectedBank(v) }}
-              options={banks.map(b => ({ value: b.id, label: b.name }))}
-              placeholder={banksLoading ? '— Loading banks… —' : banks.length === 0 ? '— No banks configured —' : '— Select a bank —'}
-              disabled={banksLoading}
-              className={filterInputCls}
-            />
+        <div className="space-y-3">
+          <DatePresetBar
+            activePreset={datePreset}
+            onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+            onCustom={() => setDatePreset('custom')}
+          />
+          <div className="flex flex-wrap gap-3 items-end">
+            <div data-tour="bank-selector" className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[200px]">
+              <label className="text-xs font-medium text-gray-500">Bank</label>
+              <SearchableSelect
+                value={selectedBank}
+                onChange={v => { didAutoSelect.current = true; setSelectedBank(v) }}
+                options={banks.map(b => ({ value: b.id, label: b.name }))}
+                placeholder={banksLoading ? '— Loading banks… —' : banks.length === 0 ? '— No banks configured —' : '— Select a bank —'}
+                disabled={banksLoading}
+                className={filterInputCls}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">From</label>
+              <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">To</label>
+              <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+            </div>
+            {(dateFrom || dateTo || datePreset) && (
+              <button onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null) }}
+                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                Clear dates
+              </button>
+            )}
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
-          </div>
-          {(dateFrom || dateTo) && (
-            <button onClick={() => { setDateFrom(''); setDateTo('') }}
-              className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-              Clear dates
-            </button>
-          )}
         </div>
       </Card>
 

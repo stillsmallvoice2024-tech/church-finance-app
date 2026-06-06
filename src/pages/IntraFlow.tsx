@@ -27,6 +27,7 @@ import { useYearRange }   from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls }         from '../components/ui/FormField'
+import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { SearchableSelect }       from '../components/ui/SearchableSelect'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { BulkActionBar }          from '../components/ui/BulkActionBar'
@@ -84,6 +85,7 @@ export default function IntraFlow() {
   // Filters
   const [dateFrom,    setDateFrom]    = useState(yearStart)
   const [dateTo,      setDateTo]      = useState(yearEnd)
+  const [datePreset,  setDatePreset]  = useState<DatePreset | null>(null)
   const [accountFrom, setAccountFrom] = useState('')
   const [accountTo,   setAccountTo]   = useState('')
 
@@ -229,7 +231,7 @@ export default function IntraFlow() {
     exportCSV(IFL_CSV_FILE, IFL_CSV_HEADERS, (rows as IntraFlowRow[]).map(iflCsvRow))
   }
 
-  const hasActiveFilters = dateFrom || dateTo || accountFrom || accountTo
+  const hasActiveFilters = dateFrom || dateTo || accountFrom || accountTo || datePreset
 
   return (
     <>
@@ -289,31 +291,38 @@ export default function IntraFlow() {
 
         {/* Filter bar */}
         <Card>
-          <div className="flex flex-wrap gap-3 items-end">
-            <FilterGroup label="From">
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
-            </FilterGroup>
-            <FilterGroup label="To">
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
-            </FilterGroup>
-            <FilterGroup label="From Category" className="min-w-[180px]">
-              <SearchableSelect value={accountFrom} onChange={setAccountFrom}
-                options={categories.map(c => ({ value: c.name, label: c.name }))}
-                placeholder="All categories" className={`${filterInputCls} bg-white`} />
-            </FilterGroup>
-            <FilterGroup label="To Category" className="min-w-[180px]">
-              <SearchableSelect value={accountTo} onChange={setAccountTo}
-                options={categories.map(c => ({ value: c.name, label: c.name }))}
-                placeholder="All categories" className={`${filterInputCls} bg-white`} />
-            </FilterGroup>
-            {hasActiveFilters && (
-              <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setAccountFrom(''); setAccountTo('') }}
-                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Clear
-              </button>
-            )}
+          <div className="space-y-3">
+            <DatePresetBar
+              activePreset={datePreset}
+              onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+              onCustom={() => setDatePreset('custom')}
+            />
+            <div className="flex flex-wrap gap-3 items-end">
+              <FilterGroup label="From">
+                <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+              </FilterGroup>
+              <FilterGroup label="To">
+                <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+              </FilterGroup>
+              <FilterGroup label="From Category" className="min-w-[180px]">
+                <SearchableSelect value={accountFrom} onChange={setAccountFrom}
+                  options={categories.map(c => ({ value: c.name, label: c.name }))}
+                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+              </FilterGroup>
+              <FilterGroup label="To Category" className="min-w-[180px]">
+                <SearchableSelect value={accountTo} onChange={setAccountTo}
+                  options={categories.map(c => ({ value: c.name, label: c.name }))}
+                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+              </FilterGroup>
+              {hasActiveFilters && (
+                <button
+                  onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setAccountFrom(''); setAccountTo('') }}
+                  className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         </Card>
 

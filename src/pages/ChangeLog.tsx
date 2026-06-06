@@ -16,6 +16,7 @@ import { ExportDropdown }     from '../components/ui/ExportDropdown'
 import type { SortField } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { filterInputCls }     from '../components/ui/FormField'
+import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { EmptyState }         from '../components/ui/EmptyState'
 import { useOrgCurrency }     from '../hooks/useOrgCurrency'
 
@@ -55,6 +56,7 @@ export default function ChangeLog() {
   const [tableFilter, setTableFilter] = useState('')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
+  const [datePreset,  setDatePreset]  = useState<DatePreset | null>(null)
 
   const clState = useDataViewState({
     storageKey:      'cl',
@@ -166,32 +168,39 @@ export default function ChangeLog() {
 
       {/* Filters */}
       <Card>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Table</label>
-            <select value={tableFilter} onChange={e => setTableFilter(e.target.value)} className={filterInputCls}>
-              <option value="">All tables</option>
-              {Object.entries(TABLE_LABELS).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
-              ))}
-            </select>
+        <div className="space-y-3">
+          <DatePresetBar
+            activePreset={datePreset}
+            onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+            onCustom={() => setDatePreset('custom')}
+          />
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">Table</label>
+              <select value={tableFilter} onChange={e => setTableFilter(e.target.value)} className={filterInputCls}>
+                <option value="">All tables</option>
+                {Object.entries(TABLE_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">From</label>
+              <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">To</label>
+              <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+            </div>
+            {(tableFilter || dateFrom || dateTo || datePreset) && (
+              <button
+                onClick={() => { setTableFilter(''); setDateFrom(''); setDateTo(''); setDatePreset(null) }}
+                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+            )}
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
-          </div>
-          {(tableFilter || dateFrom || dateTo) && (
-            <button
-              onClick={() => { setTableFilter(''); setDateFrom(''); setDateTo('') }}
-              className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              Clear
-            </button>
-          )}
         </div>
       </Card>
 

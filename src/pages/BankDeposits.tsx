@@ -27,6 +27,7 @@ import { formatDate, formatCurrency } from '../utils/formatters'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls } from '../components/ui/FormField'
+import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { exportCSV }   from '../utils/csvExport'
@@ -204,6 +205,7 @@ export default function BankDeposits() {
   const bdState = useDataViewState({ storageKey: 'bd', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const [dateFrom,     setDateFrom]     = useState('')
   const [dateTo,       setDateTo]       = useState('')
+  const [datePreset,   setDatePreset]   = useState<DatePreset | null>(null)
   const [bankFilter,   setBankFilter]   = useState('')
   const [showModal,    setShowModal]    = useState(false)
   const [editRecord,   setEditRecord]   = useState<DepositRow | null>(null)
@@ -416,28 +418,35 @@ export default function BankDeposits() {
 
       {/* Filters */}
       <Card>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">From</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
+        <div className="space-y-3">
+          <DatePresetBar
+            activePreset={datePreset}
+            onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+            onCustom={() => setDatePreset('custom')}
+          />
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">From</label>
+              <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">To</label>
+              <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">Bank</label>
+              <select value={bankFilter} onChange={e => setBankFilter(e.target.value)} className={filterInputCls}>
+                <option value="">All banks</option>
+                {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            {(dateFrom || dateTo || bankFilter || datePreset) && (
+              <button onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setBankFilter('') }}
+                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                Clear
+              </button>
+            )}
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">To</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Bank</label>
-            <select value={bankFilter} onChange={e => setBankFilter(e.target.value)} className={filterInputCls}>
-              <option value="">All banks</option>
-              {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
-          {(dateFrom || dateTo || bankFilter) && (
-            <button onClick={() => { setDateFrom(''); setDateTo(''); setBankFilter('') }}
-              className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-              Clear
-            </button>
-          )}
         </div>
       </Card>
 
