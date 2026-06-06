@@ -3,6 +3,7 @@ import {
   Landmark, Plus, Pencil, Trash2, ChevronDown, ChevronUp,
   AlertCircle, RefreshCw, ChevronRight,
 } from 'lucide-react'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { PaginationBar } from '../components/ui/PaginationBar'
@@ -395,6 +396,12 @@ export default function BankDeposits() {
 
   return (
     <div className="space-y-5">
+      <PageHelpBanner storageKey="help-dismissed-bank-deposits" title="What are Bank Deposits?">
+        A bank deposit records physical cash being deposited into a bank account.
+        This is separate from inflows (income) — it simply documents when cash arrives at the bank.
+        Use this to track cash handling and reconcile physical cash collections with bank statements.
+      </PageHelpBanner>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

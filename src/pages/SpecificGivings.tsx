@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Gift, AlertCircle, RefreshCw } from 'lucide-react'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
@@ -247,6 +248,12 @@ export default function SpecificGivings() {
 
   return (
     <div className="space-y-5">
+
+      <PageHelpBanner storageKey="help-dismissed-specific-givings" title="What are Specific Givings?">
+        These are donations earmarked for a particular purpose — for example, a gift specifically for the Building Fund or a mission project.
+        Unlike general offerings, specific givings are restricted: the money should only be used for the stated purpose.
+        This page shows the running balance and transaction history for each designated fund.
+      </PageHelpBanner>
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">

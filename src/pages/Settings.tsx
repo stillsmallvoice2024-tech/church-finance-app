@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff, Database, Download, UploadCloud, FileDown, FolderSync } from 'lucide-react'
+import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff, Database, Download, UploadCloud, FileDown, FolderSync, Shield, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
+import { MFAEnrollModal } from '../components/modals/MFAEnrollModal'
 import { useToastStore } from '../store/toastStore'
 import { useThemeStore } from '../store/themeStore'
 import { useDbStatus } from '../hooks/useDbStatus'
@@ -55,6 +56,12 @@ export default function Settings() {
   const [restoreOpen,   setRestoreOpen]   = useState(false)
   const [exportOpen,    setExportOpen]    = useState(false)
 
+  // 2FA state
+  const [mfaEnrollOpen, setMfaEnrollOpen] = useState(false)
+  const [mfaFactors,    setMfaFactors]    = useState<{ id: string; friendly_name: string | null }[]>([])
+  const [mfaLoading,    setMfaLoading]    = useState(false)
+  const [mfaError,      setMfaError]      = useState<string | null>(null)
+
   const [lastBackupTs, setLastBackupTs] = useState<string | null>(() => {
     try { return localStorage.getItem('church-last-backup') } catch { return null }
   })
@@ -79,6 +86,25 @@ export default function Settings() {
   useEffect(() => {
     if (profile?.full_name) setFullName(profile.full_name)
   }, [profile?.full_name])
+
+  // Load enrolled MFA factors for owner/admin
+  useEffect(() => {
+    if (role !== 'owner' && role !== 'admin') return
+    supabase.auth.mfa.listFactors().then(({ data }) => {
+      setMfaFactors((data?.totp ?? []).map(f => ({ id: f.id, friendly_name: f.friendly_name ?? null })))
+    })
+  }, [role, mfaEnrollOpen])
+
+  const handleRemoveMFA = async (factorId: string) => {
+    setMfaLoading(true); setMfaError(null)
+    const { error } = await supabase.auth.mfa.unenroll({ factorId })
+    if (error) {
+      setMfaError(error.message)
+    } else {
+      setMfaFactors(f => f.filter(x => x.id !== factorId))
+    }
+    setMfaLoading(false)
+  }
 
   const handleSaveProfile = async () => {
     if (!fullName.trim() || !user?.id) return
@@ -274,6 +300,61 @@ export default function Settings() {
         </div>
       </Section>
 
+      {/* ── Two-Factor Authentication (owner/admin only) ────────────────── */}
+      {(role === 'owner' || role === 'admin') && (
+        <Section icon={Shield} title="Two-Factor Authentication">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">
+              Add an authenticator app (e.g. Google Authenticator, Authy) as a second factor.
+              Once enabled, you will be asked for a time-based code each time you sign in.
+            </p>
+
+            {mfaError && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-danger">
+                <XCircle className="w-3.5 h-3.5 shrink-0" />
+                {mfaError}
+              </div>
+            )}
+
+            {mfaFactors.length > 0 ? (
+              <div className="space-y-2">
+                {mfaFactors.map(f => (
+                  <div key={f.id} className="flex items-center justify-between p-3 rounded-xl bg-green-50 border border-green-200">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Authenticator app</p>
+                        {f.friendly_name && (
+                          <p className="text-xs text-gray-500">{f.friendly_name}</p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMFA(f.id)}
+                      disabled={mfaLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-danger border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-60 transition-colors"
+                    >
+                      {mfaLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setMfaEnrollOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Shield className="w-4 h-4 text-primary" />
+                Enable 2FA
+              </button>
+            )}
+          </div>
+        </Section>
+      )}
+
       {/* ── Theme ───────────────────────────────────────────────────────── */}
       <div data-tour="appearance-settings">
       <Section icon={Palette} title="Theme">
@@ -408,6 +489,11 @@ export default function Settings() {
       <ExportCSVsModal
         open={exportOpen}
         onClose={() => setExportOpen(false)}
+      />
+      <MFAEnrollModal
+        open={mfaEnrollOpen}
+        onClose={() => setMfaEnrollOpen(false)}
+        onDone={() => toast('Two-factor authentication enabled', 'success')}
       />
     </div>
   )

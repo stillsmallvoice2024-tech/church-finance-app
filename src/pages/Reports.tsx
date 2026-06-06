@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Printer, Download, AlertCircle } from 'lucide-react'
+import { Printer, Download, AlertCircle, FileText, FilePlus, BarChart2, ChevronRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -1175,6 +1176,54 @@ export default function Reports() {
             <Printer className="w-4 h-4" /> Print
           </button>
         </div>
+      </div>
+
+      {/* Reports hub strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:hidden">
+        {[
+          {
+            icon:  BarChart2,
+            label: 'Aggregated Reports',
+            desc:  'Annual, monthly, category and department summaries (this page)',
+            href:  null,
+            active: true,
+          },
+          {
+            icon:  FileText,
+            label: 'Financial Report Builder',
+            desc:  'Build custom multi-table reports with drag-and-drop layout',
+            href:  '/financial-report',
+            active: false,
+          },
+          {
+            icon:  FilePlus,
+            label: 'Dynamic Reports',
+            desc:  'Create live-updating named reports with custom filters',
+            href:  '/dynamic-reports',
+            active: false,
+          },
+        ].map(({ icon: Icon, label, desc, href, active }) => {
+          const cls = `flex items-start gap-3 p-3.5 rounded-xl border transition-colors text-left ${
+            active
+              ? 'border-primary/40 bg-primary/5'
+              : 'border-gray-200 hover:border-primary/30 hover:bg-gray-50 cursor-pointer'
+          }`
+          const inner = (
+            <>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${active ? 'bg-primary/20' : 'bg-gray-100'}`}>
+                <Icon className={`w-4 h-4 ${active ? 'text-primary' : 'text-gray-500'}`} aria-hidden="true" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${active ? 'text-primary' : 'text-gray-800'}`}>{label}</p>
+                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{desc}</p>
+              </div>
+              {!active && <ChevronRight className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" aria-hidden="true" />}
+            </>
+          )
+          return href
+            ? <Link key={label} to={href} className={cls}>{inner}</Link>
+            : <div key={label} className={cls}>{inner}</div>
+        })}
       </div>
 
       {/* Print-only heading */}

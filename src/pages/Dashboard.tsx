@@ -33,6 +33,8 @@ import { OnboardingChecklist }     from '../components/onboarding/OnboardingChec
 import { HelpButton }              from '../components/onboarding/HelpButton'
 import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBanner'
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
+import { useRole }                 from '../hooks/useRole'
+import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +70,7 @@ function greeting() {
 export default function Dashboard() {
   const { user, profile } = useAuth()
   const { foreignCurrencies, baseCurrencyCode } = useOrgCurrency()
+  const { role } = useRole()
   const year   = useAccountingYearStore(s => s.year)
   const stats  = useDashboardStats(year)
   const { categories, loading: categoriesLoading } = useCategories()
@@ -138,6 +141,14 @@ export default function Dashboard() {
 
         {/* ── Announcement banner ───────────────────────────────────────────── */}
         <AnnouncementBanner />
+
+        {/* ── Viewer orientation banner (first-visit only) ──────────────── */}
+        {role === 'viewer' && (
+          <PageHelpBanner storageKey="help-dismissed-dashboard-viewer" title="You have view-only access">
+            You can see all financial reports, summaries, and transaction history but cannot add, edit, or delete records.
+            To request write access, contact your organisation administrator.
+          </PageHelpBanner>
+        )}
 
         {/* ── Welcome + Quick Actions ──────────────────────────────────────── */}
         <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

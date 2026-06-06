@@ -38,6 +38,7 @@ import {
   Pin,
   PinOff,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReportEngine } from '../hooks/useReportEngine'
 import { useReportTemplates, useDeleteReportTemplate } from '../hooks/useReportTemplates'
@@ -1907,6 +1908,15 @@ export default function FinancialReport() {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
+      {/* Breadcrumb */}
+      <Link
+        to="/reports"
+        className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-primary transition-colors print:hidden"
+      >
+        <ChevronDown className="w-3.5 h-3.5 rotate-90" aria-hidden="true" />
+        All Reports
+      </Link>
+
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex items-center gap-3 flex-1">

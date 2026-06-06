@@ -4,6 +4,7 @@ import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useOrgStore } from '../../store/orgStore'
+import { MFAChallengeModal } from '../modals/MFAChallengeModal'
 import type { UserRole } from '../../types'
 
 function AppIcon() {
@@ -30,6 +31,7 @@ export default function LoginPage() {
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState<string | null>(null)
   const [resetSent,   setResetSent]   = useState(false)
+  const [mfaRequired, setMfaRequired] = useState(false)
 
   // Signup-specific state
   const [signupEmail,    setSignupEmail]    = useState('')
@@ -42,8 +44,8 @@ export default function LoginPage() {
   const [signupPending,  setSignupPending]  = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated) navigate('/', { replace: true })
-  }, [isAuthenticated, navigate])
+    if (isAuthenticated && !mfaRequired) navigate('/', { replace: true })
+  }, [isAuthenticated, mfaRequired, navigate])
 
   const resolveEmail = async (input: string): Promise<string | null> => {
     if (input.includes('@')) return input
@@ -70,8 +72,18 @@ export default function LoginPage() {
       return
     }
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    if (err) {
+      setLoading(false)
+      setError(err.message)
+      return
+    }
+    // Check whether a second factor is required
+    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     setLoading(false)
-    if (err) setError(err.message)
+    if (aalData?.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
+      setMfaRequired(true)
+    }
+    // If no MFA required, the useEffect above will navigate on isAuthenticated
   }
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -170,6 +182,11 @@ export default function LoginPage() {
   }
 
   return (
+    <>
+    <MFAChallengeModal
+      open={mfaRequired}
+      onDone={() => setMfaRequired(false)}
+    />
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
 
@@ -479,5 +496,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

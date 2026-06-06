@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
@@ -193,6 +194,12 @@ export default function SavingsPortions() {
 
   return (
     <div className="space-y-5">
+
+      <PageHelpBanner storageKey="help-dismissed-savings-portions" title="What are Savings Portions?">
+        Savings portions are amounts set aside from income as a reserve or contingency fund, separate from the operating budget.
+        Each category here represents a savings allocation rule — a percentage of qualifying inflows is automatically reserved.
+        The balance grows with each new inflow and is only reduced when a formal withdrawal is recorded.
+      </PageHelpBanner>
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
