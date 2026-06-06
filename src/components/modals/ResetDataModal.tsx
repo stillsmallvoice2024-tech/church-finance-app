@@ -211,7 +211,8 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
   const [deleting,  setDeleting]  = useState(false)
   const [deleteErr, setDeleteErr] = useState<string | null>(null)
   const { baseCurrencySymbol } = useOrgCurrency()
-  const orgId = useOrgStore((s) => s.orgId)
+  const orgId   = useOrgStore((s) => s.orgId)
+  const orgName = useOrgStore((s) => s.orgName) ?? ''
 
   const setStatus = useCallback((key: string, status: ItemStatus) => {
     setItems(prev => prev.map(it => it.key === key ? { ...it, status } : it))
@@ -258,8 +259,8 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
     }
   }
 
-  const allExported = items.every(it => it.status === 'done' || it.status === 'error')
-  const confirmValid = confirm.trim() === 'DELETE ALL DATA'
+  const allExported  = items.every(it => it.status === 'done' || it.status === 'error')
+  const confirmValid = confirm.trim() === orgName.trim()
 
   return (
     <Modal
@@ -350,13 +351,15 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
-              Type <span className="font-mono font-bold text-danger">DELETE ALL DATA</span> to confirm:
+              Type your organisation name{' '}
+              <span className="font-mono font-bold text-danger">{orgName}</span>{' '}
+              to confirm:
             </label>
             <input
               type="text"
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
-              placeholder="DELETE ALL DATA"
+              placeholder={orgName}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300 focus:border-red-400 font-mono"
               autoComplete="off"
             />

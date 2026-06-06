@@ -35,9 +35,10 @@ function ToastItem({ toast }: { toast: Toast }) {
   const s = STYLES[toast.type]
 
   useEffect(() => {
-    const timer = setTimeout(() => dismiss(toast.id), 4000)
+    if (toast.duration === 0) return  // persistent — no auto-dismiss
+    const timer = setTimeout(() => dismiss(toast.id), toast.duration)
     return () => clearTimeout(timer)
-  }, [toast.id, dismiss])
+  }, [toast.id, toast.duration, dismiss])
 
   return (
     <div

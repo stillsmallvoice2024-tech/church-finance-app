@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  TrendingDown, Pencil, Trash2,
+  TrendingDown, Pencil, Trash2, PlusCircle,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
@@ -43,6 +43,7 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
+import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -109,6 +110,7 @@ export default function Outflows() {
   // Filters
   const [dateFrom,          setDateFrom]          = useState(yearStart)
   const [dateTo,            setDateTo]            = useState(yearEnd)
+  const [datePreset,        setDatePreset]        = useState<DatePreset | null>(null)
   const [stageCode,         setStageCode]         = useState('')
   const [outflowTypeFilter, setOutflowTypeFilter] = useState('')
   const [searchInput,       setSearchInput]       = useState('')
@@ -177,7 +179,7 @@ export default function Outflows() {
   const openEdit = (r: OutflowTransaction) => { setEditRecord(r); setModalOpen(true) }
 
   const handleModalSuccess = () => {
-    toast('Transaction updated', 'success')
+    toast(editRecord ? 'Transaction updated' : 'Outflow added', 'success')
     refetch()
   }
 
@@ -285,6 +287,15 @@ export default function Outflows() {
           </div>
           <div className="flex items-center gap-2">
             <HelpButton tourId="outflowsTour" size="sm" />
+            {canWrite() && (
+              <button
+                onClick={() => { setEditRecord(null); setModalOpen(true) }}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-danger rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Add Outflow
+              </button>
+            )}
             <ExportDropdown
               onExportView={handleExportView}
               onExportAll={handleExportAll}
@@ -295,33 +306,40 @@ export default function Outflows() {
 
         {/* Filter bar */}
         <Card data-tour="data-controls">
-          <div className="flex flex-wrap gap-3 items-end">
-            <FilterGroup label="From">
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
-            </FilterGroup>
-            <FilterGroup label="To">
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
-            </FilterGroup>
-            <FilterGroup label="Stage Code 1" className="min-w-[180px]">
-              <SearchableSelect value={stageCode} onChange={setStageCode}
-                options={categories.map(c => ({ value: c.name, label: c.name }))}
-                placeholder="All categories" className={`${filterInputCls} bg-white`} />
-            </FilterGroup>
-            {outflowTypes.length > 0 && (
-              <FilterGroup label="Outflow Type" className="min-w-[180px]">
-                <SearchableSelect value={outflowTypeFilter} onChange={setOutflowTypeFilter}
-                  options={outflowTypes.map(t => ({ value: t.id, label: t.name }))}
-                  placeholder="All types" className={`${filterInputCls} bg-white`} />
+          <div className="space-y-3">
+            <DatePresetBar
+              activePreset={datePreset}
+              onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+              onCustom={() => setDatePreset('custom')}
+            />
+            <div className="flex flex-wrap gap-3 items-end">
+              <FilterGroup label="From">
+                <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
               </FilterGroup>
-            )}
-            {(dateFrom || dateTo || stageCode || outflowTypeFilter) && (
-              <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setStageCode(''); setOutflowTypeFilter(''); setSearchInput(''); outState.setSort('recorded_at', 'desc'); outState.setAdvancedSort([]) }}
-                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Clear
-              </button>
-            )}
+              <FilterGroup label="To">
+                <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+              </FilterGroup>
+              <FilterGroup label="Stage Code 1" className="min-w-[180px]">
+                <SearchableSelect value={stageCode} onChange={setStageCode}
+                  options={categories.map(c => ({ value: c.name, label: c.name }))}
+                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+              </FilterGroup>
+              {outflowTypes.length > 0 && (
+                <FilterGroup label="Outflow Type" className="min-w-[180px]">
+                  <SearchableSelect value={outflowTypeFilter} onChange={setOutflowTypeFilter}
+                    options={outflowTypes.map(t => ({ value: t.id, label: t.name }))}
+                    placeholder="All types" className={`${filterInputCls} bg-white`} />
+                </FilterGroup>
+              )}
+              {(dateFrom || dateTo || stageCode || outflowTypeFilter || datePreset) && (
+                <button
+                  onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setStageCode(''); setOutflowTypeFilter(''); setSearchInput(''); outState.setSort('recorded_at', 'desc'); outState.setAdvancedSort([]) }}
+                  className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         </Card>
 

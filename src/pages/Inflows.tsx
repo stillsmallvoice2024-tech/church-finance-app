@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  TrendingUp, Pencil, Trash2,
+  TrendingUp, Pencil, Trash2, PlusCircle,
   ChevronDown, ChevronRight, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
@@ -31,6 +31,7 @@ import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { HelpButton }              from '../components/onboarding/HelpButton'
 import { Link }                    from 'react-router-dom'
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
+import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useIncomeTypes }          from '../hooks/useIncomeTypes'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
@@ -112,6 +113,7 @@ export default function Inflows() {
   // Filters
   const [dateFrom,        setDateFrom]        = useState(yearStart)
   const [dateTo,          setDateTo]          = useState(yearEnd)
+  const [datePreset,      setDatePreset]      = useState<DatePreset | null>(null)
   const [searchInput,     setSearchInput]     = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page,            setPage]            = useState(0)
@@ -182,7 +184,7 @@ export default function Inflows() {
   }
 
   const handleModalSuccess = () => {
-    toast('Transaction updated', 'success')
+    toast(editRecord ? 'Transaction updated' : 'Inflow added', 'success')
     refetch()
   }
 
@@ -280,6 +282,15 @@ export default function Inflows() {
           </div>
           <div className="flex items-center gap-2">
             <HelpButton tourId="inflowsTour" size="sm" />
+            {canWrite() && (
+              <button
+                onClick={() => { setEditRecord(null); setModalOpen(true) }}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-success rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Add Inflow
+              </button>
+            )}
             <Link
               to="/import"
               data-tour="import-link"
@@ -297,21 +308,28 @@ export default function Inflows() {
 
         {/* Filter bar */}
         <Card data-tour="data-controls">
-          <div className="flex flex-wrap gap-3 items-end">
-            <FilterGroup label="From">
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={filterInputCls} />
-            </FilterGroup>
-            <FilterGroup label="To">
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={filterInputCls} />
-            </FilterGroup>
-            {(dateFrom || dateTo) && (
-              <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setSearchInput('') }}
-                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Clear
-              </button>
-            )}
+          <div className="space-y-3">
+            <DatePresetBar
+              activePreset={datePreset}
+              onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+              onCustom={() => setDatePreset('custom')}
+            />
+            <div className="flex flex-wrap gap-3 items-end">
+              <FilterGroup label="From">
+                <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+              </FilterGroup>
+              <FilterGroup label="To">
+                <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
+              </FilterGroup>
+              {(dateFrom || dateTo || datePreset) && (
+                <button
+                  onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setSearchInput('') }}
+                  className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         </Card>
 
