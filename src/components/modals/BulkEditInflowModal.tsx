@@ -49,10 +49,7 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
     if (stageCode1)   baseUpdates.stage_code_1    = stageCode1
     if (stageCode2)   baseUpdates.stage_code_2    = stageCode2
 
-    const { failed, strippedCols } = await execute(ids, baseUpdates)
-    for (const col of strippedCols) {
-      toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
-    }
+    const { failed } = await execute(ids, baseUpdates)
     if (failed === 0) toast(`Updated ${ids.length} transaction${ids.length !== 1 ? 's' : ''}`, 'success')
     else toast(`${ids.length - failed} updated, ${failed} failed`, 'error')
     onSuccess()

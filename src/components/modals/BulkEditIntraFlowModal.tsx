@@ -51,10 +51,7 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
     if (description)       baseUpdates.description         = description
     if (remark)            baseUpdates.remark              = remark
 
-    const { failed, strippedCols } = await execute(ids, baseUpdates)
-    for (const col of strippedCols) {
-      toast(`⚠ ${col} column missing — run Setup → Database migration`, 'error')
-    }
+    const { failed } = await execute(ids, baseUpdates)
     if (failed === 0) toast(`Updated ${ids.length} transfer${ids.length !== 1 ? 's' : ''}`, 'success')
     else              toast(`${ids.length - failed} updated, ${failed} failed`, 'error')
     onSuccess()

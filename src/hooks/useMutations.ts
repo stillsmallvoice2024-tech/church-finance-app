@@ -5,7 +5,6 @@ import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import type { StartingBalanceRow } from './useBanks'
 
-const MISSING_COL_RE = /Could not find (?:the ')?(\w+)'? column/
 const BULK_CHUNK_SIZE = 500
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
@@ -750,21 +749,11 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
-      let payload: Record<string, unknown> = { ...input, created_by: user.id, ...orgPayload() }
-      let { data, error: err } = await supabase
+      const payload: Record<string, unknown> = { ...input, created_by: user.id, ...orgPayload() }
+      const { data, error: err } = await supabase
         .from('fx_transactions')
         .insert(payload)
         .select('id').single()
-      if (err) {
-        const col = err.message.match(MISSING_COL_RE)?.[1]
-        if (col && col in payload) {
-          payload = { ...payload }
-          delete payload[col]
-          const retry = await supabase.from('fx_transactions').insert(payload).select('id').single()
-          data = retry.data
-          err  = retry.error
-        }
-      }
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'fx_transactions', recordId: data.id, newData: input as unknown as Record<string, unknown> })
@@ -1134,8 +1123,7 @@ export function useBulkDeleteTransaction(table: DeletableTable) {
 // ── useBulkUpdateTransaction ────────────────────────────────────────────────────
 // Processes IDs in chunks of BULK_CHUNK_SIZE.  4 queries per chunk
 // (SELECT IN + UPDATE IN + batch audit_log + batch field_changes INSERTs).
-// Missing-column strips discovered in any chunk propagate to all subsequent chunks.
-// Chunk failures are non-fatal: failed count accumulates and is returned to the caller.
+// Any DB error on a chunk throws immediately — no silent column stripping.
 
 export function useBulkUpdateTransaction(table: UpdatableTable) {
   const [loading, setLoading] = useState(false)
@@ -1143,18 +1131,15 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
   const execute = useCallback(async (
     ids: string[],
     baseUpdates: Record<string, unknown>,
-  ): Promise<{ failed: number; total: number; strippedCols: string[] }> => {
-    if (ids.length === 0) return { failed: 0, total: 0, strippedCols: [] }
+  ): Promise<{ failed: number; total: number }> => {
+    if (ids.length === 0) return { failed: 0, total: 0 }
     const { user } = useAuthStore.getState()
     if (!user?.id) throw new Error('You must be signed in to update records.')
 
     setLoading(true)
-    const strippedCols: string[] = []
     let totalUpdated = 0
 
-    // Shared `updates` object mutated as missing columns are discovered across chunks.
-    // The timestamp is set once so all records in the batch share the same updated_at.
-    let updates: Record<string, unknown> = table !== 'intra_flows'
+    const updates: Record<string, unknown> = table !== 'intra_flows'
       ? { ...baseUpdates, updated_at: new Date().toISOString() }
       : { ...baseUpdates }
 
@@ -1163,43 +1148,21 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
         const { data: oldRows } = await supabase.from(table).select('*').in('id', chunk)
         const oldMap = new Map((oldRows ?? []).map(r => [r.id as string, r as Record<string, unknown>]))
 
-        // Attempt update, stripping unknown columns on each retry.
-        // Any strip here updates `updates` so subsequent chunks start clean.
-        let chunkUpdatedIds: string[] = []
-        let chunkUpdates = { ...updates }
+        const { data: updatedRows, error: err } = await supabase
+          .from(table)
+          .update(updates)
+          .in('id', chunk)
+          .select('id')
 
-        while (Object.keys(chunkUpdates).length > 0) {
-          const { data: updatedRows, error: err } = await supabase
-            .from(table)
-            .update(chunkUpdates)
-            .in('id', chunk)
-            .select('id')
-
-          if (!err) {
-            chunkUpdatedIds = (updatedRows ?? []).map(r => r.id as string)
-            updates = chunkUpdates   // persist strip(s) for remaining chunks
-            break
-          }
-
-          const col = err.message.match(MISSING_COL_RE)?.[1]
-          if (col && col in chunkUpdates) {
-            if (!strippedCols.includes(col)) strippedCols.push(col)
-            chunkUpdates = Object.fromEntries(Object.entries(chunkUpdates).filter(([k]) => k !== col))
-            updates = chunkUpdates
-          } else {
-            handleAuthError(err)
-            console.warn('[bulkUpdate] chunk failed:', err.message)
-            break // non-recoverable error; chunk counts as failed
-          }
+        if (err) {
+          handleAuthError(err)
+          throw err
         }
 
+        const chunkUpdatedIds = (updatedRows ?? []).map(r => r.id as string)
         totalUpdated += chunkUpdatedIds.length
 
         if (chunkUpdatedIds.length > 0) {
-          const appliedUpdates = Object.fromEntries(
-            Object.entries(baseUpdates).filter(([k]) => !strippedCols.includes(k))
-          )
-
           batchLogAudit(
             chunkUpdatedIds.map(id => ({
               user_id:    user.id,
@@ -1207,7 +1170,7 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
               table_name: table,
               record_id:  id,
               old_data:   oldMap.get(id) ?? null,
-              new_data:   appliedUpdates,
+              new_data:   baseUpdates,
             }))
           )
 
@@ -1218,7 +1181,7 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
           for (const id of chunkUpdatedIds) {
             const oldData = oldMap.get(id)
             if (!oldData) continue
-            for (const [k, newVal] of Object.entries(appliedUpdates)) {
+            for (const [k, newVal] of Object.entries(baseUpdates)) {
               if (String(oldData[k] ?? '') !== String(newVal ?? '')) {
                 fcRows.push({
                   user_id:    user.id,
@@ -1238,7 +1201,7 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
       if (table === 'outflow_transactions') useTransactionSyncStore.getState().bumpOutflow()
       if (table === 'intra_flows')          useTransactionSyncStore.getState().bumpIntraflow()
 
-      return { failed: ids.length - totalUpdated, total: ids.length, strippedCols }
+      return { failed: ids.length - totalUpdated, total: ids.length }
     } catch (err) {
       const msg = extractMessage(err)
       handleAuthError(err)

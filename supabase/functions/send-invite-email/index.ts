@@ -135,22 +135,6 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Verify caller is admin or owner in any active org
-  const { data: membership } = await service
-    .from('org_members')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .in('role', ['owner', 'admin'])
-    .limit(1)
-    .maybeSingle()
-
-  if (!membership) {
-    return new Response(JSON.stringify({ ok: false, error: 'Forbidden' }), {
-      status: 403, headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
   // ── Parse body ───────────────────────────────────────────────────────────
   let body: { invitation_id?: string }
   try {
@@ -173,6 +157,7 @@ Deno.serve(async (req) => {
     .from('invitations')
     .select(`
       id,
+      org_id,
       email,
       role,
       token,
@@ -189,6 +174,22 @@ Deno.serve(async (req) => {
     console.error('[send-invite-email] Invite not found or expired:', inviteErr?.message)
     return new Response(JSON.stringify({ ok: false, error: 'Invitation not found or already expired' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Verify caller is admin or owner of the invitation's specific org
+  const { data: membership } = await service
+    .from('org_members')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('org_id', invite.org_id)
+    .eq('status', 'active')
+    .in('role', ['owner', 'admin'])
+    .maybeSingle()
+
+  if (!membership) {
+    return new Response(JSON.stringify({ ok: false, error: 'Forbidden' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' },
     })
   }
 
