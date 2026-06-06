@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
-import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -27,11 +28,6 @@ const TXN_TYPES = [
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
-const optNum = z.union([
-  z.coerce.number().min(0),
-  z.literal('').transform(() => undefined),
-]).optional()
-
 const schema = z.object({
   date:                    z.string().min(1, 'Date is required'),
   created_at_date:         z.string().optional(),
@@ -46,9 +42,6 @@ const schema = z.object({
   outflow_type_id:         z.string().optional(),
   department_id:           z.string().optional(),
   remarks:                 z.string().optional(),
-  fx_currency:             z.string().optional(),
-  fx_amount:               optNum,
-  fx_rate:                 optNum,
   transaction_type:        z.string().optional(),
   original_transaction_id: z.string().optional(),
 })
@@ -68,6 +61,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { baseCurrencySymbol } = useOrgCurrency()
   const { categories }    = useCategories()
   const { banks }         = useBanks()
+  const fxBanks    = banks.filter(b => b.is_foreign_currency)
+  const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
   const { maps: categoryOutflowMaps }  = useCategoryOutflowTypeMaps()
   const { options: departmentOptions } = useDepartmentOptions()
@@ -116,9 +111,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         outflow_type_id:         editRecord.outflow_type_id         ?? '',
         department_id:           editRecord.department_id           ?? '',
         remarks:                 editRecord.remarks                 ?? '',
-        fx_currency:             editRecord.fx_currency             ?? '',
-        fx_amount:               editRecord.fx_amount               ?? undefined,
-        fx_rate:                 editRecord.fx_rate                 ?? undefined,
         transaction_type:        editRecord.transaction_type        ?? '',
         original_transaction_id: editRecord.original_transaction_id ?? '',
       })
@@ -159,9 +151,9 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             department_id:           values.department_id           || null,
             remarks:                 values.remarks                 || null,
             is_pending_deduction:    isPending,
-            fx_currency:             values.fx_currency             || null,
-            fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : null,
-            fx_rate:                 typeof values.fx_rate   === 'number' ? values.fx_rate   : null,
+            fx_currency:             editRecord.fx_currency         ?? null,
+            fx_amount:               editRecord.fx_amount           ?? null,
+            fx_rate:                 editRecord.fx_rate             ?? null,
             transaction_type:        values.transaction_type        || null,
             original_transaction_id: values.original_transaction_id || null,
             ...(values.created_at_date ? { created_at: `${values.created_at_date}T00:00:00.000Z` } : {}),
@@ -182,9 +174,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           outflow_type_id:         values.outflow_type_id         || null,
           department_id:           values.department_id           || null,
           remarks:                 values.remarks                 || undefined,
-          fx_currency:             values.fx_currency             || undefined,
-          fx_amount:               typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
-          fx_rate:                 typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
           transaction_type:        values.transaction_type        || undefined,
           original_transaction_id: values.original_transaction_id || undefined,
           ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
@@ -268,13 +257,30 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           </Field>
         )}
 
-        {/* Bank Account */}
+        {/* Bank Account — FX banks excluded in add mode; FX transactions go through the FX module */}
         <Field label="Bank Account" error={errors.bank_name?.message}>
-          <Controller name="bank_name" control={control} render={({ field }) => (
-            <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
-              options={banks.map(b => ({ value: b.name, label: b.name }))}
-              placeholder="— Select bank (optional) —" className={inputCls(!!errors.bank_name)} />
-          )} />
+          <Controller name="bank_name" control={control} render={({ field }) => {
+            const selectedIsFx = fxBanks.some(b => b.name === field.value)
+            const bankOptions  = isEdit
+              ? banks.map(b => ({ value: b.name, label: b.name }))
+              : nonFxBanks.map(b => ({ value: b.name, label: b.name }))
+            return (
+              <>
+                <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                  options={bankOptions}
+                  placeholder="— Select bank (optional) —" className={inputCls(!!errors.bank_name)} />
+                {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
+                  <p className="flex items-center gap-1 text-[11px] text-amber-600 mt-0.5">
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    Foreign currency transactions are managed in the{' '}
+                    <Link to="/foreign-currency" className="underline hover:text-amber-700" onClick={onClose}>
+                      FX module
+                    </Link>.
+                  </p>
+                )}
+              </>
+            )
+          }} />
         </Field>
 
         {/* Description */}
@@ -376,22 +382,6 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           />
           <span className="text-sm font-medium text-gray-700">Mark as Pending Deduction</span>
         </label>
-
-        {/* FX Details collapsible */}
-        <CollapsibleSection label="FX Details (amount & rate)">
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="FX Amount" error={errors.fx_amount?.message}>
-              <Controller control={control} name="fx_amount" render={({ field }) => (
-                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.0000" className={inputCls(!!errors.fx_amount)} />
-              )} />
-            </Field>
-            <Field label="FX Rate" error={errors.fx_rate?.message}>
-              <Controller control={control} name="fx_rate" render={({ field }) => (
-                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.000000" className={inputCls(!!errors.fx_rate)} />
-              )} />
-            </Field>
-          </div>
-        </CollapsibleSection>
 
         {/* Remarks */}
         <Field label="Remarks" error={errors.remarks?.message}>
