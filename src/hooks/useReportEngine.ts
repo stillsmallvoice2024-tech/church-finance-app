@@ -183,8 +183,14 @@ export function useReportEngine(
         : getConfigForDate(configs, r.date as string)
       if (!cfg) continue
       for (const catRow of cfg.rows) {
-        if (!catRow.percentage) continue
-        const allocated = allocatePercent(Number(r.amount), catRow.percentage)
+        let allocated: number
+        if (catRow.amount != null && catRow.amount > 0) {
+          allocated = catRow.amount
+        } else if (catRow.percentage) {
+          allocated = allocatePercent(Number(r.amount), catRow.percentage)
+        } else {
+          continue
+        }
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
         } else if (catRow.budget_portion === 'Savings') {
