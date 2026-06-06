@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
-import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -46,9 +46,6 @@ const schema = z.object({
   transaction_ref:            z.string().optional(),
   specific_seed_description:  z.string().optional(),
   remark:                     z.string().optional(),
-  fx_currency:                z.string().optional(),
-  fx_amount:                  optNum,
-  fx_rate:                    optNum,
   transaction_type:           z.string().optional(),
   original_transaction_id:    z.string().optional(),
 })
@@ -66,9 +63,11 @@ interface Props {
 
 export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
-  const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
+  const { baseCurrencySymbol } = useOrgCurrency()
   const { categories } = useCategories()
   const { banks } = useBanks()
+  const fxBanks    = banks.filter(b => b.is_foreign_currency)
+  const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const { configs: allocConfigs, fetch: fetchAllocConfigs } = useAllocationStore()
   useEffect(() => { fetchAllocConfigs() }, [fetchAllocConfigs])
   const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
@@ -189,9 +188,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         transaction_ref:            editRecord.transaction_ref ?? '',
         specific_seed_description:  editRecord.specific_seed_description ?? '',
         remark:                     editRecord.remark ?? '',
-        fx_currency:                editRecord.fx_currency ?? '',
-        fx_amount:                  editRecord.fx_amount ?? undefined,
-        fx_rate:                    editRecord.fx_rate   ?? undefined,
         transaction_type:           editRecord.transaction_type ?? '',
         original_transaction_id:    editRecord.original_transaction_id ?? '',
       })
@@ -218,9 +214,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             transaction_ref:            values.transaction_ref           || null,
             specific_seed_description:  values.specific_seed_description || null,
             remark:                     values.remark || null,
-            fx_currency:                values.fx_currency             || null,
-            fx_amount:                  typeof values.fx_amount === 'number' ? values.fx_amount : null,
-            fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : null,
+            // Preserve existing FX metadata — FX entry is managed through the FX module
+            fx_currency:                editRecord.fx_currency ?? null,
+            fx_amount:                  editRecord.fx_amount   ?? null,
+            fx_rate:                    editRecord.fx_rate     ?? null,
             transaction_type:           values.transaction_type        || null,
             original_transaction_id:    values.original_transaction_id || null,
             income_type_id:             values.transaction_type ? null : (incomeTypeId || null),
@@ -240,9 +237,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           transaction_ref:            values.transaction_ref           || undefined,
           specific_seed_description:  values.specific_seed_description || undefined,
           remark:                     values.remark || undefined,
-          fx_currency:                values.fx_currency             || undefined,
-          fx_amount:                  typeof values.fx_amount === 'number' ? values.fx_amount : undefined,
-          fx_rate:                    typeof values.fx_rate   === 'number' ? values.fx_rate   : undefined,
           transaction_type:           values.transaction_type        || undefined,
           original_transaction_id:    values.original_transaction_id || undefined,
           income_type_id:             values.transaction_type ? undefined : (incomeTypeId || undefined),
@@ -332,13 +326,30 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           <input type="text" placeholder="e.g. Sunday offering" {...register('description')} className={inputCls(!!errors.description)} />
         </Field>
 
-        {/* Bank */}
+        {/* Bank — FX banks excluded; FX transactions go through the FX module */}
         <Field label="Bank" error={errors.bank_name?.message}>
-          <Controller name="bank_name" control={control} render={({ field }) => (
-            <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
-              options={banks.map(b => ({ value: b.name, label: b.name }))}
-              placeholder="— None —" className={inputCls(!!errors.bank_name)} />
-          )} />
+          <Controller name="bank_name" control={control} render={({ field }) => {
+            const selectedIsFx = fxBanks.some(b => b.name === field.value)
+            const bankOptions  = isEdit
+              ? banks.map(b => ({ value: b.name, label: b.name }))
+              : nonFxBanks.map(b => ({ value: b.name, label: b.name }))
+            return (
+              <>
+                <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                  options={bankOptions}
+                  placeholder="— None —" className={inputCls(!!errors.bank_name)} />
+                {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
+                  <p className="flex items-center gap-1 text-[11px] text-amber-600 mt-0.5">
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                    Foreign currency transactions are managed in the{' '}
+                    <Link to="/foreign-currency" className="underline hover:text-amber-700" onClick={onClose}>
+                      FX module
+                    </Link>.
+                  </p>
+                )}
+              </>
+            )
+          }} />
         </Field>
 
         {/* Transaction Type */}
@@ -473,32 +484,6 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         <Field label="Specific Seed Description" error={errors.specific_seed_description?.message}>
           <input type="text" placeholder="Specific seed description (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
         </Field>
-
-        {/* FX Currency (optional) */}
-        <Field label="FX Currency (if applicable)" error={errors.fx_currency?.message}>
-          <select {...register('fx_currency')} className={inputCls(!!errors.fx_currency)}>
-            <option value="">— None —</option>
-            {foreignCurrencies.map(c => (
-              <option key={c.code} value={c.code}>{c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}</option>
-            ))}
-          </select>
-        </Field>
-
-        {/* FX Details collapsible */}
-        <CollapsibleSection label="FX Details (amount & rate)">
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="FX Amount" error={errors.fx_amount?.message}>
-              <Controller control={control} name="fx_amount" render={({ field }) => (
-                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.0000" className={inputCls(!!errors.fx_amount)} />
-              )} />
-            </Field>
-            <Field label="FX Rate" error={errors.fx_rate?.message}>
-              <Controller control={control} name="fx_rate" render={({ field }) => (
-                <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0.000000" className={inputCls(!!errors.fx_rate)} />
-              )} />
-            </Field>
-          </div>
-        </CollapsibleSection>
 
         {/* Remark */}
         <Field label="Remark" error={errors.remark?.message}>
