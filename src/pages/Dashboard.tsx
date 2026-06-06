@@ -238,36 +238,62 @@ export default function Dashboard() {
               <ChartEmpty message={`No transactions recorded for ${year} yet.`} />
             </div>
           ) : (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#065F46" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#065F46" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="outflowGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#991B1B" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#991B1B" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    tickFormatter={v => formatCurrencyCompact(v, baseCurrencyCode)}
-                    tick={{ fontSize: 11, fill: '#6B7280' }}
-                    axisLine={false} tickLine={false} width={64}
-                  />
-                  <Tooltip
-                    formatter={(v: number) => [formatCurrencyCompact(v, baseCurrencyCode)]}
-                    contentStyle={{ borderRadius: '0.75rem', border: '1px solid #E5E7EB', fontSize: '13px' }}
-                  />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '13px' }} />
-                  <Area type="monotone" dataKey="inflow"  name="Inflows"  stroke="#065F46" strokeWidth={2} fill="url(#inflowGrad)" />
-                  <Area type="monotone" dataKey="outflow" name="Outflows" stroke="#991B1B" strokeWidth={2} fill="url(#outflowGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div
+                role="img"
+                aria-label={`Monthly Inflows vs Outflows for ${year}`}
+                className="h-72"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#065F46" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#065F46" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="outflowGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#991B1B" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#991B1B" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      tickFormatter={v => formatCurrencyCompact(v, baseCurrencyCode)}
+                      tick={{ fontSize: 11, fill: '#6B7280' }}
+                      axisLine={false} tickLine={false} width={64}
+                    />
+                    <Tooltip
+                      formatter={(v: number) => [formatCurrencyCompact(v, baseCurrencyCode)]}
+                      contentStyle={{ borderRadius: '0.75rem', border: '1px solid #E5E7EB', fontSize: '13px' }}
+                    />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '13px' }} />
+                    <Area type="monotone" dataKey="inflow"  name="Inflows"  stroke="#065F46" strokeWidth={2} fill="url(#inflowGrad)" />
+                    <Area type="monotone" dataKey="outflow" name="Outflows" stroke="#991B1B" strokeWidth={2} fill="url(#outflowGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Visually hidden data table for screen readers */}
+              <table className="sr-only">
+                <caption>Monthly Inflows vs Outflows — {year}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Month</th>
+                    <th scope="col">Inflows</th>
+                    <th scope="col">Outflows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chartData.map(d => (
+                    <tr key={d.month}>
+                      <td>{d.month}</td>
+                      <td>{formatCurrencyCompact(d.inflow,  baseCurrencyCode)}</td>
+                      <td>{formatCurrencyCompact(d.outflow, baseCurrencyCode)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </Card>
 

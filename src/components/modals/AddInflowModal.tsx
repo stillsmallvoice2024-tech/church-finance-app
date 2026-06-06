@@ -21,11 +21,6 @@ import { SearchableSelect } from '../ui/SearchableSelect'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
-const optNum = z.union([
-  z.coerce.number().min(0),
-  z.literal('').transform(() => undefined),
-]).optional()
-
 const TXN_TYPES = [
   { value: '',                   label: 'Normal' },
   { value: 'refund',             label: 'Refund' },

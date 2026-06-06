@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, Eye, EyeOff, Database, Download, UploadCloud, FileDown, FolderSync } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { useThemeStore } from '../store/themeStore'
+import { useDbStatus } from '../hooks/useDbStatus'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { HelpButton }      from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
@@ -32,33 +33,6 @@ function Section({ icon: Icon, title, children }: {
   )
 }
 
-// ── Database status ────────────────────────────────────────────────────────────
-
-type DbStatus = 'checking' | 'online' | 'offline'
-
-function useDbStatus() {
-  const [status, setStatus] = useState<DbStatus>('checking')
-  const [latency, setLatency] = useState<number | null>(null)
-
-  const check = useCallback(async () => {
-    setStatus('checking')
-    const t0 = Date.now()
-    try {
-      const { error } = await supabase.from('profiles').select('id').limit(1)
-      if (error) throw error
-      setLatency(Date.now() - t0)
-      setStatus('online')
-    } catch {
-      setStatus('offline')
-      setLatency(null)
-    }
-  }, [])
-
-  useEffect(() => { check() }, [check])
-
-  return { status, latency, recheck: check }
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function Settings() {
@@ -80,6 +54,17 @@ export default function Settings() {
   const [backupOpen,    setBackupOpen]    = useState(false)
   const [restoreOpen,   setRestoreOpen]   = useState(false)
   const [exportOpen,    setExportOpen]    = useState(false)
+
+  const [lastBackupTs, setLastBackupTs] = useState<string | null>(() => {
+    try { return localStorage.getItem('church-last-backup') } catch { return null }
+  })
+
+  // Refresh last-backup display whenever the modal closes
+  useEffect(() => {
+    if (!backupOpen) {
+      try { setLastBackupTs(localStorage.getItem('church-last-backup')) } catch {}
+    }
+  }, [backupOpen])
 
   // In-app password change
   const [newPassword,   setNewPassword]   = useState('')
@@ -336,7 +321,11 @@ export default function Settings() {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900">Backup Account</p>
-                <p className="text-xs text-gray-500 mt-0.5">Download or share a complete backup of all your data.</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {lastBackupTs
+                    ? `Last backup: ${new Date(lastBackupTs).toLocaleString()}`
+                    : 'Download or share a complete backup of all your data.'}
+                </p>
               </div>
             </button>
 
