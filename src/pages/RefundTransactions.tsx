@@ -1,5 +1,6 @@
 import { useState, useEffect, Fragment } from 'react'
 import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { exportCSV }       from '../utils/csvExport'
 import { ExportDropdown }  from '../components/ui/ExportDropdown'
 import { Card }            from '../components/ui/Card'
@@ -150,6 +151,12 @@ export default function RefundTransactions() {
 
   return (
     <div className="space-y-5">
+      <PageHelpBanner storageKey="help-dismissed-refunds" title="Refunds vs Reversals — what's the difference?">
+        A <strong>refund</strong> is a real cash movement: money is returned to a donor or reimbursed to the church.
+        It is recorded as a new transaction that offsets the original. A <strong>reversal</strong> (see the Reversals page) is an accounting
+        correction for an entry that was made in error — no actual cash changes hands; the original record is cancelled out.
+      </PageHelpBanner>
+
       {truncated && (
         <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
           <AlertCircle className="w-4 h-4 shrink-0" />

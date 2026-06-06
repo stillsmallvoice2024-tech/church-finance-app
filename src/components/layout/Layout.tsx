@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
@@ -8,9 +8,22 @@ import { FloatingCalculator } from '../ui/FloatingCalculator'
 import { TourEngine } from '../onboarding/TourEngine'
 import { SetupWizard } from '../onboarding/SetupWizard'
 import { HelpCenter } from '../onboarding/HelpCenter'
+import { CommandPalette } from '../ui/CommandPalette'
 
 export function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen,     setSidebarOpen]     = useState(false)
+  const [paletteOpen,     setPaletteOpen]     = useState(false)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setPaletteOpen(v => !v)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -51,6 +64,7 @@ export function Layout() {
       <TourEngine />
       <SetupWizard />
       <HelpCenter />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   )
 }

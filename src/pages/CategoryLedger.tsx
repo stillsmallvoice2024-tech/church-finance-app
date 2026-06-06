@@ -31,6 +31,7 @@ import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
@@ -669,6 +670,12 @@ export default function CategoryLedger() {
 
   return (
     <div className="space-y-5">
+
+      <PageHelpBanner storageKey="help-dismissed-category-ledger" title="What is the Category Ledger?">
+        The Category Ledger shows how outflow spending is distributed across budget categories (e.g. Salaries, Utilities, Ministry).
+        Use the Summary view to see total spending per category, or switch to Ledger view to see individual transactions.
+        Categories are set up in the Categories page and assigned to outflows at the time of recording.
+      </PageHelpBanner>
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">

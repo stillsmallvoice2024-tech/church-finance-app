@@ -4,6 +4,7 @@ import {
   ArrowLeftRight, Plus, Pencil, Trash2,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
 } from 'lucide-react'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { Card }                    from '../components/ui/Card'
 import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
@@ -256,7 +257,14 @@ export default function IntraFlow() {
 
       {tab === 'reallocation' ? (
         <BulkReallocation />
-      ) : error ? (
+      ) : tab === 'transfers' && (
+        <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is an Internal Transfer?">
+          An internal transfer moves money between two bank accounts within the organisation.
+          It is not income or expenditure — no money enters or leaves the church.
+          Record a transfer when, for example, cash collected in one account is consolidated into your main operating account.
+        </PageHelpBanner>
+      )}
+      {error ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <AlertCircle className="w-10 h-10 text-danger" />
           <p className="font-semibold text-gray-800">Failed to load internal transfers</p>

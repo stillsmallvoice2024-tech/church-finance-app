@@ -30,6 +30,7 @@ import { fetchAllPaginated, EXPORT_MAX } from '../utils/paginatedExport'
 import { exportCSV }               from '../utils/csvExport'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -238,6 +239,12 @@ export default function PendingDeductions() {
   return (
     <>
       <div className="space-y-5">
+
+        <PageHelpBanner storageKey="help-dismissed-pending-deductions" title="What are Pending Deductions?">
+          A pending deduction is an approved expense that has been authorised but not yet paid or debited.
+          Recording it here reserves the funds in the budget and prevents double-spending, even before the payment leaves the account.
+          Once the payment is made, mark it as deducted to clear it from this list.
+        </PageHelpBanner>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

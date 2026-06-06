@@ -8,6 +8,7 @@ import { formatCurrency } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
+import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
@@ -191,6 +192,12 @@ export default function PercentageAllocation() {
 
   return (
     <div className="space-y-5">
+
+      <PageHelpBanner storageKey="help-dismissed-pct-alloc" title="What is Percentage Allocation?">
+        This page shows how incoming funds have been distributed across departments or budget lines using your preset percentage rules.
+        Each row represents a category that receives a fixed share of qualifying inflows — for example, 60% to General Fund.
+        Balances accumulate over time and update automatically when new inflows are recorded.
+      </PageHelpBanner>
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">

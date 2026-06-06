@@ -693,6 +693,15 @@ function FinishStep({ onClose }: { onClose: () => void }) {
           </button>
         ))}
       </div>
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="w-full flex items-center justify-center gap-2 py-2 text-sm text-primary hover:text-primary-dark font-medium transition-colors"
+      >
+        <CheckCircle2 className="w-4 h-4" />
+        View setup checklist
+      </button>
     </div>
   )
 }
