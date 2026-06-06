@@ -106,6 +106,7 @@ export function BackupModal({ open, onClose }: Props) {
       if (!cancelRef.current) {
         setBackup(result)
         setStep('ready')
+        try { localStorage.setItem('church-last-backup', new Date().toISOString()) } catch {}
       }
     } catch (e) {
       if (!cancelRef.current) {

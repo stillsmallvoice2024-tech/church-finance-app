@@ -3,9 +3,29 @@ import { useAuth } from '../../hooks/useAuth'
 import { useRole } from '../../hooks/useRole'
 import { useOrgStore } from '../../store/orgStore'
 import { useThemeStore } from '../../store/themeStore'
+import { useDbStatus, type DbStatus } from '../../hooks/useDbStatus'
 import { OrgSwitcher } from '../ui/OrgSwitcher'
 import { getInitials } from '../../utils/formatters'
 import { ROLE_BADGE_CLASSES, ROLE_LABELS } from '../../utils/constants'
+
+function ConnectionDot({ status, latency }: { status: DbStatus; latency: number | null }) {
+  const label =
+    status === 'online'  ? `Connected${latency !== null ? ` (${latency}ms)` : ''}` :
+    status === 'offline' ? 'Offline — check your connection' :
+    'Checking connection…'
+  return (
+    <span title={label} aria-label={label} className="flex items-center gap-1.5">
+      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${
+        status === 'online'  ? 'bg-green-400' :
+        status === 'offline' ? 'bg-red-500'   :
+        'bg-amber-400 animate-pulse'
+      }`} />
+      {status === 'offline' && (
+        <span className="hidden sm:inline text-xs font-medium text-red-500">Offline</span>
+      )}
+    </span>
+  )
+}
 
 interface TopBarProps {
   onMenuClick: () => void
@@ -16,6 +36,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   const { role } = useRole()
   const orgRole = useOrgStore(s => s.orgRole)
   const { theme, toggle: toggleTheme } = useThemeStore()
+  const { status: dbStatus, latency } = useDbStatus()
 
   const displayName = profile?.full_name || user?.email || 'User'
   const initials = getInitials(displayName)
@@ -62,6 +83,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
             {displayName}
           </span>
         </div>
+
+        {/* Connection status */}
+        <ConnectionDot status={dbStatus} latency={latency} />
 
         {/* Dark mode toggle */}
         <button

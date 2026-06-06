@@ -230,6 +230,15 @@ interface ImportResult {
   collisions:      string[]
 }
 
+interface ImportTemplate {
+  id:          string
+  name:        string
+  targetTable: TargetTable
+  mapping:     Record<string, string>
+}
+
+const TEMPLATES_KEY = 'church-import-templates'
+
 export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: Props) {
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -239,6 +248,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [step,     setStep]    = useState(1)
   const [dragging, setDragging] = useState(false)
   const [parsing,  setParsing] = useState(false)
+
+  // Column mapping templates (persisted to localStorage)
+  const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>(() => {
+    try {
+      const s = localStorage.getItem(TEMPLATES_KEY)
+      return s ? (JSON.parse(s) as ImportTemplate[]) : []
+    } catch { return [] }
+  })
+  const [saveTemplateName, setSaveTemplateName] = useState('')
 
   // Step 1
   const [sheets,   setSheets]   = useState<ParsedSheet[]>([])
@@ -717,6 +735,40 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setMapping(initial)
     setStep(3)
   }
+
+  // ── Column mapping templates ──────────────────────────────────────────────
+
+  const persistTemplates = useCallback((tpls: ImportTemplate[]) => {
+    setImportTemplates(tpls)
+    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(tpls)) } catch {}
+  }, [])
+
+  const handleSaveTemplate = useCallback(() => {
+    if (!saveTemplateName.trim() || !targetTable) return
+    const id = importTemplates.find(
+      t => t.name === saveTemplateName.trim() && t.targetTable === targetTable,
+    )?.id ?? crypto.randomUUID()
+    const updated = [
+      ...importTemplates.filter(t => t.id !== id),
+      { id, name: saveTemplateName.trim(), targetTable: targetTable as TargetTable, mapping },
+    ]
+    persistTemplates(updated)
+    setSaveTemplateName('')
+  }, [saveTemplateName, targetTable, mapping, importTemplates, persistTemplates])
+
+  const handleApplyTemplate = useCallback((tpl: ImportTemplate) => {
+    if (!sheet) return
+    const available = new Set(sheet.headers)
+    const applied: Record<string, string> = {}
+    for (const [header, field] of Object.entries(tpl.mapping)) {
+      if (available.has(header)) applied[header] = field
+    }
+    setMapping(prev => ({ ...prev, ...applied }))
+  }, [sheet])
+
+  const handleDeleteTemplate = useCallback((id: string) => {
+    persistTemplates(importTemplates.filter(t => t.id !== id))
+  }, [importTemplates, persistTemplates])
 
   // ── Step 3 → 4 (bank_statement) or Step 3 → 5 (fx_transactions) ─────────
 
@@ -1496,6 +1548,35 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               )}
             </div>
 
+            {/* Load template bar */}
+            {importTemplates.filter(t => t.targetTable === targetTable).length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
+                <span className="text-xs font-medium text-blue-700 shrink-0">Load template:</span>
+                {importTemplates
+                  .filter(t => t.targetTable === targetTable)
+                  .map(tpl => (
+                    <span key={tpl.id} className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyTemplate(tpl)}
+                        className="text-xs px-2.5 py-1 bg-white border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors"
+                      >
+                        {tpl.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate(tpl.id)}
+                        className="px-1 text-blue-300 hover:text-red-400 transition-colors text-sm leading-none"
+                        title="Delete template"
+                        aria-label={`Delete template ${tpl.name}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+              </div>
+            )}
+
             <p className="text-sm text-gray-600">
               Map each spreadsheet column to an app field.
               Smart defaults have been applied where column names match.
@@ -1527,6 +1608,26 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Save as template */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={saveTemplateName}
+                onChange={e => setSaveTemplateName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSaveTemplate() } }}
+                placeholder="Save mapping as template…"
+                className="flex-1 text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+              />
+              <button
+                type="button"
+                disabled={!saveTemplateName.trim()}
+                onClick={handleSaveTemplate}
+                className="shrink-0 text-xs px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-40 transition-colors whitespace-nowrap"
+              >
+                Save template
+              </button>
             </div>
 
             {/* Required field check */}
