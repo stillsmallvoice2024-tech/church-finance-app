@@ -215,8 +215,14 @@ export default function CategoryLedger() {
         : getConfigForDate(configs, r.date as string)
       if (!cfg) continue
       for (const catRow of cfg.rows) {
-        if (!catRow.percentage) continue
-        const allocated = allocatePercent(Number(r.amount), catRow.percentage)
+        let allocated: number
+        if (catRow.amount != null && catRow.amount > 0) {
+          allocated = catRow.amount
+        } else if (catRow.percentage) {
+          allocated = allocatePercent(Number(r.amount), catRow.percentage)
+        } else {
+          continue
+        }
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
         } else if (catRow.budget_portion === 'Savings') {
@@ -316,8 +322,15 @@ export default function CategoryLedger() {
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
             : getConfigForDate(configs, r.date as string)
           const catRow = cfg?.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || c.budget_portion === 'Percentage Allocation' || !c.budget_portion))
-          if (!catRow?.percentage) continue
-          const allocated = allocatePercent(Number(r.amount), catRow.percentage)
+          if (!catRow) continue
+          let allocated: number
+          if (catRow.amount != null && catRow.amount > 0) {
+            allocated = catRow.amount
+          } else if (catRow.percentage) {
+            allocated = allocatePercent(Number(r.amount), catRow.percentage)
+          } else {
+            continue
+          }
           if (allocated <= 0) continue
           inRows.push({
             id:          r.id as string,
@@ -390,8 +403,15 @@ export default function CategoryLedger() {
         for (const r of cfgInflowRes.error ? [] : (cfgInflowRes.data ?? [])) {
           const cfg = configs.find(c => c.id === (r.allocation_config_id as string))
           const catRow = cfg?.rows.find(c => c.category_name === activeCategory && c.budget_portion === sc2)
-          if (!catRow?.percentage) continue
-          const allocated = allocatePercent(Number(r.amount), catRow.percentage)
+          if (!catRow) continue
+          let allocated: number
+          if (catRow.amount != null && catRow.amount > 0) {
+            allocated = catRow.amount
+          } else if (catRow.percentage) {
+            allocated = allocatePercent(Number(r.amount), catRow.percentage)
+          } else {
+            continue
+          }
           if (allocated <= 0) continue
           inRows.push({
             id:          r.id as string,
