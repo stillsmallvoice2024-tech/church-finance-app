@@ -315,7 +315,7 @@ export default function CategoryLedger() {
           const cfg = configId
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
             : getConfigForDate(configs, r.date as string)
-          const catRow = cfg?.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || !c.budget_portion))
+          const catRow = cfg?.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || c.budget_portion === 'Percentage Allocation' || !c.budget_portion))
           if (!catRow?.percentage) continue
           const allocated = allocatePercent(Number(r.amount), catRow.percentage)
           if (allocated <= 0) continue
