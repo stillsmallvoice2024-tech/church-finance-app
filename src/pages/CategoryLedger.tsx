@@ -206,14 +206,17 @@ export default function CategoryLedger() {
     }
 
     const allocMap = new Map<string, number>()
+    console.log(`[DIAG:loadSummary] allInflowRes fetched=${allInflowRes.data?.length ?? 0}`)
+    let _ds_stage2=0, _ds_nonAlloc=0, _ds_noConfig=0, _ds_processed=0
     for (const r of allInflowRes.data ?? []) {
-      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
+      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') { _ds_stage2++; continue }
+      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) { _ds_nonAlloc++; continue }
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
         : getConfigForDate(configs, r.date as string)
-      if (!cfg) continue
+      if (!cfg) { _ds_noConfig++; continue }
+      _ds_processed++
       for (const catRow of cfg.rows) {
         let allocated: number
         if (catRow.amount != null && catRow.amount > 0) {
@@ -232,6 +235,7 @@ export default function CategoryLedger() {
         }
       }
     }
+    console.log(`[DIAG:loadSummary] allInflow filter — stage2=${_ds_stage2} nonAllocType=${_ds_nonAlloc} noConfig=${_ds_noConfig} processed=${_ds_processed}`)
 
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
@@ -314,15 +318,21 @@ export default function CategoryLedger() {
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
 
+        // ── DIAGNOSTIC ─────────────────────────────────────────────────────────
+        let _d_stage2=0, _d_nonAlloc=0, _d_noConfig=0, _d_noCatRow=0, _d_zeroAlloc=0, _d_kept=0
+        console.log(`[DIAG:loadLedger] fetched=${inflowRes.data?.length ?? 0} category='${activeCategory}' portion='Percentage'`)
+        // ───────────────────────────────────────────────────────────────────────
+
         for (const r of inflowRes.data ?? []) {
-          if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-          if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
+          if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') { _d_stage2++; continue }
+          if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) { _d_nonAlloc++; continue }
           const configId = r.allocation_config_id as string | null
           const cfg = configId
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
             : getConfigForDate(configs, r.date as string)
-          const catRow = cfg?.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || c.budget_portion === 'Percentage Allocation' || !c.budget_portion))
-          if (!catRow) continue
+          if (!cfg) { _d_noConfig++; continue }
+          const catRow = cfg.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || c.budget_portion === 'Percentage Allocation' || !c.budget_portion))
+          if (!catRow) { _d_noCatRow++; continue }
           let allocated: number
           if (catRow.amount != null && catRow.amount > 0) {
             allocated = catRow.amount
@@ -331,7 +341,8 @@ export default function CategoryLedger() {
           } else {
             continue
           }
-          if (allocated <= 0) continue
+          if (allocated <= 0) { _d_zeroAlloc++; continue }
+          _d_kept++
           inRows.push({
             id:          r.id as string,
             date:        r.date as string,
@@ -341,6 +352,7 @@ export default function CategoryLedger() {
             balance:     0,
           })
         }
+        console.log(`[DIAG:loadLedger] Inflow filter — stage2=${_d_stage2} nonAllocType=${_d_nonAlloc} noConfig=${_d_noConfig} noCatRow=${_d_noCatRow} zeroAlloc=${_d_zeroAlloc} kept=${_d_kept}`)
 
         for (const r of outflowRes.data ?? []) {
           if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue

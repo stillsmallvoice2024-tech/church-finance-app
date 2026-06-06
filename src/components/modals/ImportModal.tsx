@@ -962,6 +962,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
       setDuplicateRis(newDuplicateRis)
       setDupStats({ total: totalCount, newCount: totalCount - dupCount, dupCount })
+      console.log(`[DIAG:proceedToRowConfig] total=${totalCount} dups=${dupCount} new=${totalCount - dupCount}`)
+      console.log(`[DIAG:proceedToRowConfig] DB existingInflowRefs=${existingInflowRefs.size} existingOutflowIds=${existingOutflowIds.size}`)
+      console.log(`[DIAG:proceedToRowConfig] inflowIdList=${inflowIdList.length} outflowIdList=${outflowIdList.length}`)
       setStep(4)
     } finally {
       setDupCheckLoading(false)
@@ -1022,13 +1025,20 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       // Rows pre-merged and description-normalized at proceedToRowConfig; fall back defensively
       const mergedRows = processedRows ?? (sheet.rows as unknown[][]).map(r => [...r])
 
+      // ── DIAGNOSTIC ─────────────────────────────────────────────────────────
+      console.group('[DIAG:runImport] === Allocation Reconciliation ===')
+      console.log(`[DIAG:runImport] mergedRows=${mergedRows.length} duplicateRis=${duplicateRis.size}`)
+      let _diag_dateFail=0, _diag_dupSkip=0, _diag_noAmt=0
+      const _diagInflows: {ri:number,date:string,credit:number,incomeTypeId:string|null,cfgId:string|null,resolvedId:string|null}[] = []
+      // ───────────────────────────────────────────────────────────────────────
+
       for (let ri = 0; ri < mergedRows.length; ri++) {
         const raw  = mergedRows[ri]
         const date = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
-        if (!date) { skipped++; continue }
+        if (!date) { skipped++; _diag_dateFail++; continue }
 
         // Rows already in the database were excluded from Step 4 configuration.
-        if (duplicateRis.has(ri)) { skipped++; continue }
+        if (duplicateRis.has(ri)) { skipped++; _diag_dupSkip++; continue }
 
         const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx])      : 0
         const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
@@ -1082,6 +1092,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           row.recorded_at = importTimestamp
+          _diagInflows.push({ri, date: String(date), credit, incomeTypeId: (row.income_type_id as string|null) ?? null, cfgId: cfg?.id ?? null, resolvedId: (row.allocation_config_id as string|null) ?? null})
           inflowRows.push(row)
         }
         if (debit > 0) {
@@ -1130,8 +1141,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           row.recorded_at = importTimestamp
           outflowRows.push(row)
         }
-        if (credit === 0 && debit === 0) skipped++
+        if (credit === 0 && debit === 0) { skipped++; _diag_noAmt++ }
       }
+
+      // ── DIAGNOSTIC ─────────────────────────────────────────────────────────
+      console.log(`[DIAG:runImport] Loop done — dateFail=${_diag_dateFail} dupSkip=${_diag_dupSkip} noAmt=${_diag_noAmt}`)
+      console.log(`[DIAG:runImport] inflowRows=${inflowRows.length} outflowRows=${outflowRows.length}`)
+      if (_diagInflows.length > 0) console.table(_diagInflows)
+      // ───────────────────────────────────────────────────────────────────────
 
       // Apply dup skip filter (allSkipIds comes from pre-import stage only)
       const inflowToInsert  = allSkipIds.size > 0
@@ -1142,6 +1159,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         : outflowRows
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
+      console.log(`[DIAG:runImport] After dup filter: inflowToInsert=${inflowToInsert.length} outflowToInsert=${outflowToInsert.length} skippedDups=${skippedDups}`)
 
       const total = inflowToInsert.length + outflowToInsert.length
       const BATCH = 100
@@ -1212,6 +1230,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         useTransactionSyncStore.getState().bumpOutflow()
       }
 
+      console.log(`[DIAG:runImport] FINAL: imported=${imported} skipped=${skipped} errors=${errors.length}`)
+      console.groupEnd()
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
     }
 
