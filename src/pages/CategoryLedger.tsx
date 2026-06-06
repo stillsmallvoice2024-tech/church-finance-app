@@ -148,12 +148,13 @@ export default function CategoryLedger() {
       supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed'),
       supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings'),
       supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings'),
-      supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type'),
+      supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type').limit(100_000),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
       supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active'),
       supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
         .not('stage_code_2', 'eq', 'Specific Seed')
-        .not('stage_code_2', 'eq', 'Savings'),
+        .not('stage_code_2', 'eq', 'Savings')
+        .limit(100_000),
     ])
 
     if (seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {
@@ -309,7 +310,8 @@ export default function CategoryLedger() {
         const [inflowRes, outflowRes] = await Promise.all([
           supabase.from('inflow_transactions')
             .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type')
-            .order('date'),
+            .order('date')
+            .limit(100_000),
           supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed, stage_code_2')
             .eq('stage_code_1', activeCategory)
@@ -374,7 +376,8 @@ export default function CategoryLedger() {
             .select('id, date, description, amount')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
-            .order('date'),
+            .order('date')
+            .limit(100_000),
           supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed')
             .eq('stage_code_2', sc2)
@@ -385,7 +388,8 @@ export default function CategoryLedger() {
             .select('id, date, description, amount, allocation_config_id')
             .not('allocation_config_id', 'is', null)
             .is('stage_code_2', null)
-            .order('date'),
+            .order('date')
+            .limit(100_000),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
