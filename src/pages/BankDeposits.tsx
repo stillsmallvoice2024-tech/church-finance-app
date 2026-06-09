@@ -358,8 +358,9 @@ export default function BankDeposits() {
     return sortedRows.slice(start, start + bdState.pageSize)
   }, [sortedRows, bdState.page, bdState.pageSize])
 
-  // Total based on date+bank filtered (not search-filtered)
-  const totalAmount = dateFiltered.reduce((s, r) => s + r.amount, 0)
+  // Cards: tagged inflows only
+  const taggedInflows = dateFiltered.filter(r => r.source === 'inflow')
+  const taggedInflowTotal = taggedInflows.reduce((s, r) => s + r.amount, 0)
 
   const openAdd  = () => { setEditRecord(null); setShowModal(true) }
   const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
@@ -460,9 +461,9 @@ export default function BankDeposits() {
       {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
-          { label: 'Total deposits', value: dateFiltered.length.toLocaleString() },
-          { label: 'Total amount',   value: formatCurrency(totalAmount, baseCurrencyCode) },
-          { label: 'Avg deposit',    value: dateFiltered.length ? formatCurrency(totalAmount / dateFiltered.length, baseCurrencyCode) : '—' },
+          { label: 'Total deposit',           value: taggedInflows.length.toLocaleString() },
+          { label: 'Total deposited amounts', value: formatCurrency(taggedInflowTotal, baseCurrencyCode) },
+          { label: 'Avg deposit',             value: taggedInflows.length ? formatCurrency(taggedInflowTotal / taggedInflows.length, baseCurrencyCode) : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
             <p className="text-xs text-gray-500 mb-1">{label}</p>
