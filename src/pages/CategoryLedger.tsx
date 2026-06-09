@@ -128,12 +128,12 @@ export default function CategoryLedger() {
   const summaryViewState = useDataViewState({
     storageKey:     'cl-summary',
     defaultSortKey: 'name',
-    defaultSortDir: 'asc',
+    defaultSortDir: 'desc',
   })
   const ledgerViewState = useDataViewState({
     storageKey:      'cl-ledger',
     defaultSortKey:  'date',
-    defaultSortDir:  'asc',
+    defaultSortDir:  'desc',
     defaultPageSize: 25,
   })
 
@@ -826,7 +826,7 @@ export default function CategoryLedger() {
                 sortDir={summaryViewState.sortDir}
                 onSort={summaryViewState.setSort}
                 defaultSortKey="name"
-                defaultSortDir="asc"
+                defaultSortDir="desc"
                 search={summaryViewState.search}
                 onSearchChange={summaryViewState.setSearch}
                 searchPlaceholder="Search categories…"
@@ -1106,7 +1106,7 @@ export default function CategoryLedger() {
                     sortDir={ledgerViewState.sortDir}
                     onSort={ledgerViewState.setSort}
                     defaultSortKey="date"
-                    defaultSortDir="asc"
+                    defaultSortDir="desc"
                     view={ledgerViewState.view}
                     onViewChange={ledgerViewState.setView}
                     search={ledgerViewState.search}
