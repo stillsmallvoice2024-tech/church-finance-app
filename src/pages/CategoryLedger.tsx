@@ -192,16 +192,6 @@ export default function CategoryLedger() {
     for (const r of seedOutRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed -= Number(r.amount_disbursed || 0)
     }
-    // ── Specific seed diagnostic ─────────────────────────────────────────────
-    console.group('[CategoryLedger] specific-seed diag')
-    console.log(`seedRes rows: ${seedRes.data?.length ?? 0} | seedOutRes rows: ${seedOutRes.data?.length ?? 0}`)
-    const _seedTotals: Record<string, number> = {}
-    for (const r of seedRes.data ?? []) {
-      const k = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      _seedTotals[k] = (_seedTotals[k] ?? 0) + Number(r.amount)
-    }
-    console.log('specificSeed from seedRes (by category):', _seedTotals)
-    console.groupEnd()
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
     }
@@ -218,8 +208,6 @@ export default function CategoryLedger() {
     }
 
     const allocMap = new Map<string, number>()
-    const _seedFromAlloc: Record<string, number> = {}
-    let _allocSeedRows = 0
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
       if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
@@ -239,8 +227,6 @@ export default function CategoryLedger() {
         }
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
-          _seedFromAlloc[catRow.category_name] = (_seedFromAlloc[catRow.category_name] ?? 0) + allocated
-          _allocSeedRows++
         } else if (catRow.budget_portion === 'Savings') {
           ensure(catRow.category_name).savingsIn += allocated
         } else {
@@ -248,10 +234,6 @@ export default function CategoryLedger() {
         }
       }
     }
-    console.group('[CategoryLedger] specific-seed alloc diag')
-    console.log(`allInflowRes rows: ${allInflowRes.data?.length ?? 0} | specificSeed contributions from alloc: ${_allocSeedRows}`)
-    if (_allocSeedRows > 0) console.log('specificSeed from alloc (by category):', _seedFromAlloc)
-    console.groupEnd()
 
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
@@ -323,13 +305,13 @@ export default function CategoryLedger() {
 
       if (ledgerPortion === 'Percentage') {
         const [inflowRes, outflowRes] = await Promise.all([
-          supabase.from('inflow_transactions')
+          fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type')
-            .order('date').limit(10000),
-          supabase.from('outflow_transactions')
+            .order('date')),
+          fetchAllRows(() => supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed, stage_code_2')
             .eq('stage_code_1', activeCategory)
-            .order('date').limit(10000),
+            .order('date')),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
@@ -378,22 +360,22 @@ export default function CategoryLedger() {
       } else {
         const sc2 = ledgerPortion
         const [inflowRes, outflowRes, cfgInflowRes] = await Promise.all([
-          supabase.from('inflow_transactions')
+          fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
-            .order('date').limit(10000),
-          supabase.from('outflow_transactions')
+            .order('date')),
+          fetchAllRows(() => supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
-            .order('date').limit(10000),
+            .order('date')),
           // Config-split inflows where this category's row has matching budget_portion
-          supabase.from('inflow_transactions')
+          fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount, allocation_config_id')
             .not('allocation_config_id', 'is', null)
             .is('stage_code_2', null)
-            .order('date').limit(10000),
+            .order('date')),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
