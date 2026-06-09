@@ -625,7 +625,7 @@ function ManualEntryForm() {
 
   const MISSING_COL_RE = /Could not find (?:the ')?(\w+)'? column/
 
-  const doSaveInflow = async () => {
+  const doSaveInflow = async (pregenRef?: string) => {
     setSaving(true)
     try {
       const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
@@ -645,7 +645,7 @@ function ManualEntryForm() {
         description:                v('description')               || undefined,
         allocation_config_id:       effectiveConfigId,
         bank_name:                  selectedBank?.name             || undefined,
-        transaction_ref:            v('transaction_ref') || await generateFallbackTransactionId(v('date'), v('amount'), v('description') ?? '', selectedBank?.name ?? ''),
+        transaction_ref:            pregenRef || v('transaction_ref') || await generateFallbackTransactionId(v('date'), v('amount'), v('description') ?? '', selectedBank?.name ?? ''),
         specific_seed_description:  v('specific_seed_description') || undefined,
         remark:                     v('remark')                    || undefined,
         income_type_id:             txnType ? undefined : (incomeTypeId || undefined),
@@ -682,7 +682,7 @@ function ManualEntryForm() {
     }
   }
 
-  const doSaveOutflow = async () => {
+  const doSaveOutflow = async (pregenId?: string) => {
     setSaving(true)
     try {
       const selectedBank = banks.find(b => b.id === v('bank_id'))
@@ -693,7 +693,7 @@ function ManualEntryForm() {
         allocation_config_id:    txnType ? undefined : getConfigForDate(configs, v('date'))?.id,
         bank_name:               selectedBank?.name    || undefined,
         bank_description:        v('bank_description') || undefined,
-        transaction_id:          v('transaction_id') || await generateFallbackTransactionId(v('date'), v('amount_disbursed'), v('description') ?? v('bank_description') ?? '', selectedBank?.name ?? ''),
+        transaction_id:          pregenId || v('transaction_id') || await generateFallbackTransactionId(v('date'), v('amount_disbursed'), v('description') ?? v('bank_description') ?? '', selectedBank?.name ?? ''),
         is_pending_deduction:    isPending,
         stage_code_1:            outflowS1             || undefined,
         stage_code_2:            outflowS2             || undefined,
@@ -739,21 +739,21 @@ function ManualEntryForm() {
     const errs: Record<string, string> = {}
     if (!v('date'))   errs.date   = 'Date is required'
     if (!v('amount') || parseFloat(v('amount')) <= 0) errs.amount = 'Enter a valid amount'
+    if (!v('bank_id')) errs.bank_id = 'Bank is required'
     if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
       errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
 
+    const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
     const ref = v('transaction_ref').trim()
-    if (ref) {
-      const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
-      const isDup = await checkInflowDup(ref, bankName)
-      if (isDup) {
-        setPendingSave(() => doSaveInflow)
-        setDupWarning({ txnId: ref })
-        return
-      }
+      || await generateFallbackTransactionId(v('date'), v('amount'), v('description') ?? '', bankName ?? '')
+    const isDup = await checkInflowDup(ref, bankName)
+    if (isDup) {
+      setPendingSave(() => () => doSaveInflow(ref))
+      setDupWarning({ txnId: ref })
+      return
     }
-    await doSaveInflow()
+    await doSaveInflow(ref)
   }
 
   const handleSaveOutflow = async () => {
@@ -761,21 +761,21 @@ function ManualEntryForm() {
     if (!v('date'))            errs.date            = 'Date is required'
     if (!v('amount_disbursed') || parseFloat(v('amount_disbursed')) <= 0)
       errs.amount_disbursed = 'Enter a valid amount'
+    if (!v('bank_id')) errs.bank_id = 'Bank is required'
     if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
       errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
 
+    const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
     const txnId = v('transaction_id').trim()
-    if (txnId) {
-      const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
-      const isDup = await checkOutflowDup(txnId, bankName)
-      if (isDup) {
-        setPendingSave(() => doSaveOutflow)
-        setDupWarning({ txnId })
-        return
-      }
+      || await generateFallbackTransactionId(v('date'), v('amount_disbursed'), v('description') ?? v('bank_description') ?? '', bankName ?? '')
+    const isDup = await checkOutflowDup(txnId, bankName)
+    if (isDup) {
+      setPendingSave(() => () => doSaveOutflow(txnId))
+      setDupWarning({ txnId })
+      return
     }
-    await doSaveOutflow()
+    await doSaveOutflow(txnId)
   }
 
   const handleConfirmDup = async () => {
@@ -836,7 +836,7 @@ function ManualEntryForm() {
           </Field>
 
           {/* Bank */}
-          <Field label="Bank">
+          <Field label="Bank *" error={errors.bank_id}>
             {!banksLoading && banks.length === 0 ? (
               <p className="text-xs text-gray-400 py-1">
                 No banks configured.{' '}
@@ -1010,7 +1010,7 @@ function ManualEntryForm() {
           </Field>
 
           {/* Bank */}
-          <Field label="Bank">
+          <Field label="Bank *" error={errors.bank_id}>
             {!banksLoading && banks.length === 0 ? (
               <p className="text-xs text-gray-400 py-1">
                 No banks configured.{' '}
