@@ -560,6 +560,12 @@ export default function CategoryLedger() {
 
   // ── Derived — Summary ─────────────────────────────────────────────────────────
 
+  // Category names that have a foreign currency assigned — excluded from NGN totals
+  const fxCategoryNames = useMemo(
+    () => new Set(categories.filter(c => c.currency).map(c => c.name)),
+    [categories],
+  )
+
   const filteredRows = useMemo(
     () => rows.filter(r => {
       const catOk = !activeCategory || r.name === activeCategory
@@ -602,7 +608,7 @@ export default function CategoryLedger() {
   )
 
   const totals = useMemo(
-    () => summarySorted.reduce(
+    () => summarySorted.filter(r => !fxCategoryNames.has(r.name)).reduce(
       (acc, r) => ({
         pct:   acc.pct   + (r.percentage ?? 0),
         alloc: acc.alloc + r.percentageAllocated,
@@ -611,11 +617,11 @@ export default function CategoryLedger() {
       }),
       { pct: 0, alloc: 0, seed: 0, sav: 0 },
     ),
-    [summarySorted],
+    [summarySorted, fxCategoryNames],
   )
 
   const globalTotals = useMemo(
-    () => rows.reduce(
+    () => rows.filter(r => !fxCategoryNames.has(r.name)).reduce(
       (acc, r) => ({
         alloc: acc.alloc + r.percentageAllocated,
         seed:  acc.seed  + r.specificSeed,
@@ -623,7 +629,13 @@ export default function CategoryLedger() {
       }),
       { alloc: 0, seed: 0, sav: 0 },
     ),
-    [rows],
+    [rows, fxCategoryNames],
+  )
+
+  // Currency for the currently selected ledger category (FX categories carry their own)
+  const ledgerDisplayCurrency = useMemo(
+    () => categories.find(c => c.name === activeCategory)?.currency ?? baseCurrencyCode,
+    [categories, activeCategory, baseCurrencyCode],
   )
 
   // ── Derived — Ledger ──────────────────────────────────────────────────────────
@@ -975,10 +987,11 @@ export default function CategoryLedger() {
                         )
 
                         const GroupSubtotalRow = ({ sectionRows, label }: { sectionRows: CategoryRow[]; label: string }) => {
-                          const sPct   = sectionRows.reduce((s, r) => s + (r.percentage ?? 0), 0)
-                          const sAlloc = sectionRows.reduce((s, r) => s + r.percentageAllocated, 0)
-                          const sSeed  = sectionRows.reduce((s, r) => s + r.specificSeed, 0)
-                          const sSav   = sectionRows.reduce((s, r) => s + (r.savingsIn - r.savingsOut), 0)
+                          const localRows = sectionRows.filter(r => !fxCategoryNames.has(r.name))
+                          const sPct   = localRows.reduce((s, r) => s + (r.percentage ?? 0), 0)
+                          const sAlloc = localRows.reduce((s, r) => s + r.percentageAllocated, 0)
+                          const sSeed  = localRows.reduce((s, r) => s + r.specificSeed, 0)
+                          const sSav   = localRows.reduce((s, r) => s + (r.savingsIn - r.savingsOut), 0)
                           return (
                             <tr className="bg-gray-50 border-t border-gray-100 text-xs font-semibold text-gray-600">
                               <td className="px-5 py-2 pl-8">↳ {label} subtotal</td>
@@ -1116,11 +1129,11 @@ export default function CategoryLedger() {
                 </div>
                 <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-success mb-1">Total Inflow</p>
-                  <p className="text-sm font-mono font-semibold text-success tabular-nums">{formatCurrency(ledgerTotals.inflow, baseCurrencyCode)}</p>
+                  <p className="text-sm font-mono font-semibold text-success tabular-nums">{formatCurrency(ledgerTotals.inflow, ledgerDisplayCurrency)}</p>
                 </div>
                 <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-danger mb-1">Total Outflow</p>
-                  <p className="text-sm font-mono font-semibold text-danger tabular-nums">{formatCurrency(ledgerTotals.outflow, baseCurrencyCode)}</p>
+                  <p className="text-sm font-mono font-semibold text-danger tabular-nums">{formatCurrency(ledgerTotals.outflow, ledgerDisplayCurrency)}</p>
                 </div>
               </div>
 
@@ -1245,13 +1258,13 @@ export default function CategoryLedger() {
                                     )}
                                   </td>
                                   <td className="px-4 py-3 text-right font-mono text-success">
-                                    {row.inflow > 0 ? formatCurrency(row.inflow, baseCurrencyCode) : <span className="text-gray-300 text-xs">—</span>}
+                                    {row.inflow > 0 ? formatCurrency(row.inflow, ledgerDisplayCurrency) : <span className="text-gray-300 text-xs">—</span>}
                                   </td>
                                   <td className="px-4 py-3 text-right font-mono text-danger">
-                                    {row.outflow > 0 ? formatCurrency(row.outflow, baseCurrencyCode) : <span className="text-gray-300 text-xs">—</span>}
+                                    {row.outflow > 0 ? formatCurrency(row.outflow, ledgerDisplayCurrency) : <span className="text-gray-300 text-xs">—</span>}
                                   </td>
                                   <td className={`px-5 py-3 text-right font-mono font-semibold ${row.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                                    {formatCurrency(row.balance, baseCurrencyCode)}
+                                    {formatCurrency(row.balance, ledgerDisplayCurrency)}
                                   </td>
                                 </tr>
                                 {meta && isExpanded && (
@@ -1267,10 +1280,10 @@ export default function CategoryLedger() {
                         <tfoot>
                           <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
                             <td className="px-4 py-3 text-gray-700" colSpan={2}>Totals</td>
-                            <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow, baseCurrencyCode)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow, baseCurrencyCode)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-success">{formatCurrency(ledgerTotals.inflow, ledgerDisplayCurrency)}</td>
+                            <td className="px-4 py-3 text-right font-mono text-danger">{formatCurrency(ledgerTotals.outflow, ledgerDisplayCurrency)}</td>
                             <td className={`px-5 py-3 text-right font-mono ${closingBalance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
-                              {ledgerSorted.length > 0 ? formatCurrency(closingBalance, baseCurrencyCode) : '—'}
+                              {ledgerSorted.length > 0 ? formatCurrency(closingBalance, ledgerDisplayCurrency) : '—'}
                             </td>
                           </tr>
                         </tfoot>
@@ -1370,7 +1383,7 @@ export default function CategoryLedger() {
                                 <p className={`text-sm font-mono font-bold tabular-nums ${
                                   row.inflow > 0 ? 'text-success' : 'text-danger'
                                 }`}>
-                                  {row.inflow > 0 ? formatCurrency(row.inflow, baseCurrencyCode) : formatCurrency(row.outflow, baseCurrencyCode)}
+                                  {row.inflow > 0 ? formatCurrency(row.inflow, ledgerDisplayCurrency) : formatCurrency(row.outflow, ledgerDisplayCurrency)}
                                 </p>
                               </div>
                               <div className="border-l border-gray-200/80 pl-4 min-w-0">
@@ -1378,7 +1391,7 @@ export default function CategoryLedger() {
                                 <p className={`text-sm font-mono font-bold tabular-nums ${
                                   row.balance >= 0 ? 'text-gray-900' : 'text-danger'
                                 }`}>
-                                  {formatCurrency(row.balance, baseCurrencyCode)}
+                                  {formatCurrency(row.balance, ledgerDisplayCurrency)}
                                 </p>
                               </div>
                             </div>
