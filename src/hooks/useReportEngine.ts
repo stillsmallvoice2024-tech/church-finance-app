@@ -54,8 +54,6 @@ export function useReportEngine(
     const dateField   = reportBasis === 'recorded_at' ? 'recorded_at' : 'date'
     const dateValue   = reportBasis === 'recorded_at' ? endOfDay : reportDate
 
-    // For operational inflow row totals: exact day filter on recorded_at
-    const dayStart = `${reportDate}T00:00:00.000Z`
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
            opInflowTypeRes, opTxnTypeRes, opNormalRes, intraFlowRes] = await Promise.all([
@@ -98,30 +96,30 @@ export function useReportEngine(
       supabase
         .from('category_opening_balances')
         .select('budget_portion, amount, categories(name)'),
-      // Operational inflow by income_type: exact day using recorded_at
-      supabase
+      // Operational inflow by income_type: exact day, respects basis
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('income_type_id, amount')
         .eq('org_id', orgId)
-        .gte('recorded_at', dayStart)
-        .lte('recorded_at', endOfDay)
-        .not('income_type_id', 'is', null),
-      // Operational inflow by transaction_type: exact day using recorded_at
-      supabase
+        .gte(dateField, reportBasis === 'recorded_at' ? `${reportDate}T00:00:00.000Z` : reportDate)
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)
+        .not('income_type_id', 'is', null)),
+      // Operational inflow by transaction_type: exact day, respects basis
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('transaction_type, amount')
         .eq('org_id', orgId)
-        .gte('recorded_at', dayStart)
-        .lte('recorded_at', endOfDay)
-        .not('transaction_type', 'is', null),
-      // Normal inflow (no transaction_type): exact day using recorded_at
-      supabase
+        .gte(dateField, reportBasis === 'recorded_at' ? `${reportDate}T00:00:00.000Z` : reportDate)
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)
+        .not('transaction_type', 'is', null)),
+      // Normal inflow (no transaction_type): exact day, respects basis
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('amount')
         .eq('org_id', orgId)
-        .gte('recorded_at', dayStart)
-        .lte('recorded_at', endOfDay)
-        .is('transaction_type', null),
+        .gte(dateField, reportBasis === 'recorded_at' ? `${reportDate}T00:00:00.000Z` : reportDate)
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)
+        .is('transaction_type', null)),
       // Intra-account transfers: cumulative up to reportDate (no recorded_at column)
       fetchAllRows(() => supabase
         .from('intra_flows')
