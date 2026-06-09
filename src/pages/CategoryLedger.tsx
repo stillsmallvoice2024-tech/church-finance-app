@@ -618,25 +618,29 @@ export default function CategoryLedger() {
     [ledgerRows, ledgerViewState.search, ledgerViewState.searchCol],
   )
 
-  // Balance invariant — 5-step process, order matters:
-  // 1. Start from filtered rows (ledgerFiltered)
-  // 2. Sort a copy by date ASC (chronological order, inflows before outflows on same date)
-  // 3. Compute cumulative running balance oldest→newest
-  // 4. Freeze computed balance onto each row by ID
-  // 5. ledgerSorted applies display sort AFTER — balance values are never recalculated by sort
-  const { ledgerFilteredWithBalance, closingBalance } = useMemo(() => {
+  // Balance invariant — order matters:
+  // 1. Sort a copy by date ASC (inflows before outflows on same date)
+  // 2. Compute cumulative running balance oldest→newest; record each row's chronological seq
+  // 3. Freeze balance + seq onto each row by ID
+  // 4. ledgerSorted applies display sort AFTER using seq as tiebreaker:
+  //    DESC → reverse-chronological within date (last event at top); ASC → chronological
+  const { ledgerFilteredWithBalance, closingBalance, seqById } = useMemo(() => {
     const chronological = [...ledgerFiltered].sort(
       (a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1),
     )
     let running = 0
     const balanceById = new Map<string, number>()
-    for (const row of chronological) {
+    const seqById     = new Map<string, number>()
+    for (let i = 0; i < chronological.length; i++) {
+      const row = chronological[i]
       running += row.inflow - row.outflow
       balanceById.set(row.id, running)
+      seqById.set(row.id, i)
     }
     return {
       ledgerFilteredWithBalance: ledgerFiltered.map(row => ({ ...row, balance: balanceById.get(row.id)! })),
       closingBalance: running,
+      seqById,
     }
   }, [ledgerFiltered])
 
@@ -652,8 +656,18 @@ export default function CategoryLedger() {
   const ledgerSorted = useMemo(() => {
     const adv = ledgerViewState.advancedSort
     if (adv.length > 0) return multiSortRows(ledgerFilteredWithBalance, getLedgerValue, adv, LEDGER_SORT_FIELDS)
+    if (ledgerViewState.sortKey === 'date') {
+      const dir = ledgerViewState.sortDir
+      return [...ledgerFilteredWithBalance].sort((a, b) => {
+        const dateCmp = a.date.localeCompare(b.date)
+        if (dateCmp !== 0) return dir === 'desc' ? -dateCmp : dateCmp
+        const seqA = seqById.get(a.id) ?? 0
+        const seqB = seqById.get(b.id) ?? 0
+        return dir === 'desc' ? seqB - seqA : seqA - seqB
+      })
+    }
     return sortRows(ledgerFilteredWithBalance, getLedgerValue, ledgerViewState.sortKey, ledgerViewState.sortDir, LEDGER_SORT_FIELDS)
-  }, [ledgerFilteredWithBalance, ledgerViewState.sortKey, ledgerViewState.sortDir, ledgerViewState.advancedSort])
+  }, [ledgerFilteredWithBalance, seqById, ledgerViewState.sortKey, ledgerViewState.sortDir, ledgerViewState.advancedSort])
 
   const ledgerPagedRows = useMemo(
     () => ledgerSorted.slice(
