@@ -771,16 +771,6 @@ create table public.dynamic_report_snapshots (
   created_at  timestamptz default now()
 );
 
--- ── Currencies ───────────────────────────────────────────────────────────────
-create table public.currencies (
-  code       text    primary key,
-  name       text    not null,
-  symbol     text    not null default '',
-  flag       text,
-  is_active  boolean not null default true,
-  sort_order integer not null default 99
-);
-
 -- ── User Preferences ──────────────────────────────────────────────────────────
 create table public.user_preferences (
   id          uuid        primary key default gen_random_uuid(),
@@ -864,7 +854,6 @@ alter table public.recalculation_logs             enable row level security;
 alter table public.dynamic_reports                enable row level security;
 alter table public.dynamic_report_blocks          enable row level security;
 alter table public.dynamic_report_snapshots       enable row level security;
-alter table public.currencies                     enable row level security;
 alter table public.user_preferences               enable row level security;
 alter table public.org_deletion_backups           enable row level security;
 
@@ -1390,17 +1379,6 @@ create policy "drs_delete" on public.dynamic_report_snapshots
       where  dr.id = report_id
     )
   );
-
--- ── currencies ─────────────────────────────────────────────────────────────────
-
-create policy "currencies_select" on public.currencies
-  for select using (auth.role() = 'authenticated');
-create policy "currencies_insert" on public.currencies
-  for insert with check (public.is_admin());
-create policy "currencies_update" on public.currencies
-  for update using (public.is_admin());
-create policy "currencies_delete" on public.currencies
-  for delete using (public.is_admin());
 
 -- ── user_preferences ───────────────────────────────────────────────────────────
 
