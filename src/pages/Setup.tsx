@@ -30,6 +30,7 @@ import {
 import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
+import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
 const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
@@ -2410,6 +2411,10 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
 
 function DatabaseTab() {
   const [copied, setCopied] = useState(false)
+  const { push: toast } = useToastStore()
+
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{ inflows: number; outflows: number } | null>(null)
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(MIGRATION_SQL)
@@ -2417,8 +2422,76 @@ function DatabaseTab() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const runBackfill = async () => {
+    setBackfilling(true)
+    setBackfillResult(null)
+    try {
+      const [{ data: inflows }, { data: outflows }] = await Promise.all([
+        supabase.from('inflow_transactions').select('id, date, amount, description, bank_name').is('transaction_ref', null),
+        supabase.from('outflow_transactions').select('id, date, amount_disbursed, description, bank_description, bank_name').is('transaction_id', null),
+      ])
+
+      let inflowCount = 0
+      for (const row of inflows ?? []) {
+        const ref = await generateFallbackTransactionId(
+          row.date,
+          String(row.amount),
+          row.description ?? '',
+          row.bank_name ?? '',
+        )
+        await supabase.from('inflow_transactions').update({ transaction_ref: ref }).eq('id', row.id)
+        inflowCount++
+      }
+
+      let outflowCount = 0
+      for (const row of outflows ?? []) {
+        const id = await generateFallbackTransactionId(
+          row.date,
+          String(row.amount_disbursed),
+          row.description ?? row.bank_description ?? '',
+          row.bank_name ?? '',
+        )
+        await supabase.from('outflow_transactions').update({ transaction_id: id }).eq('id', row.id)
+        outflowCount++
+      }
+
+      setBackfillResult({ inflows: inflowCount, outflows: outflowCount })
+      toast(`Backfilled ${inflowCount} inflows and ${outflowCount} outflows`, 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Backfill failed', 'error')
+    } finally {
+      setBackfilling(false)
+    }
+  }
+
   return (
     <div className="max-w-3xl space-y-5">
+      {/* Backfill Transaction IDs */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-gray-900">Backfill Transaction IDs</h2>
+        </div>
+        <p className="text-sm text-gray-500">
+          Generates and saves fallback transaction IDs for any inflows or outflows that were saved without one.
+          Safe to run multiple times — only records with a missing ID are updated.
+        </p>
+        {backfillResult && (
+          <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 text-sm text-green-700">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            Updated {backfillResult.inflows} inflow{backfillResult.inflows !== 1 ? 's' : ''} and {backfillResult.outflows} outflow{backfillResult.outflows !== 1 ? 's' : ''}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={runBackfill}
+          disabled={backfilling}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-60"
+        >
+          {backfilling && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+          {backfilling ? 'Backfilling…' : 'Run Backfill'}
+        </button>
+      </div>
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal className="w-5 h-5 text-primary" />

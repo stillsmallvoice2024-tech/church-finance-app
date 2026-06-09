@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls } from '../ui/FormField'
@@ -161,6 +162,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           },
         })
       } else {
+        const txnId = values.transaction_id?.trim()
+          || await generateFallbackTransactionId(values.date, String(values.amount_disbursed), values.description ?? values.bank_description ?? '', values.bank_name ?? '')
         const input: AddOutflowInput = {
           date:                    values.date,
           amount_disbursed:        values.amount_disbursed,
@@ -168,7 +171,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           bank_name:               values.bank_name               || undefined,
           description:             values.description             || undefined,
           bank_description:        values.bank_description        || undefined,
-          transaction_id:          values.transaction_id          || undefined,
+          transaction_id:          txnId,
           stage_code_1:            values.stage_code_1            || undefined,
           stage_code_2:            values.stage_code_2            || undefined,
           outflow_type_id:         values.outflow_type_id         || null,
