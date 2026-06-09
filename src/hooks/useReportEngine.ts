@@ -46,6 +46,9 @@ export function useReportEngine(
     setLoading(true)
     setError(null)
 
+    // ── Diagnostic ──────────────────────────────────────────────────────────
+    console.log('[ReportEngine] basis:', reportBasis, '| date:', reportDate)
+
     // ── Date filters based on basis ─────────────────────────────────────────
     // Financial (transaction_date): cumulative up-to date using the transaction date field
     // Operational (recorded_at): cumulative up-to date using recorded_at
@@ -263,6 +266,8 @@ export function useReportEngine(
         savingsNet:          d.savingsIn - d.savingsOut,
       })
     }
+
+    console.log('[ReportEngine] allInflowRes rows:', allInflowRes.data?.length, '| dateField:', dateField, '| dateValue:', dateValue)
 
     setBalances(result)
 
