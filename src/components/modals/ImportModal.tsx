@@ -1232,7 +1232,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       const narrIdx    = colIdx('narration')
       const refIdx     = colIdx('transaction_ref')
 
+      // ── FX Stage 1: Build rows + generate fallback transaction_ref ──────────
       const fxRows: Record<string, unknown>[] = []
+      const fxIdCounts = new Map<string, number>()
       for (let ri = 0; ri < sheet.rows.length; ri++) {
         const raw  = sheet.rows[ri] as unknown[]
         const date = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
@@ -1243,27 +1245,65 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               ? String(raw[currIdx]).trim() : null)
         if (!currency) { skipped++; continue }
         const row: Record<string, unknown> = { date, currency }
-        if (depIdx  >= 0) row.deposit          = parseNumber(raw[depIdx])
-        if (wdIdx   >= 0) row.withdrawal        = parseNumber(raw[wdIdx])
-        if (balIdx  >= 0) row.running_balance   = parseNumber(raw[balIdx])
-        if (narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '') row.narration = String(raw[narrIdx]).trim()
-        if (refIdx  >= 0 && raw[refIdx]  != null && raw[refIdx]  !== '') row.transaction_ref = String(raw[refIdx]).trim()
+        const dep = depIdx >= 0 ? parseNumber(raw[depIdx]) : 0
+        const wd  = wdIdx  >= 0 ? parseNumber(raw[wdIdx])  : 0
+        if (depIdx  >= 0) row.deposit     = dep
+        if (wdIdx   >= 0) row.withdrawal  = wd
+        if (balIdx  >= 0) row.running_balance = parseNumber(raw[balIdx])
+        const narr = narrIdx >= 0 && raw[narrIdx] != null && raw[narrIdx] !== '' ? String(raw[narrIdx]).trim() : ''
+        if (narr) row.narration = narr
+        const rawRef = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== '' ? normalizeId(String(raw[refIdx])) : ''
+        if (rawRef) {
+          row.transaction_ref = rawRef
+        } else {
+          // Generate deterministic fallback ref from date + amount + narration + bank
+          const baseRef = await generateFallbackTransactionId(
+            String(date), String(dep || wd), narr, internalBank?.name ?? ''
+          )
+          const count = fxIdCounts.get(baseRef) ?? 0
+          fxIdCounts.set(baseRef, count + 1)
+          row.transaction_ref = count === 0 ? baseRef : `${baseRef}-${count}`
+          fallbackIdCount++
+          if (count > 0) collisions.push(
+            `FX  ${date}  ${dep || wd}  "${narr.slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
+          )
+        }
         if (userId) row.created_by = userId
         row.org_id = orgId
         if (internalBank) row.bank_name = internalBank.name
         fxRows.push(row)
       }
 
+      // ── FX Stage 2: Duplicate detection against fx_transactions ─────────────
+      const allFxRefs = [...new Set(fxRows.map(r => r.transaction_ref as string).filter(Boolean))]
+      const bankName  = internalBank?.name ?? null
+      let existingFxRefs = new Set<string>()
+      if (allFxRefs.length > 0) {
+        let fxDupQ = supabase.from('fx_transactions').select('transaction_ref').in('transaction_ref', allFxRefs)
+        if (bankName) fxDupQ = fxDupQ.eq('bank_name', bankName)
+        const { data: fxDupData } = await fxDupQ
+        existingFxRefs = new Set(
+          (fxDupData ?? []).map(r => normalizeId((r as { transaction_ref: string }).transaction_ref ?? '')).filter(Boolean)
+        )
+      }
+
+      // ── FX Stage 3: Filter duplicates + insert ───────────────────────────────
+      const newFxRows = fxRows.filter(r => {
+        const ref = normalizeId(String(r.transaction_ref ?? ''))
+        if (ref && existingFxRefs.has(ref)) { skipped++; return false }
+        return true
+      })
+
       const BATCH = 100
-      for (let i = 0; i < fxRows.length; i += BATCH) {
-        const batch = fxRows.slice(i, i + BATCH)
+      for (let i = 0; i < newFxRows.length; i += BATCH) {
+        const batch = newFxRows.slice(i, i + BATCH)
         const { error: err } = await supabase.from('fx_transactions').insert(batch)
         if (err) {
           errors.push(`FX batch: ${err.message}`); skipped += batch.length
         } else {
           imported += batch.length
         }
-        setProgress(Math.round(((i + batch.length) / fxRows.length) * 100))
+        setProgress(Math.round(((i + batch.length) / newFxRows.length) * 100))
       }
 
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
