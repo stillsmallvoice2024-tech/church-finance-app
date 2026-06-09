@@ -63,37 +63,37 @@ export function useReportEngine(
         .select('stage_code_1, amount')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
-        .lte(dateField, dateValue),
+        .lte(dateField, dateValue).limit(10000),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, amount_disbursed')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
-        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate).limit(10000),
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Savings')
-        .lte(dateField, dateValue),
+        .lte(dateField, dateValue).limit(10000),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, amount_disbursed')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Savings')
-        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate).limit(10000),
       supabase
         .from('inflow_transactions')
         .select('date, amount, stage_code_2, allocation_config_id, transaction_type')
         .eq('org_id', orgId)
-        .lte(dateField, dateValue),
+        .lte(dateField, dateValue).limit(10000),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, amount_disbursed, stage_code_2')
         .eq('org_id', orgId)
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')
-        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate),
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate).limit(10000),
       supabase
         .from('category_opening_balances')
         .select('budget_portion, amount, categories(name)'),
@@ -127,7 +127,7 @@ export function useReportEngine(
         .select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
         .eq('org_id', orgId)
         .eq('status', 'active')
-        .lte('date', reportDate),
+        .lte('date', reportDate).limit(10000),
     ])
 
     const firstErr =
