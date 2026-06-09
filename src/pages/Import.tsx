@@ -739,6 +739,7 @@ function ManualEntryForm() {
     const errs: Record<string, string> = {}
     if (!v('date'))   errs.date   = 'Date is required'
     if (!v('amount') || parseFloat(v('amount')) <= 0) errs.amount = 'Enter a valid amount'
+    if (!v('bank_id')) errs.bank_id = 'Bank is required'
     if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
       errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
@@ -760,6 +761,7 @@ function ManualEntryForm() {
     if (!v('date'))            errs.date            = 'Date is required'
     if (!v('amount_disbursed') || parseFloat(v('amount_disbursed')) <= 0)
       errs.amount_disbursed = 'Enter a valid amount'
+    if (!v('bank_id')) errs.bank_id = 'Bank is required'
     if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
       errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
@@ -834,7 +836,7 @@ function ManualEntryForm() {
           </Field>
 
           {/* Bank */}
-          <Field label="Bank">
+          <Field label="Bank *" error={errors.bank_id}>
             {!banksLoading && banks.length === 0 ? (
               <p className="text-xs text-gray-400 py-1">
                 No banks configured.{' '}
@@ -1008,7 +1010,7 @@ function ManualEntryForm() {
           </Field>
 
           {/* Bank */}
-          <Field label="Bank">
+          <Field label="Bank *" error={errors.bank_id}>
             {!banksLoading && banks.length === 0 ? (
               <p className="text-xs text-gray-400 py-1">
                 No banks configured.{' '}
