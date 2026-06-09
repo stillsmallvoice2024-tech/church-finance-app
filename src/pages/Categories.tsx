@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment, useMemo, useRef } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check, Globe } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
@@ -35,6 +35,8 @@ import {
   handleCategoryDeleteCleanup,
 } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore }    from '../store/orgStore'
+import { useBanks }       from '../hooks/useBanks'
 import { HelpButton }      from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
@@ -89,6 +91,7 @@ interface CategoryModalProps {
 
 function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated }: CategoryModalProps) {
   const isEdit = !!editRecord
+  const orgId  = useOrgStore(s => s.orgId) ?? ''
 
   const addMutation    = useAddCategory()
   const updateMutation = useUpdateCategory()
@@ -198,7 +201,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
             .is('budget_portion', null)
         }
         for (const row of validRows) {
-          await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount))
+          await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount), orgId)
         }
       } catch (obErr) {
         const msg = obErr instanceof Error ? obErr.message : String(obErr)
@@ -367,7 +370,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
 export default function Categories() {
   usePageTitle('Categories')
   useFirstVisitTour('categories')
-  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
+  const { baseCurrencySymbol, formatLocale, foreignCurrencies } = useOrgCurrency()
 
   const { categories, loading, error, refetch }    = useCategories()
   const { groups, error: groupsError, refetch: refetchGroups } = useCategoryGroups()
@@ -377,6 +380,29 @@ export default function Categories() {
   const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
   const { mutate: updateGroup }                     = useUpdateCategoryGroup()
   const toast = useToast()
+  const { banks } = useBanks()
+
+  const [activeTab, setActiveTab] = useState<'local' | 'fx'>('local')
+
+  // Identify FX groups by matching group names against foreign currency codes/name-words
+  const fxGroupIds = useMemo(() => {
+    const terms = new Set<string>()
+    foreignCurrencies.forEach(c => {
+      terms.add(c.code.toLowerCase())
+      c.name.toLowerCase().split(/\s+/).forEach(w => terms.add(w))
+    })
+    // Also include currencies from FX banks that may not be in the currency table
+    banks.filter(b => b.is_foreign_currency && b.currency).forEach(b => {
+      terms.add((b.currency as string).toLowerCase())
+    })
+    return new Set(
+      groups.filter(g => {
+        const gn = g.name.toLowerCase()
+        if (terms.has(gn)) return true
+        return gn.split(/\s+/).some(w => terms.has(w))
+      }).map(g => g.id)
+    )
+  }, [foreignCurrencies, banks, groups])
 
   const scrollYRef = useRef(0)
 
@@ -486,6 +512,10 @@ export default function Categories() {
   const searchCol = catState.searchCol
   const visible  = categories.filter(c => {
     if (!showHidden && c.is_hidden) return false
+    // Tab filter: FX tab shows categories in FX groups; Local tab shows the rest
+    const isFxCat = c.group_id !== null && fxGroupIds.has(c.group_id)
+    if (activeTab === 'fx'    && !isFxCat) return false
+    if (activeTab === 'local' &&  isFxCat) return false
     if (!q) return true
     const groupName = groups.find(g => g.id === c.group_id)?.name ?? ''
     if (searchCol === 'name')  return c.name.toLowerCase().includes(q)
@@ -526,9 +556,30 @@ export default function Categories() {
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Categories</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage income and allocation categories</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {activeTab === 'fx' ? 'Foreign-currency categories and their opening balances' : 'Manage income and allocation categories'}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Local / FX tab switcher */}
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+            <button
+              onClick={() => setActiveTab('local')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
+                activeTab === 'local' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" /> Local
+            </button>
+            <button
+              onClick={() => setActiveTab('fx')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-l border-gray-200 transition-colors ${
+                activeTab === 'fx' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" /> FX
+            </button>
+          </div>
           <HelpButton tourId="categoriesTour" size="sm" />
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={visibleSorted.length === 0} />
           {hiddenCt > 0 && (

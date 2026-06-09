@@ -9,14 +9,14 @@ const NON_ALLOCATABLE_TYPES = new Set([
   'bank_deposit',
   'intrabank_transfer',
 ])
-import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown } from 'lucide-react'
+import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown } from 'lucide-react'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
 import { useCategories, useCategoryGroups } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { formatCurrency, formatDate } from '../utils/formatters'
+import { formatCurrency, formatDate, getCurrencyLocale } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
@@ -33,6 +33,7 @@ import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
+import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ interface LedgerRow {
   intraflowMeta?: IntraflowMeta
 }
 
-type ViewMode      = 'summary' | 'ledger'
+type ViewMode      = 'summary' | 'ledger' | 'fx'
 type Portion       = 'All' | 'Percentage' | 'Specific Seed' | 'Savings'
 type LedgerPortion = 'Percentage' | 'Specific Seed' | 'Savings'
 
@@ -123,6 +124,17 @@ export default function CategoryLedger() {
   const [activePortion,  setActivePortion]  = useState<Portion>('All')
   const [activeCategory, setActiveCategory] = useState('')
   const [ledgerPortion,  setLedgerPortion]  = useState<LedgerPortion>('Percentage')
+
+  // FX tab state
+  const [filterFxCcy, setFilterFxCcy] = useState<string>('')
+  const { transactions: fxTransactions, summaries: fxSummaries, loading: fxLoading, error: fxError, refetch: refetchFx } =
+    useFXTransactions(filterFxCcy || undefined)
+  const fxViewState = useDataViewState({
+    storageKey:      'cl-fx',
+    defaultSortKey:  'date',
+    defaultSortDir:  'desc',
+    defaultPageSize: 25,
+  })
 
   // Data controls state — persisted per view
   const summaryViewState = useDataViewState({
@@ -680,13 +692,18 @@ export default function CategoryLedger() {
   const ledgerCsvRow = (r: LedgerRow) => [r.date, r.description ?? '', r.inflow || '', r.outflow || '', r.balance]
   const handleExportView = () => {
     if (viewMode === 'summary') exportCSV(CL_CSV_FILE, SUMMARY_CSV_HEADERS, summaryPage.map(summaryCsvRow))
-    else exportCSV(CL_CSV_FILE, LEDGER_CSV_HEADERS, ledgerPagedRows.filter(r => r.id !== 'bal-bf').map(ledgerCsvRow))
+    else if (viewMode === 'ledger') exportCSV(CL_CSV_FILE, LEDGER_CSV_HEADERS, ledgerPagedRows.filter(r => r.id !== 'bal-bf').map(ledgerCsvRow))
+    else exportCSV(CL_CSV_FILE, FX_CSV_HEADERS, fxTransactions.slice(fxViewState.page * fxViewState.pageSize, (fxViewState.page + 1) * fxViewState.pageSize).map(fxCsvRow))
   }
   const handleExportAll = () => {
     if (viewMode === 'summary') exportCSV(CL_CSV_FILE, SUMMARY_CSV_HEADERS, summarySorted.map(summaryCsvRow))
-    else exportCSV(CL_CSV_FILE, LEDGER_CSV_HEADERS, ledgerSorted.filter(r => r.id !== 'bal-bf').map(ledgerCsvRow))
+    else if (viewMode === 'ledger') exportCSV(CL_CSV_FILE, LEDGER_CSV_HEADERS, ledgerSorted.filter(r => r.id !== 'bal-bf').map(ledgerCsvRow))
+    else exportCSV(CL_CSV_FILE, FX_CSV_HEADERS, fxTransactions.map(fxCsvRow))
   }
-  const exportDisabled = viewMode === 'summary' ? summarySorted.length === 0 : ledgerSorted.length === 0
+  const exportDisabled = viewMode === 'summary' ? summarySorted.length === 0 : viewMode === 'ledger' ? ledgerSorted.length === 0 : fxTransactions.length === 0
+
+  const FX_CSV_HEADERS = ['Date', 'Currency', 'Reference', 'Narration', 'Deposit', 'Withdrawal', 'Balance']
+  const fxCsvRow = (r: FXTransaction) => [r.date, r.currency, r.transaction_ref ?? '', r.narration ?? '', r.deposit || '', r.withdrawal || '', r.running_balance]
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -704,7 +721,9 @@ export default function CategoryLedger() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Category Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {viewMode === 'summary' ? 'Aggregated view of all budget portions per category' : 'Transaction-level ledger per category and portion'}
+            {viewMode === 'summary' ? 'Aggregated view of all budget portions per category' :
+             viewMode === 'ledger'  ? 'Transaction-level ledger per category and portion' :
+                                      'Foreign-currency transaction history by currency'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -725,10 +744,18 @@ export default function CategoryLedger() {
             >
               <Layers className="w-3.5 h-3.5" /> Ledger
             </button>
+            <button
+              onClick={() => setViewMode('fx')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-l border-gray-200 transition-colors ${
+                viewMode === 'fx' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" /> FX
+            </button>
           </div>
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={exportDisabled} />
           <button
-            onClick={() => viewMode === 'summary' ? loadSummary() : loadLedger()}
+            onClick={() => viewMode === 'summary' ? loadSummary() : viewMode === 'ledger' ? loadLedger() : refetchFx()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -1362,6 +1389,141 @@ export default function CategoryLedger() {
                 </div>
               )}
             </>
+          )}
+        </>
+      )}
+
+      {/* ── FX VIEW ────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'fx' && (
+        <>
+          {fxError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{fxError}
+            </div>
+          )}
+
+          {/* Currency filter chips */}
+          {fxSummaries.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setFilterFxCcy('')}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  !filterFxCcy ? 'bg-primary text-white border-primary' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                All currencies
+              </button>
+              {fxSummaries.map(s => (
+                <button
+                  key={s.currency}
+                  onClick={() => setFilterFxCcy(prev => prev === s.currency ? '' : s.currency)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    filterFxCcy === s.currency ? 'bg-primary text-white border-primary' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {s.currency}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Summary cards */}
+          {fxLoading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {[1, 2, 3].map(i => <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />)}
+            </div>
+          ) : fxSummaries.length === 0 ? null : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {(filterFxCcy ? fxSummaries.filter(s => s.currency === filterFxCcy) : fxSummaries).map(s => (
+                <div key={s.currency} className="rounded-xl border-2 border-gray-200 bg-white p-3 space-y-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{s.currency}</span>
+                    <Globe className="w-4 h-4 text-gray-300" />
+                  </div>
+                  <p className="text-base font-bold text-gray-900 tabular-nums break-all">
+                    {s.currency} {s.currentBalance.toLocaleString(getCurrencyLocale(s.currency), { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                  </p>
+                  <div className="text-[11px] space-y-0.5">
+                    <div className="flex items-center gap-1 text-success">
+                      <TrendingUp className="w-3 h-3 shrink-0" />
+                      {s.currency} {s.totalDeposits.toLocaleString(getCurrencyLocale(s.currency), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="flex items-center gap-1 text-danger">
+                      <TrendingDown className="w-3 h-3 shrink-0" />
+                      {s.currency} {s.totalWithdrawals.toLocaleString(getCurrencyLocale(s.currency), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Transactions table */}
+          {fxLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-12 rounded bg-gray-100 animate-pulse" />)}
+            </div>
+          ) : fxTransactions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+              <Globe className="w-10 h-10 text-gray-300" />
+              <p className="text-sm text-gray-500">No FX transactions found{filterFxCcy ? ` for ${filterFxCcy}` : ''}.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100">
+                <h2 className="text-sm font-semibold text-gray-700">
+                  FX Transactions{filterFxCcy ? ` — ${filterFxCcy}` : ' (All currencies)'}
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">CCY</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-success uppercase tracking-wide">Deposit</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-danger uppercase tracking-wide">Withdrawal</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Balance</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Narration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {fxTransactions
+                      .slice(fxViewState.page * fxViewState.pageSize, (fxViewState.page + 1) * fxViewState.pageSize)
+                      .map(r => {
+                        const fmt = (n: number) => n.toLocaleString(getCurrencyLocale(r.currency), { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+                        return (
+                          <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                            <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{formatDate(r.date)}</td>
+                            <td className="px-4 py-3">
+                              <span className="text-[11px] font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{r.currency}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono tabular-nums text-success text-xs">
+                              {r.deposit > 0 ? fmt(r.deposit) : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono tabular-nums text-danger text-xs">
+                              {r.withdrawal > 0 ? fmt(r.withdrawal) : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono tabular-nums text-gray-700 text-xs">
+                              {fmt(r.running_balance)}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs hidden md:table-cell max-w-[220px] truncate">
+                              {r.narration ?? '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+              <PaginationBar
+                page={fxViewState.page}
+                pageSize={fxViewState.pageSize}
+                total={fxTransactions.length}
+                onPageChange={fxViewState.setPage}
+                variant="full"
+              />
+            </div>
           )}
         </>
       )}

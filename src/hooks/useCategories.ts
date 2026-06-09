@@ -77,13 +77,14 @@ export async function upsertCategoryOpeningBalance(
   categoryId: string,
   budgetPortion: BudgetPortion,
   amount: number,
+  orgId: string,
 ): Promise<void> {
   if (!isFinite(amount) || isNaN(amount) || amount < 0) {
     throw new Error(`Invalid opening balance amount: ${amount}. Must be a finite non-negative number.`)
   }
   const { data, error } = await supabase
     .from('category_opening_balances')
-    .upsert({ category_id: categoryId, budget_portion: budgetPortion, amount },
+    .upsert({ category_id: categoryId, budget_portion: budgetPortion, amount, org_id: orgId },
              { onConflict: 'category_id,budget_portion' })
     .select('id')
   if (error) throw new Error(error.message)
