@@ -140,12 +140,12 @@ export default function CategoryLedger() {
   const summaryViewState = useDataViewState({
     storageKey:     'cl-summary',
     defaultSortKey: 'name',
-    defaultSortDir: 'asc',
+    defaultSortDir: 'desc',
   })
   const ledgerViewState = useDataViewState({
     storageKey:      'cl-ledger',
     defaultSortKey:  'date',
-    defaultSortDir:  'asc',
+    defaultSortDir:  'desc',
     defaultPageSize: 25,
   })
 
@@ -317,13 +317,13 @@ export default function CategoryLedger() {
 
       if (ledgerPortion === 'Percentage') {
         const [inflowRes, outflowRes] = await Promise.all([
-          supabase.from('inflow_transactions')
+          fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type')
-            .order('date').limit(10000),
-          supabase.from('outflow_transactions')
+            .order('date')),
+          fetchAllRows(() => supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed, stage_code_2')
             .eq('stage_code_1', activeCategory)
-            .order('date').limit(10000),
+            .order('date')),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
@@ -372,22 +372,22 @@ export default function CategoryLedger() {
       } else {
         const sc2 = ledgerPortion
         const [inflowRes, outflowRes, cfgInflowRes] = await Promise.all([
-          supabase.from('inflow_transactions')
+          fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
-            .order('date').limit(10000),
-          supabase.from('outflow_transactions')
+            .order('date')),
+          fetchAllRows(() => supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
-            .order('date').limit(10000),
+            .order('date')),
           // Config-split inflows where this category's row has matching budget_portion
-          supabase.from('inflow_transactions')
+          fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount, allocation_config_id')
             .not('allocation_config_id', 'is', null)
             .is('stage_code_2', null)
-            .order('date').limit(10000),
+            .order('date')),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
@@ -853,7 +853,7 @@ export default function CategoryLedger() {
                 sortDir={summaryViewState.sortDir}
                 onSort={summaryViewState.setSort}
                 defaultSortKey="name"
-                defaultSortDir="asc"
+                defaultSortDir="desc"
                 search={summaryViewState.search}
                 onSearchChange={summaryViewState.setSearch}
                 searchPlaceholder="Search categories…"
@@ -1133,7 +1133,7 @@ export default function CategoryLedger() {
                     sortDir={ledgerViewState.sortDir}
                     onSort={ledgerViewState.setSort}
                     defaultSortKey="date"
-                    defaultSortDir="asc"
+                    defaultSortDir="desc"
                     view={ledgerViewState.view}
                     onViewChange={ledgerViewState.setView}
                     search={ledgerViewState.search}
