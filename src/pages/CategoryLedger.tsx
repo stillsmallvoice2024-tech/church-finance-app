@@ -34,6 +34,7 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
+import { useBanks } from '../hooks/useBanks'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
@@ -129,6 +130,15 @@ export default function CategoryLedger() {
   const [filterFxCcy, setFilterFxCcy] = useState<string>('')
   const { transactions: fxTransactions, summaries: fxSummaries, loading: fxLoading, error: fxError, refetch: refetchFx } =
     useFXTransactions(filterFxCcy || undefined)
+  const { banks } = useBanks()
+
+  // Sum of FX bank opening balances for the selected currency (shown as B/F row)
+  const fxOpeningBalance = useMemo(() => {
+    if (!filterFxCcy) return 0
+    return banks
+      .filter(b => b.is_foreign_currency && b.currency === filterFxCcy && (b.starting_balance ?? 0) > 0)
+      .reduce((sum, b) => sum + (b.starting_balance ?? 0), 0)
+  }, [banks, filterFxCcy])
   const fxViewState = useDataViewState({
     storageKey:      'cl-fx',
     defaultSortKey:  'date',
@@ -1488,6 +1498,21 @@ export default function CategoryLedger() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
+                    {/* Opening balance B/F row — only when a single currency is selected */}
+                    {filterFxCcy && fxOpeningBalance > 0 && fxViewState.page === 0 && (
+                      <tr className="bg-blue-50/40">
+                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs italic">—</td>
+                        <td className="px-4 py-3">
+                          <span className="text-[11px] font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{filterFxCcy}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono tabular-nums text-primary text-xs font-semibold">
+                          {fxOpeningBalance.toLocaleString(getCurrencyLocale(filterFxCcy), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs text-gray-300">—</td>
+                        <td className="px-4 py-3 text-right text-xs text-gray-300">—</td>
+                        <td className="px-4 py-3 text-xs text-gray-400 italic hidden md:table-cell">Balance Brought Forward</td>
+                      </tr>
+                    )}
                     {fxTransactions
                       .slice(fxViewState.page * fxViewState.pageSize, (fxViewState.page + 1) * fxViewState.pageSize)
                       .map(r => {

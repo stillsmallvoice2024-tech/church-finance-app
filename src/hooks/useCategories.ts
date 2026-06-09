@@ -24,6 +24,7 @@ export interface Category {
   description: string | null
   group_id:    string | null
   is_hidden:   boolean
+  currency:    string | null
   created_at:  string
 }
 

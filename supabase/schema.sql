@@ -269,6 +269,7 @@ create table public.categories (
   description text,
   group_id    uuid        references public.category_groups(id) on delete set null,
   is_hidden   boolean     not null default false,
+  currency    text,
   org_id      uuid        not null default public.get_current_org_id()
               references public.organizations(id) on delete set null,
   created_at  timestamptz default now()
