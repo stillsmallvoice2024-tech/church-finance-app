@@ -1208,6 +1208,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
       }
 
+      if (inflowToInsert.length > 0) {
+        useTransactionSyncStore.getState().bumpInflow()
+      }
       if (outflowToInsert.length > 0) {
         useTransactionSyncStore.getState().bumpOutflow()
       }
