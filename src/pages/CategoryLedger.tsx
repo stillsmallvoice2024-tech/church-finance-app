@@ -24,6 +24,7 @@ import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { allocatePercent } from '../utils/financeMath'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
@@ -145,16 +146,16 @@ export default function CategoryLedger() {
     setError(null)
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed').limit(10000),
-      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed').limit(10000),
-      supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings').limit(10000),
-      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings').limit(10000),
-      supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type').limit(10000),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type')),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
-      supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active').limit(10000),
-      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
+      fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
         .not('stage_code_2', 'eq', 'Specific Seed')
-        .not('stage_code_2', 'eq', 'Savings').limit(10000),
+        .not('stage_code_2', 'eq', 'Savings')),
     ])
 
     if (seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {

@@ -13,6 +13,7 @@ import { useOrgStore } from '../store/orgStore'
 import { useCategories } from './useCategories'
 import type { ReportCategoryBalance, ReportBasis, OperationalBalanceMap } from '../types'
 import { allocatePercent } from '../utils/financeMath'
+import { fetchAllRows } from '../utils/fetchAllRows'
 
 export function useReportEngine(
   reportDate: string | null,
@@ -58,42 +59,42 @@ export function useReportEngine(
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
            opInflowTypeRes, opTxnTypeRes, opNormalRes, intraFlowRes] = await Promise.all([
-      supabase
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
-        .lte(dateField, dateValue).limit(10000),
-      supabase
+        .lte(dateField, dateValue)),
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('stage_code_1, amount_disbursed')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
-        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate).limit(10000),
-      supabase
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)),
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Savings')
-        .lte(dateField, dateValue).limit(10000),
-      supabase
+        .lte(dateField, dateValue)),
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('stage_code_1, amount_disbursed')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Savings')
-        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate).limit(10000),
-      supabase
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)),
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('date, amount, stage_code_2, allocation_config_id, transaction_type')
         .eq('org_id', orgId)
-        .lte(dateField, dateValue).limit(10000),
-      supabase
+        .lte(dateField, dateValue)),
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('stage_code_1, amount_disbursed, stage_code_2')
         .eq('org_id', orgId)
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')
-        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate).limit(10000),
+        .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)),
       supabase
         .from('category_opening_balances')
         .select('budget_portion, amount, categories(name)'),
@@ -122,12 +123,12 @@ export function useReportEngine(
         .lte('recorded_at', endOfDay)
         .is('transaction_type', null),
       // Intra-account transfers: cumulative up to reportDate (no recorded_at column)
-      supabase
+      fetchAllRows(() => supabase
         .from('intra_flows')
         .select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
         .eq('org_id', orgId)
         .eq('status', 'active')
-        .lte('date', reportDate).limit(10000),
+        .lte('date', reportDate)),
     ])
 
     const firstErr =
