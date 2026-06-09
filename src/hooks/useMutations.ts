@@ -454,7 +454,8 @@ export interface AddLedgerEntryInput {
   inflow?: number
   refund_intraflow?: number
   outflow?: number
-  balance: number                   // caller pre-computes: prev + inflow + refund - outflow
+  // balance is intentionally omitted: trg_ledger_balance trigger recomputes
+  // the full chain server-side after every insert/update/delete
   special_seed_description?: string
 }
 
