@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../../lib/supabase'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -69,6 +70,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const { options: departmentOptions } = useDepartmentOptions()
   const isEdit = !!editRecord
   const [isPending, setIsPending] = useState(false)
+  const [dupError, setDupError] = useState<string | null>(null)
 
   const addMutation    = useAddOutflow()
   const updateMutation = useUpdateTransaction('outflow_transactions')
@@ -96,6 +98,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     if (!open) return
     resetAdd()
     resetUpdate()
+    setDupError(null)
     if (editRecord) {
       setIsPending(editRecord.is_pending_deduction ?? false)
       resetForm({
@@ -135,6 +138,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   }, [stage1Watch, categories, categoryOutflowMaps, outflowTypeOptions, open, isEdit, currentTypeId, setValue])
 
   const onSubmit = async (values: FormValues) => {
+    setDupError(null)
     try {
       if (isEdit && editRecord) {
         await update({
@@ -164,6 +168,13 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       } else {
         const txnId = values.transaction_id?.trim()
           || await generateFallbackTransactionId(values.date, String(values.amount_disbursed), values.description ?? values.bank_description ?? '', values.bank_name ?? '')
+        let dupQ = supabase.from('outflow_transactions').select('id').eq('transaction_id', txnId)
+        if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
+        const { data: dup } = await dupQ.limit(1)
+        if (dup && dup.length > 0) {
+          setDupError('Duplicate: an outflow with this transaction ID already exists for the selected bank.')
+          return
+        }
         const input: AddOutflowInput = {
           date:                    values.date,
           amount_disbursed:        values.amount_disbursed,
@@ -232,6 +243,12 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
                 <TechDetails>{`NOTIFY pgrst, 'reload schema';\n-- If the column is missing, run the full migration in Setup → Database tab.`}</TechDetails>
               </div>
             ) : error}
+          </div>
+        )}
+
+        {dupError && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+            {dupError}
           </div>
         )}
 
