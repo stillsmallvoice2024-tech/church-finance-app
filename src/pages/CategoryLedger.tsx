@@ -24,6 +24,7 @@ import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { allocatePercent } from '../utils/financeMath'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
@@ -145,16 +146,16 @@ export default function CategoryLedger() {
     setError(null)
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed').limit(10000),
-      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed').limit(10000),
-      supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings').limit(10000),
-      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings').limit(10000),
-      supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type').limit(10000),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type')),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
-      supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active').limit(10000),
-      supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
+      fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
         .not('stage_code_2', 'eq', 'Specific Seed')
-        .not('stage_code_2', 'eq', 'Savings').limit(10000),
+        .not('stage_code_2', 'eq', 'Savings')),
     ])
 
     if (seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {
@@ -207,19 +208,14 @@ export default function CategoryLedger() {
     }
 
     const allocMap = new Map<string, number>()
-    const _dbg: { total: number; g1: number; g2: number; g3: number; g4: number; ok: number } =
-      { total: 0, g1: 0, g2: 0, g3: 0, g4: 0, ok: 0 }
-    const _dbgFiltered: { date: string; stage_code_2: string | null; transaction_type: string | null; allocation_config_id: string | null; reason: string }[] = []
     for (const r of allInflowRes.data ?? []) {
-      _dbg.total++
-      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') { _dbg.g1++; _dbgFiltered.push({ date: r.date as string, stage_code_2: r.stage_code_2 as string, transaction_type: r.transaction_type as string | null, allocation_config_id: r.allocation_config_id as string | null, reason: 'stage_code_2' }); continue }
-      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) { _dbg.g2++; _dbgFiltered.push({ date: r.date as string, stage_code_2: r.stage_code_2 as string | null, transaction_type: r.transaction_type as string, allocation_config_id: r.allocation_config_id as string | null, reason: 'transaction_type' }); continue }
+      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
+      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
         : getConfigForDate(configs, r.date as string)
-      if (!cfg) { _dbg.g3++; _dbgFiltered.push({ date: r.date as string, stage_code_2: r.stage_code_2 as string | null, transaction_type: r.transaction_type as string | null, allocation_config_id: configId, reason: 'no_config' }); continue }
-      let rowAllocated = false
+      if (!cfg) continue
       for (const catRow of cfg.rows) {
         let allocated: number
         if (catRow.amount != null && catRow.amount > 0) {
@@ -227,9 +223,8 @@ export default function CategoryLedger() {
         } else if (catRow.percentage) {
           allocated = allocatePercent(Number(r.amount), catRow.percentage)
         } else {
-          _dbg.g4++; continue
+          continue
         }
-        rowAllocated = true
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
         } else if (catRow.budget_portion === 'Savings') {
@@ -238,19 +233,7 @@ export default function CategoryLedger() {
           allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
         }
       }
-      if (rowAllocated) _dbg.ok++
     }
-    // ── Diagnostic — DevTools > Console > [CategoryLedger] ──
-    console.group('[CategoryLedger] diag')
-    console.log(`rows: ${_dbg.total} | g1(stage_code_2): ${_dbg.g1} | g2(txn_type): ${_dbg.g2} | g3(no_cfg): ${_dbg.g3} | g4(no_%): ${_dbg.g4} | allocated: ${_dbg.ok}`)
-    console.log(`configs: ${configs.length} | locked non-special: ${configs.filter(c => c.status === 'locked' && !c.is_special).length}`)
-    console.log('allocMap:', Object.fromEntries(allocMap))
-    if (_dbgFiltered.length) {
-      // Show most-recent filtered rows first
-      const sorted = [..._dbgFiltered].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10)
-      console.warn('filtered rows (newest first):', sorted)
-    }
-    console.groupEnd()
 
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
