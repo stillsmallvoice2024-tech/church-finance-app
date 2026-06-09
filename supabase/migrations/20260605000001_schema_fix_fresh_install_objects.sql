@@ -59,11 +59,11 @@ CREATE INDEX IF NOT EXISTS idx_fx_conversions_org_date ON public.fx_conversions(
 -- ── 2. user_preferences ──────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.user_preferences (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  org_id     uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  prefs      jsonb NOT NULL DEFAULT '{}',
-  updated_at timestamptz NOT NULL DEFAULT now(),
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  org_id      uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  preferences jsonb NOT NULL DEFAULT '{}',
+  updated_at  timestamptz NOT NULL DEFAULT now(),
   UNIQUE (user_id, org_id)
 );
 
