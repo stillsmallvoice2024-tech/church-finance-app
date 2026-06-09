@@ -69,6 +69,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const { categories, refetch: refetchCategories } = useCategories()
   const { currencies } = useCurrencies()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
+  const orgId           = useOrgStore(s => s.orgId) ?? ''
   const { push: toast } = useToastStore()
 
   const addMutation    = useAddBank()
@@ -346,7 +347,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             : (row.amount ?? 0)
           if (!isFinite(amount) || isNaN(amount) || amount <= 0) continue
           try {
-            await upsertCategoryOpeningBalance(cat.id, row.budget_portion as BudgetPortion, amount)
+            await upsertCategoryOpeningBalance(cat.id, row.budget_portion as BudgetPortion, amount, orgId)
           } catch (e: unknown) {
             const msg = (e as { message?: string })?.message ?? 'Unknown error'
             console.error('[bank-modal] upsert failed', { category: row.category_name, portion: row.budget_portion, error: msg })
