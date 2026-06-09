@@ -26,6 +26,7 @@ import { Modal } from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { supabase } from '../lib/supabase'
 import { exportCSV } from '../utils/csvExport'
+import { formatCurrency } from '../utils/formatters'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
@@ -81,15 +82,17 @@ async function categoryHasLinkedData(cat: Category): Promise<boolean> {
 // ── Category form modal ────────────────────────────────────────────────────────
 
 interface CategoryModalProps {
-  open:        boolean
-  onClose:     () => void
-  onSuccess:   () => void
-  editRecord?: Category | null
-  groups:      CategoryGroup[]
-  onGroupCreated: () => void
+  open:             boolean
+  onClose:          () => void
+  onSuccess:        () => void
+  editRecord?:      Category | null
+  groups:           CategoryGroup[]
+  onGroupCreated:   () => void
+  fxGroupIds:       Set<string>
+  foreignCurrencies: { code: string; name: string; symbol: string }[]
 }
 
-function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated }: CategoryModalProps) {
+function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated, fxGroupIds, foreignCurrencies }: CategoryModalProps) {
   const isEdit = !!editRecord
   const orgId  = useOrgStore(s => s.orgId) ?? ''
 
@@ -115,9 +118,12 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   const [name,         setName]         = useState('')
   const [desc,         setDesc]         = useState('')
   const [groupId,      setGroupId]      = useState('')
+  const [currency,     setCurrency]     = useState('')
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
   const [obRows,       setObRows]       = useState<ObRow[]>([])
+
+  const isCurrentGroupFx = groupId !== '' && fxGroupIds.has(groupId)
 
   useEffect(() => {
     if (!open) return
@@ -126,6 +132,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     setName(editRecord?.name ?? '')
     setDesc(editRecord?.description ?? '')
     setGroupId(editRecord?.group_id ?? '')
+    setCurrency(editRecord?.currency ?? '')
     setNewGroupName('')
     setShowNewGroup(false)
     setObRows([])
@@ -174,6 +181,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           name:        name.trim(),
           description: desc.trim() || undefined,
           group_id:    groupId || null,
+          currency:    isCurrentGroupFx ? (currency || null) : null,
         })
         savedId = editRecord.id
       } else {
@@ -181,6 +189,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           name:        name.trim(),
           description: desc.trim() || undefined,
           group_id:    groupId || null,
+          currency:    isCurrentGroupFx ? (currency || null) : null,
         })
       }
 
@@ -286,6 +295,23 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
             </div>
           )}
         </div>
+
+        {/* Currency — only for FX groups */}
+        {isCurrentGroupFx && foreignCurrencies.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Foreign Currency</label>
+            <select
+              value={currency}
+              onChange={e => setCurrency(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+            >
+              <option value="">— Select currency —</option>
+              {foreignCurrencies.map(c => (
+                <option key={c.code} value={c.code}>{c.symbol} {c.name} ({c.code})</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Description */}
         <div className="flex flex-col gap-1">
@@ -685,7 +711,9 @@ export default function Categories() {
                         <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Bal. B/F</p>
                         {displayBalances.map(b => (
                           <p key={b.budget_portion} className="text-sm font-mono font-bold tabular-nums text-gray-700">
-                            {baseCurrencySymbol}{b.amount.toLocaleString(formatLocale, { minimumFractionDigits: 2 })}
+                            {cat.currency
+                              ? formatCurrency(b.amount, cat.currency)
+                              : `${baseCurrencySymbol}${b.amount.toLocaleString(formatLocale, { minimumFractionDigits: 2 })}`}
                           </p>
                         ))}
                       </div>
@@ -796,6 +824,8 @@ export default function Categories() {
         editRecord={editRecord}
         groups={groups}
         onGroupCreated={refetchGroups}
+        fxGroupIds={fxGroupIds}
+        foreignCurrencies={foreignCurrencies}
       />
 
       <PaginationBar
@@ -877,7 +907,11 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         {displayBalances.length > 0
           ? <div className="flex flex-col gap-0.5 items-end">
               {displayBalances.map(b => (
-                <span key={b.budget_portion}>{baseCurrencySymbol}{b.amount.toLocaleString(formatLocale, { minimumFractionDigits: 2 })}</span>
+                <span key={b.budget_portion}>
+                  {cat.currency
+                    ? formatCurrency(b.amount, cat.currency)
+                    : `${baseCurrencySymbol}${b.amount.toLocaleString(formatLocale, { minimumFractionDigits: 2 })}`}
+                </span>
               ))}
             </div>
           : <span className="text-gray-300">—</span>}

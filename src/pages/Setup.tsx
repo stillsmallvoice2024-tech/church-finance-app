@@ -2054,6 +2054,11 @@ BEGIN
 END; $$;
 GRANT EXECUTE ON FUNCTION public.revert_fx_conversion(uuid,uuid,uuid) TO authenticated;
 
+NOTIFY pgrst, 'reload schema';
+
+-- ── FX category currency ──────────────────────────────────────────────────────
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS currency text;
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
