@@ -375,6 +375,7 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         logFieldChanges(user.id, table, id, oldData as Record<string, unknown>, updates)
       }
 
+      if (table === 'inflow_transactions')  useTransactionSyncStore.getState().bumpInflow()
       if (table === 'outflow_transactions') useTransactionSyncStore.getState().bumpOutflow()
       if (table === 'intra_flows')          useTransactionSyncStore.getState().bumpIntraflow()
     } catch (err) {
@@ -430,6 +431,7 @@ export function useDeleteTransaction(table: DeletableTable): MutationHook<string
         newData:   null,
       })
 
+      if (table === 'inflow_transactions')  useTransactionSyncStore.getState().bumpInflow()
       if (table === 'intra_flows') useTransactionSyncStore.getState().bumpIntraflow()
     } catch (err) {
       const msg = extractMessage(err)
@@ -452,7 +454,8 @@ export interface AddLedgerEntryInput {
   inflow?: number
   refund_intraflow?: number
   outflow?: number
-  balance: number                   // caller pre-computes: prev + inflow + refund - outflow
+  // balance is intentionally omitted: trg_ledger_balance trigger recomputes
+  // the full chain server-side after every insert/update/delete
   special_seed_description?: string
 }
 
@@ -733,10 +736,9 @@ export function useUpdateCategoryGroup(): MutationHook<{ id: string; name: strin
 
 export interface AddFXTransactionInput {
   date: string
-  currency: 'USD' | 'GBP' | 'EUR' | 'CNY'
+  currency: string
   deposit?: number
   withdrawal?: number
-  running_balance: number
   narration?: string
   transaction_ref?: string
   bank_name?: string
@@ -749,17 +751,24 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
   const mutate = useCallback(async (input: AddFXTransactionInput): Promise<string> => {
     const { user } = useAuthStore.getState()
     if (!user?.id) throw new Error('You must be signed in.')
+    const { org_id } = orgPayload()
     setLoading(true); setError(null)
     try {
-      const payload: Record<string, unknown> = { ...input, created_by: user.id, ...orgPayload() }
-      const { data, error: err } = await supabase
-        .from('fx_transactions')
-        .insert(payload)
-        .select('id').single()
+      const { data, error: err } = await supabase.rpc('create_fx_transaction', {
+        p_org_id:          org_id,
+        p_user_id:         user.id,
+        p_date:            input.date,
+        p_currency:        input.currency,
+        p_deposit:         input.deposit    ?? 0,
+        p_withdrawal:      input.withdrawal ?? 0,
+        p_narration:       input.narration       ?? null,
+        p_transaction_ref: input.transaction_ref ?? null,
+        p_bank_name:       input.bank_name       ?? null,
+      })
       if (err) throw err
-      if (!data?.id) throw new Error('No ID returned.')
-      logAudit({ userId: user.id, action: 'INSERT', tableName: 'fx_transactions', recordId: data.id, newData: input as unknown as Record<string, unknown> })
-      return data.id
+      if (!data) throw new Error('No ID returned.')
+      logAudit({ userId: user.id, action: 'INSERT', tableName: 'fx_transactions', recordId: data as string, newData: input as unknown as Record<string, unknown> })
+      return data as string
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
@@ -773,10 +782,9 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
 export interface UpdateFXTransactionInput {
   id:              string
   date:            string
-  currency:        'USD' | 'GBP' | 'EUR' | 'CNY'
+  currency:        string
   deposit?:        number
   withdrawal?:     number
-  running_balance: number
   narration?:      string
   transaction_ref?: string
   bank_name?:      string
@@ -789,14 +797,25 @@ export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput>
   const mutate = useCallback(async (input: UpdateFXTransactionInput): Promise<void> => {
     const { user } = useAuthStore.getState()
     if (!user?.id) throw new Error('You must be signed in.')
+    const { org_id } = orgPayload()
     setLoading(true); setError(null)
     try {
       const { data: oldData } = await supabase.from('fx_transactions').select('*').eq('id', input.id).single()
-      const { id, ...updates } = input
-      const { error: err } = await supabase.from('fx_transactions').update(updates).eq('id', id)
+      const { error: err } = await supabase.rpc('update_fx_transaction', {
+        p_org_id:          org_id,
+        p_user_id:         user.id,
+        p_transaction_id:  input.id,
+        p_date:            input.date,
+        p_currency:        input.currency,
+        p_deposit:         input.deposit    ?? 0,
+        p_withdrawal:      input.withdrawal ?? 0,
+        p_narration:       input.narration       ?? null,
+        p_transaction_ref: input.transaction_ref ?? null,
+        p_bank_name:       input.bank_name       ?? null,
+      })
       if (err) throw err
-      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'fx_transactions', recordId: id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates })
-      if (oldData) logFieldChanges(user.id, 'fx_transactions', id, oldData as Record<string, unknown>, updates)
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'fx_transactions', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: input })
+      if (oldData) logFieldChanges(user.id, 'fx_transactions', input.id, oldData as Record<string, unknown>, input as unknown as Record<string, unknown>)
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
     } finally { setLoading(false) }
@@ -1111,6 +1130,7 @@ export function useBulkDeleteTransaction(table: DeletableTable) {
         }
       }
 
+      if (table === 'inflow_transactions')  useTransactionSyncStore.getState().bumpInflow()
       if (table === 'intra_flows') useTransactionSyncStore.getState().bumpIntraflow()
 
       return { failed: ids.length - totalDeleted, total: ids.length }
@@ -1200,6 +1220,7 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
         }
       }
 
+      if (table === 'inflow_transactions')  useTransactionSyncStore.getState().bumpInflow()
       if (table === 'outflow_transactions') useTransactionSyncStore.getState().bumpOutflow()
       if (table === 'intra_flows')          useTransactionSyncStore.getState().bumpIntraflow()
 

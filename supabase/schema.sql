@@ -1793,6 +1793,69 @@ create trigger trg_audit_accounts
 create trigger trg_audit_ledger_entries
   after insert or update or delete on public.ledger_entries for each row execute function public.audit_trigger_fn();
 
+-- Ledger balance auto-recompute: fires after any INSERT/UPDATE/DELETE on
+-- ledger_entries, and when accounts.opening_balance changes.
+create or replace function public.recalculate_ledger_balances(
+  p_account_id uuid,
+  p_org_id     uuid
+) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_opening numeric(15,2) := 0;
+begin
+  select coalesce(opening_balance, 0) into v_opening
+  from   public.accounts where id = p_account_id;
+  v_opening := coalesce(v_opening, 0);
+  with computed as (
+    select id,
+           v_opening + sum(
+             coalesce(inflow, 0) + coalesce(refund_intraflow, 0) - coalesce(outflow, 0)
+           ) over (
+             order by date asc, created_at asc
+             rows between unbounded preceding and current row
+           ) as new_balance
+    from   public.ledger_entries
+    where  account_id = p_account_id and org_id = p_org_id
+  )
+  update public.ledger_entries e
+  set    balance = c.new_balance
+  from   computed c where e.id = c.id;
+end;
+$$;
+
+create or replace function public.trg_ledger_balance_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    perform public.recalculate_ledger_balances(old.account_id, old.org_id);
+  elsif tg_op = 'UPDATE' and old.account_id is distinct from new.account_id then
+    perform public.recalculate_ledger_balances(old.account_id, old.org_id);
+    perform public.recalculate_ledger_balances(new.account_id, new.org_id);
+  else
+    perform public.recalculate_ledger_balances(new.account_id, new.org_id);
+  end if;
+  return null;
+end;
+$$;
+
+create trigger trg_ledger_balance
+  after insert or update or delete on public.ledger_entries
+  for each row execute function public.trg_ledger_balance_fn();
+
+create or replace function public.trg_account_opening_balance_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if old.opening_balance is distinct from new.opening_balance then
+    perform public.recalculate_ledger_balances(new.id, new.org_id);
+  end if;
+  return null;
+end;
+$$;
+
+create trigger trg_account_opening_balance
+  after update on public.accounts
+  for each row execute function public.trg_account_opening_balance_fn();
+
 -- Audit log delete immutability: rows can never be destroyed.
 -- UPDATE is allowed so GDPR erasure can SET user_id = NULL.
 -- purge_old_audit_logs() bypasses this guard via transaction-local session variable.

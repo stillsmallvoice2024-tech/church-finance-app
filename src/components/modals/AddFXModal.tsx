@@ -74,9 +74,15 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const selectedCurrency = watch('currency')
   const txType    = watch('type')
   const amount    = Number(watch('amount') || 0)
-  const prevBal   = currentBalances.get(selectedCurrency) ?? 0
-  const newBal    = useMemo(
-    () => txType === 'deposit' ? prevBal + amount : prevBal - amount,
+
+  // In edit mode, "previous balance" is the balance of the row before this one,
+  // not the current latest. Derived as: stored_balance - old_deposit + old_withdrawal.
+  const prevBal = isEdit && editRecord
+    ? editRecord.running_balance - editRecord.deposit + editRecord.withdrawal
+    : (currentBalances.get(selectedCurrency) ?? 0)
+
+  const newBal = useMemo(
+    () => prevBal + (txType === 'deposit' ? amount : -amount),
     [txType, prevBal, amount],
   )
 
@@ -89,10 +95,9 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
         const input: UpdateFXTransactionInput = {
           id:              editRecord.id,
           date:            values.date,
-          currency:        values.currency as UpdateFXTransactionInput['currency'],
+          currency:        values.currency,
           deposit,
           withdrawal,
-          running_balance: newBal,
           narration:       values.narration       || undefined,
           transaction_ref: values.transaction_ref || undefined,
           bank_name:       values.bank_name       || undefined,
@@ -110,10 +115,9 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
         }
         const input: AddFXTransactionInput = {
           date:            values.date,
-          currency:        values.currency as AddFXTransactionInput['currency'],
+          currency:        values.currency,
           deposit,
           withdrawal,
-          running_balance: newBal,
           narration:       values.narration       || undefined,
           transaction_ref: txnRef,
           bank_name:       values.bank_name       || undefined,
