@@ -192,6 +192,16 @@ export default function CategoryLedger() {
     for (const r of seedOutRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed -= Number(r.amount_disbursed || 0)
     }
+    // ── Specific seed diagnostic ─────────────────────────────────────────────
+    console.group('[CategoryLedger] specific-seed diag')
+    console.log(`seedRes rows: ${seedRes.data?.length ?? 0} | seedOutRes rows: ${seedOutRes.data?.length ?? 0}`)
+    const _seedTotals: Record<string, number> = {}
+    for (const r of seedRes.data ?? []) {
+      const k = (r.stage_code_1 as string | null) || '(Uncategorised)'
+      _seedTotals[k] = (_seedTotals[k] ?? 0) + Number(r.amount)
+    }
+    console.log('specificSeed from seedRes (by category):', _seedTotals)
+    console.groupEnd()
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
     }
@@ -208,6 +218,8 @@ export default function CategoryLedger() {
     }
 
     const allocMap = new Map<string, number>()
+    const _seedFromAlloc: Record<string, number> = {}
+    let _allocSeedRows = 0
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
       if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
@@ -227,6 +239,8 @@ export default function CategoryLedger() {
         }
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
+          _seedFromAlloc[catRow.category_name] = (_seedFromAlloc[catRow.category_name] ?? 0) + allocated
+          _allocSeedRows++
         } else if (catRow.budget_portion === 'Savings') {
           ensure(catRow.category_name).savingsIn += allocated
         } else {
@@ -234,6 +248,10 @@ export default function CategoryLedger() {
         }
       }
     }
+    console.group('[CategoryLedger] specific-seed alloc diag')
+    console.log(`allInflowRes rows: ${allInflowRes.data?.length ?? 0} | specificSeed contributions from alloc: ${_allocSeedRows}`)
+    if (_allocSeedRows > 0) console.log('specificSeed from alloc (by category):', _seedFromAlloc)
+    console.groupEnd()
 
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
