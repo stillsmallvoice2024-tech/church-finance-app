@@ -290,7 +290,7 @@ export default function CategoryLedger() {
     setLoading(false)
   }, [categories, configs])
 
-  useEffect(() => { loadSummary() }, [loadSummary, outflowVersion, intraflowVersion, inflowVersion])
+  useEffect(() => { loadSummary() }, [loadSummary, inflowVersion, outflowVersion, intraflowVersion])
 
   // ── Ledger load ───────────────────────────────────────────────────────────────
 
@@ -527,7 +527,7 @@ export default function CategoryLedger() {
 
   useEffect(() => {
     if (viewMode === 'ledger' && activeCategory) loadLedger()
-  }, [viewMode, activeCategory, ledgerPortion, loadLedger, outflowVersion, intraflowVersion])
+  }, [viewMode, activeCategory, ledgerPortion, loadLedger, inflowVersion, outflowVersion, intraflowVersion])
 
   // Reset ledger page + expansion when category or portion changes
   const { setPage: setLedgerPage } = ledgerViewState
