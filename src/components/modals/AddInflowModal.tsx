@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Sparkles, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls } from '../ui/FormField'
@@ -221,6 +222,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           },
         })
       } else {
+        const txnRef = values.transaction_ref?.trim()
+          || await generateFallbackTransactionId(values.date, String(values.amount), values.description ?? '', values.bank_name ?? '')
         const input: AddInflowInput = {
           date:                       values.date,
           amount:                     values.amount,
@@ -229,7 +232,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           bank_name:                  values.bank_name   || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
-          transaction_ref:            values.transaction_ref           || undefined,
+          transaction_ref:            txnRef,
           specific_seed_description:  values.specific_seed_description || undefined,
           remark:                     values.remark || undefined,
           transaction_type:           values.transaction_type        || undefined,
