@@ -207,16 +207,14 @@ export default function CategoryLedger() {
     }
 
     const allocMap = new Map<string, number>()
-    let _dbg_g1 = 0, _dbg_g2 = 0, _dbg_g3 = 0, _dbg_g4 = 0, _dbg_ok = 0
     for (const r of allInflowRes.data ?? []) {
-      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') { _dbg_g1++; continue }
-      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) { _dbg_g2++; continue }
+      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
+      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
         : getConfigForDate(configs, r.date as string)
-      if (!cfg) { _dbg_g3++; continue }
-      let rowAllocated = false
+      if (!cfg) continue
       for (const catRow of cfg.rows) {
         let allocated: number
         if (catRow.amount != null && catRow.amount > 0) {
@@ -224,9 +222,8 @@ export default function CategoryLedger() {
         } else if (catRow.percentage) {
           allocated = allocatePercent(Number(r.amount), catRow.percentage)
         } else {
-          _dbg_g4++; continue
+          continue
         }
-        rowAllocated = true
         if (catRow.budget_portion === 'Specific Seed') {
           ensure(catRow.category_name).specificSeed += allocated
         } else if (catRow.budget_portion === 'Savings') {
@@ -235,32 +232,7 @@ export default function CategoryLedger() {
           allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
         }
       }
-      if (rowAllocated) _dbg_ok++
     }
-    // Allocation diagnostic — open browser DevTools > Console to view
-    console.group('[CategoryLedger] allocation diagnostics')
-    console.log('inflow rows from DB:', allInflowRes.data?.length ?? 0)
-    console.log('configs in store:', configs.length,
-      '| locked non-special:', configs.filter(c => c.status === 'locked' && !c.is_special).length,
-      '| locked special:', configs.filter(c => c.status === 'locked' && c.is_special).length,
-      '| draft:', configs.filter(c => c.status === 'draft').length)
-    console.log('guard1 (stage_code_2):', _dbg_g1, '| guard2 (transaction_type):', _dbg_g2,
-      '| guard3 (no config):', _dbg_g3, '| guard4 (no %/amount in rows):', _dbg_g4,
-      '| allocated:', _dbg_ok)
-    console.log('allocMap size:', allocMap.size)
-    if (_dbg_g3 > 0) {
-      const sample = (allInflowRes.data ?? [])
-        .filter(r => {
-          if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') return false
-          if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) return false
-          const cid = r.allocation_config_id as string | null
-          return !(cid ? (configs.find(c => c.id === cid) ?? getConfigForDate(configs, r.date as string)) : getConfigForDate(configs, r.date as string))
-        })
-        .slice(0, 3)
-        .map(r => ({ date: r.date, allocation_config_id: r.allocation_config_id }))
-      console.warn('guard3 sample (no config found):', sample)
-    }
-    console.groupEnd()
 
     for (const ob of cobRows) {
       if (ob.budget_portion !== 'Percentage Allocation') continue
