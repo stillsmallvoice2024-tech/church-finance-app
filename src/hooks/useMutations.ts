@@ -191,6 +191,8 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
         newData:   input as unknown as Record<string, unknown>,
       })
 
+      useTransactionSyncStore.getState().bumpInflow()
+
       return data.id
     } catch (err) {
       const msg = extractMessage(err)

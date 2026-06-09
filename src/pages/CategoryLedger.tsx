@@ -103,6 +103,7 @@ export default function CategoryLedger() {
   const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
   const outflowVersion   = useTransactionSyncStore(s => s.outflowVersion)
   const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
+  const inflowVersion    = useTransactionSyncStore(s => s.inflowVersion)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   // Summary state
@@ -288,7 +289,7 @@ export default function CategoryLedger() {
     setLoading(false)
   }, [categories, configs])
 
-  useEffect(() => { loadSummary() }, [loadSummary, outflowVersion, intraflowVersion])
+  useEffect(() => { loadSummary() }, [loadSummary, outflowVersion, intraflowVersion, inflowVersion])
 
   // ── Ledger load ───────────────────────────────────────────────────────────────
 
@@ -541,7 +542,7 @@ export default function CategoryLedger() {
       const catOk = !activeCategory || r.name === activeCategory
       const portOk =
         activePortion === 'All'           ? true :
-        activePortion === 'Percentage'    ? r.percentage !== null :
+        activePortion === 'Percentage'    ? r.percentageAllocated !== 0 :
         activePortion === 'Specific Seed' ? r.specificSeed > 0 :
         /* Savings */                       r.savingsIn > 0 || r.savingsOut > 0
       return catOk && portOk
