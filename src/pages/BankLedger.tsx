@@ -76,7 +76,7 @@ const BL_SORT_FIELDS = deriveSortFields(BL_COLUMNS)
 export default function BankLedger() {
   usePageTitle('Bank Ledger')
   useFirstVisitTour('bank-ledger')
-  const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
+  const { baseCurrencyCode } = useOrgCurrency()
 
   const { banks, loading: banksLoading, error: banksError } = useBanks()
   const { canWrite } = useRole()
@@ -226,8 +226,9 @@ export default function BankLedger() {
 
   const selectedBankObj  = banks.find(b => b.id === selectedBank)
   const selectedBankName = selectedBankObj?.name ?? ''
+  const displayCurrency  = selectedBankObj?.currency ?? baseCurrencyCode
 
-  const BL_CSV_HEADERS = ['Date', 'Description', 'Type', `Inflow (${baseCurrencySymbol})`, `Outflow (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
+  const BL_CSV_HEADERS = ['Date', 'Description', 'Type', `Inflow (${displayCurrency})`, `Outflow (${displayCurrency})`, `Balance (${displayCurrency})`]
   const blCsvRow = (r: LedgerRow) => [
     r.date, r.description ?? '',
     TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '',
@@ -297,9 +298,9 @@ export default function BankLedger() {
       {selectedBank && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { label: 'Total Inflows',  value: formatCurrency(totalInflow, baseCurrencyCode),  color: 'text-green-700', tip: undefined },
-            { label: 'Total Outflows', value: formatCurrency(totalOutflow, baseCurrencyCode), color: 'text-red-700',   tip: undefined },
-            { label: 'Net Balance',    value: formatCurrency(netBalance, baseCurrencyCode),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700',
+            { label: 'Total Inflows',  value: formatCurrency(totalInflow, displayCurrency),  color: 'text-green-700', tip: undefined },
+            { label: 'Total Outflows', value: formatCurrency(totalOutflow, displayCurrency), color: 'text-red-700',   tip: undefined },
+            { label: 'Net Balance',    value: formatCurrency(netBalance, displayCurrency),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700',
               tip: 'Total inflows minus total outflows for this bank account over the selected date range. The ledger table below shows a running balance updated after every transaction.' },
           ].map(({ label, value, color, tip }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
@@ -449,7 +450,7 @@ export default function BankLedger() {
                         {row.inflow > 0 ? 'Inflow' : 'Outflow'}
                       </p>
                       <p className={`text-sm font-mono font-bold tabular-nums ${row.inflow > 0 ? 'text-success' : 'text-danger'}`}>
-                        {row.inflow > 0 ? formatCurrency(row.inflow, baseCurrencyCode) : formatCurrency(row.outflow, baseCurrencyCode)}
+                        {row.inflow > 0 ? formatCurrency(row.inflow, displayCurrency) : formatCurrency(row.outflow, displayCurrency)}
                       </p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0">
@@ -458,7 +459,7 @@ export default function BankLedger() {
                         <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
                       </div>
                       <p className={`text-sm font-mono font-bold tabular-nums ${row.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
-                        {formatCurrency(row.balance, baseCurrencyCode)}
+                        {formatCurrency(row.balance, displayCurrency)}
                       </p>
                     </div>
                   </div>
@@ -529,9 +530,9 @@ export default function BankLedger() {
                           )}
                         </div>
                       </td>
-                      <AmountCell value={row.inflow}   mode="inflow"  />
-                      <AmountCell value={row.outflow}  mode="outflow" />
-                      <AmountCell value={row.balance}  mode="balance" showZero />
+                      <AmountCell value={row.inflow}   mode="inflow"  currency={displayCurrency} />
+                      <AmountCell value={row.outflow}  mode="outflow" currency={displayCurrency} />
+                      <AmountCell value={row.balance}  mode="balance" currency={displayCurrency} showZero />
                       <td className="px-2 py-3">
                         {!isBF && <ReceiptBadge entityType={row.entity_type} entityId={row.id} />}
                       </td>
