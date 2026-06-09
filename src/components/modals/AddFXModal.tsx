@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -7,6 +7,8 @@ import { useAddFXTransaction, useUpdateFXTransaction, type AddFXTransactionInput
 import { CurrencyInput } from '../ui/CurrencyInput'
 import type { FXTransaction } from '../../hooks/useFX'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
+import { supabase } from '../../lib/supabase'
 
 const schema = z.object({
   date:            z.string().min(1, 'Date is required'),
@@ -37,6 +39,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const updateMutation = useUpdateFXTransaction()
   const { loading, error, reset } = isEdit ? updateMutation : addMutation
   const { foreignCurrencies, getCurrencySymbol } = useOrgCurrency()
+  const [dupError, setDupError] = useState<string | null>(null)
 
   const defaultFxCurrency = foreignCurrencies[0]?.code ?? 'USD'
 
@@ -52,6 +55,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   useEffect(() => {
     if (!open) return
     reset()
+    setDupError(null)
     if (editRecord) {
       resetForm({
         date:            editRecord.date,
@@ -79,6 +83,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const onSubmit = async (values: FormValues) => {
     const deposit    = values.type === 'deposit'    ? values.amount : 0
     const withdrawal = values.type === 'withdrawal' ? values.amount : 0
+    setDupError(null)
     try {
       if (isEdit && editRecord) {
         const input: UpdateFXTransactionInput = {
@@ -94,6 +99,15 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
         }
         await (updateMutation.mutate as unknown as (i: UpdateFXTransactionInput) => Promise<void>)(input)
       } else {
+        const txnRef = values.transaction_ref?.trim()
+          || await generateFallbackTransactionId(values.date, String(values.amount), values.narration ?? '', values.bank_name ?? '')
+        let dupQ = supabase.from('fx_transactions').select('id').eq('transaction_ref', txnRef)
+        if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
+        const { data: dup } = await dupQ.limit(1)
+        if (dup && dup.length > 0) {
+          setDupError('Duplicate: an FX transaction with this ref already exists for the selected bank.')
+          return
+        }
         const input: AddFXTransactionInput = {
           date:            values.date,
           currency:        values.currency as AddFXTransactionInput['currency'],
@@ -101,7 +115,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           withdrawal,
           running_balance: newBal,
           narration:       values.narration       || undefined,
-          transaction_ref: values.transaction_ref || undefined,
+          transaction_ref: txnRef,
           bank_name:       values.bank_name       || undefined,
         }
         await (addMutation.mutate as unknown as (i: AddFXTransactionInput) => Promise<void>)(input)
@@ -116,7 +130,8 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   return (
     <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Edit FX Transaction' : 'Add FX Transaction'} isDirty={isDirty} disableClose={loading}>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-        {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+        {error    && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+        {dupError && <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">{dupError}</div>}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Date *" error={errors.date?.message}>

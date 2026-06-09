@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../../lib/supabase'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -82,6 +83,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const [selectedConfigId,  setSelectedConfigId]  = useState('')
   const [configManuallySet, setConfigManuallySet] = useState(false)
+  const [dupError, setDupError] = useState<string | null>(null)
 
   // Custom income type (user-defined, separate from the legacy inflowType)
   const [incomeTypeId,        setIncomeTypeId]        = useState<string>('')
@@ -168,6 +170,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     resetUpdate()
     setConfigManuallySet(false)
     setIncomeTypeAutoSet(false)
+    setDupError(null)
     if (editRecord) {
       setSelectedConfigId(editRecord.allocation_config_id ?? '')
       setConfigManuallySet(true)
@@ -195,6 +198,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
   const onSubmit = async (values: FormValues) => {
+    setDupError(null)
     try {
       if (isEdit && editRecord) {
         await update({
@@ -224,6 +228,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       } else {
         const txnRef = values.transaction_ref?.trim()
           || await generateFallbackTransactionId(values.date, String(values.amount), values.description ?? '', values.bank_name ?? '')
+        let dupQ = supabase.from('inflow_transactions').select('id').eq('transaction_ref', txnRef)
+        if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
+        const { data: dup } = await dupQ.limit(1)
+        if (dup && dup.length > 0) {
+          setDupError('Duplicate: an inflow with this transaction ref already exists for the selected bank.')
+          return
+        }
         const input: AddInflowInput = {
           date:                       values.date,
           amount:                     values.amount,
@@ -291,6 +302,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                 <TechDetails>{`NOTIFY pgrst, 'reload schema';\n-- If the column is missing, run the full migration in Setup → Database tab.`}</TechDetails>
               </div>
             ) : error}
+          </div>
+        )}
+
+        {dupError && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+            {dupError}
           </div>
         )}
 
