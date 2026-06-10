@@ -314,13 +314,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const bankLabel = (b: { name: string; is_foreign_currency: boolean }) =>
     b.is_foreign_currency ? `${b.name} [FX]` : b.name
 
-  // When a Foreign Currency Bank is selected: lock target table to fx_transactions
-  // and auto-populate fxCurrency from the bank's own currency.
+  // Auto-select target table based on bank type:
+  //   FX bank   → fx_transactions (locked)
+  //   Normal bank → bank_statement (default, still editable)
   useEffect(() => {
-    if (!isForeignCurrencyBank) return
-    setTargetTable('fx_transactions')
-    const bankCurrency = bankList.find(b => b.id === internalBank?.id)?.currency
-    if (bankCurrency) setFxCurrency(bankCurrency)
+    if (!internalBank) return
+    if (isForeignCurrencyBank) {
+      setTargetTable('fx_transactions')
+      const bankCurrency = bankList.find(b => b.id === internalBank.id)?.currency
+      if (bankCurrency) setFxCurrency(bankCurrency)
+    } else {
+      setTargetTable('bank_statement')
+    }
   }, [isForeignCurrencyBank, internalBank?.id, bankList])
 
   // Per-row pending deduction (by sheet row index ri)
@@ -1932,17 +1937,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                           wrapperClassName="flex-1 min-w-[110px]" />
                       )}
-                      <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
-                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      <select value={batchTxnType} onChange={e => { setBatchTxnType(e.target.value); if (!isOffsetableType(e.target.value)) setBatchOffsetRole('') }}
+                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
                         <option value="">— Type —</option>
                         {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
-                      <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
-                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                        <option value="">— Role —</option>
-                        <option value="root">Root</option>
-                        <option value="offset">Offset</option>
-                      </select>
+                      {isOffsetableType(batchTxnType) && (
+                        <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
+                          className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[90px]">
+                          <option value="">— Role —</option>
+                          <option value="root">Root</option>
+                          <option value="offset">Offset</option>
+                        </select>
+                      )}
                       <button
                         type="button"
                         disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType && !batchOffsetRole) || inflowTargetRis.length === 0}
@@ -2417,17 +2424,19 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                         wrapperClassName="flex-1 min-w-[100px]" />
                     )}
-                    <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
-                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                    <select value={batchTxnType} onChange={e => { setBatchTxnType(e.target.value); if (!isOffsetableType(e.target.value)) setBatchOffsetRole('') }}
+                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
                       <option value="">— Type —</option>
                       {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
-                    <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
-                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                      <option value="">— Role —</option>
-                      <option value="root">Root</option>
-                      <option value="offset">Offset</option>
-                    </select>
+                    {isOffsetableType(batchTxnType) && (
+                      <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
+                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[90px]">
+                        <option value="">— Role —</option>
+                        <option value="root">Root</option>
+                        <option value="offset">Offset</option>
+                      </select>
+                    )}
                     <button
                       type="button"
                       disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType && !batchOffsetRole) || outflowTargetRis.length === 0}
