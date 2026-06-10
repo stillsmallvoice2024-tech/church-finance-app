@@ -58,7 +58,7 @@ export function useReportEngine(
         .lte(dateField, dateValue)),
       fetchAllRows(() => supabase
         .from('outflow_transactions')
-        .select('stage_code_1, amount_disbursed')
+        .select('stage_code_1, amount_disbursed, offset_role')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
         .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)),
@@ -70,7 +70,7 @@ export function useReportEngine(
         .lte(dateField, dateValue)),
       fetchAllRows(() => supabase
         .from('outflow_transactions')
-        .select('stage_code_1, amount_disbursed')
+        .select('stage_code_1, amount_disbursed, offset_role')
         .eq('org_id', orgId)
         .eq('stage_code_2', 'Savings')
         .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)),
@@ -81,7 +81,7 @@ export function useReportEngine(
         .lte(dateField, dateValue)),
       fetchAllRows(() => supabase
         .from('outflow_transactions')
-        .select('stage_code_1, amount_disbursed, stage_code_2')
+        .select('stage_code_1, amount_disbursed, stage_code_2, offset_role')
         .eq('org_id', orgId)
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')
@@ -145,15 +145,19 @@ export function useReportEngine(
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed += Number(r.amount)
     }
     for (const r of seedOutRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeedOut +=
-        Number(r.amount_disbursed || 0)
+      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
+      const amt = Number(r.amount_disbursed || 0)
+      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+      ensure(cat).specificSeedOut += isOffset ? -amt : amt
     }
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
     }
     for (const r of savOutRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut +=
-        Number(r.amount_disbursed || 0)
+      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
+      const amt = Number(r.amount_disbursed || 0)
+      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+      ensure(cat).savingsOut += isOffset ? -amt : amt
     }
 
     for (const ob of cobRows) {
@@ -204,7 +208,9 @@ export function useReportEngine(
     const pctOutMap = new Map<string, number>()
     for (const r of pctOutRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.amount_disbursed || 0))
+      const amt = Number(r.amount_disbursed || 0)
+      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + (isOffset ? -amt : amt))
     }
 
     // ── Intra-flow adjustments (FROM = debit, TO = credit) ─────────────────

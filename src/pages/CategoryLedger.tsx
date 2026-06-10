@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
-import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown } from 'lucide-react'
+import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react'
 import { isNonContributing } from '../utils/transactionTypes'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
@@ -70,13 +70,14 @@ interface IntraflowMeta {
 }
 
 interface LedgerRow {
-  id:             string
-  date:           string
-  description:    string
-  inflow:         number
-  outflow:        number
-  balance:        number
-  intraflowMeta?: IntraflowMeta
+  id:               string
+  date:             string
+  description:      string
+  inflow:           number
+  outflow:          number
+  balance:          number
+  intraflowMeta?:   IntraflowMeta
+  isReversalCredit?: boolean
 }
 
 type ViewMode      = 'summary' | 'ledger' | 'fx'
@@ -160,13 +161,13 @@ export default function CategoryLedger() {
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
       fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('stage_code_2', 'Specific Seed')),
       fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('stage_code_2', 'Savings')),
       fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type, offset_role')),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
       fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role')
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')),
     ])
@@ -203,13 +204,19 @@ export default function CategoryLedger() {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed += Number(r.amount)
     }
     for (const r of seedOutRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed -= Number(r.amount_disbursed || 0)
+      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
+      const amt = Number(r.amount_disbursed || 0)
+      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+      ensure(cat).specificSeed += isOffset ? amt : -amt
     }
     for (const r of savInRes.data ?? []) {
       ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
     }
     for (const r of savOutRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsOut += Number(r.amount_disbursed || 0)
+      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
+      const amt = Number(r.amount_disbursed || 0)
+      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+      ensure(cat).savingsOut += isOffset ? -amt : amt
     }
 
     for (const ob of cobRows) {
@@ -279,7 +286,9 @@ export default function CategoryLedger() {
     const pctOutMap = new Map<string, number>()
     for (const r of pctOutRes.data ?? []) {
       const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + Number(r.amount_disbursed || 0))
+      const amt = Number(r.amount_disbursed || 0)
+      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + (isOffset ? -amt : amt))
     }
 
     const allNames = new Set<string>([
@@ -322,7 +331,7 @@ export default function CategoryLedger() {
             .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type, offset_role')
             .order('date')),
           fetchAllRows(() => supabase.from('outflow_transactions')
-            .select('id, date, description, amount_disbursed, stage_code_2')
+            .select('id, date, description, amount_disbursed, stage_code_2, offset_role')
             .eq('stage_code_1', activeCategory)
             .order('date')),
         ])
@@ -361,14 +370,27 @@ export default function CategoryLedger() {
           if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
           const amt = Number(r.amount_disbursed || 0)
           if (amt <= 0) continue
-          outRows.push({
-            id:          r.id as string,
-            date:        r.date as string,
-            description: (r.description as string | null) || '—',
-            inflow:      0,
-            outflow:     amt,
-            balance:     0,
-          })
+          const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+          if (isOffset) {
+            inRows.push({
+              id:               r.id as string,
+              date:             r.date as string,
+              description:      (r.description as string | null) || '—',
+              inflow:           amt,
+              outflow:          0,
+              balance:          0,
+              isReversalCredit: true,
+            })
+          } else {
+            outRows.push({
+              id:          r.id as string,
+              date:        r.date as string,
+              description: (r.description as string | null) || '—',
+              inflow:      0,
+              outflow:     amt,
+              balance:     0,
+            })
+          }
         }
       } else {
         const sc2 = ledgerPortion
@@ -379,7 +401,7 @@ export default function CategoryLedger() {
             .eq('stage_code_1', activeCategory)
             .order('date')),
           fetchAllRows(() => supabase.from('outflow_transactions')
-            .select('id, date, description, amount_disbursed')
+            .select('id, date, description, amount_disbursed, offset_role')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
             .order('date')),
@@ -405,14 +427,27 @@ export default function CategoryLedger() {
         }
         for (const r of outflowRes.data ?? []) {
           const amt = Number(r.amount_disbursed || 0)
-          outRows.push({
-            id:          r.id as string,
-            date:        r.date as string,
-            description: (r.description as string | null) || '—',
-            inflow:      0,
-            outflow:     amt,
-            balance:     0,
-          })
+          const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+          if (isOffset) {
+            inRows.push({
+              id:               r.id as string,
+              date:             r.date as string,
+              description:      (r.description as string | null) || '—',
+              inflow:           amt,
+              outflow:          0,
+              balance:          0,
+              isReversalCredit: true,
+            })
+          } else {
+            outRows.push({
+              id:          r.id as string,
+              date:        r.date as string,
+              description: (r.description as string | null) || '—',
+              inflow:      0,
+              outflow:     amt,
+              balance:     0,
+            })
+          }
         }
         // Config-split: allocations routed to this category+portion via config rows
         for (const r of cfgInflowRes.error ? [] : (cfgInflowRes.data ?? [])) {
@@ -1246,10 +1281,16 @@ export default function CategoryLedger() {
                             const meta = row.intraflowMeta
                             return (
                               <Fragment key={row.id}>
-                                <tr className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : meta ? 'bg-indigo-50/30 hover:bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
+                                <tr className={`transition-colors ${row.id === 'bal-bf' ? 'bg-blue-50/60 font-medium' : row.isReversalCredit ? 'bg-amber-50/40 hover:bg-amber-50/60' : meta ? 'bg-indigo-50/30 hover:bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
                                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{row.id === 'bal-bf' ? '—' : formatDate(row.date)}</td>
                                   <td className="px-4 py-3 text-gray-700 max-w-xs">
                                     <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                                    {row.isReversalCredit && (
+                                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                        <RotateCcw className="w-3 h-3" />
+                                        Reversal Credit
+                                      </span>
+                                    )}
                                     {meta && (
                                       <button
                                         type="button"
@@ -1316,6 +1357,8 @@ export default function CategoryLedger() {
                             className={`rounded-xl border overflow-hidden shadow-sm ${
                               row.id === 'bal-bf'
                                 ? 'bg-blue-50/60 border-blue-200'
+                                : row.isReversalCredit
+                                ? 'bg-amber-50/40 border-amber-200'
                                 : meta
                                 ? 'bg-indigo-50/30 border-indigo-200'
                                 : 'bg-white border-gray-200'
@@ -1340,6 +1383,12 @@ export default function CategoryLedger() {
                                     setTooltip={setDescTooltip}
                                     textCls="text-gray-800"
                                   />
+                                  {row.isReversalCredit && (
+                                    <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                      <RotateCcw className="w-3 h-3" />
+                                      Reversal Credit
+                                    </span>
+                                  )}
                                   {meta && (
                                     <button
                                       type="button"
