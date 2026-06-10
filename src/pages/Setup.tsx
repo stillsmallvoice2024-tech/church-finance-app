@@ -2059,6 +2059,94 @@ NOTIFY pgrst, 'reload schema';
 -- ── FX category currency ──────────────────────────────────────────────────────
 ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS currency text;
 
+NOTIFY pgrst, 'reload schema';
+
+-- ── Transaction offset linking ────────────────────────────────────────────────
+-- Adds generic offset-linking architecture to inflow_transactions and
+-- outflow_transactions. Supports reversal, refund, bank_deposit, and
+-- intra_bank_transfer relationship types without double-counting balances.
+-- Safe on existing data: all new columns are nullable. Existing rows are
+-- unaffected — NULL offset_role is treated identically to 'root' everywhere.
+
+ALTER TABLE public.inflow_transactions
+  ADD COLUMN IF NOT EXISTS root_transaction_id    text,
+  ADD COLUMN IF NOT EXISTS root_transaction_table text,
+  ADD COLUMN IF NOT EXISTS offset_link_type       text,
+  ADD COLUMN IF NOT EXISTS offset_role            text;
+
+DO $$ BEGIN
+  ALTER TABLE public.inflow_transactions
+    ADD CONSTRAINT inflow_offset_role_check
+    CHECK (offset_role IN ('root', 'offset'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE public.outflow_transactions
+  ADD COLUMN IF NOT EXISTS root_transaction_id    text,
+  ADD COLUMN IF NOT EXISTS root_transaction_table text,
+  ADD COLUMN IF NOT EXISTS offset_link_type       text,
+  ADD COLUMN IF NOT EXISTS offset_role            text;
+
+DO $$ BEGIN
+  ALTER TABLE public.outflow_transactions
+    ADD CONSTRAINT outflow_offset_role_check
+    CHECK (offset_role IN ('root', 'offset'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_inflow_root_txn_id
+  ON public.inflow_transactions(root_transaction_id)
+  WHERE root_transaction_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_outflow_root_txn_id
+  ON public.outflow_transactions(root_transaction_id)
+  WHERE root_transaction_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_inflow_offset_role
+  ON public.inflow_transactions(offset_role)
+  WHERE offset_role IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_outflow_offset_role
+  ON public.outflow_transactions(offset_role)
+  WHERE offset_role IS NOT NULL;
+
+-- Anti-chaining trigger: prevents offset->offset links (no recursive chains).
+-- An offset transaction's root_transaction_id must point to a root (or NULL role)
+-- transaction, never to another offset.
+CREATE OR REPLACE FUNCTION public.prevent_offset_chaining()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.offset_role = 'offset' AND NEW.root_transaction_id IS NOT NULL THEN
+    IF NEW.root_transaction_table = 'inflow_transactions' THEN
+      IF EXISTS (
+        SELECT 1 FROM public.inflow_transactions
+        WHERE id::text = NEW.root_transaction_id AND offset_role = 'offset'
+      ) THEN
+        RAISE EXCEPTION 'offset_chaining_not_allowed: root transaction is itself an offset';
+      END IF;
+    ELSIF NEW.root_transaction_table = 'outflow_transactions' THEN
+      IF EXISTS (
+        SELECT 1 FROM public.outflow_transactions
+        WHERE id::text = NEW.root_transaction_id AND offset_role = 'offset'
+      ) THEN
+        RAISE EXCEPTION 'offset_chaining_not_allowed: root transaction is itself an offset';
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_prevent_inflow_offset_chaining  ON public.inflow_transactions;
+CREATE TRIGGER trg_prevent_inflow_offset_chaining
+  BEFORE INSERT OR UPDATE ON public.inflow_transactions
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_offset_chaining();
+
+DROP TRIGGER IF EXISTS trg_prevent_outflow_offset_chaining ON public.outflow_transactions;
+CREATE TRIGGER trg_prevent_outflow_offset_chaining
+  BEFORE INSERT OR UPDATE ON public.outflow_transactions
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_offset_chaining();
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────

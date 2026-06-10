@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { allocatePercent } from './financeMath'
+import { isNonContributing } from './transactionTypes'
 
 export interface DateRange {
   from: string
@@ -80,7 +81,7 @@ async function getCategoryConfigInflows(
 
   let inflowQ = supabase
     .from('inflow_transactions')
-    .select('amount, allocation_config_id, date, transaction_type, stage_code_2')
+    .select('amount, allocation_config_id, date, transaction_type, stage_code_2, offset_role')
     // Allow null (normal inflows) and fx_conversion (converted naira). All other tagged
     // types (reversal, refund, bank_deposit, intrabank_transfer, balance_brought_forward)
     // are pass-through entries that carry no allocatable income.
@@ -100,6 +101,9 @@ async function getCategoryConfigInflows(
   let total = 0
 
   for (const inflow of inflowRes.data ?? []) {
+    // Belt-and-suspenders: PostgREST filter already excludes non-allocatable types,
+    // but isNonContributing also catches offset_role='offset' rows on migrated DBs.
+    if (isNonContributing(inflow)) continue
     const s2 = inflow.stage_code_2 as string | null
     // Direct seed/savings inflows are counted via stage_code_1 direct queries
     if (s2 === 'Specific Seed' || s2 === 'Savings') continue

@@ -99,6 +99,10 @@ export interface AddInflowInput {
   income_type_id?: string
   bank_name?: string
   recorded_at?: string
+  root_transaction_id?: string | null
+  root_transaction_table?: 'inflow_transactions' | 'outflow_transactions' | null
+  offset_link_type?: string | null
+  offset_role?: 'root' | 'offset' | null
 }
 
 export interface AddOutflowInput {
@@ -124,6 +128,10 @@ export interface AddOutflowInput {
   department_id?: string | null
   bank_name?: string
   recorded_at?: string
+  root_transaction_id?: string | null
+  root_transaction_table?: 'inflow_transactions' | 'outflow_transactions' | null
+  offset_link_type?: string | null
+  offset_role?: 'root' | 'offset' | null
 }
 
 export interface AddIntraFlowInput {
@@ -169,6 +177,8 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
     if (!user?.id) throw new Error('You must be signed in to add transactions.')
     if (input.transaction_type === 'fx_inflow' || input.transaction_type === 'fx_outflow')
       throw new Error('FX transactions must be entered through the Foreign Currency module.')
+    if (input.offset_role === 'offset' && !input.root_transaction_id)
+      throw new Error('Offset transactions require root_transaction_id to be set.')
 
     setLoading(true)
     setError(null)
@@ -217,6 +227,8 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
     if (!user?.id) throw new Error('You must be signed in to add transactions.')
     if (input.transaction_type === 'fx_inflow' || input.transaction_type === 'fx_outflow')
       throw new Error('FX transactions must be entered through the Foreign Currency module.')
+    if (input.offset_role === 'offset' && !input.root_transaction_id)
+      throw new Error('Offset transactions require root_transaction_id to be set.')
 
     setLoading(true)
     setError(null)
