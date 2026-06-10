@@ -290,7 +290,7 @@ function DepositsPanel() {
   const bdCsvRow = (r: DepositRow) => [r.date, r.bank_name ?? '', r.description ?? '', r.amount, r.transaction_ref ?? '', r.remarks ?? '', BD_SRC[r.source] ?? r.source]
   const BD_CSV_FILE = `bank-deposits-${new Date().toISOString().slice(0, 10)}.csv`
 
-  const colCount = 9
+  const colCount = 8
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -468,7 +468,7 @@ function DepositsPanel() {
                   <SortableHeader field={BD_SORT_FIELDS[0]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={BD_SORT_FIELDS[2]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={BD_SORT_FIELDS[1]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  {['Description', 'Transaction Ref', 'Remarks', 'Source', 'Actions'].map(h => (
+                  {['Description', 'Remarks', 'Source', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -491,10 +491,9 @@ function DepositsPanel() {
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(row.date)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(row.amount, baseCurrencyCode)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
+                      <td className="px-4 py-3 text-sm text-gray-700 max-w-[300px]">
                         <DescriptionCell id={`${row.source}-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
-                      <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
                         <DescriptionCell id={`rem-${row.source}-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>
