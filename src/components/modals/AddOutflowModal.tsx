@@ -377,6 +377,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
                 if (v?.txnRef) setValue('original_transaction_id', v.txnRef)
               }}
               bankName={watchedBankName}
+              excludeId={editRecord?.id}
             />
           </Field>
         )}

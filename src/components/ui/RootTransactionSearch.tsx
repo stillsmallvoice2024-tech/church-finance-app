@@ -20,6 +20,7 @@ interface SearchResult {
   bank_name: string | null
   direction: 'in' | 'out'
   txnRef: string | null
+  offsetRole: 'root' | 'offset' | null
 }
 
 interface Props {
@@ -27,9 +28,11 @@ interface Props {
   onChange: (v: RootTxnLink | null) => void
   /** When set, results are scoped to this bank by default. */
   bankName?: string | null
+  /** When set, this transaction ID is excluded from search results (prevents self-linking). */
+  excludeId?: string
 }
 
-export function RootTransactionSearch({ value, onChange, bankName }: Props) {
+export function RootTransactionSearch({ value, onChange, bankName, excludeId }: Props) {
   const orgId = useOrgStore((s) => s.orgId)
   const { baseCurrencyCode } = useOrgCurrency()
 
@@ -69,23 +72,25 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
         (() => {
           let q = supabase
             .from('inflow_transactions')
-            .select('id, date, amount, description, bank_name, transaction_ref')
+            .select('id, date, amount, description, bank_name, transaction_ref, offset_role')
             .eq('org_id', orgId)
             .ilike('description', likeQ)
             .order('date', { ascending: false })
             .limit(8)
           if (scopeBank) q = q.eq('bank_name', bankName!)
+          if (excludeId) q = q.neq('id', excludeId)
           return q
         })(),
         (() => {
           let q = supabase
             .from('outflow_transactions')
-            .select('id, date, amount_disbursed, description, bank_description, bank_name, transaction_id')
+            .select('id, date, amount_disbursed, description, bank_description, bank_name, transaction_id, offset_role')
             .eq('org_id', orgId)
             .ilike('description', likeQ)
             .order('date', { ascending: false })
             .limit(8)
           if (scopeBank) q = q.eq('bank_name', bankName!)
+          if (excludeId) q = q.neq('id', excludeId)
           return q
         })(),
       ])
@@ -99,6 +104,7 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
           bank_name:   r.bank_name as string | null,
           direction:   'in' as const,
           txnRef:      r.transaction_ref as string | null,
+          offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
         })),
         ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
           id:          r.id as string,
@@ -108,6 +114,7 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
           bank_name:   r.bank_name as string | null,
           direction:   'out' as const,
           txnRef:      r.transaction_id as string | null,
+          offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
         })),
       ]
         .sort((a, b) => b.date.localeCompare(a.date))
@@ -119,7 +126,7 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
     }, 300)
 
     return () => clearTimeout(searchTimeout.current)
-  }, [query, orgId, bankName, allBanks])
+  }, [query, orgId, bankName, allBanks, excludeId])
 
   const select = (r: SearchResult) => {
     const table = r.direction === 'in'
@@ -205,6 +212,15 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
               }`}>
                 {r.direction === 'in' ? 'IN' : 'OUT'}
               </span>
+              {r.offsetRole && (
+                <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  r.offsetRole === 'root'
+                    ? 'bg-green-50 text-green-600 border border-green-200'
+                    : 'bg-amber-50 text-amber-600 border border-amber-200'
+                }`} title={r.offsetRole === 'root' ? 'This transaction is a root (has an offset linked to it)' : 'This transaction is already tagged as an offset'}>
+                  {r.offsetRole === 'root' ? 'R' : 'O'}
+                </span>
+              )}
               <span className="text-xs text-gray-400 whitespace-nowrap">
                 {formatDate(r.date)}
               </span>
