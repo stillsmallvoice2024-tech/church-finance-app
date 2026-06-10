@@ -34,6 +34,12 @@ export function inflowDetailItems(row: InflowTransaction, _currency: string): De
         : null,
     },
     { label: 'Original Txn ID', value: row.original_transaction_id, mono: true, breakAll: true },
+    {
+      label: 'Offset Role',
+      value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
+      badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
+    },
+    { label: 'Root Txn ID', value: row.root_transaction_id, mono: true, breakAll: true },
   ]
 }
 
@@ -66,5 +72,11 @@ export function outflowDetailItems(row: OutflowTransaction, currency: string): D
     },
     { label: 'Original Txn ID', value: row.original_transaction_id, mono: true, breakAll: true },
     { label: 'Status', value: row.is_pending_deduction ? 'Pending Deduction' : null, badge: 'bg-amber-100 text-amber-700' },
+    {
+      label: 'Offset Role',
+      value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
+      badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
+    },
+    { label: 'Root Txn ID', value: row.root_transaction_id, mono: true, breakAll: true },
   ]
 }

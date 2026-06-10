@@ -392,6 +392,12 @@ export default function BankDeposits() {
     { label: 'Remarks',          value: row.remarks,         breakAll: true },
     { label: 'Source',           value: row.source === 'bank_deposits' ? 'Bank Deposit Record' : row.source === 'inflow' ? 'Inflow Transaction' : 'Outflow Transaction' },
     { label: 'Raw Description',  value: row.description,     breakAll: true },
+    {
+      label: 'Offset Role',
+      value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
+      badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
+    },
+    { label: 'Root Txn ID', value: row.root_transaction_id, mono: true, breakAll: true },
   ]
 
   const BD_SOURCE_LABELS: Record<string, string> = { bank_deposits: 'Deposit', inflow: 'Inflow', outflow: 'Outflow' }
@@ -612,7 +618,7 @@ export default function BankDeposits() {
                         </button>
                       </>
                     )}
-                    {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.root_transaction_id === null && (
+                    {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.offset_role === 'offset' && row.root_transaction_id === null && (
                       <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                         <Link2 className="w-3.5 h-3.5" />
                       </button>
@@ -694,7 +700,7 @@ export default function BankDeposits() {
                             </button>
                           </>
                         )}
-                        {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.root_transaction_id === null && (
+                        {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.offset_role === 'offset' && row.root_transaction_id === null && (
                           <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                             <Link2 className="w-3.5 h-3.5" />
                           </button>

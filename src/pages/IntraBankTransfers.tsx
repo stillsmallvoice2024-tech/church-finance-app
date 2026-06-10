@@ -226,6 +226,12 @@ export default function IntraBankTransfers() {
     { label: 'From Bank',        value: row.from_bank_name },
     { label: 'To Bank',          value: row.to_bank_name },
     { label: 'Raw Description',  value: row.description,     breakAll: true },
+    {
+      label: 'Offset Role',
+      value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
+      badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
+    },
+    { label: 'Root Txn ID', value: row.root_transaction_id, mono: true, breakAll: true },
   ]
 
   const load = useCallback(async () => {
@@ -455,7 +461,7 @@ export default function IntraBankTransfers() {
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                       {row.source === 'intrabank_transfers' && canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>}
                       {row.source === 'intrabank_transfers' && canDelete() && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>}
-                      {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && row.root_transaction_id === null && (
+                      {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && row.offset_role === 'offset' && row.root_transaction_id === null && (
                         <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                           <Link2 className="w-3.5 h-3.5" />
                         </button>
@@ -522,7 +528,7 @@ export default function IntraBankTransfers() {
                         <div className="flex items-center gap-1">
                           {row.source === 'intrabank_transfers' && canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10" title="Edit"><Pencil className="w-4 h-4" /></button>}
                           {row.source === 'intrabank_transfers' && canDelete() && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>}
-                          {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && row.root_transaction_id === null && (
+                          {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && row.offset_role === 'offset' && row.root_transaction_id === null && (
                             <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                               <Link2 className="w-4 h-4" />
                             </button>

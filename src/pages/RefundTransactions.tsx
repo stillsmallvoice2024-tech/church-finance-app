@@ -62,6 +62,12 @@ export default function RefundTransactions() {
     { label: 'Remarks',         value: row.remarks,                 breakAll: true },
     { label: 'Raw Description', value: row.description,             breakAll: true },
     { label: 'Direction',       value: row.direction === 'in' ? 'Inflow' : 'Outflow' },
+    {
+      label: 'Offset Role',
+      value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
+      badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
+    },
+    { label: 'Root Txn ID', value: row.root_transaction_id, mono: true, breakAll: true },
   ]
 
   const load = async () => {
@@ -291,7 +297,7 @@ export default function RefundTransactions() {
                     </p>
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                    {canWrite() && row.root_transaction_id === null && (
+                    {canWrite() && row.offset_role === 'offset' && row.root_transaction_id === null && (
                       <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                         <Link2 className="w-3.5 h-3.5" />
                       </button>
@@ -369,7 +375,7 @@ export default function RefundTransactions() {
                           <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          {row.root_transaction_id === null && (
+                          {row.offset_role === 'offset' && row.root_transaction_id === null && (
                             <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                               <Link2 className="w-3.5 h-3.5" />
                             </button>
