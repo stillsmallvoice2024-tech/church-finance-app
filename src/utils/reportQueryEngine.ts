@@ -293,7 +293,7 @@ export async function getCategoryOutflows(
 
   let q = supabase
     .from('outflow_transactions')
-    .select('amount_disbursed')
+    .select('amount_disbursed, offset_role')
     .eq('stage_code_1', category)
 
   let intraQ = supabase
@@ -324,10 +324,11 @@ export async function getCategoryOutflows(
 
   const [{ data, error }, intraRes] = await Promise.all([q, intraQ])
   if (error) return { value: 0, error: error.message }
-  const baseTotal  = (data ?? []).reduce(
-    (sum, r) => sum + Number(r.amount_disbursed || 0),
-    0,
-  )
+  const baseTotal = (data ?? []).reduce((sum, r) => {
+    const amt = Number(r.amount_disbursed || 0)
+    const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+    return sum + (isOffset ? -amt : amt)
+  }, 0)
   const intraDebit = intraRes.error
     ? 0
     : (intraRes.data ?? []).reduce((sum, r) => sum + Number(r.total_amount), 0)
