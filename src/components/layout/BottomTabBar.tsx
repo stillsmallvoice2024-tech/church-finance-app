@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, TrendingUp, TrendingDown, FileUp,
-  BookOpen, Landmark, ArrowRightLeft, Repeat2, Globe,
+  BookOpen, Repeat2, Globe,
   Hourglass, RotateCcw, Undo2, Receipt,
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText,
   SlidersHorizontal, Settings, Users, ClipboardList,
   MoreHorizontal, X,
 } from 'lucide-react'
+import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
 
 interface PrimaryTab {
@@ -44,7 +45,7 @@ const DRAWER_SECTIONS: DrawerSection[] = [
     label: 'Banking',
     items: [
       { label: 'Bank Ledger',         path: '/bank-ledger',         icon: BookOpen       },
-      { label: 'Deposits & Transfers', path: '/bank-movement', icon: Landmark },
+      { label: 'Deposits & Transfers', path: '/bank-movement', icon: BankMovementIcon },
       { label: 'Intra-Account',       path: '/intra-flow',          icon: Repeat2        },
       { label: 'FX Currency',         path: '/foreign-currency',    icon: Globe          },
       { label: 'Receipts',            path: '/receipts',            icon: Receipt        },
