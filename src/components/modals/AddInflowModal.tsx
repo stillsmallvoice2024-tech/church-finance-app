@@ -20,6 +20,8 @@ import type { InflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import { SearchableSelect } from '../ui/SearchableSelect'
+import { RootTransactionSearch, type RootTxnLink } from '../ui/RootTransactionSearch'
+import { isOffsetableType } from '../../utils/transactionTypes'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
@@ -45,6 +47,7 @@ const schema = z.object({
   remark:                     z.string().optional(),
   transaction_type:           z.string().optional(),
   original_transaction_id:    z.string().optional(),
+  offset_role:                z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -84,6 +87,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const [selectedConfigId,  setSelectedConfigId]  = useState('')
   const [configManuallySet, setConfigManuallySet] = useState(false)
   const [dupError, setDupError] = useState<string | null>(null)
+  const [rootTxnLink, setRootTxnLink] = useState<RootTxnLink | null>(null)
 
   // Custom income type (user-defined, separate from the legacy inflowType)
   const [incomeTypeId,        setIncomeTypeId]        = useState<string>('')
@@ -99,12 +103,17 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     formState: { errors, isDirty },
     reset: resetForm,
     watch,
+    setValue,
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   const description     = watch('description')
   const stageCode1      = watch('stage_code_1')
   const transactionType = watch('transaction_type')
   const watchedDate     = watch('date')
+  const offsetRole      = watch('offset_role') ?? ''
+  const watchedBankName = watch('bank_name')
+
+  const isOffsetType = isOffsetableType(transactionType)
 
   // Auto-classify income type from description + stage code
   useEffect(() => {
@@ -171,10 +180,19 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setConfigManuallySet(false)
     setIncomeTypeAutoSet(false)
     setDupError(null)
+    setRootTxnLink(null)
     if (editRecord) {
       setSelectedConfigId(editRecord.allocation_config_id ?? '')
       setConfigManuallySet(true)
       setIncomeTypeId(editRecord.income_type_id ?? '')
+      // Restore root-link pill if this record has a linked root
+      if (editRecord.root_transaction_id && editRecord.root_transaction_table) {
+        setRootTxnLink({
+          id:    editRecord.root_transaction_id,
+          table: editRecord.root_transaction_table as 'inflow_transactions' | 'outflow_transactions',
+          label: `Linked · ID: ${editRecord.root_transaction_id.slice(0, 8)}… (search to update)`,
+        })
+      }
       resetForm({
         date:                       editRecord.date,
         created_at_date:            editRecord.created_at ? editRecord.created_at.slice(0, 10) : '',
@@ -189,6 +207,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         remark:                     editRecord.remark ?? '',
         transaction_type:           editRecord.transaction_type ?? '',
         original_transaction_id:    editRecord.original_transaction_id ?? '',
+        offset_role:                editRecord.offset_role ?? '',
       })
     } else {
       setSelectedConfigId('')
@@ -220,6 +239,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             fx_rate:                    editRecord.fx_rate     ?? null,
             transaction_type:           values.transaction_type        || null,
             original_transaction_id:    values.original_transaction_id || null,
+            offset_role:                isOffsetableType(values.transaction_type) ? (values.offset_role as 'root' | 'offset' | null || null) : null,
+            root_transaction_id:        isOffsetableType(values.transaction_type) && values.offset_role === 'offset' && rootTxnLink ? rootTxnLink.id    : null,
+            root_transaction_table:     isOffsetableType(values.transaction_type) && values.offset_role === 'offset' && rootTxnLink ? rootTxnLink.table : null,
+            offset_link_type:           isOffsetableType(values.transaction_type) && values.offset_role === 'offset' && rootTxnLink ? (values.transaction_type || null) : null,
             income_type_id:             values.transaction_type ? null : (incomeTypeId || null),
             ...(values.created_at_date ? { created_at: `${values.created_at_date}T00:00:00.000Z` } : {}),
             ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
@@ -248,6 +271,16 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           remark:                     values.remark || undefined,
           transaction_type:           values.transaction_type        || undefined,
           original_transaction_id:    values.original_transaction_id || undefined,
+          ...(isOffsetableType(values.transaction_type) && values.offset_role
+            ? { offset_role: values.offset_role as 'root' | 'offset' }
+            : {}),
+          ...(isOffsetableType(values.transaction_type) && values.offset_role === 'offset' && rootTxnLink
+            ? {
+                root_transaction_id:    rootTxnLink.id,
+                root_transaction_table: rootTxnLink.table,
+                offset_link_type:       values.transaction_type || undefined,
+              }
+            : {}),
           income_type_id:             values.transaction_type ? undefined : (incomeTypeId || undefined),
           ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
         }
@@ -377,7 +410,31 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </select>
         </Field>
 
-        {/* Original Txn ID — only for refund/reversal */}
+        {/* Offset Role — visible only for offsetting transaction types */}
+        {isOffsetType && (
+          <Field label="Offset Role"
+            help="Root = this is the original transaction. Offset = this transaction cancels or adjusts a root transaction.">
+            <select {...register('offset_role')} className={inputCls(false)}>
+              <option value="">— Not set —</option>
+              <option value="root">Root (original transaction)</option>
+              <option value="offset">Offset (linked to root)</option>
+            </select>
+          </Field>
+        )}
+
+        {/* Root Transaction Search — only when this is an offset */}
+        {isOffsetType && offsetRole === 'offset' && (
+          <Field label="Root Transaction"
+            help="Search for the original transaction this offsets. Scoped to the same bank by default. You can link this later via Edit if the root is unknown now.">
+            <RootTransactionSearch
+              value={rootTxnLink}
+              onChange={v => setRootTxnLink(v)}
+              bankName={watchedBankName}
+            />
+          </Field>
+        )}
+
+        {/* Original Txn ID — only for refund/reversal (legacy field, kept for back-compat) */}
         {(transactionType === 'refund' || transactionType === 'reversal') && (
           <Field label="Original Transaction ID" error={errors.original_transaction_id?.message}>
             <input

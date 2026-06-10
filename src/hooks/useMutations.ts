@@ -177,8 +177,6 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
     if (!user?.id) throw new Error('You must be signed in to add transactions.')
     if (input.transaction_type === 'fx_inflow' || input.transaction_type === 'fx_outflow')
       throw new Error('FX transactions must be entered through the Foreign Currency module.')
-    if (input.offset_role === 'offset' && !input.root_transaction_id)
-      throw new Error('Offset transactions require root_transaction_id to be set.')
 
     setLoading(true)
     setError(null)
@@ -227,8 +225,6 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
     if (!user?.id) throw new Error('You must be signed in to add transactions.')
     if (input.transaction_type === 'fx_inflow' || input.transaction_type === 'fx_outflow')
       throw new Error('FX transactions must be entered through the Foreign Currency module.')
-    if (input.offset_role === 'offset' && !input.root_transaction_id)
-      throw new Error('Offset transactions require root_transaction_id to be set.')
 
     setLoading(true)
     setError(null)

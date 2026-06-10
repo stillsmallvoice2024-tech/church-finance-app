@@ -29,6 +29,8 @@ import { normalizeId } from '../utils/normalizeId'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
+import { RootTransactionSearch, type RootTxnLink } from '../components/ui/RootTransactionSearch'
+import { isOffsetableType } from '../utils/transactionTypes'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -519,7 +521,9 @@ function ManualEntryForm() {
   const [configOverride,    setConfigOverride]    = useState('')
 
   // Shared direction state
-  const [txnType, setTxnType] = useState('')
+  const [txnType,       setTxnType]       = useState('')
+  const [txnOffsetRole, setTxnOffsetRole] = useState('')
+  const [rootTxnLink,   setRootTxnLink]   = useState<RootTxnLink | null>(null)
 
   // Outflow-specific state
   const [isPending,      setIsPending]      = useState(false)
@@ -588,6 +592,8 @@ function ManualEntryForm() {
     setIncomeTypeAutoSet(false)
     setConfigOverride('')
     setTxnType('')
+    setTxnOffsetRole('')
+    setRootTxnLink(null)
     setIsPending(false)
     setOutflowS1('')
     setOutflowS2('')
@@ -651,6 +657,16 @@ function ManualEntryForm() {
         income_type_id:             txnType ? undefined : (incomeTypeId || undefined),
         transaction_type:           txnType                        || undefined,
         original_transaction_id:    v('original_transaction_id')   || undefined,
+        ...(isOffsetableType(txnType) && txnOffsetRole
+          ? { offset_role: txnOffsetRole as 'root' | 'offset' }
+          : {}),
+        ...(isOffsetableType(txnType) && txnOffsetRole === 'offset' && rootTxnLink
+          ? {
+              root_transaction_id:    rootTxnLink.id,
+              root_transaction_table: rootTxnLink.table,
+              offset_link_type:       txnType || undefined,
+            }
+          : {}),
         recorded_at:                new Date().toISOString(),
       }
       try {
@@ -672,6 +688,8 @@ function ManualEntryForm() {
       setIncomeTypeAutoSet(false)
       setConfigOverride('')
       setTxnType('')
+      setTxnOffsetRole('')
+      setRootTxnLink(null)
       setErrors({})
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error')
@@ -701,6 +719,16 @@ function ManualEntryForm() {
         remarks:                 v('remarks')          || undefined,
         transaction_type:        txnType               || undefined,
         original_transaction_id: v('original_transaction_id') || undefined,
+        ...(isOffsetableType(txnType) && txnOffsetRole
+          ? { offset_role: txnOffsetRole as 'root' | 'offset' }
+          : {}),
+        ...(isOffsetableType(txnType) && txnOffsetRole === 'offset' && rootTxnLink
+          ? {
+              root_transaction_id:    rootTxnLink.id,
+              root_transaction_table: rootTxnLink.table,
+              offset_link_type:       txnType || undefined,
+            }
+          : {}),
         recorded_at:             new Date().toISOString(),
       }
       try {
@@ -723,6 +751,8 @@ function ManualEntryForm() {
       setOutflowS2('')
       setOutflowTypeId('')
       setTxnType('')
+      setTxnOffsetRole('')
+      setRootTxnLink(null)
       setErrors({})
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : 'Save failed', 'error')
@@ -952,16 +982,38 @@ function ManualEntryForm() {
 
           {/* Transaction Type */}
           <Field label="Transaction Type">
-            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
+            <select value={txnType} onChange={e => { setTxnType(e.target.value); setTxnOffsetRole(''); setRootTxnLink(null) }} className={iCls}>
               {availableTxnTypes.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </Field>
 
-          {/* Original Transaction ID (refund / reversal only) */}
+          {/* Offset Role — visible only for offsetting transaction types */}
+          {isOffsetableType(txnType) && (
+            <Field label="Offset Role">
+              <select value={txnOffsetRole} onChange={e => { setTxnOffsetRole(e.target.value); if (e.target.value !== 'offset') setRootTxnLink(null) }} className={iCls}>
+                <option value="">— Not set —</option>
+                <option value="root">Root (original transaction)</option>
+                <option value="offset">Offset (linked to root)</option>
+              </select>
+            </Field>
+          )}
+
+          {/* Root Transaction Search — only when this is an offset */}
+          {isOffsetableType(txnType) && txnOffsetRole === 'offset' && (
+            <Field label="Root Transaction">
+              <RootTransactionSearch
+                value={rootTxnLink}
+                onChange={setRootTxnLink}
+                bankName={banks.find(b => b.id === v('bank_id'))?.name ?? null}
+              />
+            </Field>
+          )}
+
+          {/* Original Transaction ID (refund / reversal only, legacy) */}
           {(txnType === 'refund' || txnType === 'reversal') && (
-            <Field label="Original Transaction ID *" error={errors.original_transaction_id}>
+            <Field label="Original Transaction ID" error={errors.original_transaction_id}>
               <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
             </Field>
           )}
@@ -1096,16 +1148,38 @@ function ManualEntryForm() {
 
           {/* Transaction Type */}
           <Field label="Transaction Type">
-            <select value={txnType} onChange={e => setTxnType(e.target.value)} className={iCls}>
+            <select value={txnType} onChange={e => { setTxnType(e.target.value); setTxnOffsetRole(''); setRootTxnLink(null) }} className={iCls}>
               {availableTxnTypes.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </Field>
 
-          {/* Original Transaction ID (refund / reversal only) */}
+          {/* Offset Role — visible only for offsetting transaction types */}
+          {isOffsetableType(txnType) && (
+            <Field label="Offset Role">
+              <select value={txnOffsetRole} onChange={e => { setTxnOffsetRole(e.target.value); if (e.target.value !== 'offset') setRootTxnLink(null) }} className={iCls}>
+                <option value="">— Not set —</option>
+                <option value="root">Root (original transaction)</option>
+                <option value="offset">Offset (linked to root)</option>
+              </select>
+            </Field>
+          )}
+
+          {/* Root Transaction Search — only when this is an offset */}
+          {isOffsetableType(txnType) && txnOffsetRole === 'offset' && (
+            <Field label="Root Transaction">
+              <RootTransactionSearch
+                value={rootTxnLink}
+                onChange={setRootTxnLink}
+                bankName={banks.find(b => b.id === v('bank_id'))?.name ?? null}
+              />
+            </Field>
+          )}
+
+          {/* Original Transaction ID (refund / reversal only, legacy) */}
           {(txnType === 'refund' || txnType === 'reversal') && (
-            <Field label="Original Transaction ID *" error={errors.original_transaction_id}>
+            <Field label="Original Transaction ID" error={errors.original_transaction_id}>
               <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
             </Field>
           )}

@@ -17,6 +17,18 @@ export const NON_ALLOCATABLE_TYPES = new Set([
   'intrabank_transfer',
 ])
 
+// Types for which offset-role UI should appear in forms.
+export const OFFSETABLE_TYPES = new Set([
+  'reversal',
+  'refund',
+  'bank_deposit',
+  'intrabank_transfer',
+])
+
+export function isOffsetableType(type: string | null | undefined): boolean {
+  return !!type && OFFSETABLE_TYPES.has(type)
+}
+
 // Returns true when a transaction row must be excluded from balances/reports.
 // Checks both legacy transaction_type exclusion and new offset_role exclusion.
 // offset_role = 'offset' rows always contribute 0 — their financial effect is
