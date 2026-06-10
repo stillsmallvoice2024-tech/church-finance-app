@@ -302,7 +302,10 @@ export default function ReversalTransactions() {
                       <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      {row.offset_role === 'offset' && row.root_transaction_id === null && (
+                      {row.offset_role === 'root' && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                      )}
+                      {row.offset_role !== 'root' && row.root_transaction_id === null && (
                         <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                           <Link2 className="w-3.5 h-3.5" />
                         </button>
@@ -374,7 +377,10 @@ export default function ReversalTransactions() {
                               <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              {row.root_transaction_id === null && (
+                              {row.offset_role === 'root' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                              )}
+                              {row.offset_role !== 'root' && row.root_transaction_id === null && (
                                 <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                                   <Link2 className="w-3.5 h-3.5" />
                                 </button>
