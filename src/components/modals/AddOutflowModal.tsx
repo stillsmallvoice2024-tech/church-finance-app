@@ -366,26 +366,17 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           </Field>
         )}
 
-        {/* Root Transaction Search — only when this is an offset */}
+        {/* Root / Original Transaction — single combined field for offset rows */}
         {isOffsetType && offsetRole === 'offset' && (
-          <Field label="Root Transaction"
-            help="Search for the original transaction this offsets. Scoped to the same bank by default. You can link this later via Edit if the root is unknown now.">
+          <Field label="Root / Original Transaction"
+            help="Search for the original transaction this offsets. The transaction ref is automatically saved as the Original Transaction ID. Scoped to the same bank by default. You can link this later via Edit if the root is unknown now.">
             <RootTransactionSearch
               value={rootTxnLink}
-              onChange={v => setRootTxnLink(v)}
+              onChange={v => {
+                setRootTxnLink(v)
+                if (v?.txnRef) setValue('original_transaction_id', v.txnRef)
+              }}
               bankName={watchedBankName}
-            />
-          </Field>
-        )}
-
-        {/* Original Txn ID — only for refund/reversal (legacy field, kept for back-compat) */}
-        {(transactionType === 'refund' || transactionType === 'reversal') && (
-          <Field label="Original Transaction ID" error={errors.original_transaction_id?.message}>
-            <input
-              type="text"
-              placeholder="ID of the transaction being refunded/reversed"
-              {...register('original_transaction_id')}
-              className={inputCls(!!errors.original_transaction_id)}
             />
           </Field>
         )}

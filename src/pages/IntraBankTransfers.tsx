@@ -231,7 +231,6 @@ export default function IntraBankTransfers() {
       value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
       badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
     },
-    { label: 'Root Txn ID', value: row.root_transaction_id, mono: true, breakAll: true },
   ]
 
   const load = useCallback(async () => {

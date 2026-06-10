@@ -9,6 +9,7 @@ export interface RootTxnLink {
   id: string
   table: 'inflow_transactions' | 'outflow_transactions'
   label: string
+  txnRef: string | null   // bank transaction_ref / transaction_id — same as original_transaction_id
 }
 
 interface SearchResult {
@@ -18,6 +19,7 @@ interface SearchResult {
   description: string | null
   bank_name: string | null
   direction: 'in' | 'out'
+  txnRef: string | null
 }
 
 interface Props {
@@ -67,7 +69,7 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
         (() => {
           let q = supabase
             .from('inflow_transactions')
-            .select('id, date, amount, description, bank_name')
+            .select('id, date, amount, description, bank_name, transaction_ref')
             .eq('org_id', orgId)
             .ilike('description', likeQ)
             .order('date', { ascending: false })
@@ -78,7 +80,7 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
         (() => {
           let q = supabase
             .from('outflow_transactions')
-            .select('id, date, amount_disbursed, description, bank_description, bank_name')
+            .select('id, date, amount_disbursed, description, bank_description, bank_name, transaction_id')
             .eq('org_id', orgId)
             .ilike('description', likeQ)
             .order('date', { ascending: false })
@@ -96,6 +98,7 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
           description: r.description as string | null,
           bank_name:   r.bank_name as string | null,
           direction:   'in' as const,
+          txnRef:      r.transaction_ref as string | null,
         })),
         ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
           id:          r.id as string,
@@ -104,6 +107,7 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
           description: (r.description ?? r.bank_description) as string | null,
           bank_name:   r.bank_name as string | null,
           direction:   'out' as const,
+          txnRef:      r.transaction_id as string | null,
         })),
       ]
         .sort((a, b) => b.date.localeCompare(a.date))
@@ -123,9 +127,10 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
       : 'outflow_transactions' as const
     const dirLabel = r.direction === 'in' ? '↙ IN' : '↗ OUT'
     const amtStr   = formatCurrency(r.amount, baseCurrencyCode)
-    const descStr  = r.description ? ` · ${r.description.slice(0, 45)}` : ''
-    const label    = `${dirLabel} · ${formatDate(r.date)} · ${amtStr}${descStr}`
-    onChange({ id: r.id, table, label })
+    const refStr   = r.txnRef ? ` · ${r.txnRef}` : ''
+    const descStr  = r.description ? ` · ${r.description.slice(0, 40)}` : ''
+    const label    = `${dirLabel} · ${formatDate(r.date)} · ${amtStr}${refStr}${descStr}`
+    onChange({ id: r.id, txnRef: r.txnRef ?? null, table, label })
     setQuery('')
     setOpen(false)
   }
@@ -133,13 +138,18 @@ export function RootTransactionSearch({ value, onChange, bankName }: Props) {
   // ── Selected pill ──────────────────────────────────────────────────────────
   if (value) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
-        <Link2 className="w-3.5 h-3.5 text-primary shrink-0" />
-        <span className="flex-1 text-sm text-gray-700 truncate">{value.label}</span>
+      <div className="flex items-start gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
+        <Link2 className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          {value.txnRef && (
+            <p className="text-xs font-semibold font-mono text-primary truncate">{value.txnRef}</p>
+          )}
+          <p className="text-xs text-gray-500 truncate">{value.label}</p>
+        </div>
         <button
           type="button"
           onClick={() => onChange(null)}
-          className="p-0.5 rounded text-gray-400 hover:text-danger hover:bg-danger/10 transition-colors"
+          className="p-0.5 rounded text-gray-400 hover:text-danger hover:bg-danger/10 transition-colors shrink-0"
           title="Remove link"
         >
           <X className="w-3.5 h-3.5" />

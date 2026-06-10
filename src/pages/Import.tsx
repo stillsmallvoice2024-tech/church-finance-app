@@ -770,8 +770,6 @@ function ManualEntryForm() {
     if (!v('date'))   errs.date   = 'Date is required'
     if (!v('amount') || parseFloat(v('amount')) <= 0) errs.amount = 'Enter a valid amount'
     if (!v('bank_id')) errs.bank_id = 'Bank is required'
-    if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
-      errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
 
     const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
@@ -792,8 +790,6 @@ function ManualEntryForm() {
     if (!v('amount_disbursed') || parseFloat(v('amount_disbursed')) <= 0)
       errs.amount_disbursed = 'Enter a valid amount'
     if (!v('bank_id')) errs.bank_id = 'Bank is required'
-    if ((txnType === 'refund' || txnType === 'reversal') && !v('original_transaction_id'))
-      errs.original_transaction_id = 'Required for refund / reversal'
     if (Object.keys(errs).length) { setErrors(errs); return }
 
     const bankName = banks.find(b => b.id === v('bank_id'))?.name ?? null
@@ -1000,21 +996,17 @@ function ManualEntryForm() {
             </Field>
           )}
 
-          {/* Root Transaction Search — only when this is an offset */}
+          {/* Root / Original Transaction — single combined field for offset rows */}
           {isOffsetableType(txnType) && txnOffsetRole === 'offset' && (
-            <Field label="Root Transaction">
+            <Field label="Root / Original Transaction">
               <RootTransactionSearch
                 value={rootTxnLink}
-                onChange={setRootTxnLink}
+                onChange={v => {
+                  setRootTxnLink(v)
+                  if (v?.txnRef) set('original_transaction_id', v.txnRef)
+                }}
                 bankName={banks.find(b => b.id === v('bank_id'))?.name ?? null}
               />
-            </Field>
-          )}
-
-          {/* Original Transaction ID (refund / reversal only, legacy) */}
-          {(txnType === 'refund' || txnType === 'reversal') && (
-            <Field label="Original Transaction ID" error={errors.original_transaction_id}>
-              <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
             </Field>
           )}
 
@@ -1166,21 +1158,17 @@ function ManualEntryForm() {
             </Field>
           )}
 
-          {/* Root Transaction Search — only when this is an offset */}
+          {/* Root / Original Transaction — single combined field for offset rows */}
           {isOffsetableType(txnType) && txnOffsetRole === 'offset' && (
-            <Field label="Root Transaction">
+            <Field label="Root / Original Transaction">
               <RootTransactionSearch
                 value={rootTxnLink}
-                onChange={setRootTxnLink}
+                onChange={v => {
+                  setRootTxnLink(v)
+                  if (v?.txnRef) set('original_transaction_id', v.txnRef)
+                }}
                 bankName={banks.find(b => b.id === v('bank_id'))?.name ?? null}
               />
-            </Field>
-          )}
-
-          {/* Original Transaction ID (refund / reversal only, legacy) */}
-          {(txnType === 'refund' || txnType === 'reversal') && (
-            <Field label="Original Transaction ID" error={errors.original_transaction_id}>
-              <input type="text" placeholder="ID of the original transaction" value={v('original_transaction_id')} onChange={e => set('original_transaction_id', e.target.value)} className={iCls} />
             </Field>
           )}
 
