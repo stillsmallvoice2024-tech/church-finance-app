@@ -44,7 +44,7 @@ const DRAWER_SECTIONS: DrawerSection[] = [
     label: 'Banking',
     items: [
       { label: 'Bank Ledger',         path: '/bank-ledger',         icon: BookOpen       },
-      { label: 'Bank Deposits & Transfers', path: '/bank-movement', icon: Landmark },
+      { label: 'Deposits & Transfers', path: '/bank-movement', icon: Landmark },
       { label: 'Intra-Account',       path: '/intra-flow',          icon: Repeat2        },
       { label: 'FX Currency',         path: '/foreign-currency',    icon: Globe          },
       { label: 'Receipts',            path: '/receipts',            icon: Receipt        },

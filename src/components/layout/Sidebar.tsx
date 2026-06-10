@@ -51,7 +51,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     defaultOpen: true,
     items: [
       { label: 'Bank Ledger',         path: '/bank-ledger',         icon: BookOpen       },
-      { label: 'Bank Deposits & Transfers', path: '/bank-movement', icon: Landmark },
+      { label: 'Deposits & Transfers', path: '/bank-movement', icon: Landmark },
       { label: 'Foreign Currency',    path: '/foreign-currency',    icon: Globe          },
     ],
   },
