@@ -879,10 +879,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       // Separate maps for inflow (transaction_ref) and outflow (transaction_id).
       // Fallback IDs use normalized descriptions so they match on re-import.
       // Bank-provided refs are used directly (no hashing needed).
+      // Within-batch collision suffix (-1, -2, …) mirrors runImport logic so that
+      // two identical rows in the same file only mark ONE as a duplicate.
       const newInflowIds:  Record<number, string> = {}
       const newOutflowIds: Record<number, string> = {}
       const inflowIdList:  string[] = []
       const outflowIdList: string[] = []
+      const inflowIdCounts  = new Map<string, number>()
+      const outflowIdCounts = new Map<string, number>()
 
       for (let ri = 0; ri < merged.length; ri++) {
         const raw    = merged[ri]
@@ -895,16 +899,32 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                          ? normalizeId(String(raw[refIdx])) || null : null
 
         if (credit > 0) {
-          const id = ref ?? await generateFallbackTransactionId(
-            String(date), String(credit), desc, internalBank?.name ?? ''
-          )
+          let id: string
+          if (ref) {
+            id = ref
+          } else {
+            const baseId = await generateFallbackTransactionId(
+              String(date), String(credit), desc, internalBank?.name ?? ''
+            )
+            const count = inflowIdCounts.get(baseId) ?? 0
+            inflowIdCounts.set(baseId, count + 1)
+            id = count === 0 ? baseId : `${baseId}-${count}`
+          }
           newInflowIds[ri] = id
           inflowIdList.push(id)
         }
         if (debit > 0) {
-          const id = ref ?? await generateFallbackTransactionId(
-            String(date), String(debit), desc, internalBank?.name ?? ''
-          )
+          let id: string
+          if (ref) {
+            id = ref
+          } else {
+            const baseId = await generateFallbackTransactionId(
+              String(date), String(debit), desc, internalBank?.name ?? ''
+            )
+            const count = outflowIdCounts.get(baseId) ?? 0
+            outflowIdCounts.set(baseId, count + 1)
+            id = count === 0 ? baseId : `${baseId}-${count}`
+          }
           newOutflowIds[ri] = id
           outflowIdList.push(id)
         }
