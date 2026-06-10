@@ -112,7 +112,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       // 1. All inflow amounts for the year (minimal columns for aggregation)
       supabase
         .from('inflow_transactions')
-        .select('date, amount')
+        .select('date, amount, offset_role')
         .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd),
@@ -120,7 +120,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       // 2. All outflow disbursed amounts for the year
       supabase
         .from('outflow_transactions')
-        .select('date, amount_disbursed')
+        .select('date, amount_disbursed, offset_role')
         .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd),
@@ -152,9 +152,11 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       return
     }
 
-    // ── Aggregate client-side ─────────────────────────────────────────────────
-    const inflows  = (inflowRes.data  ?? []) as { date: string; amount: number }[]
-    const outflows = (outflowRes.data ?? []) as { date: string; amount_disbursed: number }[]
+    // ── Aggregate client-side (exclude offset rows — they contribute 0) ──────
+    const inflows  = ((inflowRes.data  ?? []) as { date: string; amount: number; offset_role: string | null }[])
+      .filter(r => r.offset_role !== 'offset')
+    const outflows = ((outflowRes.data ?? []) as { date: string; amount_disbursed: number; offset_role: string | null }[])
+      .filter(r => r.offset_role !== 'offset')
 
     const totals   = buildMonthlyTotals(inflows, outflows)
     const totalIn  = inflows.reduce((s, r)  => s + Number(r.amount),          0)
