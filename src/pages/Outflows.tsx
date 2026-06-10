@@ -587,22 +587,24 @@ export default function Outflows() {
                           <td className="px-4 py-3 text-sm text-gray-800 max-w-[280px]">
                             <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </td>
-                          <td className="px-4 py-3 text-sm">
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
                             <div className="flex flex-col gap-0.5 items-start">
-                              {row.outflow_type_name
-                                ? <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700 whitespace-nowrap">{row.outflow_type_name}</span>
-                                : <span className="text-gray-300">—</span>}
-                              {row.transaction_type && TXN_TYPE_LABELS[row.transaction_type] && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
+                              {row.outflow_type_name && (
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700">{row.outflow_type_name}</span>
+                              )}
+                              {row.transaction_type && TXN_TYPE_LABELS[row.transaction_type] ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500">
+                                  {row.offset_role === 'root' && (
+                                    <span className="px-1 rounded text-[9px] font-bold bg-green-100 text-green-700">R</span>
+                                  )}
+                                  {row.offset_role === 'offset' && (
+                                    <span className="px-1 rounded text-[9px] font-bold bg-amber-100 text-amber-700">O</span>
+                                  )}
                                   {TXN_TYPE_LABELS[row.transaction_type]}
                                 </span>
-                              )}
-                              {row.offset_role === 'root' && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 whitespace-nowrap">Root</span>
-                              )}
-                              {row.offset_role === 'offset' && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 whitespace-nowrap">Offset</span>
-                              )}
+                              ) : !row.outflow_type_name ? (
+                                <span className="text-gray-300">—</span>
+                              ) : null}
                             </div>
                           </td>
                           <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
