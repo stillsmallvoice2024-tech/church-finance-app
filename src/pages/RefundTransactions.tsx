@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
-import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
+import { RotateCcw, LayoutGrid, LayoutList, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown, Link2 } from 'lucide-react'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { exportCSV }       from '../utils/csvExport'
 import { ExportDropdown }  from '../components/ui/ExportDropdown'
@@ -28,6 +28,8 @@ interface TxnRow {
   original_transaction_id: string | null
   bank_name:               string | null
   remarks:                 string | null
+  offset_role:             string | null
+  root_transaction_id:     string | null
   inflowData?:             InflowTransaction
   outflowData?:            OutflowTransaction
 }
@@ -102,6 +104,8 @@ export default function RefundTransactions() {
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remark as string | null,
+        offset_role:         r.offset_role         as string | null,
+        root_transaction_id: r.root_transaction_id as string | null,
         inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -111,6 +115,8 @@ export default function RefundTransactions() {
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remarks as string | null,
+        offset_role:         r.offset_role         as string | null,
+        root_transaction_id: r.root_transaction_id as string | null,
         outflowData: r as unknown as OutflowTransaction,
       })),
     ].sort((a, b) => b.date.localeCompare(a.date))
@@ -285,6 +291,11 @@ export default function RefundTransactions() {
                     </p>
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
+                    {canWrite() && row.root_transaction_id === null && (
+                      <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                        <Link2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {canWrite() && (
                       <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                         <Pencil className="w-3.5 h-3.5" />
@@ -354,9 +365,16 @@ export default function RefundTransactions() {
                     </td>
                     {canWrite() && (
                       <td className="px-2 py-3">
-                        <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          {row.root_transaction_id === null && (
+                            <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                              <Link2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   ArrowRightLeft, Plus, Pencil, Trash2,
   LayoutGrid, LayoutList, AlertCircle, RefreshCw, X,
-  ChevronRight, ChevronDown,
+  ChevronRight, ChevronDown, Link2,
 } from 'lucide-react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -28,6 +28,9 @@ import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useOrgCurrency }  from '../hooks/useOrgCurrency'
 import { PageEmptyState }  from '../components/onboarding/PageEmptyState'
+import { AddInflowModal }  from '../components/modals/AddInflowModal'
+import { AddOutflowModal } from '../components/modals/AddOutflowModal'
+import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -42,6 +45,11 @@ interface TransferRow {
   description:     string | null
   transaction_ref: string | null
   remarks:         string | null
+  source:              'intrabank_transfers' | 'inflow' | 'outflow'
+  offset_role:         string | null
+  root_transaction_id: string | null
+  inflowData?:         InflowTransaction
+  outflowData?:        OutflowTransaction
 }
 
 // ── Modal schema ───────────────────────────────────────────────────────────────
@@ -188,6 +196,7 @@ function TransferModal({ open, onClose, onSaved, editRecord, banks }: {
 export default function IntraBankTransfers() {
   usePageTitle('Intrabank Transfers')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
+  const orgId = useOrgStore((s) => s.orgId)
 
   const { banks } = useBanks()
   const { canWrite, canDelete } = useRole()
@@ -205,6 +214,8 @@ export default function IntraBankTransfers() {
 
   const [modalOpen,   setModalOpen]   = useState(false)
   const [editRecord,  setEditRecord]  = useState<TransferRow | null>(null)
+  const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
+  const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
   const [deleting,    setDeleting]    = useState(false)
   const [expandedId,  setExpandedId]  = useState<string | null>(null)
@@ -220,17 +231,55 @@ export default function IntraBankTransfers() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const { data, error: err } = await supabase
-      .from('intrabank_transfers')
-      .select('*')
-      .order('date', { ascending: false })
-    if (err) {
-      setError(err.message)
-    } else {
-      setRows((data ?? []) as TransferRow[])
-    }
+    const [transferRes, inflowRes, outflowRes] = await Promise.all([
+      supabase.from('intrabank_transfers').select('*').order('date', { ascending: false }),
+      ...(orgId ? [
+        supabase.from('inflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
+        supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
+      ] : [Promise.resolve({ data: [], error: null }), Promise.resolve({ data: [], error: null })]),
+    ])
+    if (transferRes.error) { setError(transferRes.error.message); setLoading(false); return }
+    const transferRows: TransferRow[] = (transferRes.data ?? []).map((r: Record<string, unknown>) => ({
+      ...(r as TransferRow),
+      source:              'intrabank_transfers' as const,
+      offset_role:         null,
+      root_transaction_id: null,
+    }))
+    const inRows: TransferRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+      id:              r.id as string,
+      date:            r.date as string,
+      from_bank_id:    null,
+      from_bank_name:  r.bank_name as string | null,
+      to_bank_id:      null,
+      to_bank_name:    null,
+      amount:          r.amount as number,
+      description:     r.description as string | null,
+      transaction_ref: r.transaction_ref as string | null,
+      remarks:         r.remark as string | null,
+      source:          'inflow' as const,
+      offset_role:     r.offset_role         as string | null,
+      root_transaction_id: r.root_transaction_id as string | null,
+      inflowData:      r as unknown as InflowTransaction,
+    }))
+    const outRows: TransferRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+      id:              r.id as string,
+      date:            r.date as string,
+      from_bank_id:    null,
+      from_bank_name:  r.bank_name as string | null,
+      to_bank_id:      null,
+      to_bank_name:    null,
+      amount:          r.amount_disbursed as number,
+      description:     r.description as string | null,
+      transaction_ref: r.transaction_id as string | null,
+      remarks:         r.remarks as string | null,
+      source:          'outflow' as const,
+      offset_role:     r.offset_role         as string | null,
+      root_transaction_id: r.root_transaction_id as string | null,
+      outflowData:     r as unknown as OutflowTransaction,
+    }))
+    setRows([...transferRows, ...inRows, ...outRows].sort((a, b) => b.date.localeCompare(a.date)))
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { load() }, [load])
 
@@ -243,6 +292,11 @@ export default function IntraBankTransfers() {
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: TransferRow) => { setEditRecord(r); setModalOpen(true) }
+
+  const handleLinkRoot = (row: TransferRow) => {
+    if (row.source === 'inflow' && row.inflowData) setEditInflow(row.inflowData)
+    else if (row.source === 'outflow' && row.outflowData) setEditOutflow(row.outflowData)
+  }
 
   const IBT_CSV_HEADERS = ['Date', 'From Bank', 'To Bank', `Amount (${baseCurrencySymbol})`, 'Description', 'Ref', 'Remarks']
   const ibtCsvRow = (r: TransferRow) => [
@@ -399,8 +453,18 @@ export default function IntraBankTransfers() {
                       <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                      {canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>}
-                      {canDelete() && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>}
+                      {row.source === 'intrabank_transfers' && canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>}
+                      {row.source === 'intrabank_transfers' && canDelete() && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>}
+                      {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && row.root_transaction_id === null && (
+                        <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
+                        <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -456,8 +520,18 @@ export default function IntraBankTransfers() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          {canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10" title="Edit"><Pencil className="w-4 h-4" /></button>}
-                          {canDelete() && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>}
+                          {row.source === 'intrabank_transfers' && canWrite()  && <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10" title="Edit"><Pencil className="w-4 h-4" /></button>}
+                          {row.source === 'intrabank_transfers' && canDelete() && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>}
+                          {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && row.root_transaction_id === null && (
+                            <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                              <Link2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
+                            <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>,
@@ -471,6 +545,18 @@ export default function IntraBankTransfers() {
         </Card>
       </div>
 
+      <AddInflowModal
+        open={!!editInflow}
+        onClose={() => setEditInflow(null)}
+        onSuccess={() => { setEditInflow(null); load() }}
+        editRecord={editInflow}
+      />
+      <AddOutflowModal
+        open={!!editOutflow}
+        onClose={() => setEditOutflow(null)}
+        onSuccess={() => { setEditOutflow(null); load() }}
+        editRecord={editOutflow}
+      />
       <TransferModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}

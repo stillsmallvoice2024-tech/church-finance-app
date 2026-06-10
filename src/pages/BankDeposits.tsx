@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Landmark, Plus, Pencil, Trash2, ChevronDown, ChevronUp,
-  AlertCircle, RefreshCw, ChevronRight,
+  AlertCircle, RefreshCw, ChevronRight, Link2,
 } from 'lucide-react'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
@@ -34,6 +34,9 @@ import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel
 import { exportCSV }   from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { AddInflowModal }  from '../components/modals/AddInflowModal'
+import { AddOutflowModal } from '../components/modals/AddOutflowModal'
+import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -47,6 +50,10 @@ interface DepositRow {
   transaction_ref:     string | null
   remarks:             string | null
   source:              'bank_deposits' | 'inflow' | 'outflow'
+  offset_role:         string | null
+  root_transaction_id: string | null
+  inflowData?:         InflowTransaction
+  outflowData?:        OutflowTransaction
 }
 
 // ── Modal schema ───────────────────────────────────────────────────────────────
@@ -196,7 +203,7 @@ export default function BankDeposits() {
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const { banks }       = useBanks()
-  const { isAdmin }     = useRole()
+  const { isAdmin, canWrite } = useRole()
   const { push }        = useToastStore()
   const admin           = isAdmin()
 
@@ -210,6 +217,8 @@ export default function BankDeposits() {
   const [bankFilter,   setBankFilter]   = useState('')
   const [showModal,    setShowModal]    = useState(false)
   const [editRecord,   setEditRecord]   = useState<DepositRow | null>(null)
+  const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
+  const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DepositRow | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [deleting,     setDeleting]     = useState(false)
@@ -232,13 +241,13 @@ export default function BankDeposits() {
         .order('date', { ascending: false }),
       supabase
         .from('inflow_transactions')
-        .select('id, date, bank_name, amount, description, transaction_ref, remark')
+        .select('*')
         .eq('org_id', orgId)
         .eq('transaction_type', 'bank_deposit')
         .order('date', { ascending: false }),
       supabase
         .from('outflow_transactions')
-        .select('id, date, bank_name, amount_disbursed, description, transaction_id, remarks')
+        .select('*')
         .eq('org_id', orgId)
         .eq('transaction_type', 'bank_deposit')
         .order('date', { ascending: false }),
@@ -246,8 +255,10 @@ export default function BankDeposits() {
     if (depRes.error) { setError(depRes.error.message); setLoading(false); return }
 
     const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
-      ...(r as Omit<DepositRow, 'source'>),
-      source: 'bank_deposits' as const,
+      ...(r as Omit<DepositRow, 'source' | 'offset_role' | 'root_transaction_id'>),
+      source:              'bank_deposits' as const,
+      offset_role:         null,
+      root_transaction_id: null,
     }))
 
     const inflowRows: DepositRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -258,8 +269,11 @@ export default function BankDeposits() {
       amount:          r.amount as number,
       description:     r.description as string | null,
       transaction_ref: r.transaction_ref as string | null,
-      remarks:         r.remark as string | null,
-      source:          'inflow' as const,
+      remarks:             r.remark as string | null,
+      source:              'inflow' as const,
+      offset_role:         r.offset_role         as string | null,
+      root_transaction_id: r.root_transaction_id as string | null,
+      inflowData:          r as unknown as InflowTransaction,
     }))
 
     const outflowRows: DepositRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -270,8 +284,11 @@ export default function BankDeposits() {
       amount:          r.amount_disbursed as number,
       description:     r.description as string | null,
       transaction_ref: r.transaction_id as string | null,
-      remarks:         r.remarks as string | null,
-      source:          'outflow' as const,
+      remarks:             r.remarks as string | null,
+      source:              'outflow' as const,
+      offset_role:         r.offset_role         as string | null,
+      root_transaction_id: r.root_transaction_id as string | null,
+      outflowData:         r as unknown as OutflowTransaction,
     }))
 
     const merged = [...depositRows, ...inflowRows, ...outflowRows]
@@ -365,6 +382,11 @@ export default function BankDeposits() {
   const openAdd  = () => { setEditRecord(null); setShowModal(true) }
   const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
 
+  const handleLinkRoot = (row: DepositRow) => {
+    if (row.source === 'inflow' && row.inflowData) setEditInflow(row.inflowData)
+    else if (row.source === 'outflow' && row.outflowData) setEditOutflow(row.outflowData)
+  }
+
   const depositDetailItems = (row: DepositRow): DetailItem[] => [
     { label: 'Transaction Ref',  value: row.transaction_ref, mono: true, breakAll: true },
     { label: 'Remarks',          value: row.remarks,         breakAll: true },
@@ -382,7 +404,7 @@ export default function BankDeposits() {
   const handleExportView = () => exportCSV(BD_CSV_FILE, BD_CSV_HEADERS, pagedRows.map(bdCsvRow))
   const handleExportAll  = () => exportCSV(BD_CSV_FILE, BD_CSV_HEADERS, sortedRows.map(bdCsvRow))
 
-  const colCount = admin ? 9 : 8
+  const colCount = 9
 
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -579,18 +601,28 @@ export default function BankDeposits() {
                     <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Amount</p>
                     <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                   </div>
-                  {admin && row.source === 'bank_deposits' ? (
-                    <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                      <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-primary/10 text-gray-400 hover:text-primary transition-colors" title="Edit">
+                  <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
+                    {admin && row.source === 'bank_deposits' && (
+                      <>
+                        <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-primary/10 text-gray-400 hover:text-primary transition-colors" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                    {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.root_transaction_id === null && (
+                      <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                        <Link2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
+                      <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="border-l border-gray-200/80 pl-4 min-w-0" />
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -608,7 +640,7 @@ export default function BankDeposits() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Transaction Ref</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Remarks</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Source</th>
-                  {admin && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>}
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -650,20 +682,30 @@ export default function BankDeposits() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <SourceBadge source={row.source} />
                     </td>
-                    {admin && (
-                      <td className="px-4 py-3">
-                        {row.source === 'bank_deposits' && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {admin && row.source === 'bank_deposits' && (
+                          <>
+                            <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit">
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors">
+                            <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          </div>
+                          </>
                         )}
-                      </td>
-                    )}
+                        {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.root_transaction_id === null && (
+                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
+                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>,
                   isExpanded && <RowDetailPanel key={`${row.source}-${row.id}-detail`} items={depositDetailItems(row)} colSpan={colCount} />,
                   ]
@@ -681,6 +723,18 @@ export default function BankDeposits() {
         />
       </Card>
 
+      <AddInflowModal
+        open={!!editInflow}
+        onClose={() => setEditInflow(null)}
+        onSuccess={() => { setEditInflow(null); load() }}
+        editRecord={editInflow}
+      />
+      <AddOutflowModal
+        open={!!editOutflow}
+        onClose={() => setEditOutflow(null)}
+        onSuccess={() => { setEditOutflow(null); load() }}
+        editRecord={editOutflow}
+      />
       <DepositModal
         open={showModal}
         onClose={() => setShowModal(false)}
