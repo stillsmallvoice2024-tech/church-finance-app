@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
-import { Undo2, LayoutGrid, LayoutList, AlertCircle, RefreshCw, ChevronRight, ChevronDown } from 'lucide-react'
+import { Undo2, LayoutGrid, LayoutList, AlertCircle, RefreshCw, ChevronRight, ChevronDown, Link2, Pencil } from 'lucide-react'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { exportCSV }       from '../utils/csvExport'
 import { ExportDropdown }  from '../components/ui/ExportDropdown'
@@ -14,6 +14,10 @@ import { filterInputCls } from '../components/ui/FormField'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { AddInflowModal }  from '../components/modals/AddInflowModal'
+import { AddOutflowModal } from '../components/modals/AddOutflowModal'
+import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
+import { useRole } from '../hooks/useRole'
 
 interface TxnRow {
   id:                      string
@@ -24,6 +28,10 @@ interface TxnRow {
   original_transaction_id: string | null
   bank_name:               string | null
   remarks:                 string | null
+  offset_role:             string | null
+  root_transaction_id:     string | null
+  inflowData?:             InflowTransaction
+  outflowData?:            OutflowTransaction
 }
 
 const REVERSAL_LIMIT = 5_000
@@ -43,6 +51,9 @@ export default function ReversalTransactions() {
   const [datePreset,  setDatePreset]  = useState<DatePreset | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const { canWrite } = useRole()
+  const [editInflow,  setEditInflow]  = useState<InflowTransaction | null>(null)
+  const [editOutflow, setEditOutflow] = useState<OutflowTransaction | null>(null)
 
   function reversalDetailItems(row: TxnRow): DetailItem[] {
     return [
@@ -51,6 +62,12 @@ export default function ReversalTransactions() {
       { label: 'Remarks',         value: row.remarks, breakAll: true },
       { label: 'Raw Description', value: row.description, breakAll: true },
       { label: 'Direction',       value: row.direction === 'in' ? 'Inflow' : 'Outflow' },
+      {
+        label: 'Offset Role',
+        value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
+        badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
+      },
+      { label: 'Root / Orig Txn ID', value: row.original_transaction_id, mono: true, breakAll: true },
     ]
   }
 
@@ -62,13 +79,13 @@ export default function ReversalTransactions() {
 
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions')
-        .select('id, date, amount, description, original_transaction_id, bank_name, remark', { count: 'exact' })
+        .select('*', { count: 'exact' })
         .eq('org_id', orgId)
         .eq('transaction_type', 'reversal')
         .order('date', { ascending: false })
         .limit(REVERSAL_LIMIT),
       supabase.from('outflow_transactions')
-        .select('id, date, amount_disbursed, description, original_transaction_id, bank_name, remarks', { count: 'exact' })
+        .select('*', { count: 'exact' })
         .eq('org_id', orgId)
         .eq('transaction_type', 'reversal')
         .order('date', { ascending: false })
@@ -94,6 +111,9 @@ export default function ReversalTransactions() {
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remark as string | null,
+        offset_role:         r.offset_role         as string | null,
+        root_transaction_id: r.root_transaction_id as string | null,
+        inflowData:          r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string, direction: 'out' as const,
@@ -102,11 +122,19 @@ export default function ReversalTransactions() {
         original_transaction_id: r.original_transaction_id as string | null,
         bank_name: r.bank_name as string | null,
         remarks: r.remarks as string | null,
+        offset_role:         r.offset_role         as string | null,
+        root_transaction_id: r.root_transaction_id as string | null,
+        outflowData:         r as unknown as OutflowTransaction,
       })),
     ].sort((a, b) => b.date.localeCompare(a.date))
 
     setRows(merged)
     setLoading(false)
+  }
+
+  const handleEdit = (row: TxnRow) => {
+    if (row.direction === 'in' && row.inflowData) setEditInflow(row.inflowData)
+    else if (row.direction === 'out' && row.outflowData) setEditOutflow(row.outflowData)
   }
 
   useEffect(() => { load() }, [orgId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -198,20 +226,50 @@ export default function ReversalTransactions() {
       </Card>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[
-          { label: 'Total rows',    value: filtered.length.toLocaleString() },
-          { label: 'Total inflow',  value: formatCurrency(filtered.filter(r => r.direction === 'in').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
-          { label: 'Total outflow', value: formatCurrency(filtered.filter(r => r.direction === 'out').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-            <p className="text-xs text-gray-500 mb-1">{label}</p>
-            {loading
-              ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
-              : <p className="text-lg font-bold text-gray-900">{value}</p>}
+      {(() => {
+        const roots     = filtered.filter(r => r.offset_role === 'root')
+        const offsets   = filtered.filter(r => r.offset_role === 'offset')
+        const untagged  = filtered.filter(r => !r.offset_role)
+        const cards = [
+          {
+            label: 'Total rows',
+            sub:   null,
+            value: filtered.length.toLocaleString(),
+            accent: 'border-gray-100 text-gray-900',
+          },
+          {
+            label: 'Originals',
+            sub:   'the entry that got reversed',
+            value: `${roots.length.toLocaleString()} · ${formatCurrency(roots.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,
+            accent: 'border-green-200 text-green-700',
+          },
+          {
+            label: 'Reversals',
+            sub:   'the correcting entry',
+            value: `${offsets.length.toLocaleString()} · ${formatCurrency(offsets.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,
+            accent: 'border-amber-200 text-amber-700',
+          },
+          {
+            label: 'Needs review',
+            sub:   "hasn't been classified yet",
+            value: untagged.length.toLocaleString(),
+            accent: untagged.length > 0 ? 'border-red-200 text-red-600' : 'border-gray-100 text-gray-900',
+          },
+        ]
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {cards.map(({ label, sub, value, accent }) => (
+              <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
+                <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
+                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {loading
+                  ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
+                  : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )
+      })()}
 
       {/* Table / Cards */}
       <Card padding={false}>
@@ -260,13 +318,30 @@ export default function ReversalTransactions() {
                   )}
                 </div>
                 {/* Metrics footer */}
-                <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3">
-                  <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-green-600/70' : 'text-red-600/70'}`}>
-                    Reversal
-                  </p>
-                  <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
-                    {formatCurrency(row.amount, baseCurrencyCode)}
-                  </p>
+                <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-green-600/70' : 'text-red-600/70'}`}>
+                      Reversal
+                    </p>
+                    <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
+                      {formatCurrency(row.amount, baseCurrencyCode)}
+                    </p>
+                  </div>
+                  {canWrite() && (
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {row.offset_role === 'root' && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                      )}
+                      {row.offset_role !== 'root' && row.root_transaction_id === null && (
+                        <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -280,6 +355,7 @@ export default function ReversalTransactions() {
                   {['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
+                  {canWrite() && <th className="px-2 py-3 w-20" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -325,8 +401,25 @@ export default function ReversalTransactions() {
                         <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
                           <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
+                        {canWrite() && (
+                          <td className="px-2 py-3">
+                            <div className="flex items-center gap-0.5">
+                              <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {row.offset_role === 'root' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                              )}
+                              {row.offset_role !== 'root' && row.root_transaction_id === null && (
+                                <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                                  <Link2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
-                      {isExpanded && <RowDetailPanel items={reversalDetailItems(row)} colSpan={8} />}
+                      {isExpanded && <RowDetailPanel items={reversalDetailItems(row)} colSpan={8 + (canWrite() ? 1 : 0)} />}
                     </Fragment>
                   )
                 })}
@@ -336,6 +429,18 @@ export default function ReversalTransactions() {
         )}
       </Card>
       <DescriptionTooltip tooltip={descTooltip} />
+      <AddInflowModal
+        open={!!editInflow}
+        onClose={() => setEditInflow(null)}
+        onSuccess={() => { setEditInflow(null); load() }}
+        editRecord={editInflow}
+      />
+      <AddOutflowModal
+        open={!!editOutflow}
+        onClose={() => setEditOutflow(null)}
+        onSuccess={() => { setEditOutflow(null); load() }}
+        editRecord={editOutflow}
+      />
     </div>
   )
 }

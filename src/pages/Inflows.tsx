@@ -470,7 +470,6 @@ export default function Inflows() {
                   <SortableHeader field={infSF('date')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <SortableHeader field={infSF('recorded_at')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Bank</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Txn Ref</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Type</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
                   <SortableHeader field={infSF('amount')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
@@ -481,7 +480,7 @@ export default function Inflows() {
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 10 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse" />
                         </td>
@@ -490,7 +489,7 @@ export default function Inflows() {
                   ))
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={10}>
+                    <td colSpan={9}>
                       {searchInput
                         ? <EmptyState icon={TrendingUp} title="No inflow transactions" message="No transactions match your filters." compact />
                         : <PageEmptyState pageId="inflows" compact />
@@ -530,9 +529,6 @@ export default function Inflows() {
                           {row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-[180px]" onClick={e => e.stopPropagation()}>
-                          <DescriptionCell id={`ref-${row.id}`} text={row.transaction_ref ?? null} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
-                        </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col items-start gap-1">
                             {(() => {
@@ -575,7 +571,7 @@ export default function Inflows() {
                     ]
                     if (expanded) {
                       rows.push(
-                        <RowDetailPanel key={`${row.id}-detail`} items={inflowDetailItems(row, baseCurrencyCode)} colSpan={10} />,
+                        <RowDetailPanel key={`${row.id}-detail`} items={inflowDetailItems(row, baseCurrencyCode)} colSpan={9} />,
                       )
                     }
                     return rows

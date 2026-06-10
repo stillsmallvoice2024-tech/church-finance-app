@@ -1,15 +1,6 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
-
-// Types that carry no allocatable income — skipped in all category allocation passes.
-// fx_conversion is intentionally absent: converted naira IS allocatable income.
-const NON_ALLOCATABLE_TYPES = new Set([
-  'balance_brought_forward',
-  'reversal',
-  'refund',
-  'bank_deposit',
-  'intrabank_transfer',
-])
 import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown } from 'lucide-react'
+import { isNonContributing } from '../utils/transactionTypes'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
@@ -172,7 +163,7 @@ export default function CategoryLedger() {
       fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Specific Seed')),
       fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings')),
       fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed').eq('stage_code_2', 'Savings')),
-      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type, offset_role')),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
       fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active')),
       fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed')
@@ -232,7 +223,7 @@ export default function CategoryLedger() {
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-      if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
+      if (isNonContributing(r)) continue
       const configId = r.allocation_config_id as string | null
       const cfg = configId
         ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
@@ -328,7 +319,7 @@ export default function CategoryLedger() {
       if (ledgerPortion === 'Percentage') {
         const [inflowRes, outflowRes] = await Promise.all([
           fetchAllRows(() => supabase.from('inflow_transactions')
-            .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type')
+            .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type, offset_role')
             .order('date')),
           fetchAllRows(() => supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed, stage_code_2')
@@ -340,7 +331,7 @@ export default function CategoryLedger() {
 
         for (const r of inflowRes.data ?? []) {
           if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-          if (r.transaction_type && NON_ALLOCATABLE_TYPES.has(r.transaction_type)) continue
+          if (isNonContributing(r)) continue
           const configId = r.allocation_config_id as string | null
           const cfg = configId
             ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))

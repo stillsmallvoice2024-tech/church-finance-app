@@ -27,6 +27,7 @@ import { generateFallbackTransactionId } from '../../utils/generateTransactionId
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
+import { isOffsetableType } from '../../utils/transactionTypes'
 
 // ── ID normalization ──────────────────────────────────────────────────────────
 // Strips invisible characters (zero-width spaces, soft hyphen, BOM, NBSP, etc.),
@@ -342,6 +343,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [rowOrigTxnIds,   setRowOrigTxnIds]   = useState<Record<number, string>>({})
   const [rowOutflowTypes, setRowOutflowTypes] = useState<Record<number, string>>({})
   const [batchTxnType,    setBatchTxnType]    = useState('')
+  const [batchOffsetRole, setBatchOffsetRole] = useState('')
   const [createConfigPendingRow, setCreateConfigPendingRow] = useState<number | 'apply' | null>(null)
   const [bsConfigTab,     setBsConfigTab]     = useState<'inflow' | 'outflow'>('inflow')
 
@@ -484,6 +486,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setRowOrigTxnIds({})
     setRowOutflowTypes({})
     setBatchTxnType('')
+    setBatchOffsetRole('')
     setCreateConfigPendingRow(null)
     setBsConfigTab('inflow')
     setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })
@@ -547,6 +550,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       duplicateRis:          [...duplicateRis],
       dupStats,
       bsConfigTab,
+      batchOffsetRole,
     }
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(state)) } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -595,6 +599,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       setDuplicateRis(new Set<number>(s.duplicateRis ?? []))
       if (s.dupStats) setDupStats(s.dupStats)
       if (s.bsConfigTab) setBsConfigTab(s.bsConfigTab)
+      if (s.batchOffsetRole) setBatchOffsetRole(s.batchOffsetRole)
     } catch {}
   }, [open, preloadedFile]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1081,6 +1086,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           }
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
+          if (isOffsetableType(txnType) && batchOffsetRole) row.offset_role = batchOffsetRole
           row.recorded_at = importTimestamp
           inflowRows.push(row)
         }
@@ -1127,6 +1133,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           row.is_pending_deduction = rowPendingDeductions.has(ri)
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
+          if (isOffsetableType(txnType) && batchOffsetRole) row.offset_role = batchOffsetRole
           row.recorded_at = importTimestamp
           outflowRows.push(row)
         }
@@ -1930,9 +1937,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         <option value="">— Type —</option>
                         {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
+                      <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
+                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                        <option value="">— Role —</option>
+                        <option value="root">Root</option>
+                        <option value="offset">Offset</option>
+                      </select>
                       <button
                         type="button"
-                        disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType) || inflowTargetRis.length === 0}
+                        disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType && !batchOffsetRole) || inflowTargetRis.length === 0}
                         onClick={() => {
                           if (applyInflowConfig) {
                             // Explicit config selection → mark affected rows as manual overrides
@@ -2409,9 +2422,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       <option value="">— Type —</option>
                       {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
+                    <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
+                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                      <option value="">— Role —</option>
+                      <option value="root">Root</option>
+                      <option value="offset">Offset</option>
+                    </select>
                     <button
                       type="button"
-                      disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType) || outflowTargetRis.length === 0}
+                      disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType && !batchOffsetRole) || outflowTargetRis.length === 0}
                       onClick={() => {
                         if (applyS1 || applyS2) {
                           setRowStageCodes(prev => {

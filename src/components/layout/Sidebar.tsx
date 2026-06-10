@@ -2,13 +2,14 @@ import { useState, useCallback } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, TrendingUp, TrendingDown, FileUp, Receipt,
-  BookOpen, Landmark, ArrowRightLeft, Repeat2, Globe,
+  BookOpen, Repeat2, Globe,
   Hourglass, RotateCcw, Undo2,
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
   ChevronDown, X, HelpCircle,
 } from 'lucide-react'
+import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
 import { useOrgStore } from '../../store/orgStore'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
@@ -51,8 +52,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     defaultOpen: true,
     items: [
       { label: 'Bank Ledger',         path: '/bank-ledger',         icon: BookOpen       },
-      { label: 'Bank Deposits',       path: '/bank-deposits',       icon: Landmark       },
-      { label: 'Intrabank Transfers', path: '/intrabank-transfers', icon: ArrowRightLeft },
+      { label: 'Deposits & Transfers', path: '/bank-movement', icon: BankMovementIcon },
       { label: 'Foreign Currency',    path: '/foreign-currency',    icon: Globe          },
     ],
   },

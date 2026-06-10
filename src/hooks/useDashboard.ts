@@ -112,7 +112,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       // 1. All inflow amounts for the year (minimal columns for aggregation)
       supabase
         .from('inflow_transactions')
-        .select('date, amount')
+        .select('date, amount, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd),
@@ -120,7 +120,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       // 2. All outflow disbursed amounts for the year
       supabase
         .from('outflow_transactions')
-        .select('date, amount_disbursed')
+        .select('date, amount_disbursed, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd),
@@ -152,9 +152,33 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       return
     }
 
-    // ── Aggregate client-side ─────────────────────────────────────────────────
-    const inflows  = (inflowRes.data  ?? []) as { date: string; amount: number }[]
-    const outflows = (outflowRes.data ?? []) as { date: string; amount_disbursed: number }[]
+    // ── Aggregate with directional flipping for same-table offsets ──────────
+    // When an offset's root lives in the same table (e.g. both outflows), the
+    // offset flips to the opposite column so root + offset nets to zero while
+    // both amounts remain visible in the totals.
+    type InflowRaw  = { date: string; amount: number; offset_role: string | null; root_transaction_table: string | null }
+    type OutflowRaw = { date: string; amount_disbursed: number; offset_role: string | null; root_transaction_table: string | null }
+
+    const inflowData  = (inflowRes.data  ?? []) as InflowRaw[]
+    const outflowData = (outflowRes.data ?? []) as OutflowRaw[]
+
+    // Outflow offsets whose root is also an outflow → flip into inflow column
+    const outOffsetFlipped = outflowData.filter(
+      r => r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions'
+    )
+    // Inflow offsets whose root is also an inflow → flip into outflow column
+    const inOffsetFlipped = inflowData.filter(
+      r => r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions'
+    )
+
+    const inflows = [
+      ...inflowData.filter(r => !(r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions')),
+      ...outOffsetFlipped.map(r => ({ date: r.date, amount: r.amount_disbursed })),
+    ]
+    const outflows = [
+      ...outflowData.filter(r => !(r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions')),
+      ...inOffsetFlipped.map(r => ({ date: r.date, amount_disbursed: r.amount })),
+    ]
 
     const totals   = buildMonthlyTotals(inflows, outflows)
     const totalIn  = inflows.reduce((s, r)  => s + Number(r.amount),          0)

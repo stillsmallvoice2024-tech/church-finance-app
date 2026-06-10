@@ -11,16 +11,18 @@ export interface BulkActionConfig {
   show?: boolean
 }
 
-export function BulkActionBar({ count, actions, onClear }: {
+export function BulkActionBar({ count, actions, onClear, summary }: {
   count: number
   actions: BulkActionConfig[]
   onClear: () => void
+  summary?: ReactNode
 }) {
   if (count === 0) return null
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/10 bg-primary/5">
       <span className="text-sm font-medium text-primary">{count} selected</span>
+      {summary}
       {actions.filter(a => a.show !== false).map(a => {
         const base = 'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50'
         const cls =

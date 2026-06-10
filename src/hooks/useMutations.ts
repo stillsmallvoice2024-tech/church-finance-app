@@ -99,6 +99,10 @@ export interface AddInflowInput {
   income_type_id?: string
   bank_name?: string
   recorded_at?: string
+  root_transaction_id?: string | null
+  root_transaction_table?: 'inflow_transactions' | 'outflow_transactions' | null
+  offset_link_type?: string | null
+  offset_role?: 'root' | 'offset' | null
 }
 
 export interface AddOutflowInput {
@@ -124,6 +128,10 @@ export interface AddOutflowInput {
   department_id?: string | null
   bank_name?: string
   recorded_at?: string
+  root_transaction_id?: string | null
+  root_transaction_table?: 'inflow_transactions' | 'outflow_transactions' | null
+  offset_link_type?: string | null
+  offset_role?: 'root' | 'offset' | null
 }
 
 export interface AddIntraFlowInput {

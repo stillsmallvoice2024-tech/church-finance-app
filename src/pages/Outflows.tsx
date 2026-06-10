@@ -76,8 +76,8 @@ const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_na
 
 // ── Summary strip ──────────────────────────────────────────────────────────────
 
-function SummaryStrip({ total, count, largest, average, loading }: {
-  total: number; count: number; largest: number; average: number; loading: boolean
+function SummaryStrip({ total, effectiveTotal, hasOffsets, count, largest, average, loading }: {
+  total: number; effectiveTotal: number; hasOffsets: boolean; count: number; largest: number; average: number; loading: boolean
 }) {
   const { baseCurrencyCode } = useOrgCurrency()
   const items = [
@@ -96,6 +96,12 @@ function SummaryStrip({ total, count, largest, average, loading }: {
             : <p className="text-base font-bold text-gray-900 tabular-nums">{value}</p>}
         </div>
       ))}
+      {!loading && hasOffsets && (
+        <div className="bg-white rounded-xl border border-amber-200 shadow-sm px-4 py-3 min-w-0 col-span-2 sm:col-span-4">
+          <p className="text-xs text-amber-600 mb-1 truncate font-medium">Effective Total (excl. offsets)</p>
+          <p className="text-base font-bold text-amber-700 tabular-nums">{formatCurrencyCompact(effectiveTotal, baseCurrencyCode)}</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -142,9 +148,12 @@ export default function Outflows() {
   const displayed = data
 
   // Summary (current page, disbursed amounts)
-  const total   = displayed.reduce((s, r) => s + Number(r.amount_disbursed), 0)
-  const largest = displayed.length ? Math.max(...displayed.map(r => Number(r.amount_disbursed))) : 0
-  const average = displayed.length ? total / displayed.length : 0
+  const total          = displayed.reduce((s, r) => s + Number(r.amount_disbursed), 0)
+  const largest        = displayed.length ? Math.max(...displayed.map(r => Number(r.amount_disbursed))) : 0
+  const average        = displayed.length ? total / displayed.length : 0
+  const hasOffsets     = displayed.some(r => r.offset_role === 'offset')
+  const effectiveTotal = displayed.reduce((s, r) =>
+    r.offset_role === 'offset' ? s - Number(r.amount_disbursed) : s + Number(r.amount_disbursed), 0)
 
   // UI state
   const [editRecord,        setEditRecord]        = useState<OutflowTransaction | null>(null)
@@ -344,7 +353,7 @@ export default function Outflows() {
         </Card>
 
         {/* Summary strip */}
-        <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        <SummaryStrip total={total} effectiveTotal={effectiveTotal} hasOffsets={hasOffsets} count={count} largest={largest} average={average} loading={loading} />
 
         {/* Data controls bar */}
         <DataControlsBar
@@ -408,10 +417,16 @@ export default function Outflows() {
                         {row.is_pending_deduction && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
                         )}
-                        {row.transaction_type && (
+                        {row.transaction_type && TXN_TYPE_LABELS[row.transaction_type] && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 whitespace-nowrap">
-                            {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                            {TXN_TYPE_LABELS[row.transaction_type]}
                           </span>
+                        )}
+                        {row.offset_role === 'root' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">Root</span>
+                        )}
+                        {row.offset_role === 'offset' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Offset</span>
                         )}
                       </div>
                     </div>
@@ -470,14 +485,29 @@ export default function Outflows() {
         )}
 
         {outState.view === 'table' && <Card padding={false} data-tour="data-table">
-          <BulkActionBar
-            count={selectedIds.size}
-            onClear={clearAll}
-            actions={[
-              { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true),      show: canWrite() },
-              { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 className="w-3.5 h-3.5" /> },
-            ]}
-          />
+          {(() => {
+            const selectedRows = displayed.filter(r => selectedIds.has(r.id))
+            const selHasOffsets = selectedRows.some(r => r.offset_role === 'offset')
+            const selEffective = selectedRows.reduce((s, r) =>
+              r.offset_role === 'offset' ? s - Number(r.amount_disbursed) : s + Number(r.amount_disbursed), 0)
+            const selTotal = selectedRows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
+            return (
+              <BulkActionBar
+                count={selectedIds.size}
+                onClear={clearAll}
+                actions={[
+                  { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true),      show: canWrite() },
+                  { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 className="w-3.5 h-3.5" /> },
+                ]}
+                summary={selHasOffsets ? (
+                  <span className="text-xs text-gray-500 font-mono">
+                    Total: <span className="font-semibold text-danger">{formatCurrency(selTotal, baseCurrencyCode)}</span>
+                    {' · '}Effective: <span className="font-semibold text-amber-600">{formatCurrency(selEffective, baseCurrencyCode)}</span>
+                  </span>
+                ) : undefined}
+              />
+            )
+          })()}
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
@@ -558,9 +588,24 @@ export default function Outflows() {
                             <DescriptionCell id={row.id} text={row.display_description || row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                           </td>
                           <td className="px-4 py-3 text-sm whitespace-nowrap">
-                            {row.outflow_type_name
-                              ? <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700">{row.outflow_type_name}</span>
-                              : <span className="text-gray-300">—</span>}
+                            <div className="flex flex-col gap-0.5 items-start">
+                              {row.outflow_type_name && (
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700">{row.outflow_type_name}</span>
+                              )}
+                              {row.transaction_type && TXN_TYPE_LABELS[row.transaction_type] ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500">
+                                  {row.offset_role === 'root' && (
+                                    <span className="px-1 rounded text-[9px] font-bold bg-green-100 text-green-700">R</span>
+                                  )}
+                                  {row.offset_role === 'offset' && (
+                                    <span className="px-1 rounded text-[9px] font-bold bg-amber-100 text-amber-700">O</span>
+                                  )}
+                                  {TXN_TYPE_LABELS[row.transaction_type]}
+                                </span>
+                              ) : !row.outflow_type_name ? (
+                                <span className="text-gray-300">—</span>
+                              ) : null}
+                            </div>
                           </td>
                           <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />
                           <td className="px-2 py-3">
