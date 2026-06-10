@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Landmark, Plus, Pencil, Trash2, ChevronDown, ChevronUp,
+  Landmark, Pencil, Trash2, ChevronDown, ChevronUp,
   AlertCircle, RefreshCw, ChevronRight, Link2,
 } from 'lucide-react'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
@@ -11,17 +11,12 @@ import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { Card }         from '../components/ui/Card'
-import { Modal }        from '../components/ui/Modal'
 import { DeleteDialog } from '../components/ui/DeleteDialog'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useBanks }     from '../hooks/useBanks'
 import { useRole }      from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
-import { useAuthStore }  from '../store/authStore'
 import { useOrgStore }   from '../store/orgStore'
 import { supabase }      from '../lib/supabase'
 import { formatDate, formatCurrency } from '../utils/formatters'
@@ -56,18 +51,6 @@ interface DepositRow {
   outflowData?:        OutflowTransaction
 }
 
-// ── Modal schema ───────────────────────────────────────────────────────────────
-
-const schema = z.object({
-  date:            z.string().min(1, 'Date is required'),
-  bank_id:         z.string().optional(),
-  amount:          z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be > 0'),
-  description:     z.string().optional(),
-  transaction_ref: z.string().optional(),
-  remarks:         z.string().optional(),
-})
-type FormValues = z.infer<typeof schema>
-
 // ── Sort fields ────────────────────────────────────────────────────────────────
 
 const BD_COLUMNS: TableColumnDef<DepositRow>[] = [
@@ -79,122 +62,6 @@ const BD_COLUMNS: TableColumnDef<DepositRow>[] = [
 ]
 
 const BD_SORT_FIELDS = deriveSortFields(BD_COLUMNS)
-
-// ── Add/Edit modal ─────────────────────────────────────────────────────────────
-
-function DepositModal({ open, onClose, onSaved, editRecord, banks }: {
-  open: boolean
-  onClose: () => void
-  onSaved: () => void
-  editRecord: DepositRow | null
-  banks: { id: string; name: string }[]
-}) {
-  const { baseCurrencySymbol } = useOrgCurrency()
-  const [saving, setSaving] = useState(false)
-  const [err,    setErr]    = useState<string | null>(null)
-  const { user } = useAuthStore.getState()
-
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-  })
-
-  useEffect(() => {
-    if (!open) return
-    setErr(null)
-    if (editRecord) {
-      reset({
-        date:            editRecord.date,
-        bank_id:         editRecord.bank_id         ?? '',
-        amount:          editRecord.amount,
-        description:     editRecord.description     ?? '',
-        transaction_ref: editRecord.transaction_ref ?? '',
-        remarks:         editRecord.remarks         ?? '',
-      })
-    } else {
-      reset({ date: new Date().toISOString().slice(0, 10), amount: undefined })
-    }
-  }, [open, editRecord, reset])
-
-  const onSubmit = async (values: FormValues) => {
-    setSaving(true)
-    setErr(null)
-    try {
-      const bankObj = banks.find(b => b.id === values.bank_id)
-      const payload = {
-        date:            values.date,
-        bank_id:         values.bank_id         || null,
-        bank_name:       bankObj?.name          || null,
-        amount:          values.amount,
-        description:     values.description     || null,
-        transaction_ref: values.transaction_ref || null,
-        remarks:         values.remarks         || null,
-        created_by:      user?.id               ?? null,
-      }
-      if (editRecord) {
-        const { error } = await supabase.from('bank_deposits').update(payload).eq('id', editRecord.id)
-        if (error) throw error
-      } else {
-        const { orgId } = useOrgStore.getState()
-        const { error } = await supabase.from('bank_deposits').insert({ ...payload, ...(orgId ? { org_id: orgId } : {}) })
-        if (error) throw error
-      }
-      onSaved()
-      onClose()
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Save failed')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title={editRecord ? 'Edit Bank Deposit' : 'Add Bank Deposit'}>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-        {err && (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{err}</div>
-        )}
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Date *" error={errors.date?.message}>
-            <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
-          </Field>
-          <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.amount?.message}>
-            <input type="number" min="0" step="0.01" placeholder="0.00"
-              {...register('amount')} className={inputCls(!!errors.amount)} />
-          </Field>
-        </div>
-        <Field label="Bank" error={errors.bank_id?.message}>
-          <select {...register('bank_id')} className={inputCls(!!errors.bank_id)}>
-            <option value="">— Select Bank —</option>
-            {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Description" error={errors.description?.message}>
-          <input type="text" placeholder="e.g. Sunday offering deposit"
-            {...register('description')} className={inputCls(!!errors.description)} />
-        </Field>
-        <Field label="Transaction Reference" error={errors.transaction_ref?.message}>
-          <input type="text" placeholder="Bank reference / teller ID"
-            {...register('transaction_ref')} className={inputCls(!!errors.transaction_ref)} />
-        </Field>
-        <Field label="Remarks" error={errors.remarks?.message}>
-          <textarea rows={2} placeholder="Additional notes…"
-            {...register('remarks')} className={`${inputCls(!!errors.remarks)} resize-none`} />
-        </Field>
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-            Cancel
-          </button>
-          <button type="submit" disabled={saving}
-            className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2">
-            {saving && <Spinner />}
-            {saving ? 'Saving…' : editRecord ? 'Save Changes' : 'Add Deposit'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
@@ -215,8 +82,6 @@ export default function BankDeposits() {
   const [dateTo,       setDateTo]       = useState('')
   const [datePreset,   setDatePreset]   = useState<DatePreset | null>(null)
   const [bankFilter,   setBankFilter]   = useState('')
-  const [showModal,    setShowModal]    = useState(false)
-  const [editRecord,   setEditRecord]   = useState<DepositRow | null>(null)
   const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
   const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DepositRow | null>(null)
@@ -331,10 +196,8 @@ export default function BankDeposits() {
 
   const selectedBankName = bankFilter ? (banks.find(b => b.id === bankFilter)?.name ?? null) : null
 
-  // Reset page when filters change
   useEffect(() => { bdState.setPage(0) }, [dateFrom, dateTo, bankFilter, bdState.setPage])
 
-  // Date + bank filter (existing logic unchanged)
   const dateFiltered = useMemo(() => rows.filter(r => {
     if (dateFrom && r.date < dateFrom) return false
     if (dateTo   && r.date > dateTo)   return false
@@ -348,7 +211,6 @@ export default function BankDeposits() {
     return true
   }), [rows, dateFrom, dateTo, bankFilter, selectedBankName])
 
-  // Search filter
   const searchFiltered = useMemo(
     () => searchRows(dateFiltered, BD_COLUMNS, bdState.search, bdState.searchCol),
     [dateFiltered, bdState.search, bdState.searchCol],
@@ -362,25 +224,16 @@ export default function BankDeposits() {
     return r.date
   }
 
-  // Sort
   const sortedRows = useMemo(() => {
     const adv = bdState.advancedSort
     if (adv.length > 0) return multiSortRows(searchFiltered, getBdValue, adv, BD_SORT_FIELDS)
     return sortRows(searchFiltered, getBdValue, bdState.sortKey, bdState.sortDir, BD_SORT_FIELDS)
   }, [searchFiltered, bdState.sortKey, bdState.sortDir, bdState.advancedSort])
 
-  // Pagination
   const pagedRows = useMemo(() => {
     const start = bdState.page * bdState.pageSize
     return sortedRows.slice(start, start + bdState.pageSize)
   }, [sortedRows, bdState.page, bdState.pageSize])
-
-  // Cards: tagged inflows only
-  const taggedInflows = dateFiltered.filter(r => r.source === 'inflow')
-  const taggedInflowTotal = taggedInflows.reduce((s, r) => s + r.amount, 0)
-
-  const openAdd  = () => { setEditRecord(null); setShowModal(true) }
-  const openEdit = (r: DepositRow) => { setEditRecord(r); setShowModal(true) }
 
   const handleLinkRoot = (row: DepositRow) => {
     if (row.source === 'inflow' && row.inflowData) setEditInflow(row.inflowData)
@@ -442,12 +295,6 @@ export default function BankDeposits() {
             onExportAll={handleExportAll}
             disabled={sortedRows.length === 0}
           />
-          {admin && (
-            <button onClick={openAdd}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
-              <Plus className="w-4 h-4" /> Add Deposit
-            </button>
-          )}
         </div>
       </div>
 
@@ -486,20 +333,31 @@ export default function BankDeposits() {
       </Card>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[
-          { label: 'Total deposit',           value: taggedInflows.length.toLocaleString() },
-          { label: 'Total deposited amounts', value: formatCurrency(taggedInflowTotal, baseCurrencyCode) },
-          { label: 'Avg deposit',             value: taggedInflows.length ? formatCurrency(taggedInflowTotal / taggedInflows.length, baseCurrencyCode) : '—' },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-            <p className="text-xs text-gray-500 mb-1">{label}</p>
-            {loading
-              ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
-              : <p className="text-lg font-bold text-gray-900">{value}</p>}
+      {(() => {
+        const offsetEligible = dateFiltered.filter(r => r.source !== 'bank_deposits')
+        const roots    = offsetEligible.filter(r => r.offset_role === 'root')
+        const offsets  = offsetEligible.filter(r => r.offset_role === 'offset')
+        const untagged = offsetEligible.filter(r => !r.offset_role)
+        const cards = [
+          { label: 'Total rows',   sub: null,                           value: dateFiltered.length.toLocaleString(),                                                                                                   accent: 'border-gray-100 text-gray-900' },
+          { label: 'Originals',    sub: 'the root deposit source',      value: `${roots.length.toLocaleString()} · ${formatCurrency(roots.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,     accent: 'border-green-200 text-green-700' },
+          { label: 'Deposits',     sub: 'the offset entry',             value: `${offsets.length.toLocaleString()} · ${formatCurrency(offsets.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,  accent: 'border-amber-200 text-amber-700' },
+          { label: 'Needs review', sub: "hasn't been classified yet",   value: untagged.length.toLocaleString(),                                                                                                accent: untagged.length > 0 ? 'border-red-200 text-red-600' : 'border-gray-100 text-gray-900' },
+        ]
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {cards.map(({ label, sub, value, accent }) => (
+              <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
+                <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
+                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {loading
+                  ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
+                  : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )
+      })()}
 
       {/* Reconciliation panel */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -609,23 +467,25 @@ export default function BankDeposits() {
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                     {admin && row.source === 'bank_deposits' && (
                       <>
-                        <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-primary/10 text-gray-400 hover:text-primary transition-colors" title="Edit">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
                         <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </>
                     )}
-                    {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.offset_role === 'offset' && row.root_transaction_id === null && (
-                      <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
-                        <Link2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                     {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
-                      <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      <>
+                        <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        {row.offset_role === 'root' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                        )}
+                        {row.offset_role !== 'root' && row.root_transaction_id === null && (
+                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -690,24 +550,24 @@ export default function BankDeposits() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         {admin && row.source === 'bank_deposits' && (
-                          <>
-                            <button onClick={() => openEdit(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        )}
-                        {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && row.offset_role === 'offset' && row.root_transaction_id === null && (
-                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
-                            <Link2 className="w-3.5 h-3.5" />
+                          <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                         {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
-                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
+                          <>
+                            <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            {row.offset_role === 'root' && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                            )}
+                            {row.offset_role !== 'root' && row.root_transaction_id === null && (
+                              <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                                <Link2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -740,14 +600,6 @@ export default function BankDeposits() {
         onSuccess={() => { setEditOutflow(null); load() }}
         editRecord={editOutflow}
       />
-      <DepositModal
-        open={showModal}
-        onClose={() => setShowModal(false)}
-        onSaved={() => { push(editRecord ? 'Deposit updated' : 'Deposit added', 'success'); load() }}
-        editRecord={editRecord}
-        banks={banks}
-      />
-
       <DeleteDialog
         open={!!deleteTarget}
         label={deleteTarget ? `deposit of ${formatCurrency(deleteTarget.amount, baseCurrencyCode)} on ${formatDate(deleteTarget.date)}` : 'this record'}
@@ -793,24 +645,3 @@ function ReconRow({ label, value, highlight }: { label: string; value: number; h
     </div>
   )
 }
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>
-  )
-}
-
-function Spinner() {
-  return <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-}
-
-function inputCls(hasError: boolean) {
-  return `w-full px-3 py-2 text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
-    hasError ? 'border-red-400 focus:border-red-400' : 'border-gray-300 focus:border-primary'
-  }`
-}
-

@@ -225,20 +225,30 @@ export default function RefundTransactions() {
       </Card>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[
-          { label: 'Total rows',    value: filtered.length.toLocaleString() },
-          { label: 'Total inflow',  value: formatCurrency(filtered.filter(r => r.direction === 'in').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
-          { label: 'Total outflow', value: formatCurrency(filtered.filter(r => r.direction === 'out').reduce((s, r) => s + r.amount, 0), baseCurrencyCode) },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-            <p className="text-xs text-gray-500 mb-1">{label}</p>
-            {loading
-              ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
-              : <p className="text-lg font-bold text-gray-900">{value}</p>}
+      {(() => {
+        const roots    = filtered.filter(r => r.offset_role === 'root')
+        const offsets  = filtered.filter(r => r.offset_role === 'offset')
+        const untagged = filtered.filter(r => !r.offset_role)
+        const cards = [
+          { label: 'Total rows',   sub: null,                              value: filtered.length.toLocaleString(),                                                                                                  accent: 'border-gray-100 text-gray-900' },
+          { label: 'Originals',    sub: 'the entry that got refunded',     value: `${roots.length.toLocaleString()} · ${formatCurrency(roots.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,    accent: 'border-green-200 text-green-700' },
+          { label: 'Refunds',      sub: 'the refund entry',                value: `${offsets.length.toLocaleString()} · ${formatCurrency(offsets.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,  accent: 'border-amber-200 text-amber-700' },
+          { label: 'Needs review', sub: "hasn't been classified yet",      value: untagged.length.toLocaleString(),                                                                                               accent: untagged.length > 0 ? 'border-red-200 text-red-600' : 'border-gray-100 text-gray-900' },
+        ]
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {cards.map(({ label, sub, value, accent }) => (
+              <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
+                <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
+                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {loading
+                  ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
+                  : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )
+      })()}
 
       {/* Table / Cards */}
       <Card padding={false}>
@@ -297,15 +307,20 @@ export default function RefundTransactions() {
                     </p>
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                    {canWrite() && row.offset_role === 'offset' && row.root_transaction_id === null && (
-                      <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
-                        <Link2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                     {canWrite() && (
-                      <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      <>
+                        <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        {row.offset_role === 'root' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                        )}
+                        {row.offset_role !== 'root' && row.root_transaction_id === null && (
+                          <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -375,7 +390,10 @@ export default function RefundTransactions() {
                           <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          {row.offset_role === 'offset' && row.root_transaction_id === null && (
+                          {row.offset_role === 'root' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="This is a root transaction">R</span>
+                          )}
+                          {row.offset_role !== 'root' && row.root_transaction_id === null && (
                             <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root transaction">
                               <Link2 className="w-3.5 h-3.5" />
                             </button>
