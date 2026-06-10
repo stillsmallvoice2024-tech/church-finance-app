@@ -314,13 +314,18 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const bankLabel = (b: { name: string; is_foreign_currency: boolean }) =>
     b.is_foreign_currency ? `${b.name} [FX]` : b.name
 
-  // When a Foreign Currency Bank is selected: lock target table to fx_transactions
-  // and auto-populate fxCurrency from the bank's own currency.
+  // Auto-select target table based on bank type:
+  //   FX bank   → fx_transactions (locked)
+  //   Normal bank → bank_statement (default, still editable)
   useEffect(() => {
-    if (!isForeignCurrencyBank) return
-    setTargetTable('fx_transactions')
-    const bankCurrency = bankList.find(b => b.id === internalBank?.id)?.currency
-    if (bankCurrency) setFxCurrency(bankCurrency)
+    if (!internalBank) return
+    if (isForeignCurrencyBank) {
+      setTargetTable('fx_transactions')
+      const bankCurrency = bankList.find(b => b.id === internalBank.id)?.currency
+      if (bankCurrency) setFxCurrency(bankCurrency)
+    } else {
+      setTargetTable('bank_statement')
+    }
   }, [isForeignCurrencyBank, internalBank?.id, bankList])
 
   // Per-row pending deduction (by sheet row index ri)
@@ -1911,83 +1916,91 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         ? `${selectedInflowRis.size} selected`
                         : isFiltered ? `${filtered.length} filtered` : 'all'
                       return (
-                    <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                      <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                        Apply to {inflowTargetLabel} rows:
-                      </span>
-                      <select value={applyInflowConfig} onChange={e => {
-                          if (e.target.value === '__create__') { setCreateConfigPendingRow('apply'); setApplyInflowConfig('') }
-                          else setApplyInflowConfig(e.target.value)
-                        }}
-                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
-                        <option value="">— Allocation Config —</option>
-                        <option value="__general__">General (date-based)</option>
-                        {applyBarSpecialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        <option value="__create__">＋ Create New Config…</option>
-                      </select>
-                      {incomeTypes.length > 0 && (
-                        <SearchableSelect value={applyIncomeType} onChange={setApplyIncomeType}
-                          options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
-                          placeholder="— Income Type —"
-                          className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                          wrapperClassName="flex-1 min-w-[110px]" />
-                      )}
-                      <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
-                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                        <option value="">— Type —</option>
-                        {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                      <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
-                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                        <option value="">— Role —</option>
-                        <option value="root">Root</option>
-                        <option value="offset">Offset</option>
-                      </select>
-                      <button
-                        type="button"
-                        disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType && !batchOffsetRole) || inflowTargetRis.length === 0}
-                        onClick={() => {
-                          if (applyInflowConfig) {
-                            // Explicit config selection → mark affected rows as manual overrides
-                            const configVal = applyInflowConfig === '__general__' ? '' : applyInflowConfig
-                            setRowConfigs(prev => {
-                              const next = { ...prev }
-                              for (const ri of inflowTargetRis) next[ri] = configVal
-                              return next
-                            })
-                            setRowManualOverrides(prev => {
-                              const next = { ...prev }
-                              for (const ri of inflowTargetRis) next[ri] = true
-                              return next
-                            })
-                          }
-                          if (applyIncomeType) {
-                            setRowIncomeTypes(prev => {
-                              const next = { ...prev }
-                              for (const ri of inflowTargetRis) next[ri] = applyIncomeType
-                              return next
-                            })
-                            if (!applyInflowConfig) {
-                              // Income type only — clear manual overrides so linked config auto-applies
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 space-y-2">
+                      {/* Row 1 — primary classification selects */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+                          Apply to {inflowTargetLabel} rows:
+                        </span>
+                        <select value={applyInflowConfig} onChange={e => {
+                            if (e.target.value === '__create__') { setCreateConfigPendingRow('apply'); setApplyInflowConfig('') }
+                            else setApplyInflowConfig(e.target.value)
+                          }}
+                          className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
+                          <option value="">— Allocation Config —</option>
+                          <option value="__general__">General (date-based)</option>
+                          {applyBarSpecialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          <option value="__create__">＋ Create New Config…</option>
+                        </select>
+                        {incomeTypes.length > 0 && (
+                          <SearchableSelect value={applyIncomeType} onChange={setApplyIncomeType}
+                            options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
+                            placeholder="— Income Type —"
+                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                            wrapperClassName="flex-1 min-w-[110px]" />
+                        )}
+                      </div>
+                      {/* Row 2 — transaction type + apply */}
+                      <div className="flex flex-wrap items-center gap-2 justify-end">
+                        <select value={batchTxnType} onChange={e => { setBatchTxnType(e.target.value); if (!isOffsetableType(e.target.value)) setBatchOffsetRole('') }}
+                          className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[130px]">
+                          <option value="">— Type —</option>
+                          {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        {isOffsetableType(batchTxnType) && (
+                          <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
+                            className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[90px]">
+                            <option value="">— Role —</option>
+                            <option value="root">Root</option>
+                            <option value="offset">Offset</option>
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType && !batchOffsetRole) || inflowTargetRis.length === 0}
+                          onClick={() => {
+                            if (applyInflowConfig) {
+                              // Explicit config selection → mark affected rows as manual overrides
+                              const configVal = applyInflowConfig === '__general__' ? '' : applyInflowConfig
+                              setRowConfigs(prev => {
+                                const next = { ...prev }
+                                for (const ri of inflowTargetRis) next[ri] = configVal
+                                return next
+                              })
                               setRowManualOverrides(prev => {
                                 const next = { ...prev }
-                                for (const ri of inflowTargetRis) delete next[ri]
+                                for (const ri of inflowTargetRis) next[ri] = true
                                 return next
                               })
                             }
-                          }
-                          if (batchTxnType !== '') {
-                            setRowTxnTypes(prev => {
-                              const next = { ...prev }
-                              for (const ri of inflowTargetRis) next[ri] = batchTxnType
-                              return next
-                            })
-                          }
-                        }}
-                        className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
-                      >
-                        Apply
-                      </button>
+                            if (applyIncomeType) {
+                              setRowIncomeTypes(prev => {
+                                const next = { ...prev }
+                                for (const ri of inflowTargetRis) next[ri] = applyIncomeType
+                                return next
+                              })
+                              if (!applyInflowConfig) {
+                                // Income type only — clear manual overrides so linked config auto-applies
+                                setRowManualOverrides(prev => {
+                                  const next = { ...prev }
+                                  for (const ri of inflowTargetRis) delete next[ri]
+                                  return next
+                                })
+                              }
+                            }
+                            if (batchTxnType !== '') {
+                              setRowTxnTypes(prev => {
+                                const next = { ...prev }
+                                for (const ri of inflowTargetRis) next[ri] = batchTxnType
+                                return next
+                              })
+                            }
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
+                        >
+                          Apply
+                        </button>
+                      </div>
                     </div>
                       )
                     })()}
@@ -2394,117 +2407,125 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       ? `${selectedOutflowRis.size} selected`
                       : isFiltered ? `${filtered.length} filtered` : 'all'
                     return (
-                  <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                      Apply to {outflowTargetLabel} rows:
-                    </span>
-                    <SearchableSelect value={applyS1} onChange={setApplyS1}
-                      options={categories.map(c => ({ value: c.name, label: c.name }))}
-                      placeholder="Stage Code 1"
-                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                      wrapperClassName="flex-1 min-w-[100px]" />
-                    <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
-                      className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
-                      <option value="">Stage Code 2</option>
-                      <option value="Percentage Allocation">Percentage Allocation</option>
-                      <option value="Specific Seed">Specific Seed</option>
-                      <option value="Savings">Savings</option>
-                    </select>
-                    {outflowTypeOptions.length > 0 && (
-                      <SearchableSelect value={applyOutflowType} onChange={setApplyOutflowType}
-                        options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
-                        placeholder="Outflow Type"
-                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 space-y-2">
+                    {/* Row 1 — primary classification selects */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+                        Apply to {outflowTargetLabel} rows:
+                      </span>
+                      <SearchableSelect value={applyS1} onChange={setApplyS1}
+                        options={categories.map(c => ({ value: c.name, label: c.name }))}
+                        placeholder="Stage Code 1"
+                        className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                         wrapperClassName="flex-1 min-w-[100px]" />
-                    )}
-                    <select value={batchTxnType} onChange={e => setBatchTxnType(e.target.value)}
-                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                      <option value="">— Type —</option>
-                      {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                    <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
-                      className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                      <option value="">— Role —</option>
-                      <option value="root">Root</option>
-                      <option value="offset">Offset</option>
-                    </select>
-                    <button
-                      type="button"
-                      disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType && !batchOffsetRole) || outflowTargetRis.length === 0}
-                      onClick={() => {
-                        if (applyS1 || applyS2) {
-                          setRowStageCodes(prev => {
-                            const next = { ...prev }
-                            for (const ri of outflowTargetRis)
-                              next[ri] = {
-                                s1: applyS1 || (prev[ri]?.s1 ?? ''),
-                                s2: applyS2 || (prev[ri]?.s2 ?? ''),
-                              }
-                            return next
-                          })
-                        }
-                        if (applyOutflowType !== '') {
-                          setRowOutflowTypes(prev => {
-                            const next = { ...prev }
-                            for (const ri of outflowTargetRis) next[ri] = applyOutflowType
-                            return next
-                          })
-                        } else if (applyS1) {
-                          // Auto-suggest outflow type from applied stage_code_1
-                          const cat = categories.find((c: { name: string }) => c.name === applyS1)
-                          let suggestedId = ''
-                          if (cat) {
-                            const sug = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
-                            suggestedId = sug?.id ?? ''
-                          } else {
-                            const match = outflowTypeOptions.find(t => t.name.toLowerCase() === applyS1.toLowerCase())
-                            suggestedId = match?.id ?? ''
-                          }
-                          if (suggestedId) {
-                            setRowOutflowTypes(prev => {
+                      <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
+                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
+                        <option value="">Stage Code 2</option>
+                        <option value="Percentage Allocation">Percentage Allocation</option>
+                        <option value="Specific Seed">Specific Seed</option>
+                        <option value="Savings">Savings</option>
+                      </select>
+                      {outflowTypeOptions.length > 0 && (
+                        <SearchableSelect value={applyOutflowType} onChange={setApplyOutflowType}
+                          options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
+                          placeholder="Outflow Type"
+                          className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                          wrapperClassName="flex-1 min-w-[100px]" />
+                      )}
+                    </div>
+                    {/* Row 2 — transaction type + apply + pending */}
+                    <div className="flex flex-wrap items-center gap-2 justify-end">
+                      <select value={batchTxnType} onChange={e => { setBatchTxnType(e.target.value); if (!isOffsetableType(e.target.value)) setBatchOffsetRole('') }}
+                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[130px]">
+                        <option value="">— Type —</option>
+                        {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {isOffsetableType(batchTxnType) && (
+                        <select value={batchOffsetRole} onChange={e => setBatchOffsetRole(e.target.value)}
+                          className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[90px]">
+                          <option value="">— Role —</option>
+                          <option value="root">Root</option>
+                          <option value="offset">Offset</option>
+                        </select>
+                      )}
+                      <button
+                        type="button"
+                        disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType && !batchOffsetRole) || outflowTargetRis.length === 0}
+                        onClick={() => {
+                          if (applyS1 || applyS2) {
+                            setRowStageCodes(prev => {
                               const next = { ...prev }
-                              for (const ri of outflowTargetRis) next[ri] = suggestedId
+                              for (const ri of outflowTargetRis)
+                                next[ri] = {
+                                  s1: applyS1 || (prev[ri]?.s1 ?? ''),
+                                  s2: applyS2 || (prev[ri]?.s2 ?? ''),
+                                }
                               return next
                             })
                           }
-                        }
-                        if (batchTxnType !== '') {
-                          setRowTxnTypes(prev => {
-                            const next = { ...prev }
-                            for (const ri of outflowTargetRis) next[ri] = batchTxnType
-                            return next
-                          })
-                        }
-                      }}
-                      className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
-                    >
-                      Apply
-                    </button>
-                    <div className="w-px self-stretch bg-gray-200 mx-1" />
-                    <button
-                      type="button"
-                      disabled={outflowTargetRis.length === 0}
-                      onClick={() => setRowPendingDeductions(prev => {
-                        const next = new Set(prev)
-                        for (const ri of outflowTargetRis) next.add(ri)
-                        return next
-                      })}
-                      className="px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 whitespace-nowrap"
-                    >
-                      Mark Pending
-                    </button>
-                    <button
-                      type="button"
-                      disabled={outflowTargetRis.length === 0}
-                      onClick={() => setRowPendingDeductions(prev => {
-                        const next = new Set(prev)
-                        for (const ri of outflowTargetRis) next.delete(ri)
-                        return next
-                      })}
-                      className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap"
-                    >
-                      Clear Pending
-                    </button>
+                          if (applyOutflowType !== '') {
+                            setRowOutflowTypes(prev => {
+                              const next = { ...prev }
+                              for (const ri of outflowTargetRis) next[ri] = applyOutflowType
+                              return next
+                            })
+                          } else if (applyS1) {
+                            // Auto-suggest outflow type from applied stage_code_1
+                            const cat = categories.find((c: { name: string }) => c.name === applyS1)
+                            let suggestedId = ''
+                            if (cat) {
+                              const sug = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+                              suggestedId = sug?.id ?? ''
+                            } else {
+                              const match = outflowTypeOptions.find(t => t.name.toLowerCase() === applyS1.toLowerCase())
+                              suggestedId = match?.id ?? ''
+                            }
+                            if (suggestedId) {
+                              setRowOutflowTypes(prev => {
+                                const next = { ...prev }
+                                for (const ri of outflowTargetRis) next[ri] = suggestedId
+                                return next
+                              })
+                            }
+                          }
+                          if (batchTxnType !== '') {
+                            setRowTxnTypes(prev => {
+                              const next = { ...prev }
+                              for (const ri of outflowTargetRis) next[ri] = batchTxnType
+                              return next
+                            })
+                          }
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-50"
+                      >
+                        Apply
+                      </button>
+                      <div className="w-px self-stretch bg-gray-200 mx-1" />
+                      <button
+                        type="button"
+                        disabled={outflowTargetRis.length === 0}
+                        onClick={() => setRowPendingDeductions(prev => {
+                          const next = new Set(prev)
+                          for (const ri of outflowTargetRis) next.add(ri)
+                          return next
+                        })}
+                        className="px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        Mark Pending
+                      </button>
+                      <button
+                        type="button"
+                        disabled={outflowTargetRis.length === 0}
+                        onClick={() => setRowPendingDeductions(prev => {
+                          const next = new Set(prev)
+                          for (const ri of outflowTargetRis) next.delete(ri)
+                          return next
+                        })}
+                        className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        Clear Pending
+                      </button>
+                    </div>
                   </div>
                     )
                   })()}

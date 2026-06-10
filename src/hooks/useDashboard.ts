@@ -115,7 +115,8 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
         .select('date, amount, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte('date', yearStart)
-        .lte('date', yearEnd),
+        .lte('date', yearEnd)
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)'),
 
       // 2. All outflow disbursed amounts for the year
       supabase
@@ -123,7 +124,8 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
         .select('date, amount_disbursed, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte('date', yearStart)
-        .lte('date', yearEnd),
+        .lte('date', yearEnd)
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)'),
 
       // 3. All FX transactions for latest-balance extraction
       supabase
