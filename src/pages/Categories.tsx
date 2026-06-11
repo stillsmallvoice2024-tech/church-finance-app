@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment, useMemo, useRef } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check, Globe } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
@@ -35,6 +35,7 @@ import {
   handleCategoryDeleteCleanup,
 } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useBanks } from '../hooks/useBanks'
 import { HelpButton }      from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
@@ -79,15 +80,18 @@ async function categoryHasLinkedData(cat: Category): Promise<boolean> {
 // ── Category form modal ────────────────────────────────────────────────────────
 
 interface CategoryModalProps {
-  open:        boolean
-  onClose:     () => void
-  onSuccess:   () => void
-  editRecord?: Category | null
-  groups:      CategoryGroup[]
-  onGroupCreated: () => void
+  open:              boolean
+  onClose:           () => void
+  onSuccess:         () => void
+  editRecord?:       Category | null
+  groups:            CategoryGroup[]
+  onGroupCreated:    () => void
+  fxGroupIds:        Set<string>
+  foreignCurrencies: { code: string; name: string; symbol: string }[]
+  isFx:              boolean
 }
 
-function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated }: CategoryModalProps) {
+function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated, fxGroupIds, foreignCurrencies, isFx }: CategoryModalProps) {
   const isEdit = !!editRecord
 
   const addMutation    = useAddCategory()
@@ -112,9 +116,12 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   const [name,         setName]         = useState('')
   const [desc,         setDesc]         = useState('')
   const [groupId,      setGroupId]      = useState('')
+  const [currency,     setCurrency]     = useState('')
   const [newGroupName, setNewGroupName] = useState('')
   const [showNewGroup, setShowNewGroup] = useState(false)
   const [obRows,       setObRows]       = useState<ObRow[]>([])
+
+  const isCurrentGroupFx = groupId !== '' && fxGroupIds.has(groupId)
 
   useEffect(() => {
     if (!open) return
@@ -123,6 +130,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
     setName(editRecord?.name ?? '')
     setDesc(editRecord?.description ?? '')
     setGroupId(editRecord?.group_id ?? '')
+    setCurrency(editRecord?.currency ?? '')
     setNewGroupName('')
     setShowNewGroup(false)
     setObRows([])
@@ -171,6 +179,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           name:        name.trim(),
           description: desc.trim() || undefined,
           group_id:    groupId || null,
+          currency:    (isFx || isCurrentGroupFx) ? (currency || null) : null,
         })
         savedId = editRecord.id
       } else {
@@ -178,6 +187,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           name:        name.trim(),
           description: desc.trim() || undefined,
           group_id:    groupId || null,
+          currency:    (isFx || isCurrentGroupFx) ? (currency || null) : null,
         })
       }
 
@@ -263,7 +273,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
               className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
             >
               <option value="">— No group —</option>
-              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              {groups.filter(g => isFx ? fxGroupIds.has(g.id) : !fxGroupIds.has(g.id)).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
             <button type="button" onClick={() => setShowNewGroup(v => !v)} title="Create new group"
               className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors">
@@ -283,6 +293,23 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
             </div>
           )}
         </div>
+
+        {/* Currency — always visible in FX mode, otherwise only when an FX group is selected */}
+        {(isFx || isCurrentGroupFx) && foreignCurrencies.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Foreign Currency</label>
+            <select
+              value={currency}
+              onChange={e => setCurrency(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+            >
+              <option value="">— Select currency —</option>
+              {foreignCurrencies.map(c => (
+                <option key={c.code} value={c.code}>{c.symbol} {c.name} ({c.code})</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Description */}
         <div className="flex flex-col gap-1">
@@ -367,7 +394,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
 export default function Categories() {
   usePageTitle('Categories')
   useFirstVisitTour('categories')
-  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
+  const { baseCurrencySymbol, formatLocale, foreignCurrencies } = useOrgCurrency()
 
   const { categories, loading, error, refetch }    = useCategories()
   const { groups, error: groupsError, refetch: refetchGroups } = useCategoryGroups()
@@ -377,10 +404,32 @@ export default function Categories() {
   const { mutate: deleteGroup }                     = useDeleteCategoryGroup()
   const { mutate: updateGroup }                     = useUpdateCategoryGroup()
   const toast = useToast()
+  const { banks } = useBanks()
+
+  const [activeTab, setActiveTab] = useState<'local' | 'fx'>('local')
+
+  const fxGroupIds = useMemo(() => {
+    const terms = new Set<string>()
+    foreignCurrencies.forEach(c => {
+      terms.add(c.code.toLowerCase())
+      c.name.toLowerCase().split(/\s+/).forEach(w => terms.add(w))
+    })
+    banks.filter(b => b.is_foreign_currency && b.currency).forEach(b => {
+      terms.add((b.currency as string).toLowerCase())
+    })
+    return new Set(
+      groups.filter(g => {
+        const gn = g.name.toLowerCase()
+        if (terms.has(gn)) return true
+        return gn.split(/\s+/).some(w => terms.has(w))
+      }).map(g => g.id)
+    )
+  }, [foreignCurrencies, banks, groups])
 
   const scrollYRef = useRef(0)
 
   const [modalOpen,    setModalOpen]    = useState(false)
+  const [isFxModal,    setIsFxModal]    = useState(false)
   const [editRecord,   setEditRecord]   = useState<Category | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null)
   const [hideTarget,   setHideTarget]   = useState<Category | null>(null)
@@ -414,8 +463,8 @@ export default function Categories() {
     setModalOpen(false)
   }
 
-  const openAdd  = () => { scrollYRef.current = getScroller()?.scrollTop ?? 0; setEditRecord(null); setModalOpen(true) }
-  const openEdit = (c: Category) => { scrollYRef.current = getScroller()?.scrollTop ?? 0; setEditRecord(c); setModalOpen(true) }
+  const openAdd  = () => { scrollYRef.current = getScroller()?.scrollTop ?? 0; setIsFxModal(activeTab === 'fx'); setEditRecord(null); setModalOpen(true) }
+  const openEdit = (c: Category) => { scrollYRef.current = getScroller()?.scrollTop ?? 0; setIsFxModal(fxGroupIds.has(c.group_id ?? '') || !!c.currency); setEditRecord(c); setModalOpen(true) }
 
   const handleDeleteClick = async (cat: Category) => {
     setCheckingDeps(true)
@@ -529,6 +578,16 @@ export default function Categories() {
           <p className="text-sm text-gray-500 mt-0.5">Manage income and allocation categories</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+            <button onClick={() => setActiveTab('local')}
+              className={`px-3 py-1.5 transition-colors ${activeTab === 'local' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+              Local
+            </button>
+            <button onClick={() => setActiveTab('fx')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-l border-gray-200 transition-colors ${activeTab === 'fx' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <Globe className="w-3.5 h-3.5" /> FX
+            </button>
+          </div>
           <HelpButton tourId="categoriesTour" size="sm" />
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={visibleSorted.length === 0} />
           {hiddenCt > 0 && (
@@ -745,6 +804,9 @@ export default function Categories() {
         editRecord={editRecord}
         groups={groups}
         onGroupCreated={refetchGroups}
+        fxGroupIds={fxGroupIds}
+        foreignCurrencies={foreignCurrencies}
+        isFx={isFxModal}
       />
 
       <PaginationBar
