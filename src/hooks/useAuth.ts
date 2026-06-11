@@ -34,7 +34,7 @@ async function fetchAllOrgMemberships(
 
   // Attempt 1: full columns including deletion-lifecycle fields
   const res1 = await fetch(
-    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,status,deleted_at,purge_at)`,
+    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at)`,
     { signal, headers },
   )
 
@@ -46,6 +46,7 @@ async function fetchAllOrgMemberships(
         name:                string
         onboarding_complete: boolean | null
         default_currency:    string | null
+        timezone:            string | null
         status:              OrgStatus | null
         deleted_at:          string | null
         purge_at:            string | null
@@ -57,6 +58,7 @@ async function fetchAllOrgMemberships(
       role:                row.role,
       onboarding_complete: row.organizations?.onboarding_complete ?? null,
       default_currency:    row.organizations?.default_currency ?? null,
+      timezone:            row.organizations?.timezone ?? null,
       org_status:          row.organizations?.status ?? 'active',
       org_deleted_at:      row.organizations?.deleted_at ?? null,
       org_purge_at:        row.organizations?.purge_at ?? null,
@@ -81,6 +83,7 @@ async function fetchAllOrgMemberships(
         role:                row.role,
         onboarding_complete: row.organizations?.onboarding_complete ?? null,
         default_currency:    row.organizations?.default_currency ?? null,
+        timezone:            null,
         org_status:          'active' as OrgStatus,
         org_deleted_at:      null,
         org_purge_at:        null,
@@ -108,6 +111,7 @@ async function fetchAllOrgMemberships(
         role:                row.role,
         onboarding_complete: null,
         default_currency:    null,
+        timezone:            null,
         org_status:          'active' as OrgStatus,
         org_deleted_at:      null,
         org_purge_at:        null,

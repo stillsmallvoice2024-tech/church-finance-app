@@ -9,8 +9,10 @@ import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReconciliation } from '../hooks/useReconciliation'
 import { useBanks } from '../hooks/useBanks'
-import { formatDate, formatCurrency } from '../utils/formatters'
+import { formatCurrency, formatWithTimezone } from '../utils/formatters'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
+import { getOrgTimezone } from '../utils/timezones'
 import type { ReconciliationIssue } from '../utils/reconciliationEngine'
 import {
   type HealthStatus,
@@ -220,6 +222,8 @@ function BankSummaryRow({ summary, currency }: { summary: BankHealthSummary; cur
 export default function ReconciliationCenter() {
   usePageTitle('Reconciliation Center')
   const { baseCurrencyCode } = useOrgCurrency()
+  const storedTz    = useOrgStore(s => s.timezone)
+  const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
   const { banks } = useBanks()
   const {
     result, diagnostics, loading, error,
@@ -293,7 +297,7 @@ export default function ReconciliationCenter() {
                 </h2>
                 {result && (
                   <span className="text-xs text-gray-400">
-                    Last checked {formatDate(result.runAt.slice(0, 10))} · {result.durationMs}ms
+                    Last checked {formatWithTimezone(result.runAt, orgTimezone)}{result.durationMs > 0 ? ` · ${result.durationMs}ms` : ''}
                   </span>
                 )}
               </div>

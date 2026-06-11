@@ -119,6 +119,23 @@ export function formatDateTime(date: string | Date): string {
   return format(new Date(date), 'dd MMM yyyy, HH:mm')
 }
 
+/** Format an ISO timestamp in a given IANA timezone, e.g. "11 Jun 2026, 14:35 WAT" */
+export function formatWithTimezone(isoTimestamp: string, timezone: string): string {
+  try {
+    const date = new Date(isoTimestamp)
+    const datePart = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric', timeZone: timezone,
+    }).format(date)
+    const timePart = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone,
+      timeZoneName: 'short',
+    }).format(date)
+    return `${datePart}, ${timePart}`
+  } catch {
+    return format(new Date(isoTimestamp), 'dd MMM yyyy, HH:mm')
+  }
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

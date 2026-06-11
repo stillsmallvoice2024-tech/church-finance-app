@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -32,6 +32,8 @@ import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
+import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
 const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
@@ -141,10 +143,44 @@ function GeneralTab() {
   const [saved, setSaved] = useState(false)
   const [pending, setPending] = useState(year)
 
+  const orgId          = useOrgStore(s => s.orgId)
+  const storedTimezone = useOrgStore(s => s.timezone)
+  const setTimezone    = useOrgStore(s => s.setTimezone)
+  const { baseCurrencyCode } = useOrgCurrency()
+
+  const effectiveTz    = getOrgTimezone(storedTimezone, baseCurrencyCode)
+  const [pendingTz, setPendingTz] = useState(effectiveTz)
+  const [tzSaved,   setTzSaved]   = useState(false)
+  const [tzSaving,  setTzSaving]  = useState(false)
+  const [tzError,   setTzError]   = useState<string | null>(null)
+
+  // Keep pendingTz in sync if the store changes (e.g. org switch)
+  useEffect(() => {
+    setPendingTz(getOrgTimezone(storedTimezone, baseCurrencyCode))
+  }, [storedTimezone, baseCurrencyCode])
+
   const handleSave = () => {
     setYear(pending)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleSaveTz = async () => {
+    if (!orgId) return
+    setTzSaving(true)
+    setTzError(null)
+    const { error } = await supabase
+      .from('organizations')
+      .update({ timezone: pendingTz })
+      .eq('id', orgId)
+    setTzSaving(false)
+    if (error) {
+      setTzError(error.message)
+    } else {
+      setTimezone(pendingTz)
+      setTzSaved(true)
+      setTimeout(() => setTzSaved(false), 2000)
+    }
   }
 
   return (
@@ -188,6 +224,54 @@ function GeneralTab() {
             </span>
           )}
           {pending !== year && !saved && (
+            <span className="text-xs text-gray-400">Unsaved change</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Timezone ─────────────────────────────────────────────────────────── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-2 text-gray-800">
+          <Globe className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold">Organisation Timezone</h2>
+        </div>
+        <p className="text-sm text-gray-500">
+          Controls how timestamps (e.g. last reconciliation check) are displayed throughout the app.
+          Defaults to the timezone of your organisation's base currency.
+        </p>
+
+        <div className="pt-1">
+          <select
+            value={pendingTz}
+            onChange={e => setPendingTz(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          >
+            {COMMON_TIMEZONES.map(tz => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label} (UTC{tz.offset})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {tzError && (
+          <p className="text-xs text-danger">{tzError}</p>
+        )}
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={handleSaveTz}
+            disabled={pendingTz === effectiveTz || tzSaving}
+            className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-50 transition-colors"
+          >
+            {tzSaving ? 'Saving…' : 'Save'}
+          </button>
+          {tzSaved && (
+            <span className="flex items-center gap-1.5 text-sm text-success font-medium">
+              <CheckCircle2 className="w-4 h-4" /> Saved
+            </span>
+          )}
+          {pendingTz !== effectiveTz && !tzSaved && !tzSaving && (
             <span className="text-xs text-gray-400">Unsaved change</span>
           )}
         </div>
@@ -2199,6 +2283,8 @@ DO $$ BEGIN
   CREATE POLICY "bsb_delete" ON public.bank_statement_balances FOR DELETE USING (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_bsb_org_bank ON public.bank_statement_balances(org_id, bank_name);
+
+ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS timezone text;
 
 NOTIFY pgrst, 'reload schema';`
 

@@ -26,7 +26,7 @@ import { useCategories }           from '../hooks/useCategories'
 import { useAuth }                 from '../hooks/useAuth'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
-import { formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/formatters'
+import { formatCurrencyCompact, formatDate, formatWithTimezone, getCurrencyLocale } from '../utils/formatters'
 import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
@@ -38,6 +38,8 @@ import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
 import { getStoredHealthStatus }   from '../hooks/useReconciliation'
 import { healthStatusLabel } from '../utils/reconciliationAggregator'
+import { useOrgStore }             from '../store/orgStore'
+import { getOrgTimezone }          from '../utils/timezones'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +76,9 @@ export default function Dashboard() {
   const { user, profile } = useAuth()
   const { foreignCurrencies, baseCurrencyCode } = useOrgCurrency()
   const { role } = useRole()
-  const year   = useAccountingYearStore(s => s.year)
+  const year        = useAccountingYearStore(s => s.year)
+  const storedTz    = useOrgStore(s => s.timezone)
+  const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
   const stats  = useDashboardStats(year)
   const { categories, loading: categoriesLoading } = useCategories()
 
@@ -213,7 +217,7 @@ export default function Dashboard() {
               System health: <strong>{healthStatusLabel(storedHealth.status)}</strong>
             </span>
             <span className="text-xs opacity-60 hidden sm:inline">
-              · last checked {formatDate(storedHealth.runAt.slice(0, 10))}
+              · last checked {formatWithTimezone(storedHealth.runAt, orgTimezone)}
             </span>
             <span className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0">View →</span>
           </Link>
