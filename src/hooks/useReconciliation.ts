@@ -6,6 +6,7 @@ import { runReconciliation, type ReconciliationResult, type ReconciliationIssue 
 import { ALL_RULES } from '../utils/reconciliationRules'
 import { aggregateDiagnostics, type ReconciliationDiagnostics, type HealthStatus } from '../utils/reconciliationAggregator'
 import { useHealthStore } from '../store/healthStore'
+import { useReconciliationStore } from '../store/reconciliationStore'
 
 export interface ReconciliationRun {
   id: string
@@ -24,19 +25,28 @@ export function getStoredHealthStatus(): { status: HealthStatus; runAt: string }
 }
 
 export function useReconciliation() {
-  const orgId   = useOrgStore(s => s.orgId)
+  const orgId    = useOrgStore(s => s.orgId)
   const { user } = useAuth()
 
-  const [result,      setResult]      = useState<ReconciliationResult | null>(null)
-  const [diagnostics, setDiagnostics] = useState<ReconciliationDiagnostics | null>(null)
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState<string | null>(null)
-  const [history,     setHistory]     = useState<ReconciliationRun[]>([])
+  // result + diagnostics live in the store so they survive page navigation
+  const storeResult      = useReconciliationStore(s => s.result)
+  const storeDiagnostics = useReconciliationStore(s => s.diagnostics)
+  const storedOrgId      = useReconciliationStore(s => s.orgId)
+  const { setResults, clearResults } = useReconciliationStore.getState()
+
+  const [loading,        setLoading]        = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
+  const [history,        setHistory]        = useState<ReconciliationRun[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // Restore last run from DB on mount so results survive page navigation
+  // Clear cached results when the active org changes
   useEffect(() => {
-    if (!orgId) return
+    if (orgId && storedOrgId && orgId !== storedOrgId) clearResults()
+  }, [orgId, storedOrgId, clearResults])
+
+  // On first mount for this org (store is empty), restore last run from DB
+  useEffect(() => {
+    if (!orgId || storeResult) return       // already have results in memory
     ;(async () => {
       const { data, error } = await supabase
         .from('reconciliation_runs')
@@ -46,26 +56,25 @@ export function useReconciliation() {
         .limit(1)
         .single()
       if (error || !data) return
-      const row = data as { run_at: string; issues_json: unknown }
+      const row    = data as { run_at: string; issues_json: unknown }
       const issues = (Array.isArray(row.issues_json) ? row.issues_json : []) as ReconciliationIssue[]
-      setResult({ issues, runAt: row.run_at, durationMs: 0 })
-      setDiagnostics(aggregateDiagnostics(issues))
+      const restored: ReconciliationResult = { issues, runAt: row.run_at, durationMs: 0 }
+      setResults(restored, aggregateDiagnostics(issues), orgId)
     })()
-  }, [orgId])
+  }, [orgId, storeResult, setResults])
 
   const runCheck = useCallback(async () => {
     if (!orgId) return
     setLoading(true)
     setError(null)
     try {
-      const res = await runReconciliation(orgId, ALL_RULES)
+      const res  = await runReconciliation(orgId, ALL_RULES)
       const diag = aggregateDiagnostics(res.issues)
 
       useHealthStore.getState().setHealth(diag.healthStatus, res.runAt)
-      setResult(res)
-      setDiagnostics(diag)
+      setResults(res, diag, orgId)
 
-      // Persist run to DB
+      // Best-effort persist to DB — silent if table doesn't exist yet
       await supabase.from('reconciliation_runs').insert({
         run_at:         res.runAt,
         issue_count:    res.issues.length,
@@ -82,7 +91,7 @@ export function useReconciliation() {
     } finally {
       setLoading(false)
     }
-  }, [orgId, user?.id])
+  }, [orgId, user?.id, setResults])
 
   const fetchHistory = useCallback(async () => {
     if (!orgId) return
@@ -128,8 +137,8 @@ export function useReconciliation() {
   }, [orgId])
 
   return {
-    result,
-    diagnostics,
+    result:      storeResult,
+    diagnostics: storeDiagnostics,
     loading,
     error,
     history,
