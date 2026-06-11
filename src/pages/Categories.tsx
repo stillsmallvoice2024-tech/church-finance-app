@@ -90,9 +90,10 @@ interface CategoryModalProps {
   onGroupCreated:   () => void
   fxGroupIds:       Set<string>
   foreignCurrencies: { code: string; name: string; symbol: string }[]
+  mode:             'local' | 'fx'
 }
 
-function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated, fxGroupIds, foreignCurrencies }: CategoryModalProps) {
+function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCreated, fxGroupIds, foreignCurrencies, mode }: CategoryModalProps) {
   const isEdit = !!editRecord
   const orgId  = useOrgStore(s => s.orgId) ?? ''
 
@@ -296,8 +297,8 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           )}
         </div>
 
-        {/* Currency — only for FX groups */}
-        {isCurrentGroupFx && foreignCurrencies.length > 0 && (
+        {/* Currency — shown for FX groups, or always on FX tab */}
+        {(isCurrentGroupFx || mode === 'fx') && foreignCurrencies.length > 0 && (
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">Foreign Currency</label>
             <select
@@ -822,10 +823,14 @@ export default function Categories() {
         onClose={handleModalClose}
         onSuccess={() => { refetch(); refetchBalances() }}
         editRecord={editRecord}
-        groups={groups}
+        groups={activeTab === 'fx'
+          ? groups.filter(g => fxGroupIds.has(g.id))
+          : groups.filter(g => !fxGroupIds.has(g.id))
+        }
         onGroupCreated={refetchGroups}
         fxGroupIds={fxGroupIds}
         foreignCurrencies={foreignCurrencies}
+        mode={activeTab}
       />
 
       <PaginationBar
