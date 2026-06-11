@@ -2445,7 +2445,7 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
       {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+          <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Please contact your administrator to apply the required database migration.</span>
         </div>
       )}
       {isCacheStale && (
@@ -2573,7 +2573,7 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
       {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">departments</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+          <span>The <code className="font-mono text-xs">departments</code> table doesn't exist yet. Please contact your administrator to apply the required database migration.</span>
         </div>
       )}
 
@@ -2966,27 +2966,8 @@ export default function SetupPage() {
           {activeTab === 'Currencies'     && <CurrenciesTab />}
         </div>
 
-        {/* Developer Tools */}
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setDevToolsOpen(o => !o)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <Terminal className="w-4 h-4 text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-500">Developer Tools</p>
-                <p className="text-xs text-gray-400">Advanced setup and troubleshooting utilities</p>
-              </div>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${devToolsOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {devToolsOpen && (
-            <div className="border-t border-gray-100 p-5">
-              <DatabaseTab />
-            </div>
-          )}
-        </div>
+        {/* Developer Tools — hidden from UI; code kept in DatabaseTab for developer reference.
+             See archive/devtools-removal branch (PR #304) for full clean-up when ready. */}
 
         {/* Danger Zone */}
         <div className="border border-red-200 rounded-xl p-5 space-y-3 bg-red-50/40">
