@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom'
 import {
   ShieldCheck, ShieldAlert, ShieldX, RefreshCw, AlertCircle,
   ChevronDown, ChevronUp, CheckCircle, Clock, Info,
-  ExternalLink, BookOpen, FileSearch, ArrowRightLeft, Landmark,
+  ExternalLink, BookOpen, FileSearch, ArrowRightLeft, Landmark, Pencil, X,
 } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReconciliation } from '../hooks/useReconciliation'
 import { useBanks } from '../hooks/useBanks'
-import { formatCurrency, formatWithTimezone } from '../utils/formatters'
+import { formatCurrency, formatDate, formatWithTimezone } from '../utils/formatters'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
 import { getOrgTimezone } from '../utils/timezones'
@@ -73,67 +73,6 @@ function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
   )
 }
 
-// ── Reference balance input per bank ──────────────────────────────────────────
-
-interface RefBalanceRowProps {
-  bank: { id: string; name: string }
-  existing: { balance: number; date: string } | undefined
-  currency: string
-  onSave: (bankId: string, bankName: string, balance: number, date: string) => Promise<void>
-}
-
-function RefBalanceRow({ bank, existing, currency, onSave }: RefBalanceRowProps) {
-  const [balance, setBalance] = useState(existing ? String(existing.balance) : '')
-  const [date,    setDate]    = useState(existing?.date ?? new Date().toISOString().slice(0, 10))
-  const [saving,  setSaving]  = useState(false)
-  const [saved,   setSaved]   = useState(false)
-
-  const handleSave = async () => {
-    const val = parseFloat(balance)
-    if (isNaN(val)) return
-    setSaving(true)
-    await onSave(bank.id, bank.name, val, date)
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  return (
-    <tr className="border-t border-gray-100">
-      <td className="px-4 py-3 text-sm font-medium text-gray-800">{bank.name}</td>
-      <td className="px-4 py-3">
-        <input
-          type="number"
-          value={balance}
-          onChange={e => setBalance(e.target.value)}
-          placeholder="Enter statement balance"
-          className="w-44 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-        />
-      </td>
-      <td className="px-4 py-3">
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-        />
-      </td>
-      <td className="px-4 py-3 text-xs text-gray-400">
-        {existing ? `Last: ${formatCurrency(existing.balance, currency)} on ${formatDate(existing.date)}` : 'Not set'}
-      </td>
-      <td className="px-4 py-3">
-        <button
-          onClick={handleSave}
-          disabled={saving || !balance}
-          className="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-50 transition-colors"
-        >
-          {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
-        </button>
-      </td>
-    </tr>
-  )
-}
-
 // ── Issue card ─────────────────────────────────────────────────────────────────
 
 function IssueCard({ issue }: { issue: ReconciliationIssue }) {
@@ -173,17 +112,49 @@ function IssueCard({ issue }: { issue: ReconciliationIssue }) {
   )
 }
 
-// ── Bank status table row ──────────────────────────────────────────────────────
+// ── Bank status table row (with inline reference-balance edit) ────────────────
 
-function BankSummaryRow({ summary, currency }: { summary: BankHealthSummary; currency: string }) {
+interface BankSummaryRowProps {
+  summary:    BankHealthSummary
+  currency:   string
+  bankId:     string | null
+  refBalance: { balance: number; date: string } | undefined
+  onSave:     (bankId: string | null, bankName: string, balance: number, date: string) => Promise<void>
+}
+
+function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankSummaryRowProps) {
+  const [editing,      setEditing]      = useState(false)
+  const [inputBalance, setInputBalance] = useState('')
+  const [inputDate,    setInputDate]    = useState('')
+  const [saving,       setSaving]       = useState(false)
+
+  const startEdit = () => {
+    setInputBalance(refBalance ? String(refBalance.balance) : '')
+    setInputDate(refBalance?.date ?? new Date().toISOString().slice(0, 10))
+    setEditing(true)
+  }
+
+  const cancelEdit = () => setEditing(false)
+
+  const handleSave = async () => {
+    const val = parseFloat(inputBalance)
+    if (isNaN(val)) return
+    setSaving(true)
+    await onSave(bankId, summary.bankName, val, inputDate)
+    setSaving(false)
+    setEditing(false)
+  }
+
   return (
-    <tr className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
+    <tr className="border-t border-gray-100 hover:bg-gray-50 transition-colors group">
+      {/* Account */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${healthStatusDot(summary.status)}`} />
           <span className="text-sm font-medium text-gray-800">{summary.bankName}</span>
         </div>
       </td>
+      {/* Status */}
       <td className="px-4 py-3">
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
           summary.status === 'critical' ? 'bg-red-100 text-red-700' :
@@ -193,12 +164,60 @@ function BankSummaryRow({ summary, currency }: { summary: BankHealthSummary; cur
           {healthStatusLabel(summary.status)}
         </span>
       </td>
+      {/* Book Balance */}
       <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">
         {summary.bookBalance !== undefined ? formatCurrency(summary.bookBalance, currency) : '—'}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600 tabular-nums">
-        {summary.referenceBalance !== undefined ? formatCurrency(summary.referenceBalance, currency) : '—'}
+      {/* Reference Balance — click the pencil to edit inline */}
+      <td className="px-4 py-3">
+        {editing ? (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <input
+              type="number"
+              value={inputBalance}
+              onChange={e => setInputBalance(e.target.value)}
+              autoFocus
+              placeholder="Amount"
+              className="w-32 px-2 py-1 text-xs border border-primary/40 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+            />
+            <input
+              type="date"
+              value={inputDate}
+              onChange={e => setInputDate(e.target.value)}
+              className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+            />
+            <button
+              onClick={handleSave}
+              disabled={saving || !inputBalance}
+              className="px-2 py-1 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-50 transition-colors"
+            >
+              {saving ? '…' : 'Save'}
+            </button>
+            <button onClick={cancelEdit} className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <div>
+              <span className="text-sm text-gray-600 tabular-nums">
+                {refBalance !== undefined ? formatCurrency(refBalance.balance, currency) : <span className="text-gray-400">—</span>}
+              </span>
+              {refBalance && (
+                <div className="text-xs text-gray-400">as of {formatDate(refBalance.date)}</div>
+              )}
+            </div>
+            <button
+              onClick={startEdit}
+              className="opacity-0 group-hover:opacity-100 ml-1 p-0.5 rounded text-gray-400 hover:text-primary transition-all"
+              title="Edit reference balance"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        )}
       </td>
+      {/* Difference */}
       <td className={`px-4 py-3 text-sm font-semibold tabular-nums ${
         summary.difference !== undefined && summary.difference < 0 ? 'text-red-600' :
         summary.difference !== undefined && summary.difference > 0 ? 'text-amber-600' :
@@ -208,6 +227,7 @@ function BankSummaryRow({ summary, currency }: { summary: BankHealthSummary; cur
           ? (summary.difference > 0 ? '+' : '') + formatCurrency(summary.difference, currency)
           : '—'}
       </td>
+      {/* Issues */}
       <td className="px-4 py-3">
         <span className="text-xs text-red-600 font-medium">{summary.criticalCount > 0 ? `${summary.criticalCount} critical` : ''}</span>
         {summary.criticalCount > 0 && summary.warningCount > 0 && <span className="text-gray-300 mx-1">·</span>}
@@ -234,8 +254,7 @@ export default function ReconciliationCenter() {
 
   const [refBalances, setRefBalances] = useState<Map<string, { balance: number; date: string }>>(new Map())
   const [showAccountStatus, setShowAccountStatus] = useState(true)
-  const [showRefSection, setShowRefSection] = useState(false)
-  const [showHistory,    setShowHistory]    = useState(false)
+  const [showHistory,       setShowHistory]       = useState(false)
   const [showCritical,   setShowCritical]   = useState(true)
   const [showWarning,    setShowWarning]    = useState(true)
   const [showInfo,       setShowInfo]       = useState(false)
@@ -247,7 +266,7 @@ export default function ReconciliationCenter() {
 
   useEffect(() => { loadRefs() }, [loadRefs])
 
-  const handleSaveRef = async (bankId: string, bankName: string, balance: number, date: string) => {
+  const handleSaveRef = async (bankId: string | null, bankName: string, balance: number, date: string) => {
     await saveReferenceBalance(bankName, bankId, balance, date)
     await loadRefs()
   }
@@ -357,7 +376,14 @@ export default function ReconciliationCenter() {
                   </thead>
                   <tbody>
                     {diag.bankSummaries.map(s => (
-                      <BankSummaryRow key={s.bankName} summary={s} currency={baseCurrencyCode} />
+                      <BankSummaryRow
+                        key={s.bankName}
+                        summary={s}
+                        currency={baseCurrencyCode}
+                        bankId={banks.find(b => b.name === s.bankName)?.id ?? null}
+                        refBalance={refBalances.get(s.bankName)}
+                        onSave={handleSaveRef}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -442,54 +468,6 @@ export default function ReconciliationCenter() {
           </div>
         </Card>
       )}
-
-      {/* ── Reference Balance Setup ────────────────────────────────────────── */}
-      <div>
-        <button
-          onClick={() => setShowRefSection(v => !v)}
-          className="flex items-center gap-2 w-full text-left"
-        >
-          <Landmark className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-semibold text-gray-700">Statement Reference Balances</span>
-          {showRefSection ? <ChevronUp className="w-4 h-4 text-gray-400 ml-auto" /> : <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />}
-        </button>
-        {showRefSection && (
-          <Card padding={false} className="mt-3">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <p className="text-xs text-gray-500">
-                Enter the closing balance from your latest bank statement for each account. This is used to verify your app records
-                match your actual bank balance. You can also save the closing balance directly from the Import window after importing a bank statement.
-              </p>
-            </div>
-            {banks.length === 0 ? (
-              <p className="text-sm text-gray-400 px-6 py-4">No bank accounts configured.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      {['Bank', 'Statement Balance', 'Statement Date', 'Last Saved', ''].map(h => (
-                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {banks.filter(b => !b.is_foreign_currency).map(bank => (
-                      <RefBalanceRow
-                        key={bank.id}
-                        bank={bank}
-                        existing={refBalances.get(bank.name)}
-                        currency={baseCurrencyCode}
-                        onSave={handleSaveRef}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-        )}
-      </div>
 
       {/* ── Run History ───────────────────────────────────────────────────── */}
       <div>
