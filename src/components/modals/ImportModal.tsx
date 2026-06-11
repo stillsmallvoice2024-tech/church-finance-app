@@ -314,20 +314,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     if (bank) setInternalBank(bank)
   }, [bank])
 
-  // Auto-derive the latest transaction date when a bank_statement import completes
-  useEffect(() => {
-    if (!result || targetTable !== 'bank_statement' || !sheet || !processedRows) return
-    const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
-    let maxDate = ''
-    if (dateIdx >= 0) {
-      for (const row of processedRows) {
-        const d = parseDate(row[dateIdx], dateFormat)
-        if (d && d > maxDate) maxDate = d
-      }
-    }
-    setStmtDate(maxDate || new Date().toISOString().slice(0, 10))
-  }, [result, targetTable, sheet, processedRows, mapping, dateFormat])
-
   const isForeignCurrencyBank = !!internalBank &&
     (bankList.find(b => b.id === internalBank.id)?.is_foreign_currency ?? false)
 
@@ -363,7 +349,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
   // Date format (Phase A)
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
-
+  
   // FX currency (Phase B)
   const [fxCurrency, setFxCurrency] = useState('')
 
@@ -494,6 +480,21 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   }, [specialConfigs, allocConfigs])
   const [createConfigOpen, setCreateConfigOpen] = useState(false)
 
+ // Auto-derive the latest transaction date when a bank_statement import completes
+  useEffect(() => {
+    if (!result || targetTable !== 'bank_statement' || !sheet || !processedRows) return
+    const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
+    let maxDate = ''
+    if (dateIdx >= 0) {
+      for (const row of processedRows) {
+        const d = parseDate(row[dateIdx], dateFormat)
+        if (d && d > maxDate) maxDate = d
+      }
+    }
+    setStmtDate(maxDate || new Date().toISOString().slice(0, 10))
+  }, [result, targetTable, sheet, processedRows, mapping, dateFormat])
+
+  
   // ── Reset on open/close ──────────────────────────────────────────────────
 
   const reset = useCallback(() => {
