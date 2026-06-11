@@ -277,10 +277,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [result,    setResult]      = useState<ImportResult | null>(null)
 
   // Closing balance capture (bank_statement only — shown after successful import)
-  const [stmtBalance, setStmtBalance] = useState('')
-  const [stmtDate,    setStmtDate]    = useState('')
-  const [stmtSaving,  setStmtSaving]  = useState(false)
-  const [stmtSaved,   setStmtSaved]   = useState(false)
+  const [stmtBalance,   setStmtBalance]   = useState('')
+  const [stmtDate,      setStmtDate]      = useState('')
+  const [stmtSaving,    setStmtSaving]    = useState(false)
+  const [stmtSaved,     setStmtSaved]     = useState(false)
+  /** Set when the balance column was auto-detected and saved; null = not detected (show manual form). */
+  const [stmtAutoSaved, setStmtAutoSaved] = useState<{ balance: number; date: string } | null>(null)
 
   // Derived
   const sheet   = useMemo(() => sheets.find(s => s.name === selectedSheet) ?? null, [sheets, selectedSheet])
@@ -548,6 +550,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setStmtDate('')
     setStmtSaving(false)
     setStmtSaved(false)
+    setStmtAutoSaved(null)
     // Clear back-button sentinel ref so a fresh open can push a new one
     sentinelPushedRef.current = false
     pendingNavIsBackRef.current = false
@@ -1309,6 +1312,44 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       }
 
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
+
+      // Auto-detect closing balance from the mapped balance column and save silently.
+      // Falls back to a manual entry form if the column wasn't mapped or had no values.
+      const balIdx = colIdx('balance')
+      let balAutoDetected = false
+      if (balIdx >= 0 && internalBank) {
+        let lastDate    = ''
+        let lastBalance: number | null = null
+        for (const raw of mergedRows) {
+          const d = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
+          if (!d) continue
+          if (d >= lastDate && raw[balIdx] != null && raw[balIdx] !== '') {
+            lastDate    = d
+            lastBalance = parseNumber(raw[balIdx])
+          }
+        }
+        if (lastDate && lastBalance !== null) {
+          balAutoDetected = true
+          const lb  = lastBalance
+          const ld  = lastDate
+          const uid = useAuthStore.getState().user?.id ?? null
+          void supabase.from('bank_statement_balances')
+            .upsert(
+              { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: lb, statement_date: ld, org_id: orgId, entered_by: uid },
+              { onConflict: 'org_id,bank_name' },
+            )
+            .then(() => setStmtAutoSaved({ balance: lb, date: ld }))
+        }
+      }
+      if (!balAutoDetected) {
+        // Derive last transaction date to pre-fill the manual entry form
+        let maxDate = ''
+        for (const raw of mergedRows) {
+          const d = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
+          if (d && d > maxDate) maxDate = d
+        }
+        setStmtDate(maxDate || new Date().toISOString().slice(0, 10))
+      }
     }
 
     // ── FX transactions ───────────────────────────────────────────────────────
@@ -3134,37 +3175,51 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             {/* Closing balance capture — bank_statement only, shown after successful import */}
             {result && !importing && targetTable === 'bank_statement' && internalBank && (
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
-                <p className="text-xs font-semibold text-gray-600">
-                  Save statement closing balance <span className="font-normal text-gray-400">(optional)</span>
-                </p>
-                {stmtSaved ? (
+                <p className="text-xs font-semibold text-gray-600">Statement closing balance</p>
+                {stmtAutoSaved ? (
+                  /* Balance was auto-detected from the mapped balance column */
                   <div className="flex items-center gap-2 text-xs text-green-600">
-                    <CheckCircle2 className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>
+                      Closing balance auto-saved to Reconciliation Centre
+                      <span className="text-gray-400 font-normal ml-1">
+                        ({stmtAutoSaved.balance.toLocaleString()} · {stmtAutoSaved.date})
+                      </span>
+                    </span>
+                  </div>
+                ) : stmtSaved ? (
+                  /* Manually entered and saved */
+                  <div className="flex items-center gap-2 text-xs text-green-600">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
                     Closing balance saved — Reconciliation Centre updated.
                   </div>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="number"
-                      value={stmtBalance}
-                      onChange={e => setStmtBalance(e.target.value)}
-                      placeholder="Closing balance"
-                      className="w-40 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
-                    />
-                    <input
-                      type="date"
-                      value={stmtDate}
-                      onChange={e => setStmtDate(e.target.value)}
-                      className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
-                    />
-                    <button
-                      onClick={handleSaveStmtBalance}
-                      disabled={stmtSaving || !stmtBalance || !stmtDate}
-                      className="px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-50 transition-colors"
-                    >
-                      {stmtSaving ? 'Saving…' : 'Save'}
-                    </button>
-                  </div>
+                  /* Balance column not mapped — manual fallback */
+                  <>
+                    <p className="text-xs text-gray-400">Balance column not mapped — enter manually if needed:</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="number"
+                        value={stmtBalance}
+                        onChange={e => setStmtBalance(e.target.value)}
+                        placeholder="Closing balance"
+                        className="w-40 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
+                      />
+                      <input
+                        type="date"
+                        value={stmtDate}
+                        onChange={e => setStmtDate(e.target.value)}
+                        className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
+                      />
+                      <button
+                        onClick={handleSaveStmtBalance}
+                        disabled={stmtSaving || !stmtBalance || !stmtDate}
+                        className="px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-50 transition-colors"
+                      >
+                        {stmtSaving ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             )}

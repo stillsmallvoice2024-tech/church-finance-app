@@ -4,7 +4,7 @@ import { useOrgStore } from '../store/orgStore'
 import { useAuth } from './useAuth'
 import { runReconciliation, type ReconciliationResult, type ReconciliationIssue } from '../utils/reconciliationEngine'
 import { ALL_RULES } from '../utils/reconciliationRules'
-import { aggregateDiagnostics, type ReconciliationDiagnostics, type HealthStatus } from '../utils/reconciliationAggregator'
+import { aggregateDiagnostics, type HealthStatus } from '../utils/reconciliationAggregator'
 import { useHealthStore } from '../store/healthStore'
 import { useReconciliationStore } from '../store/reconciliationStore'
 
