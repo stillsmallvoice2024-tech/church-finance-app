@@ -37,7 +37,7 @@ import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
 import { getStoredHealthStatus }   from '../hooks/useReconciliation'
-import { healthStatusLabel, healthStatusColor, healthStatusDot } from '../utils/reconciliationAggregator'
+import { healthStatusLabel } from '../utils/reconciliationAggregator'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -196,6 +196,29 @@ export default function Dashboard() {
         {/* ── Onboarding checklist ─────────────────────────────────────────── */}
         <OnboardingChecklist />
 
+        {/* ── Health status strip ──────────────────────────────────────────── */}
+        {storedHealth && (
+          <Link
+            to="/reconciliation"
+            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+              storedHealth.status === 'critical' ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
+              storedHealth.status === 'warning'  ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' :
+              'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+            }`}
+          >
+            {storedHealth.status === 'critical' ? <ShieldX     className="w-4 h-4 shrink-0" /> :
+             storedHealth.status === 'warning'  ? <ShieldAlert className="w-4 h-4 shrink-0" /> :
+             <ShieldCheck className="w-4 h-4 shrink-0" />}
+            <span>
+              System health: <strong>{healthStatusLabel(storedHealth.status)}</strong>
+            </span>
+            <span className="text-xs opacity-60 hidden sm:inline">
+              · last checked {formatDate(storedHealth.runAt.slice(0, 10))}
+            </span>
+            <span className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0">View →</span>
+          </Link>
+        )}
+
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
         <div data-tour="summary-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {isLoading ? (
@@ -350,38 +373,6 @@ export default function Dashboard() {
             </div>
           )}
         </Card>
-
-        {/* ── Reconciliation health card ──────────────────────────────────── */}
-        <Link to="/reconciliation" className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl">
-          <Card className="transition-shadow group-hover:shadow-md group-hover:ring-2 group-hover:ring-primary/20 cursor-pointer">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0">
-                {storedHealth ? (
-                  storedHealth.status === 'critical' ? <ShieldX   className="w-7 h-7 text-red-500 shrink-0" /> :
-                  storedHealth.status === 'warning'  ? <ShieldAlert className="w-7 h-7 text-amber-500 shrink-0" /> :
-                  <ShieldCheck className="w-7 h-7 text-green-500 shrink-0" />
-                ) : (
-                  <ShieldCheck className="w-7 h-7 text-gray-300 shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">System Health</p>
-                  {storedHealth ? (
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${healthStatusDot(storedHealth.status)}`} />
-                      <span className={`text-base font-bold ${healthStatusColor(storedHealth.status)}`}>
-                        {healthStatusLabel(storedHealth.status)}
-                      </span>
-                      <span className="text-xs text-gray-400">· last checked {formatDate(storedHealth.runAt.slice(0, 10))}</span>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400 mt-0.5">No check run yet</p>
-                  )}
-                </div>
-              </div>
-              <span className="text-xs font-medium text-primary shrink-0 group-hover:underline">View details →</span>
-            </div>
-          </Card>
-        </Link>
 
         {/* ── FX currency strip ────────────────────────────────────────────── */}
         <Card>
