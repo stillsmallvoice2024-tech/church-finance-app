@@ -233,6 +233,7 @@ export default function ReconciliationCenter() {
   } = useReconciliation()
 
   const [refBalances, setRefBalances] = useState<Map<string, { balance: number; date: string }>>(new Map())
+  const [showAccountStatus, setShowAccountStatus] = useState(true)
   const [showRefSection, setShowRefSection] = useState(false)
   const [showHistory,    setShowHistory]    = useState(false)
   const [showCritical,   setShowCritical]   = useState(true)
@@ -334,27 +335,36 @@ export default function ReconciliationCenter() {
 
       {/* ── Section B: Account Status Table ───────────────────────────────── */}
       {diag && diag.bankSummaries.length > 0 && (
-        <Card padding={false}>
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-700">Account Status</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  {['Account', 'Status', 'Book Balance', 'Reference Balance', 'Difference', 'Issues'].map(h => (
-                    <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {diag.bankSummaries.map(s => (
-                  <BankSummaryRow key={s.bankName} summary={s} currency={baseCurrencyCode} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <div>
+          <button
+            onClick={() => setShowAccountStatus(v => !v)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <Landmark className="w-4 h-4 text-gray-500" />
+            <span className="text-sm font-semibold text-gray-700">Account Status</span>
+            {showAccountStatus ? <ChevronUp className="w-4 h-4 text-gray-400 ml-auto" /> : <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />}
+          </button>
+          {showAccountStatus && (
+            <Card padding={false} className="mt-3">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      {['Account', 'Status', 'Book Balance', 'Reference Balance', 'Difference', 'Issues'].map(h => (
+                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {diag.bankSummaries.map(s => (
+                      <BankSummaryRow key={s.bankName} summary={s} currency={baseCurrencyCode} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* ── Section C: Diagnostics Feed ───────────────────────────────────── */}
@@ -448,7 +458,7 @@ export default function ReconciliationCenter() {
             <div className="px-6 py-4 border-b border-gray-100">
               <p className="text-xs text-gray-500">
                 Enter the closing balance from your latest bank statement for each account. This is used to verify your app records
-                match your actual bank balance. Press the "Propagate" button after importing a statement to auto-fill from the last import.
+                match your actual bank balance. You can also save the closing balance directly from the Import window after importing a bank statement.
               </p>
             </div>
             {banks.length === 0 ? (

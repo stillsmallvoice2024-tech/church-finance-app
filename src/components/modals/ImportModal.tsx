@@ -276,6 +276,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [progress,  setProgress]    = useState(0)
   const [result,    setResult]      = useState<ImportResult | null>(null)
 
+  // Closing balance capture (bank_statement only — shown after successful import)
+  const [stmtBalance, setStmtBalance] = useState('')
+  const [stmtDate,    setStmtDate]    = useState('')
+  const [stmtSaving,  setStmtSaving]  = useState(false)
+  const [stmtSaved,   setStmtSaved]   = useState(false)
+
   // Derived
   const sheet   = useMemo(() => sheets.find(s => s.name === selectedSheet) ?? null, [sheets, selectedSheet])
   const config  = targetTable ? TABLE_CONFIG[targetTable] : null
@@ -307,6 +313,20 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   useEffect(() => {
     if (bank) setInternalBank(bank)
   }, [bank])
+
+  // Auto-derive the latest transaction date when a bank_statement import completes
+  useEffect(() => {
+    if (!result || targetTable !== 'bank_statement' || !sheet || !processedRows) return
+    const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
+    let maxDate = ''
+    if (dateIdx >= 0) {
+      for (const row of processedRows) {
+        const d = parseDate(row[dateIdx], dateFormat)
+        if (d && d > maxDate) maxDate = d
+      }
+    }
+    setStmtDate(maxDate || new Date().toISOString().slice(0, 10))
+  }, [result, targetTable, sheet, processedRows, mapping, dateFormat])
 
   const isForeignCurrencyBank = !!internalBank &&
     (bankList.find(b => b.id === internalBank.id)?.is_foreign_currency ?? false)
@@ -523,6 +543,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     setDupCheckLoading(false)
     setDupStats(null)
     setDupSkipOpen(false)
+    setStmtBalance('')
+    setStmtDate('')
+    setStmtSaving(false)
+    setStmtSaved(false)
     // Clear back-button sentinel ref so a fresh open can push a new one
     sentinelPushedRef.current = false
     pendingNavIsBackRef.current = false
@@ -1018,6 +1042,26 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     if (!sheet || !config || !targetTable) return
     setStep(5)
   }, [sheet, config, targetTable])
+
+  // ── Closing balance save ──────────────────────────────────────────────────
+
+  const handleSaveStmtBalance = async () => {
+    if (!internalBank || !stmtDate || !stmtBalance) return
+    const val = parseFloat(stmtBalance)
+    if (isNaN(val)) return
+    const orgId  = useOrgStore.getState().orgId
+    const userId = useAuthStore.getState().user?.id ?? null
+    if (!orgId) return
+    setStmtSaving(true)
+    await supabase
+      .from('bank_statement_balances')
+      .upsert(
+        { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: val, statement_date: stmtDate, org_id: orgId, entered_by: userId },
+        { onConflict: 'org_id,bank_name' },
+      )
+    setStmtSaving(false)
+    setStmtSaved(true)
+  }
 
   // ── Step 4: Import ────────────────────────────────────────────────────────
 
@@ -3081,6 +3125,44 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     <div className="max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 dark:bg-amber-900/30 rounded-lg p-3 space-y-0.5 font-mono">
                       {result.collisions.map((c, i) => <div key={i}>{c}</div>)}
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Closing balance capture — bank_statement only, shown after successful import */}
+            {result && !importing && targetTable === 'bank_statement' && internalBank && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
+                <p className="text-xs font-semibold text-gray-600">
+                  Save statement closing balance <span className="font-normal text-gray-400">(optional)</span>
+                </p>
+                {stmtSaved ? (
+                  <div className="flex items-center gap-2 text-xs text-green-600">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Closing balance saved — Reconciliation Centre updated.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="number"
+                      value={stmtBalance}
+                      onChange={e => setStmtBalance(e.target.value)}
+                      placeholder="Closing balance"
+                      className="w-40 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
+                    />
+                    <input
+                      type="date"
+                      value={stmtDate}
+                      onChange={e => setStmtDate(e.target.value)}
+                      className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white"
+                    />
+                    <button
+                      onClick={handleSaveStmtBalance}
+                      disabled={stmtSaving || !stmtBalance || !stmtDate}
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-50 transition-colors"
+                    >
+                      {stmtSaving ? 'Saving…' : 'Save'}
+                    </button>
                   </div>
                 )}
               </div>
