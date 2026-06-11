@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -113,7 +113,23 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
 
+  const selectedBank = useMemo(
+    () => banks.find(b => b.name === watchedBankName) ?? null,
+    [banks, watchedBankName],
+  )
+  const filteredCategories = useMemo(() => {
+    if (!selectedBank) return categories
+    if (selectedBank.is_foreign_currency) return categories.filter(c => c.currency === selectedBank.currency)
+    return categories.filter(c => !c.currency)
+  }, [categories, selectedBank])
+
   const isOffsetType = isOffsetableType(transactionType)
+
+  // Clear stage_code_1 when bank changes and the current value is not in the filtered list
+  useEffect(() => {
+    if (!stageCode1) return
+    if (!filteredCategories.some(c => c.name === stageCode1)) setValue('stage_code_1', '')
+  }, [filteredCategories, stageCode1, setValue])
 
   // Auto-classify income type from description + stage code
   useEffect(() => {
@@ -524,7 +540,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             help="The category assigned to this inflow. Used in reports to group income by type (e.g. Tithes, Offerings, Donations). Drives budget allocation.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
-                options={categories.map(c => ({ value: c.name, label: c.name }))}
+                options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
                 placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
             )} />
           </Field>

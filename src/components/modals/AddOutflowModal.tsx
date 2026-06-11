@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -101,6 +101,16 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
 
+  const selectedBank = useMemo(
+    () => banks.find(b => b.name === watchedBankName) ?? null,
+    [banks, watchedBankName],
+  )
+  const filteredCategories = useMemo(() => {
+    if (!selectedBank) return categories
+    if (selectedBank.is_foreign_currency) return categories.filter(c => c.currency === selectedBank.currency)
+    return categories.filter(c => !c.currency)
+  }, [categories, selectedBank])
+
   const isOffsetType = isOffsetableType(transactionType)
 
   useEffect(() => {
@@ -141,6 +151,13 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       resetForm({ date: new Date().toISOString().slice(0, 10), recorded_at_date: new Date().toISOString().slice(0, 10), amount_disbursed: undefined })
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
+
+  // Clear stage_code_1 when bank changes and the current value is not in the filtered list
+  const stage1Value = useWatch({ control, name: 'stage_code_1' })
+  useEffect(() => {
+    if (!stage1Value) return
+    if (!filteredCategories.some(c => c.name === stage1Value)) setValue('stage_code_1', '')
+  }, [filteredCategories, stage1Value, setValue])
 
   // Auto-suggest outflow type from the category-outflow map when stage_code_1 changes
   // (only if user hasn't already picked a type; never forced — user can override)
@@ -406,7 +423,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             help="The fund or category this outflow is charged against. Used to match outflows to the correct budget line and allocation portion.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
-                options={categories.map(c => ({ value: c.name, label: c.name }))}
+                options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
                 placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
             )} />
           </Field>
