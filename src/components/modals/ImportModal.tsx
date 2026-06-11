@@ -926,7 +926,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         if (debit > 0) {
           let id: string
           if (ref) {
-            id = ref
+            // Some banks reuse the main transaction's ref for associated charges;
+            // suffix distinguishes COMM/VAT rows so dedup treats them as distinct.
+            const chargeTag = /^COMM(?:ISSION)?\b/i.test(desc) ? '-comm'
+                            : /^VAT\b/i.test(desc)              ? '-vat'
+                            : ''
+            id = chargeTag ? `${ref}${chargeTag}` : ref
           } else {
             const baseId = await generateFallbackTransactionId(
               String(date), String(debit), desc, internalBank?.name ?? ''
@@ -1127,7 +1132,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         }
         if (debit > 0) {
           const txnType = rowTxnType
-          const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref }
+          const chargeTag = ref && desc ? (/^COMM(?:ISSION)?\b/i.test(desc) ? '-comm' : /^VAT\b/i.test(desc) ? '-vat' : '') : ''
+          const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref ? `${ref}${chargeTag}` : ref }
           if (userId) row.created_by = userId
           row.org_id = orgId
           if (!txnType && cfg) row.allocation_config_id = cfg.id
