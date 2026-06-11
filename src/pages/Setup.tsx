@@ -2284,8 +2284,6 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_bsb_org_bank ON public.bank_statement_balances(org_id, bank_name);
 
-ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS timezone text;
-
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
