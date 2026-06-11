@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, Database, ShieldAlert, ChevronDown, Search, X, Globe } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -2445,7 +2445,7 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
       {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+          <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Contact your administrator to run the Database &amp; Maintenance segment.</span>
         </div>
       )}
       {isCacheStale && (
@@ -2573,7 +2573,7 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
       {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">departments</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+          <span>The <code className="font-mono text-xs">departments</code> table doesn't exist yet. Contact your administrator to run the Database &amp; Maintenance segment.</span>
         </div>
       )}
 
@@ -2764,7 +2764,7 @@ function DatabaseTab() {
 // ── Page ──────────────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
-  const { canWrite } = useRole()
+  const { canWrite, role } = useRole()
   const [activeTab,      setActiveTab]      = useState<Tab>('General')
   const [bankModalOpen,  setBankModalOpen]  = useState(false)
   const [editBankRecord, setEditBankRecord] = useState<DbBank | null>(null)
@@ -2966,27 +2966,29 @@ export default function SetupPage() {
           {activeTab === 'Currencies'     && <CurrenciesTab />}
         </div>
 
-        {/* Developer Tools */}
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setDevToolsOpen(o => !o)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <Terminal className="w-4 h-4 text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-500">Developer Tools</p>
-                <p className="text-xs text-gray-400">Advanced setup and troubleshooting utilities</p>
+        {/* Database & Maintenance — admin only */}
+        {role === 'admin' && (
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setDevToolsOpen(o => !o)}
+              className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <Database className="w-4 h-4 text-gray-400" />
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Database &amp; Maintenance</p>
+                  <p className="text-xs text-gray-400">Schema maintenance and data utilities</p>
+                </div>
               </div>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${devToolsOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {devToolsOpen && (
-            <div className="border-t border-gray-100 p-5">
-              <DatabaseTab />
-            </div>
-          )}
-        </div>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${devToolsOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {devToolsOpen && (
+              <div className="border-t border-gray-100 p-5">
+                <DatabaseTab />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Danger Zone */}
         <div className="border border-red-200 rounded-xl p-5 space-y-3 bg-red-50/40">
