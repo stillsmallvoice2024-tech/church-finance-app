@@ -474,58 +474,88 @@ const negativeBalanceRule: ReconciliationRule = {
   },
 }
 
-// ── Rule 8: Incomplete reversal detection ─────────────────────────────────────
-// Reversals that lack an original_transaction_id — the reversal is unlinked.
+// ── Rule 8: Incomplete transaction linkage ────────────────────────────────────
+// Three cases:
+//   1. offset_role='offset' entries with no root_transaction_id (dangling offset)
+//   2. reversal/refund entries with no offset role AND no original_transaction_id
+//   3. bank_deposit/intrabank_transfer entries with no offset role AND no root link
+// Root-tagged transactions (offset_role='root') are never flagged — they ARE the originals.
 
 const incompleteReversalRule: ReconciliationRule = {
   id: 'incomplete_reversal',
-  name: 'Incomplete Reversal',
-  description: 'Reversal transactions that are not linked to an original transaction',
+  name: 'Incomplete Transaction Linkage',
+  description: 'Offset entries without a root link, and reversal/refund/deposit/transfer entries with no offset role or original transaction',
   async run(orgId) {
-    const [inflowRes, outflowRes] = await Promise.all([
-      allRows(supabase
-        .from('inflow_transactions')
-        .select('id, date, bank_name, amount, original_transaction_id, description')
-        .eq('org_id', orgId)
-        .eq('transaction_type', 'reversal')),
-      allRows(supabase
-        .from('outflow_transactions')
-        .select('id, date, bank_name, amount_disbursed, original_transaction_id, description')
-        .eq('org_id', orgId)
-        .eq('transaction_type', 'reversal')),
+    const SPECIAL = ['reversal', 'refund', 'bank_deposit', 'intrabank_transfer']
+
+    const [inOffsetRes, inSpecialRes, outOffsetRes, outSpecialRes] = await Promise.all([
+      // Case 1 — inflow offset entries with no root
+      allRows(supabase.from('inflow_transactions')
+        .select('id, date, bank_name, amount, description')
+        .eq('org_id', orgId).eq('offset_role', 'offset').is('root_transaction_id', null)),
+      // Cases 2+3 — inflow special types with no offset role and no linkage
+      allRows(supabase.from('inflow_transactions')
+        .select('id, date, bank_name, amount, description, transaction_type')
+        .eq('org_id', orgId).in('transaction_type', SPECIAL)
+        .is('offset_role', null).is('original_transaction_id', null).is('root_transaction_id', null)),
+      // Case 1 — outflow offset entries with no root
+      allRows(supabase.from('outflow_transactions')
+        .select('id, date, bank_name, amount_disbursed, description')
+        .eq('org_id', orgId).eq('offset_role', 'offset').is('root_transaction_id', null)),
+      // Cases 2+3 — outflow special types with no offset role and no linkage
+      allRows(supabase.from('outflow_transactions')
+        .select('id, date, bank_name, amount_disbursed, description, transaction_type')
+        .eq('org_id', orgId).in('transaction_type', SPECIAL)
+        .is('offset_role', null).is('original_transaction_id', null).is('root_transaction_id', null)),
     ])
 
     const issues: ReconciliationIssue[] = []
 
-    for (const t of inflowRes.data) {
-      const r = t as { id: string; date: string; bank_name: string | null; amount: number; original_transaction_id: string | null; description: string | null }
-      if (!r.original_transaction_id) {
-        issues.push({
-          id: `incomplete_reversal-inflow-${r.id}`,
-          ruleId: 'incomplete_reversal',
-          severity: 'warning',
-          message: `Inflow reversal${r.description ? ` "${r.description}"` : ''} (${r.amount.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no linked original transaction`,
-          evidence: { description: r.description, transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount },
-          suggestedFix: 'Open the Reversals page, edit this record, and link it to the original transaction it reverses.',
-          bankName: r.bank_name ?? undefined,
-          transactionId: r.id,
-        })
-      }
+    for (const t of inOffsetRes.data) {
+      const r = t as { id: string; date: string; bank_name: string | null; amount: number; description: string | null }
+      issues.push({
+        id: `incomplete_reversal-offset-inflow-${r.id}`,
+        ruleId: 'incomplete_reversal', severity: 'warning',
+        message: `Offset inflow${r.description ? ` "${r.description}"` : ''} (${r.amount.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no linked root transaction`,
+        evidence: { description: r.description, transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount },
+        suggestedFix: 'Open the Inflows page, edit this record, and link it to its root transaction.',
+        bankName: r.bank_name ?? undefined, transactionId: r.id,
+      })
     }
-    for (const t of outflowRes.data) {
-      const r = t as { id: string; date: string; bank_name: string | null; amount_disbursed: number; original_transaction_id: string | null; description: string | null }
-      if (!r.original_transaction_id) {
-        issues.push({
-          id: `incomplete_reversal-outflow-${r.id}`,
-          ruleId: 'incomplete_reversal',
-          severity: 'warning',
-          message: `Outflow reversal${r.description ? ` "${r.description}"` : ''} (${r.amount_disbursed.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no linked original transaction`,
-          evidence: { description: r.description, transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount_disbursed },
-          suggestedFix: 'Open the Reversals page, edit this record, and link it to the original transaction it reverses.',
-          bankName: r.bank_name ?? undefined,
-          transactionId: r.id,
-        })
-      }
+    for (const t of inSpecialRes.data) {
+      const r = t as { id: string; date: string; bank_name: string | null; amount: number; description: string | null; transaction_type: string }
+      const typeLabel = r.transaction_type.replace(/_/g, ' ')
+      issues.push({
+        id: `incomplete_reversal-special-inflow-${r.id}`,
+        ruleId: 'incomplete_reversal', severity: 'warning',
+        message: `Inflow ${typeLabel}${r.description ? ` "${r.description}"` : ''} (${r.amount.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no offset role or linked transaction`,
+        evidence: { description: r.description, transactionId: r.id, transactionType: r.transaction_type, date: r.date, bank: r.bank_name, amount: r.amount },
+        suggestedFix: 'Open the Inflows page, edit this record, and set its offset role and link it to its counterpart transaction.',
+        bankName: r.bank_name ?? undefined, transactionId: r.id,
+      })
+    }
+    for (const t of outOffsetRes.data) {
+      const r = t as { id: string; date: string; bank_name: string | null; amount_disbursed: number; description: string | null }
+      issues.push({
+        id: `incomplete_reversal-offset-outflow-${r.id}`,
+        ruleId: 'incomplete_reversal', severity: 'warning',
+        message: `Offset outflow${r.description ? ` "${r.description}"` : ''} (${r.amount_disbursed.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no linked root transaction`,
+        evidence: { description: r.description, transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount_disbursed },
+        suggestedFix: 'Open the Outflows page, edit this record, and link it to its root transaction.',
+        bankName: r.bank_name ?? undefined, transactionId: r.id,
+      })
+    }
+    for (const t of outSpecialRes.data) {
+      const r = t as { id: string; date: string; bank_name: string | null; amount_disbursed: number; description: string | null; transaction_type: string }
+      const typeLabel = r.transaction_type.replace(/_/g, ' ')
+      issues.push({
+        id: `incomplete_reversal-special-outflow-${r.id}`,
+        ruleId: 'incomplete_reversal', severity: 'warning',
+        message: `Outflow ${typeLabel}${r.description ? ` "${r.description}"` : ''} (${r.amount_disbursed.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no offset role or linked transaction`,
+        evidence: { description: r.description, transactionId: r.id, transactionType: r.transaction_type, date: r.date, bank: r.bank_name, amount: r.amount_disbursed },
+        suggestedFix: 'Open the Outflows page, edit this record, and set its offset role and link it to its counterpart transaction.',
+        bankName: r.bank_name ?? undefined, transactionId: r.id,
+      })
     }
     return issues
   },

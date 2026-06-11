@@ -43,10 +43,13 @@ function severityBadge(s: ReconciliationIssue['severity']) {
 }
 
 function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
+  const isOutflow = issue.evidence.table === 'outflow_transactions'
   const links: Record<string, { label: string; href: string; icon: React.ElementType }> = {
     orphan_transfer:           { label: 'View Transfers',     href: '/bank-movement?tab=transfers', icon: ArrowRightLeft },
     missing_transfer_pair:     { label: 'View Deposits',      href: '/bank-movement?tab=deposits',  icon: Landmark },
-    duplicate_import:          { label: 'View Inflows',       href: '/inflows',                     icon: FileSearch },
+    duplicate_import:          isOutflow
+                                 ? { label: 'View Outflows', href: '/outflows', icon: FileSearch }
+                                 : { label: 'View Inflows',  href: '/inflows',  icon: FileSearch },
     pending_deduction:         { label: 'View Deductions',    href: '/pending-deductions',           icon: Clock },
     balance_mismatch:          { label: 'View Bank Ledger',   href: '/bank-ledger',                  icon: BookOpen },
     allocation_inconsistency:  { label: 'View Configs',       href: '/percentage-allocations',       icon: FileSearch },

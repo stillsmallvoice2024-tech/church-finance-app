@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
 import { useAuth } from './useAuth'
-import { runReconciliation, type ReconciliationResult } from '../utils/reconciliationEngine'
+import { runReconciliation, type ReconciliationResult, type ReconciliationIssue } from '../utils/reconciliationEngine'
 import { ALL_RULES } from '../utils/reconciliationRules'
 import { aggregateDiagnostics, type ReconciliationDiagnostics, type HealthStatus } from '../utils/reconciliationAggregator'
 
@@ -43,6 +43,25 @@ export function useReconciliation() {
   const [error,       setError]       = useState<string | null>(null)
   const [history,     setHistory]     = useState<ReconciliationRun[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Restore last run from DB on mount so results survive page navigation
+  useEffect(() => {
+    if (!orgId) return
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('reconciliation_runs')
+        .select('run_at, issues_json')
+        .eq('org_id', orgId)
+        .order('run_at', { ascending: false })
+        .limit(1)
+        .single()
+      if (error || !data) return
+      const row = data as { run_at: string; issues_json: unknown }
+      const issues = (Array.isArray(row.issues_json) ? row.issues_json : []) as ReconciliationIssue[]
+      setResult({ issues, runAt: row.run_at, durationMs: 0 })
+      setDiagnostics(aggregateDiagnostics(issues))
+    })()
+  }, [orgId])
 
   const runCheck = useCallback(async () => {
     if (!orgId) return
