@@ -627,6 +627,7 @@ export interface AddCategoryInput {
   name:         string
   description?: string
   group_id?:    string | null
+  currency?:    string | null
 }
 
 export function useAddCategory(): MutationHook<AddCategoryInput, string> {
@@ -643,6 +644,7 @@ export function useAddCategory(): MutationHook<AddCategoryInput, string> {
           name:        input.name,
           description: input.description ?? null,
           group_id:    input.group_id ?? null,
+          currency:    input.currency ?? null,
           ...orgPayload(),
         }).select('id').single()
       if (err) throw err
@@ -665,6 +667,7 @@ export interface UpdateCategoryInput {
   description?: string
   group_id?:   string | null
   is_hidden?:  boolean
+  currency?:   string | null
 }
 
 export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
@@ -682,6 +685,7 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
         description: input.description ?? null,
         group_id:    input.group_id ?? null,
         ...(input.is_hidden !== undefined ? { is_hidden: input.is_hidden } : {}),
+        ...(input.currency  !== undefined ? { currency:  input.currency  } : {}),
       }
       const { data: updatedRows, error: err } = await supabase
         .from('categories')
