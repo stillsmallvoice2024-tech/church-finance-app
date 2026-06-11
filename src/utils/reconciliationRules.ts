@@ -133,55 +133,64 @@ const duplicateImportRule: ReconciliationRule = {
     const [inflowRes, outflowRes] = await Promise.all([
       allRows(supabase
         .from('inflow_transactions')
-        .select('transaction_ref, bank_name')
+        .select('transaction_ref, bank_name, description, date, amount')
         .eq('org_id', orgId)
         .not('transaction_ref', 'is', null)
         .not('bank_name', 'is', null)),
       allRows(supabase
         .from('outflow_transactions')
-        .select('transaction_id, bank_name')
+        .select('transaction_id, bank_name, description, date, amount_disbursed')
         .eq('org_id', orgId)
         .not('transaction_id', 'is', null)
         .not('bank_name', 'is', null)),
     ])
 
-    const inflowMap = new Map<string, number>()
+    type DupInfo = { count: number; description: string | null; date: string; amount: number }
+    const inflowMap = new Map<string, DupInfo>()
     for (const r of inflowRes.data) {
-      const row = r as { transaction_ref: string; bank_name: string }
+      const row = r as { transaction_ref: string; bank_name: string; description: string | null; date: string; amount: number }
       const key = `${row.bank_name}|${row.transaction_ref}`
-      inflowMap.set(key, (inflowMap.get(key) ?? 0) + 1)
+      const existing = inflowMap.get(key)
+      if (existing) { existing.count++ } else {
+        inflowMap.set(key, { count: 1, description: row.description, date: row.date, amount: row.amount })
+      }
     }
-    const outflowMap = new Map<string, number>()
+    const outflowMap = new Map<string, DupInfo>()
     for (const r of outflowRes.data) {
-      const row = r as { transaction_id: string; bank_name: string }
+      const row = r as { transaction_id: string; bank_name: string; description: string | null; date: string; amount_disbursed: number }
       const key = `${row.bank_name}|${row.transaction_id}`
-      outflowMap.set(key, (outflowMap.get(key) ?? 0) + 1)
+      const existing = outflowMap.get(key)
+      if (existing) { existing.count++ } else {
+        outflowMap.set(key, { count: 1, description: row.description, date: row.date, amount: row.amount_disbursed })
+      }
     }
 
     const issues: ReconciliationIssue[] = []
-    for (const [key, count] of inflowMap) {
-      if (count > 1) {
+    for (const [key, info] of inflowMap) {
+      if (info.count > 1) {
         const [bank, ref] = key.split('|')
+        const label = info.description ? `"${info.description}"` : `ref ${ref}`
         issues.push({
           id: `duplicate_import-inflow-${key}`,
           ruleId: 'duplicate_import',
           severity: 'critical',
-          message: `Inflow reference "${ref}" appears ${count} times on bank "${bank}"`,
-          evidence: { ref, bank, count, table: 'inflow_transactions' },
+          message: `Inflow ${label} (${info.amount.toLocaleString()} · ${info.date}, ref: ${ref}) is duplicated ${info.count} times on "${bank}"`,
+          evidence: { description: info.description, date: info.date, amount: info.amount, ref, bank, count: info.count, table: 'inflow_transactions' },
           suggestedFix: 'Open Inflows page, filter by this reference number, and delete the duplicate entry.',
           bankName: bank,
         })
       }
     }
-    for (const [key, count] of outflowMap) {
-      if (count > 1) {
+    for (const [key, info] of outflowMap) {
+      if (info.count > 1) {
         const [bank, ref] = key.split('|')
+        const label = info.description ? `"${info.description}"` : `ref ${ref}`
         issues.push({
           id: `duplicate_import-outflow-${key}`,
           ruleId: 'duplicate_import',
           severity: 'critical',
-          message: `Outflow reference "${ref}" appears ${count} times on bank "${bank}"`,
-          evidence: { ref, bank, count, table: 'outflow_transactions' },
+          message: `Outflow ${label} (${info.amount.toLocaleString()} · ${info.date}, ref: ${ref}) is duplicated ${info.count} times on "${bank}"`,
+          evidence: { description: info.description, date: info.date, amount: info.amount, ref, bank, count: info.count, table: 'outflow_transactions' },
           suggestedFix: 'Open Outflows page, filter by this reference number, and delete the duplicate entry.',
           bankName: bank,
         })
@@ -219,7 +228,7 @@ const pendingDeductionRule: ReconciliationRule = {
         id: `pending_deduction-${r.id}`,
         ruleId: 'pending_deduction',
         severity: 'warning' as const,
-        message: `Pending deduction of ${r.amount_disbursed} on ${r.date} from "${r.bank_name ?? 'unknown bank'}" has been pending for over 30 days`,
+        message: `Pending deduction${r.description ? ` "${r.description}"` : ''} — ${r.amount_disbursed.toLocaleString()} on ${r.date} from "${r.bank_name ?? 'unknown bank'}" — has been open for over 30 days`,
         evidence: { transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount_disbursed, description: r.description },
         suggestedFix: 'Open the Pending Deductions page, locate this transaction, and either clear it or mark it resolved.',
         bankName: r.bank_name ?? undefined,
@@ -340,16 +349,17 @@ const balanceMismatchRule: ReconciliationRule = {
 }
 
 // ── Rule 6: Category allocation inconsistency ──────────────────────────────────
-// Locked percentage allocation configs whose percentage rows do not sum to 100%.
+// Locked allocation configs with rows missing budget_portion, or whose row
+// percentages (across all budget_portion types) do not sum to 100%.
 
 const allocationInconsistencyRule: ReconciliationRule = {
   id: 'allocation_inconsistency',
   name: 'Allocation Config Inconsistency',
-  description: 'Locked percentage allocation configs whose rows do not sum to 100%',
+  description: 'Locked allocation configs with missing budget_portion or row percentages not summing to 100%',
   async run(orgId) {
     const res = await supabase
       .from('allocation_configs')
-      .select('id, rows, allocation_type')
+      .select('id, name, rows, allocation_type')
       .eq('org_id', orgId)
       .eq('status', 'locked')
 
@@ -357,21 +367,32 @@ const allocationInconsistencyRule: ReconciliationRule = {
 
     const issues: ReconciliationIssue[] = []
     for (const c of res.data ?? []) {
-      const cfg = c as { id: string; rows: unknown; allocation_type: string | null }
-      if (cfg.allocation_type === 'amount') continue
-
+      const cfg = c as { id: string; name: string; rows: unknown; allocation_type: string | null }
       const rows = Array.isArray(cfg.rows) ? (cfg.rows as Record<string, unknown>[]) : []
-      const pctRows = rows.filter(r => !r.budget_portion || r.budget_portion === 'Percentage')
-      const total = pctRows.reduce((sum, r) => sum + Number(r.percentage ?? 0), 0)
 
-      if (Math.abs(total - 100) > 0.01 && total > 0) {
+      // Check A: any row missing budget_portion
+      const missingBp = rows.filter(r => !r.budget_portion)
+      if (missingBp.length > 0) {
         issues.push({
-          id: `allocation_inconsistency-${cfg.id}`,
+          id: `allocation_inconsistency-missing_bp-${cfg.id}`,
           ruleId: 'allocation_inconsistency',
           severity: 'warning',
-          message: `Allocation config rows sum to ${total.toFixed(2)}% instead of 100% — transactions using this config may be misallocated`,
-          evidence: { configId: cfg.id, percentageTotal: total, rowCount: pctRows.length },
-          suggestedFix: 'Open Allocation Configs, unlock this config, adjust the percentages to sum to 100%, then re-lock.',
+          message: `"${cfg.name}" has ${missingBp.length} row(s) with no budget_portion set — allocation type is ambiguous for those rows`,
+          evidence: { configName: cfg.name, configId: cfg.id, missingCount: missingBp.length, totalRows: rows.length },
+          suggestedFix: 'Open Allocation Configs, unlock this config, and set the budget_portion on every row to Percentage, Specific Seed, or Savings.',
+        })
+      }
+
+      // Check B: all row percentages (Percentage + Specific Seed + Savings) must sum to 100%
+      const total = rows.reduce((sum, r) => sum + Number(r.percentage ?? 0), 0)
+      if (total > 0 && Math.abs(total - 100) > 0.01) {
+        issues.push({
+          id: `allocation_inconsistency-total-${cfg.id}`,
+          ruleId: 'allocation_inconsistency',
+          severity: 'warning',
+          message: `"${cfg.name}" row percentages sum to ${total.toFixed(2)}% instead of 100% — transactions using this config may be misallocated`,
+          evidence: { configName: cfg.name, configId: cfg.id, percentageTotal: total, rowCount: rows.length },
+          suggestedFix: 'Open Allocation Configs, unlock this config, adjust the percentages across all rows to sum to 100%, then re-lock.',
         })
       }
     }
@@ -464,12 +485,12 @@ const incompleteReversalRule: ReconciliationRule = {
     const [inflowRes, outflowRes] = await Promise.all([
       allRows(supabase
         .from('inflow_transactions')
-        .select('id, date, bank_name, amount, original_transaction_id')
+        .select('id, date, bank_name, amount, original_transaction_id, description')
         .eq('org_id', orgId)
         .eq('transaction_type', 'reversal')),
       allRows(supabase
         .from('outflow_transactions')
-        .select('id, date, bank_name, amount_disbursed, original_transaction_id')
+        .select('id, date, bank_name, amount_disbursed, original_transaction_id, description')
         .eq('org_id', orgId)
         .eq('transaction_type', 'reversal')),
     ])
@@ -477,14 +498,14 @@ const incompleteReversalRule: ReconciliationRule = {
     const issues: ReconciliationIssue[] = []
 
     for (const t of inflowRes.data) {
-      const r = t as { id: string; date: string; bank_name: string | null; amount: number; original_transaction_id: string | null }
+      const r = t as { id: string; date: string; bank_name: string | null; amount: number; original_transaction_id: string | null; description: string | null }
       if (!r.original_transaction_id) {
         issues.push({
           id: `incomplete_reversal-inflow-${r.id}`,
           ruleId: 'incomplete_reversal',
           severity: 'warning',
-          message: `Inflow reversal on ${r.date} for ${r.amount} on "${r.bank_name ?? 'unknown bank'}" has no linked original transaction`,
-          evidence: { transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount },
+          message: `Inflow reversal${r.description ? ` "${r.description}"` : ''} (${r.amount.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no linked original transaction`,
+          evidence: { description: r.description, transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount },
           suggestedFix: 'Open the Reversals page, edit this record, and link it to the original transaction it reverses.',
           bankName: r.bank_name ?? undefined,
           transactionId: r.id,
@@ -492,14 +513,14 @@ const incompleteReversalRule: ReconciliationRule = {
       }
     }
     for (const t of outflowRes.data) {
-      const r = t as { id: string; date: string; bank_name: string | null; amount_disbursed: number; original_transaction_id: string | null }
+      const r = t as { id: string; date: string; bank_name: string | null; amount_disbursed: number; original_transaction_id: string | null; description: string | null }
       if (!r.original_transaction_id) {
         issues.push({
           id: `incomplete_reversal-outflow-${r.id}`,
           ruleId: 'incomplete_reversal',
           severity: 'warning',
-          message: `Outflow reversal on ${r.date} for ${r.amount_disbursed} on "${r.bank_name ?? 'unknown bank'}" has no linked original transaction`,
-          evidence: { transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount_disbursed },
+          message: `Outflow reversal${r.description ? ` "${r.description}"` : ''} (${r.amount_disbursed.toLocaleString()} · ${r.date}) on "${r.bank_name ?? 'unknown bank'}" has no linked original transaction`,
+          evidence: { description: r.description, transactionId: r.id, date: r.date, bank: r.bank_name, amount: r.amount_disbursed },
           suggestedFix: 'Open the Reversals page, edit this record, and link it to the original transaction it reverses.',
           bankName: r.bank_name ?? undefined,
           transactionId: r.id,
