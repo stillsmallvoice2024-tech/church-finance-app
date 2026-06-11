@@ -201,27 +201,32 @@ export default function Dashboard() {
         <OnboardingChecklist />
 
         {/* ── Health status strip ──────────────────────────────────────────── */}
-        {storedHealth && (
-          <Link
-            to="/reconciliation"
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-              storedHealth.status === 'critical' ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
-              storedHealth.status === 'warning'  ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' :
-              'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-            }`}
-          >
-            {storedHealth.status === 'critical' ? <ShieldX     className="w-4 h-4 shrink-0" /> :
-             storedHealth.status === 'warning'  ? <ShieldAlert className="w-4 h-4 shrink-0" /> :
-             <ShieldCheck className="w-4 h-4 shrink-0" />}
-            <span>
-              System health: <strong>{healthStatusLabel(storedHealth.status)}</strong>
-            </span>
+        <Link
+          to="/reconciliation"
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+            !storedHealth                          ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100' :
+            storedHealth.status === 'critical'     ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
+            storedHealth.status === 'warning'      ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' :
+            'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+          }`}
+        >
+          {!storedHealth                      ? <ShieldCheck className="w-4 h-4 shrink-0 opacity-40" /> :
+           storedHealth.status === 'critical' ? <ShieldX     className="w-4 h-4 shrink-0" /> :
+           storedHealth.status === 'warning'  ? <ShieldAlert className="w-4 h-4 shrink-0" /> :
+           <ShieldCheck className="w-4 h-4 shrink-0" />}
+          <span>
+            System health:{' '}
+            <strong>{storedHealth ? healthStatusLabel(storedHealth.status) : 'Not checked yet'}</strong>
+          </span>
+          {storedHealth && (
             <span className="text-xs opacity-60 hidden sm:inline">
               · last checked {formatWithTimezone(storedHealth.runAt, orgTimezone)}
             </span>
-            <span className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0">View →</span>
-          </Link>
-        )}
+          )}
+          <span className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0">
+            {storedHealth ? 'View →' : 'Run check →'}
+          </span>
+        </Link>
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
         <div data-tour="summary-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
