@@ -608,16 +608,10 @@ function ManualEntryForm() {
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const hasFxBanks = banks.some(b => b.is_foreign_currency)
 
-  const selectedManualBank = useMemo(
-    () => banks.find(b => b.id === v('bank_id')) ?? null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [banks, fields],
+  const filteredManualCategories = useMemo(
+    () => categories.filter(c => !c.currency),
+    [categories],
   )
-  const filteredManualCategories = useMemo(() => {
-    if (!selectedManualBank) return categories
-    if (selectedManualBank.is_foreign_currency) return categories.filter(c => c.currency === selectedManualBank.currency)
-    return categories.filter(c => !c.currency)
-  }, [categories, selectedManualBank])
 
   // Clear outflowS1 when bank changes and the current value is not in the filtered list
   useEffect(() => {

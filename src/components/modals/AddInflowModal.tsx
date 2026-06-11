@@ -113,15 +113,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
 
-  const selectedBank = useMemo(
-    () => banks.find(b => b.name === watchedBankName) ?? null,
-    [banks, watchedBankName],
+  const filteredCategories = useMemo(
+    () => categories.filter(c => !c.currency),
+    [categories],
   )
-  const filteredCategories = useMemo(() => {
-    if (!selectedBank) return categories
-    if (selectedBank.is_foreign_currency) return categories.filter(c => c.currency === selectedBank.currency)
-    return categories.filter(c => !c.currency)
-  }, [categories, selectedBank])
 
   const isOffsetType = isOffsetableType(transactionType)
 
