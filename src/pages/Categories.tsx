@@ -437,7 +437,8 @@ export default function Categories() {
   const [editRecord,   setEditRecord]   = useState<Category | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null)
   const [hideTarget,   setHideTarget]   = useState<Category | null>(null)
-  const [showHidden,   setShowHidden]   = useState(false)
+  const [showHiddenLocal, setShowHiddenLocal] = useState(false)
+  const [showHiddenFx,    setShowHiddenFx]    = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(false)
   const catState = useDataViewState({ storageKey: 'cat', defaultSortKey: 'name', defaultSortDir: 'asc' })
 
@@ -537,6 +538,7 @@ export default function Categories() {
 
   const q = catState.search.trim().toLowerCase()
   const searchCol = catState.searchCol
+  const showHidden = activeTab === 'fx' ? showHiddenFx : showHiddenLocal
   const visible  = categories.filter(c => {
     if (!showHidden && c.is_hidden) return false
     // Tab filter: FX tab shows categories in FX groups; Local tab shows the rest
@@ -549,7 +551,11 @@ export default function Categories() {
     if (searchCol === 'group') return groupName.toLowerCase().includes(q)
     return c.name.toLowerCase().includes(q) || groupName.toLowerCase().includes(q)
   })
-  const hiddenCt = categories.filter(c => c.is_hidden).length
+  const hiddenCt = categories.filter(c => c.is_hidden && (
+    activeTab === 'fx'
+      ? (c.group_id !== null && fxGroupIds.has(c.group_id))
+      : (c.group_id === null || !fxGroupIds.has(c.group_id))
+  )).length
 
   const visibleSorted = useMemo(() => {
     const adv = catState.advancedSort
@@ -610,7 +616,7 @@ export default function Categories() {
           <HelpButton tourId="categoriesTour" size="sm" />
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={visibleSorted.length === 0} />
           {hiddenCt > 0 && (
-            <button onClick={() => setShowHidden(v => !v)}
+            <button onClick={() => activeTab === 'fx' ? setShowHiddenFx(v => !v) : setShowHiddenLocal(v => !v)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               {showHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               {showHidden ? 'Hide hidden' : `Show hidden (${hiddenCt})`}
