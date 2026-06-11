@@ -30,11 +30,12 @@ export function DataTable<T>({
     <div className="overflow-x-auto">
       <table className="min-w-full">
         <thead>
-          <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+          <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ${col.rightAlign ? 'text-right' : 'text-left'} ${col.className ?? ''}`}
+                scope="col"
+                className={`px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 ${col.rightAlign ? 'text-right' : 'text-left'} ${col.className ?? ''}`}
               >
                 {col.header}
               </th>

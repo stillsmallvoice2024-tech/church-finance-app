@@ -23,6 +23,43 @@ import {
   healthStatusDot,
 } from '../utils/reconciliationAggregator'
 
+// ── Plain-language issue explanations ─────────────────────────────────────────
+
+const RULE_PLAIN: Record<string, { headline: string; why: string }> = {
+  orphan_transfer: {
+    headline: 'A transfer was recorded but has no matching deposit.',
+    why: 'Until this is resolved, your bank balance and book records will be out of sync. Check bank movements for an unmatched entry.',
+  },
+  missing_transfer_pair: {
+    headline: 'A deposit exists without a corresponding transfer record.',
+    why: 'This usually means a transaction was imported on one side but not the other. Your bank balance may appear incorrect.',
+  },
+  duplicate_import: {
+    headline: 'This transaction ID appears more than once in your records.',
+    why: 'A duplicate entry means the same income or expense is being counted twice, overstating your totals.',
+  },
+  balance_mismatch: {
+    headline: 'Your recorded balance does not match your reference bank statement.',
+    why: 'This difference means your reports are showing an inaccurate balance. Review recent transactions in the Bank Ledger to find the gap.',
+  },
+  allocation_inconsistency: {
+    headline: 'A transaction\'s fund allocation does not match the active distribution rule.',
+    why: 'Fund category totals may be off. This can cause incorrect balances in Regular Funds, Designated Gifts, or Savings Funds.',
+  },
+  negative_balance: {
+    headline: 'This bank account is showing a negative balance.',
+    why: 'A negative balance usually means an outflow was recorded before the corresponding inflow arrived, or a transaction amount is incorrect.',
+  },
+  incomplete_reversal: {
+    headline: 'A reversal was started but the original transaction has not been fully reversed.',
+    why: 'Partial reversals leave your records in an inconsistent state. The affected amount may be double-counted.',
+  },
+  pending_deduction: {
+    headline: 'There are outflow transactions that have not yet been deducted from the account.',
+    why: 'Your bank ledger balance is higher than it should be until these deductions are processed.',
+  },
+}
+
 // ── Small helpers ──────────────────────────────────────────────────────────────
 
 function HealthIcon({ status, size = 'md' }: { status: HealthStatus; size?: 'sm' | 'md' | 'lg' }) {
@@ -138,6 +175,7 @@ function RefBalanceRow({ bank, existing, currency, onSave }: RefBalanceRowProps)
 
 function IssueCard({ issue }: { issue: ReconciliationIssue }) {
   const [expanded, setExpanded] = useState(false)
+  const plain = RULE_PLAIN[issue.ruleId]
   return (
     <div className={`rounded-xl border p-4 ${
       issue.severity === 'critical' ? 'border-red-200 bg-red-50/40' :
@@ -147,8 +185,15 @@ function IssueCard({ issue }: { issue: ReconciliationIssue }) {
       <div className="flex items-start gap-3">
         <SeverityIcon severity={issue.severity} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-800">{issue.message}</p>
-          <p className="text-xs text-gray-500 mt-1">{issue.suggestedFix}</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {plain?.headline ?? issue.message}
+          </p>
+          {plain?.why && (
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">{plain.why}</p>
+          )}
+          {!plain?.why && issue.suggestedFix && (
+            <p className="text-xs text-gray-500 mt-1">{issue.suggestedFix}</p>
+          )}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <RuleActionLink issue={issue} />
             <button
@@ -156,13 +201,18 @@ function IssueCard({ issue }: { issue: ReconciliationIssue }) {
               className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
             >
               {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              Evidence
+              Technical details
             </button>
           </div>
           {expanded && (
-            <pre className="mt-2 text-xs text-gray-500 bg-white/70 border border-gray-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">
-              {JSON.stringify(issue.evidence, null, 2)}
-            </pre>
+            <div className="mt-2 space-y-1">
+              {issue.suggestedFix && plain && (
+                <p className="text-xs text-gray-500 italic">{issue.suggestedFix}</p>
+              )}
+              <pre className="text-xs text-gray-500 bg-white/70 border border-gray-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">
+                {JSON.stringify(issue.evidence, null, 2)}
+              </pre>
+            </div>
           )}
         </div>
         <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${severityBadge(issue.severity)}`}>
@@ -326,9 +376,23 @@ export default function ReconciliationCenter() {
       ) : (
         <Card>
           <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <ShieldCheck className="w-12 h-12 text-gray-200" />
-            <p className="text-sm font-medium text-gray-600">No reconciliation run yet</p>
-            <p className="text-xs text-gray-400">Press "Run Reconciliation" to check your records.</p>
+            <div className="w-14 h-14 rounded-full bg-gray-50 flex items-center justify-center">
+              <ShieldCheck className="w-8 h-8 text-gray-300" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-700">Records not yet verified</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Run a reconciliation check to confirm your records are accurate and complete.
+              </p>
+            </div>
+            <button
+              onClick={handleRun}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Run Reconciliation Check
+            </button>
           </div>
         </Card>
       )}
@@ -370,7 +434,24 @@ export default function ReconciliationCenter() {
       {/* ── Section C: Diagnostics Feed ───────────────────────────────────── */}
       {diag && diag.totalIssues > 0 && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700">Diagnostics</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold text-gray-700">Issues to Resolve</h2>
+            {diag.criticalIssues > 0 && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                {diag.criticalIssues} critical
+              </span>
+            )}
+            {diag.warningIssues > 0 && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                {diag.warningIssues} warning
+              </span>
+            )}
+            {diag.bySeverity.info.length > 0 && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                {diag.bySeverity.info.length} info
+              </span>
+            )}
+          </div>
 
           {/* Critical */}
           {diag.bySeverity.critical.length > 0 && (
@@ -433,11 +514,20 @@ export default function ReconciliationCenter() {
 
       {diag && diag.totalIssues === 0 && (
         <Card>
-          <div className="flex items-center gap-3 py-6">
-            <CheckCircle className="w-8 h-8 text-green-500 shrink-0" />
+          <div className="flex flex-col sm:flex-row items-center gap-4 py-8 text-center sm:text-left">
+            <div className="shrink-0 w-14 h-14 rounded-full bg-green-50 flex items-center justify-center">
+              <CheckCircle className="w-8 h-8 text-green-500" />
+            </div>
             <div>
-              <p className="text-sm font-semibold text-gray-800">No issues found</p>
-              <p className="text-xs text-gray-500">All reconciliation rules passed. Your records appear consistent.</p>
+              <p className="text-base font-semibold text-gray-900">Everything looks good</p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                All records are reconciled and consistent. No action needed.
+              </p>
+              {result && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Verified {formatWithTimezone(result.runAt, orgTimezone)}
+                </p>
+              )}
             </div>
           </div>
         </Card>

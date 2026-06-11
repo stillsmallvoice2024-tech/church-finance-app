@@ -95,7 +95,7 @@ export default function PendingDeductions() {
 
   const { selectedIds, toggleRow, clearAll, selectAllRows, headerRef: headerCheckboxRef } = useBulkSelection(displayed)
 
-  usePageTitle('Pending Deductions')
+  usePageTitle('Upcoming Deductions')
 
   // Reset page + selection when search changes
   useEffect(() => { pdState.setPage(0); clearAll() }, [pdState.search, pdState.setPage]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -251,7 +251,7 @@ export default function PendingDeductions() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <Clock className="w-6 h-6 text-amber-500" />
-              Pending Deductions
+              Upcoming Deductions
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
               Outflow transactions awaiting deduction from the account — {count} pending

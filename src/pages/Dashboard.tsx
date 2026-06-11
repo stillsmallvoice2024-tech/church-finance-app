@@ -203,45 +203,74 @@ export default function Dashboard() {
         {/* ── Onboarding checklist ─────────────────────────────────────────── */}
         <OnboardingChecklist />
 
-        {/* ── Health status strip ──────────────────────────────────────────── */}
-        {/* Strip is a div so the dismiss × button doesn't trigger navigation */}
-        <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-          healthSkipped || !healthStatus              ? 'bg-gray-50 border-gray-200 text-gray-400'           :
-          healthStatus === 'critical'                 ? 'bg-red-50 border-red-200 text-red-700'              :
-          healthStatus === 'warning'                  ? 'bg-amber-50 border-amber-200 text-amber-700'        :
-          'bg-green-50 border-green-200 text-green-700'
-        }`}>
-          {(healthSkipped || !healthStatus)           ? <ShieldCheck className="w-4 h-4 shrink-0 opacity-40" /> :
-           healthStatus === 'critical'                ? <ShieldX     className="w-4 h-4 shrink-0" />          :
-           healthStatus === 'warning'                 ? <ShieldAlert className="w-4 h-4 shrink-0" />          :
-           <ShieldCheck className="w-4 h-4 shrink-0" />}
-          <span>
-            System health:{' '}
-            <strong>
-              {healthSkipped ? 'Paused' : healthStatus ? healthStatusLabel(healthStatus) : 'Not checked yet'}
-            </strong>
-          </span>
-          {healthStatus && !healthSkipped && healthRunAt && (
-            <span className="text-xs opacity-60 hidden sm:inline">
-              · last checked {formatWithTimezone(healthRunAt, orgTimezone)}
-            </span>
-          )}
-          <Link
-            to="/reconciliation"
-            className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0"
-          >
-            {healthStatus && !healthSkipped ? 'View →' : 'Run check →'}
-          </Link>
-          <button
-            onClick={() => setSkipped(!healthSkipped)}
-            title={healthSkipped ? 'Resume health monitoring' : 'Dismiss health strip'}
-            className="shrink-0 p-0.5 rounded opacity-40 hover:opacity-80 transition-opacity"
-          >
-            {healthSkipped
-              ? <ShieldCheck className="w-3.5 h-3.5" />
-              : <span className="text-base leading-none">×</span>}
-          </button>
-        </div>
+        {/* ── Record confidence strip ───────────────────────────────────────── */}
+        {!healthSkipped && (
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm transition-colors ${
+            !healthStatus                ? 'bg-gray-50 border-gray-200'                          :
+            healthStatus === 'critical'  ? 'bg-red-50 border-red-200'                            :
+            healthStatus === 'warning'   ? 'bg-amber-50 border-amber-200'                        :
+                                          'bg-green-50 border-green-200'
+          }`}>
+            <div className="shrink-0">
+              {!healthStatus              ? <ShieldCheck className="w-5 h-5 text-gray-300" /> :
+               healthStatus === 'critical' ? <ShieldX     className="w-5 h-5 text-red-500" /> :
+               healthStatus === 'warning'  ? <ShieldAlert className="w-5 h-5 text-amber-500" /> :
+               <ShieldCheck className="w-5 h-5 text-green-600" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${
+                !healthStatus              ? 'text-gray-500'    :
+                healthStatus === 'critical' ? 'text-red-700'    :
+                healthStatus === 'warning'  ? 'text-amber-700'  :
+                                             'text-green-700'
+              }`}>
+                {!healthStatus
+                  ? 'Records not yet verified — run a reconciliation check to confirm accuracy'
+                  : healthStatus === 'critical'
+                  ? 'Action needed: issues found that need your attention'
+                  : healthStatus === 'warning'
+                  ? 'Review recommended: some items may need attention'
+                  : 'All records reconciled — your books are in good order'}
+              </p>
+              {healthStatus && healthRunAt && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Last verified {formatWithTimezone(healthRunAt, orgTimezone)}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                to="/reconciliation"
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                  healthStatus === 'critical' ? 'bg-red-100 text-red-700 hover:bg-red-200'     :
+                  healthStatus === 'warning'  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' :
+                  healthStatus === 'healthy'  ? 'bg-green-100 text-green-700 hover:bg-green-200' :
+                  'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {healthStatus === 'critical' || healthStatus === 'warning' ? 'View issues →' : 'View details →'}
+              </Link>
+              <button
+                onClick={() => setSkipped(true)}
+                title="Dismiss"
+                className="p-1 rounded text-gray-300 hover:text-gray-500 transition-colors"
+                aria-label="Dismiss health banner"
+              >
+                <span className="text-lg leading-none">×</span>
+              </button>
+            </div>
+          </div>
+        )}
+        {healthSkipped && (
+          <div className="flex items-center justify-end">
+            <button
+              onClick={() => setSkipped(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Show record health status
+            </button>
+          </div>
+        )}
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
         <div data-tour="summary-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

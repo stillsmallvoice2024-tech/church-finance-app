@@ -5,7 +5,7 @@ import {
   BookOpen, Repeat2, Globe,
   Hourglass, RotateCcw, Undo2, Receipt,
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
-  BarChart3, FileText,
+  BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
   MoreHorizontal, X,
 } from 'lucide-react'
@@ -20,9 +20,10 @@ interface PrimaryTab {
 }
 
 const BASE_PRIMARY_TABS: PrimaryTab[] = [
-  { label: 'Home',     path: '/',         icon: LayoutDashboard, end: true },
-  { label: 'Inflows',  path: '/inflows',  icon: TrendingUp                 },
-  { label: 'Outflows', path: '/outflows', icon: TrendingDown               },
+  { label: 'Home',     path: '/',          icon: LayoutDashboard, end: true },
+  { label: 'Inflows',  path: '/inflows',   icon: TrendingUp                 },
+  { label: 'Outflows', path: '/outflows',  icon: TrendingDown               },
+  { label: 'Ledger',   path: '/bank-ledger', icon: BookOpen                 },
 ]
 
 const IMPORT_TAB: PrimaryTab = { label: 'Import', path: '/import', icon: FileUp }
@@ -42,48 +43,55 @@ interface DrawerSection {
 
 const DRAWER_SECTIONS: DrawerSection[] = [
   {
-    label: 'Banking',
+    label: 'Daily Finance',
     items: [
-      { label: 'Bank Ledger',         path: '/bank-ledger',         icon: BookOpen       },
-      { label: 'Deposits & Transfers', path: '/bank-movement', icon: BankMovementIcon },
-      { label: 'Intra-Account',       path: '/intra-flow',          icon: Repeat2        },
-      { label: 'FX Currency',         path: '/foreign-currency',    icon: Globe          },
-      { label: 'Receipts',            path: '/receipts',            icon: Receipt        },
+      { label: 'Import',            path: '/import',           icon: FileUp,         canWriteOnly: true },
+      { label: 'Internal Transfers', path: '/intra-flow',      icon: Repeat2        },
+      { label: 'Receipts',          path: '/receipts',         icon: Receipt        },
     ],
   },
   {
-    label: 'Review',
+    label: 'Banking',
     items: [
-      { label: 'Pending',    path: '/pending-deductions', icon: Hourglass },
-      { label: 'Refunds',    path: '/refunds',            icon: RotateCcw },
-      { label: 'Reversals',  path: '/reversals',          icon: Undo2     },
+      { label: 'Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
+      { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe          },
+    ],
+  },
+  {
+    label: 'Review & Processing',
+    items: [
+      { label: 'Upcoming Deductions', path: '/pending-deductions', icon: Hourglass },
+      { label: 'Refunds',             path: '/refunds',            icon: RotateCcw },
+      { label: 'Reversals',           path: '/reversals',          icon: Undo2     },
+      { label: 'Reconciliation',      path: '/reconciliation',     icon: ClipboardList },
     ],
   },
   {
     label: 'Budget & Allocation',
     items: [
-      { label: 'Categories',    path: '/categories',             icon: Layers     },
-      { label: 'Alloc. Configs', path: '/percentage-allocations', icon: Percent   },
-      { label: 'Cat. Ledger',   path: '/category-ledger',        icon: LayoutList },
-      { label: '% Allocation',  path: '/percentage-allocation',  icon: PieChart   },
-      { label: 'Specific Give', path: '/specific-givings',       icon: HandCoins  },
-      { label: 'Savings',       path: '/savings-portions',       icon: PiggyBank  },
+      { label: 'Categories',         path: '/categories',             icon: Layers     },
+      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent    },
+      { label: 'Category Accounts',  path: '/category-ledger',        icon: LayoutList },
+      { label: 'Regular Funds',      path: '/percentage-allocation',  icon: PieChart   },
+      { label: 'Designated Gifts',   path: '/specific-givings',       icon: HandCoins  },
+      { label: 'Savings Funds',      path: '/savings-portions',       icon: PiggyBank  },
     ],
   },
   {
     label: 'Reports',
     items: [
-      { label: 'Reports',     path: '/reports',          icon: BarChart3 },
-      { label: 'Fin. Report', path: '/financial-report', icon: FileText  },
+      { label: 'Reports',          path: '/reports',          icon: BarChart3 },
+      { label: 'Financial Report', path: '/financial-report', icon: FileText  },
+      { label: 'Custom Reports',   path: '/dynamic-reports',  icon: NotebookPen },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { label: 'Setup',       path: '/setup',      icon: SlidersHorizontal, canWriteOnly: true },
-      { label: 'Settings',    path: '/settings',   icon: Settings          },
-      { label: 'Users',       path: '/users',      icon: Users,         adminOnly: true },
-      { label: 'Change Log',  path: '/change-log', icon: ClipboardList, adminOnly: true },
+      { label: 'Setup',            path: '/setup',       icon: SlidersHorizontal, canWriteOnly: true },
+      { label: 'Settings',         path: '/settings',    icon: Settings          },
+      { label: 'Users',            path: '/users',       icon: Users,         adminOnly: true },
+      { label: 'Activity History', path: '/change-log',  icon: ClipboardList, adminOnly: true },
     ],
   },
 ]
@@ -93,7 +101,7 @@ export function BottomTabBar() {
   const { isAdmin, canWrite } = useRole()
   const admin = isAdmin()
   const write = canWrite()
-  const primaryTabs = write ? [...BASE_PRIMARY_TABS, IMPORT_TAB] : BASE_PRIMARY_TABS
+  const primaryTabs = BASE_PRIMARY_TABS
 
   return (
     <>

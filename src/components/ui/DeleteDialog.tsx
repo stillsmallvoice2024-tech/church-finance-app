@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Modal } from './Modal'
 
 interface DeleteDialogProps {
@@ -18,19 +18,23 @@ export function DeleteDialog({
   label = 'this record',
 }: DeleteDialogProps) {
   return (
-    <Modal open={open} onClose={onClose} title="Confirm Delete" size="max-w-sm">
-      <div className="flex flex-col items-center gap-4 text-center pb-2">
-        <div className="p-3 bg-red-50 rounded-full">
-          <AlertTriangle className="w-7 h-7 text-danger" />
-        </div>
-        <div>
-          <p className="text-sm text-gray-700">
-            Are you sure you want to delete <strong>{label}</strong>?
-          </p>
-          <p className="text-xs text-gray-400 mt-1">This action cannot be undone.</p>
+    <Modal open={open} onClose={onClose} title="Delete record" size="max-w-sm">
+      <div className="flex flex-col gap-4 pb-2">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-red-50 rounded-lg shrink-0 mt-0.5">
+            <Trash2 className="w-4 h-4 text-danger" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-800">
+              Delete <span className="text-gray-900">{label}</span>?
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              This will permanently remove the record and cannot be undone.
+            </p>
+          </div>
         </div>
 
-        <div className="flex gap-3 w-full">
+        <div className="flex gap-3">
           <button
             type="button"
             onClick={onClose}
@@ -48,7 +52,7 @@ export function DeleteDialog({
             {loading && (
               <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             )}
-            {loading ? 'Deleting…' : 'Delete'}
+            {loading ? 'Deleting…' : 'Yes, delete'}
           </button>
         </div>
       </div>

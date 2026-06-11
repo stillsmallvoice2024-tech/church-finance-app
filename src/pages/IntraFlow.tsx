@@ -155,7 +155,7 @@ export default function IntraFlow() {
   const { execute: bulkDelete, loading: bulkDeleting } = useBulkDeleteTransaction('intra_flows')
   const { categories } = useCategories()
 
-  usePageTitle('Intra Accounts')
+  usePageTitle('Internal Transfers')
   const [tab, setTab] = useState<'transfers' | 'reallocation'>('transfers')
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
