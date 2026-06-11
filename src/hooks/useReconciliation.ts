@@ -5,6 +5,7 @@ import { useAuth } from './useAuth'
 import { runReconciliation, type ReconciliationResult, type ReconciliationIssue } from '../utils/reconciliationEngine'
 import { ALL_RULES } from '../utils/reconciliationRules'
 import { aggregateDiagnostics, type ReconciliationDiagnostics, type HealthStatus } from '../utils/reconciliationAggregator'
+import { useHealthStore } from '../store/healthStore'
 
 export interface ReconciliationRun {
   id: string
@@ -16,21 +17,10 @@ export interface ReconciliationRun {
   health_status: HealthStatus
 }
 
-const HEALTH_STORAGE_KEY = 'church-recon-last-health'
-
+/** @deprecated — read from useHealthStore instead; kept for any legacy callers. */
 export function getStoredHealthStatus(): { status: HealthStatus; runAt: string } | null {
-  try {
-    const raw = localStorage.getItem(HEALTH_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function storeHealthStatus(status: HealthStatus, runAt: string) {
-  try {
-    localStorage.setItem(HEALTH_STORAGE_KEY, JSON.stringify({ status, runAt }))
-  } catch { /* storage unavailable */ }
+  const { status, runAt } = useHealthStore.getState()
+  return status && runAt ? { status, runAt } : null
 }
 
 export function useReconciliation() {
@@ -71,7 +61,7 @@ export function useReconciliation() {
       const res = await runReconciliation(orgId, ALL_RULES)
       const diag = aggregateDiagnostics(res.issues)
 
-      storeHealthStatus(diag.healthStatus, res.runAt)
+      useHealthStore.getState().setHealth(diag.healthStatus, res.runAt)
       setResult(res)
       setDiagnostics(diag)
 

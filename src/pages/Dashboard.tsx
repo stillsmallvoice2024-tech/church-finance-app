@@ -36,10 +36,10 @@ import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBa
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
-import { getStoredHealthStatus }   from '../hooks/useReconciliation'
 import { healthStatusLabel } from '../utils/reconciliationAggregator'
 import { useOrgStore }             from '../store/orgStore'
 import { getOrgTimezone }          from '../utils/timezones'
+import { useHealthStore }          from '../store/healthStore'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,10 @@ export default function Dashboard() {
   const [showAddOutflow, setShowAddOutflow] = useState(false)
   const [showImport,     setShowImport]     = useState(false)
 
-  const storedHealth = getStoredHealthStatus()
+  const healthStatus  = useHealthStore(s => s.status)
+  const healthRunAt   = useHealthStore(s => s.runAt)
+  const healthSkipped = useHealthStore(s => s.skipped)
+  const setSkipped    = useHealthStore(s => s.setSkipped)
 
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
@@ -201,32 +204,44 @@ export default function Dashboard() {
         <OnboardingChecklist />
 
         {/* ── Health status strip ──────────────────────────────────────────── */}
-        <Link
-          to="/reconciliation"
-          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-            !storedHealth                          ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100' :
-            storedHealth.status === 'critical'     ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
-            storedHealth.status === 'warning'      ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' :
-            'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-          }`}
-        >
-          {!storedHealth                      ? <ShieldCheck className="w-4 h-4 shrink-0 opacity-40" /> :
-           storedHealth.status === 'critical' ? <ShieldX     className="w-4 h-4 shrink-0" /> :
-           storedHealth.status === 'warning'  ? <ShieldAlert className="w-4 h-4 shrink-0" /> :
+        {/* Strip is a div so the dismiss × button doesn't trigger navigation */}
+        <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+          healthSkipped || !healthStatus              ? 'bg-gray-50 border-gray-200 text-gray-400'           :
+          healthStatus === 'critical'                 ? 'bg-red-50 border-red-200 text-red-700'              :
+          healthStatus === 'warning'                  ? 'bg-amber-50 border-amber-200 text-amber-700'        :
+          'bg-green-50 border-green-200 text-green-700'
+        }`}>
+          {(healthSkipped || !healthStatus)           ? <ShieldCheck className="w-4 h-4 shrink-0 opacity-40" /> :
+           healthStatus === 'critical'                ? <ShieldX     className="w-4 h-4 shrink-0" />          :
+           healthStatus === 'warning'                 ? <ShieldAlert className="w-4 h-4 shrink-0" />          :
            <ShieldCheck className="w-4 h-4 shrink-0" />}
           <span>
             System health:{' '}
-            <strong>{storedHealth ? healthStatusLabel(storedHealth.status) : 'Not checked yet'}</strong>
+            <strong>
+              {healthSkipped ? 'Paused' : healthStatus ? healthStatusLabel(healthStatus) : 'Not checked yet'}
+            </strong>
           </span>
-          {storedHealth && (
+          {healthStatus && !healthSkipped && healthRunAt && (
             <span className="text-xs opacity-60 hidden sm:inline">
-              · last checked {formatWithTimezone(storedHealth.runAt, orgTimezone)}
+              · last checked {formatWithTimezone(healthRunAt, orgTimezone)}
             </span>
           )}
-          <span className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0">
-            {storedHealth ? 'View →' : 'Run check →'}
-          </span>
-        </Link>
+          <Link
+            to="/reconciliation"
+            className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0"
+          >
+            {healthStatus && !healthSkipped ? 'View →' : 'Run check →'}
+          </Link>
+          <button
+            onClick={() => setSkipped(!healthSkipped)}
+            title={healthSkipped ? 'Resume health monitoring' : 'Dismiss health strip'}
+            className="shrink-0 p-0.5 rounded opacity-40 hover:opacity-80 transition-opacity"
+          >
+            {healthSkipped
+              ? <ShieldCheck className="w-3.5 h-3.5" />
+              : <span className="text-base leading-none">×</span>}
+          </button>
+        </div>
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
         <div data-tour="summary-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

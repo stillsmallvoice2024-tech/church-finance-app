@@ -8,23 +8,29 @@ import { useDbStatus, type DbStatus } from '../../hooks/useDbStatus'
 import { OrgSwitcher } from '../ui/OrgSwitcher'
 import { getInitials } from '../../utils/formatters'
 import { ROLE_BADGE_CLASSES, ROLE_LABELS } from '../../utils/constants'
-import { getStoredHealthStatus } from '../../hooks/useReconciliation'
+import { useHealthStore } from '../../store/healthStore'
 import type { HealthStatus } from '../../utils/reconciliationAggregator'
 
-function HealthBadge({ status }: { status: HealthStatus }) {
+function HealthBadge({ status, skipped }: { status: HealthStatus | null; skipped: boolean }) {
+  const muted = skipped || !status
   const icon =
-    status === 'critical' ? <ShieldX   className="h-3.5 w-3.5" /> :
-    status === 'warning'  ? <ShieldAlert className="h-3.5 w-3.5" /> :
+    !muted && status === 'critical' ? <ShieldX     className="h-3.5 w-3.5" /> :
+    !muted && status === 'warning'  ? <ShieldAlert className="h-3.5 w-3.5" /> :
     <ShieldCheck className="h-3.5 w-3.5" />
-  const cls =
-    status === 'critical' ? 'text-red-600 bg-red-50 hover:bg-red-100 border-red-200' :
-    status === 'warning'  ? 'text-amber-600 bg-amber-50 hover:bg-amber-100 border-amber-200' :
-    'text-green-600 bg-green-50 hover:bg-green-100 border-green-200'
-  const label = status === 'critical' ? 'Critical' : status === 'warning' ? 'Warning' : 'Healthy'
+  const cls = muted
+    ? 'text-gray-400 bg-gray-50 hover:bg-gray-100 border-gray-200'
+    : status === 'critical' ? 'text-red-600 bg-red-50 hover:bg-red-100 border-red-200'
+    : status === 'warning'  ? 'text-amber-600 bg-amber-50 hover:bg-amber-100 border-amber-200'
+    : 'text-green-600 bg-green-50 hover:bg-green-100 border-green-200'
+  const label =
+    !status  ? '—' :
+    skipped  ? 'Paused' :
+    status === 'critical' ? 'Critical' :
+    status === 'warning'  ? 'Warning'  : 'Healthy'
   return (
     <Link
       to="/reconciliation"
-      title={`System health: ${label} — view Reconciliation Center`}
+      title={muted ? 'System health check paused — click to view' : `System health: ${label} — view Reconciliation Center`}
       className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors ${cls}`}
     >
       {icon}
@@ -65,7 +71,8 @@ export function TopBar({ onMenuClick }: TopBarProps) {
 
   const displayName  = profile?.full_name || user?.email || 'User'
   const initials     = getInitials(displayName)
-  const storedHealth = getStoredHealthStatus()
+  const healthStatus  = useHealthStore(s => s.status)
+  const healthSkipped = useHealthStore(s => s.skipped)
 
   // Show the org-scoped role (orgRole) in the badge — more accurate than profile.role
   const badgeRole = orgRole ?? role
@@ -89,7 +96,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
 
       {/* Right: health badge + role badge + user avatar + sign out */}
       <div className="flex items-center gap-3">
-        {storedHealth && <HealthBadge status={storedHealth.status} />}
+        <HealthBadge status={healthStatus} skipped={healthSkipped} />
         {roleLabel && (
           <span
             className={`hidden sm:inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeClass}`}
