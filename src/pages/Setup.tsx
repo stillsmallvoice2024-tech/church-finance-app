@@ -2508,6 +2508,8 @@ function DatabaseTab() {
 
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState<{ inflows: number; outflows: number } | null>(null)
+  const [backfillingCharge, setBackfillingCharge] = useState(false)
+  const [backfillChargeResult, setBackfillChargeResult] = useState<number | null>(null)
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(MIGRATION_SQL)
@@ -2557,6 +2559,53 @@ function DatabaseTab() {
     }
   }
 
+  const runChargeBackfill = async () => {
+    setBackfillingCharge(true)
+    setBackfillChargeResult(null)
+    try {
+      // Matches the same patterns used in ImportModal during ID generation
+      const HASH_RE = /^[0-9a-f]{64}(-\d+)?$/i
+      const COMM_RE = /^COMM(?:ISSION)?\b/i
+      const VAT_RE  = /^VAT\b/i
+
+      const { data, error } = await supabase
+        .from('outflow_transactions')
+        .select('id, transaction_id, description')
+        .or('description.ilike.COMM%,description.ilike.VAT%')
+        .not('transaction_id', 'is', null)
+        .limit(5000)
+
+      if (error) throw error
+
+      let count = 0
+      for (const row of data ?? []) {
+        const txnId = row.transaction_id as string
+        const desc  = (row.description as string) ?? ''
+        if (txnId.endsWith('-comm') || txnId.endsWith('-vat')) continue
+        if (HASH_RE.test(txnId)) continue
+        const suffix = COMM_RE.test(desc) ? '-comm' : VAT_RE.test(desc) ? '-vat' : null
+        if (!suffix) continue
+        const { error: updateErr } = await supabase
+          .from('outflow_transactions')
+          .update({ transaction_id: txnId + suffix })
+          .eq('id', row.id)
+        if (!updateErr) count++
+      }
+
+      setBackfillChargeResult(count)
+      toast(
+        count > 0
+          ? `Updated ${count} charge row${count !== 1 ? 's' : ''}`
+          : 'No rows needed updating',
+        'success',
+      )
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Backfill failed', 'error')
+    } finally {
+      setBackfillingCharge(false)
+    }
+  }
+
   return (
     <div className="max-w-3xl space-y-5">
       {/* Backfill Transaction IDs */}
@@ -2585,6 +2634,40 @@ function DatabaseTab() {
           {backfilling ? 'Backfilling…' : 'Run Backfill'}
         </button>
       </div>
+
+      {/* Backfill Bank Charge IDs (COMM/VAT) */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold text-gray-900">Backfill Bank Charge IDs</h2>
+        </div>
+        <p className="text-sm text-gray-500">
+          Appends{' '}
+          <code className="font-mono text-xs bg-gray-100 px-1 rounded">-comm</code> or{' '}
+          <code className="font-mono text-xs bg-gray-100 px-1 rounded">-vat</code> to the{' '}
+          <code className="font-mono text-xs bg-gray-100 px-1 rounded">transaction_id</code> of existing COMM/COMMISSION
+          and VAT outflow rows that share a reference ID with their parent transaction. Safe to run multiple times —
+          already-tagged rows and hash-based IDs are skipped automatically.
+        </p>
+        {backfillChargeResult !== null && (
+          <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 text-sm text-green-700">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            {backfillChargeResult > 0
+              ? `Updated ${backfillChargeResult} charge row${backfillChargeResult !== 1 ? 's' : ''}`
+              : 'No rows needed updating'}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={runChargeBackfill}
+          disabled={backfillingCharge}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-60"
+        >
+          {backfillingCharge && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+          {backfillingCharge ? 'Backfilling…' : 'Run Backfill'}
+        </button>
+      </div>
+
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal className="w-5 h-5 text-primary" />
