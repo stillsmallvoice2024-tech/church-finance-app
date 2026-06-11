@@ -113,9 +113,10 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       setIsPending(editRecord.is_pending_deduction ?? false)
       if (editRecord.root_transaction_id && editRecord.root_transaction_table) {
         setRootTxnLink({
-          id:    editRecord.root_transaction_id,
-          table: editRecord.root_transaction_table as 'inflow_transactions' | 'outflow_transactions',
-          label: `Linked · ID: ${editRecord.root_transaction_id.slice(0, 8)}… (search to update)`,
+          id:     editRecord.root_transaction_id,
+          table:  editRecord.root_transaction_table as 'inflow_transactions' | 'outflow_transactions',
+          label:  `Linked · ID: ${editRecord.root_transaction_id.slice(0, 8)}… (search to update)`,
+          txnRef: null,
         })
       }
       resetForm({

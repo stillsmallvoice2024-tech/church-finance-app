@@ -5,7 +5,7 @@
 const PAGE_SIZE = 1000
 
 type RangeableQuery<T> = {
-  range: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>
+  range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
 }
 
 export async function fetchAllRows<T>(

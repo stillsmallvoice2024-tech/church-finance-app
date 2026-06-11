@@ -1,4 +1,4 @@
-import type { ReconciliationIssue, ReconciliationSeverity } from './reconciliationEngine'
+import type { ReconciliationIssue } from './reconciliationEngine'
 
 export type HealthStatus = 'healthy' | 'warning' | 'critical'
 
@@ -35,7 +35,7 @@ export interface ReconciliationDiagnostics {
   }
 }
 
-function severityWeight(s: ReconciliationSeverity): number {
+function severityWeight(s: HealthStatus): number {
   if (s === 'critical') return 3
   if (s === 'warning')  return 2
   return 1

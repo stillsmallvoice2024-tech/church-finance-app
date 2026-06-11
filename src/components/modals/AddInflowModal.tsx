@@ -188,9 +188,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       // Restore root-link pill if this record has a linked root
       if (editRecord.root_transaction_id && editRecord.root_transaction_table) {
         setRootTxnLink({
-          id:    editRecord.root_transaction_id,
-          table: editRecord.root_transaction_table as 'inflow_transactions' | 'outflow_transactions',
-          label: `Linked · ID: ${editRecord.root_transaction_id.slice(0, 8)}… (search to update)`,
+          id:     editRecord.root_transaction_id,
+          table:  editRecord.root_transaction_table as 'inflow_transactions' | 'outflow_transactions',
+          label:  `Linked · ID: ${editRecord.root_transaction_id.slice(0, 8)}… (search to update)`,
+          txnRef: null,
         })
       }
       resetForm({

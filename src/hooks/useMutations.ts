@@ -826,7 +826,7 @@ export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput>
         p_bank_name:       input.bank_name       ?? null,
       })
       if (err) throw err
-      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'fx_transactions', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: input })
+      logAudit({ userId: user.id, action: 'UPDATE', tableName: 'fx_transactions', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: input as unknown as Record<string, unknown> })
       if (oldData) logFieldChanges(user.id, 'fx_transactions', input.id, oldData as Record<string, unknown>, input as unknown as Record<string, unknown>)
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)

@@ -586,7 +586,7 @@ function TransfersPanel() {
     if (transferRes.error) { setError(transferRes.error.message); setLoading(false); return }
 
     const transferRows: TransferRow[] = (transferRes.data ?? []).map((r: Record<string, unknown>) => ({
-      ...(r as TransferRow), source: 'intrabank_transfers' as const, offset_role: null, root_transaction_id: null,
+      ...(r as unknown as TransferRow), source: 'intrabank_transfers' as const, offset_role: null, root_transaction_id: null,
     }))
     const inRows: TransferRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string, date: r.date as string, from_bank_id: null, from_bank_name: r.bank_name as string | null,
