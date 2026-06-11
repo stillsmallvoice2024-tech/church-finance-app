@@ -32,6 +32,7 @@ import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeningBalance'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore }    from '../store/orgStore'
 import { HelpButton }      from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
@@ -55,6 +56,8 @@ interface LedgerRow {
   balance:             number   // running
   transaction_type:    string | null
   entity_type:         'inflow' | 'outflow'
+  // source distinguishes rows from dedicated tables vs inflow/outflow_transactions
+  source?:             'bank_deposits' | 'intrabank_transfers'
   inflowData?:         InflowTransaction
   outflowData?:        OutflowTransaction
 }
@@ -80,6 +83,7 @@ export default function BankLedger() {
 
   const { banks, loading: banksLoading, error: banksError } = useBanks()
   const { canWrite } = useRole()
+  const orgId = useOrgStore(s => s.orgId)
 
   const [selectedBank, setSelectedBank] = useState('')
   const didAutoSelect = useRef(false)
@@ -100,7 +104,7 @@ export default function BankLedger() {
     setLoading(true)
     setError(null)
 
-    const [inflowRes, outflowRes] = await Promise.all([
+    const [inflowRes, outflowRes, depositsRes, transfersRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('*')
@@ -112,6 +116,18 @@ export default function BankLedger() {
         .select('*')
         .eq('bank_name', bankName)
         .order('date', { ascending: true }),
+      // Bank deposit slip records for this bank
+      supabase
+        .from('bank_deposits')
+        .select('id, date, bank_name, amount, description')
+        .eq('bank_name', bankName)
+        .order('date', { ascending: true }),
+      // Intrabank transfers: this bank as source (outflow) or destination (inflow)
+      supabase
+        .from('intrabank_transfers')
+        .select('id, date, from_bank_name, to_bank_name, amount, description')
+        .or(`from_bank_name.eq.${bankName},to_bank_name.eq.${bankName}`)
+        .order('date', { ascending: true }),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -121,7 +137,7 @@ export default function BankLedger() {
     }
 
     // Merge & sort chronologically (B/F DB rows excluded above)
-    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
+    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; source?: 'bank_deposits' | 'intrabank_transfers'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
@@ -139,6 +155,40 @@ export default function BankLedger() {
         entity_type: 'outflow' as const,
         outflowData: r as unknown as OutflowTransaction,
       })),
+      // Bank deposit slip entries — show as inflow with Bank Deposit tag
+      ...(!depositsRes.error ? (depositsRes.data ?? []).map((r: Record<string, unknown>) => ({
+        id: `bd-${r.id as string}`, date: r.date as string,
+        description: r.description as string | null,
+        inflow: r.amount as number, outflow: 0,
+        transaction_type: 'bank_deposit',
+        entity_type: 'inflow' as const,
+        source: 'bank_deposits' as const,
+      })) : []),
+      // Intrabank transfer entries — outflow for source bank, inflow for destination
+      ...(!transfersRes.error ? (transfersRes.data ?? []).flatMap((r: Record<string, unknown>) => {
+        const rows: RawRow[] = []
+        if (r.from_bank_name === bankName) {
+          rows.push({
+            id: `it-out-${r.id as string}`, date: r.date as string,
+            description: r.description as string | null,
+            inflow: 0, outflow: r.amount as number,
+            transaction_type: 'intrabank_transfer',
+            entity_type: 'outflow' as const,
+            source: 'intrabank_transfers' as const,
+          })
+        }
+        if (r.to_bank_name === bankName) {
+          rows.push({
+            id: `it-in-${r.id as string}`, date: r.date as string,
+            description: r.description as string | null,
+            inflow: r.amount as number, outflow: 0,
+            transaction_type: 'intrabank_transfer',
+            entity_type: 'inflow' as const,
+            source: 'intrabank_transfers' as const,
+          })
+        }
+        return rows
+      }) : []),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
 
     // Running balance starts from opening balance so all subsequent rows are correct
@@ -167,7 +217,7 @@ export default function BankLedger() {
 
     setLedgerRows(rows)
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => {
     const bank = banks.find(b => b.id === selectedBank)
@@ -409,7 +459,8 @@ export default function BankLedger() {
               ) : sortedRows.length === 0 ? (
                 <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
               ) : pagedRows.map(row => {
-                const isBF = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
+                const isBF     = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
+                const isTableRow = !!row.source
                 return (
                 <div key={row.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white ${isBF ? 'border-blue-200' : 'border-gray-200'}`}>
                   {/* Card header */}
@@ -422,7 +473,7 @@ export default function BankLedger() {
                             {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                           </span>
                         )}
-                        {canWrite() && !isBF && (
+                        {canWrite() && !isBF && !isTableRow && (
                           <button
                             onClick={() => row.entity_type === 'inflow' && row.inflowData
                               ? setEditInflow(row.inflowData)
@@ -493,9 +544,10 @@ export default function BankLedger() {
                       <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
                     </td></tr>
                   ) : pagedRows.flatMap(row => {
-                    const isBF = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
+                    const isBF     = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
+                    const isTableRow = !!row.source  // bank_deposits / intrabank_transfers direct entries
                     const isExpanded = expandedId === row.id
-                    const detailItems = !isBF
+                    const detailItems = !isBF && !isTableRow
                       ? (row.inflowData  ? inflowDetailItems(row.inflowData, baseCurrencyCode)
                         : row.outflowData ? outflowDetailItems(row.outflowData, baseCurrencyCode)
                         : [])
@@ -503,7 +555,7 @@ export default function BankLedger() {
                     return [
                     <tr key={row.id} className={`transition-colors ${isBF ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
                       <td className="w-8 px-1 py-3">
-                        {!isBF && (
+                        {!isBF && !isTableRow && (
                           <button
                             onClick={() => setExpandedId(isExpanded ? null : row.id)}
                             className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -534,11 +586,11 @@ export default function BankLedger() {
                       <AmountCell value={row.outflow}  mode="outflow" currency={displayCurrency} />
                       <AmountCell value={row.balance}  mode="balance" currency={displayCurrency} showZero />
                       <td className="px-2 py-3">
-                        {!isBF && <ReceiptBadge entityType={row.entity_type} entityId={row.id} />}
+                        {!isBF && !isTableRow && <ReceiptBadge entityType={row.entity_type} entityId={row.id} />}
                       </td>
                       {canWrite() && (
                         <td className="px-2 py-3">
-                          {!isBF && (
+                          {!isBF && !isTableRow && (
                             <button
                               onClick={() => row.entity_type === 'inflow' && row.inflowData
                                 ? setEditInflow(row.inflowData)

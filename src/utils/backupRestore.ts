@@ -229,6 +229,20 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
     dependencies: ['organizations'],
     notes: 'Contains user roles — restore with care; sensitive',
   },
+  {
+    key: 'bank_statement_balances', label: 'Statement Reference Balances', module: 'Reconciliation',
+    restorePriority: 80, backupEnabled: true, restoreMode: 'merge',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: true, sensitive: false, optional: true,
+    dependencies: ['banks'],
+  },
+  {
+    key: 'reconciliation_runs', label: 'Reconciliation History', module: 'Reconciliation',
+    restorePriority: 81, backupEnabled: true, restoreMode: 'append',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: true, sensitive: false, optional: true,
+    dependencies: [],
+  },
 ]
 
 /** Backward compat alias */

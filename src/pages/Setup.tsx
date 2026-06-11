@@ -2147,6 +2147,59 @@ CREATE TRIGGER trg_prevent_outflow_offset_chaining
   BEFORE INSERT OR UPDATE ON public.outflow_transactions
   FOR EACH ROW EXECUTE FUNCTION public.prevent_offset_chaining();
 
+NOTIFY pgrst, 'reload schema';
+
+-- ── Reconciliation Center tables ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.reconciliation_runs (
+  id             uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  run_at         timestamptz NOT NULL DEFAULT now(),
+  issue_count    int         NOT NULL DEFAULT 0,
+  critical_count int         NOT NULL DEFAULT 0,
+  warning_count  int         NOT NULL DEFAULT 0,
+  info_count     int         NOT NULL DEFAULT 0,
+  health_status  text        NOT NULL CHECK (health_status IN ('healthy','warning','critical')),
+  run_by         uuid        REFERENCES public.profiles(id),
+  issues_json    jsonb       NOT NULL DEFAULT '[]',
+  org_id         uuid        NOT NULL DEFAULT public.get_current_org_id()
+                 REFERENCES public.organizations(id) ON DELETE SET NULL
+);
+ALTER TABLE public.reconciliation_runs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "recon_runs_select" ON public.reconciliation_runs FOR SELECT USING (org_id = public.get_current_org_id());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "recon_runs_insert" ON public.reconciliation_runs FOR INSERT WITH CHECK (public.is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS idx_recon_runs_org_at ON public.reconciliation_runs(org_id, run_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.bank_statement_balances (
+  id                uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  bank_name         text        NOT NULL,
+  bank_id           uuid        REFERENCES public.banks(id) ON DELETE SET NULL,
+  reference_balance numeric(15,2) NOT NULL,
+  statement_date    date        NOT NULL,
+  notes             text,
+  entered_by        uuid        REFERENCES public.profiles(id),
+  org_id            uuid        NOT NULL DEFAULT public.get_current_org_id()
+                    REFERENCES public.organizations(id) ON DELETE SET NULL,
+  created_at        timestamptz DEFAULT now(),
+  UNIQUE (org_id, bank_name)
+);
+ALTER TABLE public.bank_statement_balances ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "bsb_select" ON public.bank_statement_balances FOR SELECT USING (org_id = public.get_current_org_id());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "bsb_insert" ON public.bank_statement_balances FOR INSERT WITH CHECK (public.is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "bsb_update" ON public.bank_statement_balances FOR UPDATE USING (public.is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "bsb_delete" ON public.bank_statement_balances FOR DELETE USING (public.is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS idx_bsb_org_bank ON public.bank_statement_balances(org_id, bank_name);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────

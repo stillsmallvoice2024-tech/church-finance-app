@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -7,7 +8,7 @@ import {
 import {
   TrendingUp, TrendingDown, Layers,
   PlusCircle, MinusCircle, FileSpreadsheet,
-  RefreshCw, AlertCircle, Wallet,
+  RefreshCw, AlertCircle, Wallet, ShieldCheck, ShieldAlert, ShieldX,
 } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -35,6 +36,8 @@ import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBa
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
+import { getStoredHealthStatus }   from '../hooks/useReconciliation'
+import { healthStatusLabel, healthStatusColor, healthStatusDot } from '../utils/reconciliationAggregator'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -82,6 +85,8 @@ export default function Dashboard() {
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
   const [showImport,     setShowImport]     = useState(false)
+
+  const storedHealth = getStoredHealthStatus()
 
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
@@ -345,6 +350,38 @@ export default function Dashboard() {
             </div>
           )}
         </Card>
+
+        {/* ── Reconciliation health card ──────────────────────────────────── */}
+        <Link to="/reconciliation" className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl">
+          <Card className="transition-shadow group-hover:shadow-md group-hover:ring-2 group-hover:ring-primary/20 cursor-pointer">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                {storedHealth ? (
+                  storedHealth.status === 'critical' ? <ShieldX   className="w-7 h-7 text-red-500 shrink-0" /> :
+                  storedHealth.status === 'warning'  ? <ShieldAlert className="w-7 h-7 text-amber-500 shrink-0" /> :
+                  <ShieldCheck className="w-7 h-7 text-green-500 shrink-0" />
+                ) : (
+                  <ShieldCheck className="w-7 h-7 text-gray-300 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">System Health</p>
+                  {storedHealth ? (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${healthStatusDot(storedHealth.status)}`} />
+                      <span className={`text-base font-bold ${healthStatusColor(storedHealth.status)}`}>
+                        {healthStatusLabel(storedHealth.status)}
+                      </span>
+                      <span className="text-xs text-gray-400">· last checked {formatDate(storedHealth.runAt.slice(0, 10))}</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 mt-0.5">No check run yet</p>
+                  )}
+                </div>
+              </div>
+              <span className="text-xs font-medium text-primary shrink-0 group-hover:underline">View details →</span>
+            </div>
+          </Card>
+        </Link>
 
         {/* ── FX currency strip ────────────────────────────────────────────── */}
         <Card>

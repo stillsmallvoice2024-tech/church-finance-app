@@ -1,4 +1,5 @@
-import { Menu, LogOut, Sun, Moon } from 'lucide-react'
+import { Menu, LogOut, Sun, Moon, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useRole } from '../../hooks/useRole'
 import { useOrgStore } from '../../store/orgStore'
@@ -7,6 +8,30 @@ import { useDbStatus, type DbStatus } from '../../hooks/useDbStatus'
 import { OrgSwitcher } from '../ui/OrgSwitcher'
 import { getInitials } from '../../utils/formatters'
 import { ROLE_BADGE_CLASSES, ROLE_LABELS } from '../../utils/constants'
+import { getStoredHealthStatus } from '../../hooks/useReconciliation'
+import type { HealthStatus } from '../../utils/reconciliationAggregator'
+
+function HealthBadge({ status }: { status: HealthStatus }) {
+  const icon =
+    status === 'critical' ? <ShieldX   className="h-3.5 w-3.5" /> :
+    status === 'warning'  ? <ShieldAlert className="h-3.5 w-3.5" /> :
+    <ShieldCheck className="h-3.5 w-3.5" />
+  const cls =
+    status === 'critical' ? 'text-red-600 bg-red-50 hover:bg-red-100 border-red-200' :
+    status === 'warning'  ? 'text-amber-600 bg-amber-50 hover:bg-amber-100 border-amber-200' :
+    'text-green-600 bg-green-50 hover:bg-green-100 border-green-200'
+  const label = status === 'critical' ? 'Critical' : status === 'warning' ? 'Warning' : 'Healthy'
+  return (
+    <Link
+      to="/reconciliation"
+      title={`System health: ${label} — view Reconciliation Center`}
+      className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors ${cls}`}
+    >
+      {icon}
+      <span className="hidden md:inline">{label}</span>
+    </Link>
+  )
+}
 
 function ConnectionDot({ status, latency }: { status: DbStatus; latency: number | null }) {
   const label =
@@ -38,8 +63,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   const { theme, toggle: toggleTheme } = useThemeStore()
   const { status: dbStatus, latency } = useDbStatus()
 
-  const displayName = profile?.full_name || user?.email || 'User'
-  const initials = getInitials(displayName)
+  const displayName  = profile?.full_name || user?.email || 'User'
+  const initials     = getInitials(displayName)
+  const storedHealth = getStoredHealthStatus()
 
   // Show the org-scoped role (orgRole) in the badge — more accurate than profile.role
   const badgeRole = orgRole ?? role
@@ -61,8 +87,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         <OrgSwitcher />
       </div>
 
-      {/* Right: role badge + user avatar + sign out */}
+      {/* Right: health badge + role badge + user avatar + sign out */}
       <div className="flex items-center gap-3">
+        {storedHealth && <HealthBadge status={storedHealth.status} />}
         {roleLabel && (
           <span
             className={`hidden sm:inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeClass}`}
