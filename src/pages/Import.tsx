@@ -607,6 +607,18 @@ function ManualEntryForm() {
   // FX banks are excluded from Manual Entry — all FX transactions go through the FX module.
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const hasFxBanks = banks.some(b => b.is_foreign_currency)
+
+  const filteredManualCategories = useMemo(
+    () => categories.filter(c => !c.currency),
+    [categories],
+  )
+
+  // Clear outflowS1 when bank changes and the current value is not in the filtered list
+  useEffect(() => {
+    if (!outflowS1) return
+    if (!filteredManualCategories.some(c => c.name === outflowS1)) setOutflowS1('')
+  }, [filteredManualCategories, outflowS1])
+
   const availableTxnTypes = TXN_TYPE_OPTIONS
 
   // ── Duplicate check helpers ──────────────────────────────────────────────
@@ -1100,7 +1112,7 @@ function ManualEntryForm() {
               <Field label="Category (Stage Code 1)">
                 <select value={outflowS1} onChange={e => setOutflowS1(e.target.value)} className={iCls}>
                   <option value="">— None —</option>
-                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  {filteredManualCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </Field>
               <Field label="Budget Portion (Stage Code 2)">

@@ -311,6 +311,16 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const isForeignCurrencyBank = !!internalBank &&
     (bankList.find(b => b.id === internalBank.id)?.is_foreign_currency ?? false)
 
+  const bankCurrency = internalBank
+    ? bankList.find(b => b.id === internalBank.id)?.currency ?? null
+    : null
+
+  const filteredCategories = useMemo(() => {
+    if (!internalBank) return categories
+    if (isForeignCurrencyBank) return categories.filter(c => c.currency === bankCurrency)
+    return categories.filter(c => !c.currency)
+  }, [categories, internalBank, isForeignCurrencyBank, bankCurrency])
+
   const bankLabel = (b: { name: string; is_foreign_currency: boolean }) =>
     b.is_foreign_currency ? `${b.name} [FX]` : b.name
 
@@ -2434,7 +2444,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         Apply to {outflowTargetLabel} rows:
                       </span>
                       <SearchableSelect value={applyS1} onChange={setApplyS1}
-                        options={categories.map(c => ({ value: c.name, label: c.name }))}
+                        options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
                         placeholder="Stage Code 1"
                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                         wrapperClassName="flex-1 min-w-[100px]" />
@@ -2635,7 +2645,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       }
                                       setRowOutflowTypes(prev => ({ ...prev, [ri]: suggestedId }))
                                     }}
-                                    options={categories.map(c => ({ value: c.name, label: c.name }))}
+                                    options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
                                     placeholder="— None —"
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full" />
                                   <select value={sc.s2}
@@ -2805,7 +2815,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         }}
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                         <option value="">— None —</option>
-                                        {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {filteredCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                       </select>
                                     </div>
                                     {/* Stage Code 2 */}
