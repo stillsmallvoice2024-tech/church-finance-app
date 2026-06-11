@@ -251,7 +251,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
 
         {/* Allocation */}
         <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation for the {baseCurrencyCode} Inflow</p>
+          <p className="text-xs font-semibold text-gray-500">Allocation for the {baseCurrencyCode} Inflow</p>
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Allocation Config</label>

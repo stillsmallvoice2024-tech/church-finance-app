@@ -519,7 +519,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
         {/* Opening Balance section */}
         <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balance (optional)</p>
+          <p className="text-xs font-semibold text-gray-500">Opening Balance (optional)</p>
 
           <Field label={`Starting Balance (${selectedCurrencySymbol})`} error={errors.starting_balance?.message}>
             <Controller control={control} name="starting_balance" render={({ field }) => (

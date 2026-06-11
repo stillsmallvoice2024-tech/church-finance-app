@@ -184,7 +184,7 @@ export function EditFXConversionModal({ open, onClose, onSuccess, conversion }: 
 
           {/* Allocation */}
           <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation</p>
+            <p className="text-xs font-semibold text-gray-500">Allocation</p>
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">Allocation Config</label>
               <select value={configId} onChange={e => setConfigId(e.target.value)} className={iCls}>

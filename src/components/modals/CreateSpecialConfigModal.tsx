@@ -418,7 +418,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
             <div className="flex items-center gap-2">
               <Link2 className="w-3.5 h-3.5 text-gray-400" />
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Linked Income Type</p>
+              <p className="text-xs font-semibold text-gray-500">Linked Income Type</p>
             </div>
             <p className="text-[11px] text-gray-400">
               When a transaction matches this income type, this config will be auto-applied.

@@ -347,9 +347,9 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bank Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Number</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Bank Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Account Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Type</th>
                     <th className="px-4 py-3 w-24" />
                   </tr>
                 </thead>
@@ -493,10 +493,10 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Effective From</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total %</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Effective From</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Total %</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                     <th className="px-4 py-3 w-28" />
                   </tr>
                 </thead>
@@ -717,12 +717,12 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-100">
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Ver</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Effective From</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Effective To</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Type</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="px-4 py-2 text-right text-gray-500 font-semibold uppercase tracking-wider">Rows</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Type</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status</th>
+                            <th className="px-4 py-2 text-right text-gray-500 font-semibold">Rows</th>
                             <th className="px-4 py-2 w-10" />
                           </tr>
                         </thead>
@@ -882,7 +882,7 @@ function CurrenciesTab() {
 
       {/* Add form */}
       <form onSubmit={handleAdd} className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Add Currency</p>
+        <p className="text-xs font-semibold text-gray-500">Add Currency</p>
         {(formErr || addError) && (
           <p className="text-xs text-red-600">{formErr ?? addError}</p>
         )}

@@ -487,7 +487,7 @@ export default function Import() {
           {/* Supported tables */}
           {!parseResult && (
             <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Supported Tables</p>
+              <p className="text-xs font-semibold text-gray-500">Supported Tables</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {['Inflow Transactions', 'Outflow Transactions', 'Intra-Account Flows', 'Ledger Entries', 'FX Transactions'].map(label => (
                   <div key={label} className="flex items-center gap-2 text-xs text-gray-600">
@@ -960,7 +960,7 @@ function ManualEntryForm() {
           {/* Allocation Config */}
           {txnType ? (
             <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config</p>
+              <p className="text-xs font-semibold text-gray-500">Allocation Config</p>
               <p className="text-xs text-gray-400 italic mt-1">Not applicable for non-Normal transactions</p>
             </div>
           ) : cfgLoaded && v('date') && (() => {
@@ -980,7 +980,7 @@ function ManualEntryForm() {
               selIncomeType && (selIncomeType.special_config_id || selIncomeType.special_config_group_id)
             return (
               <div className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Allocation Config</p>
+                <p className="text-xs font-semibold text-gray-500">Allocation Config</p>
                 {effectiveCfg ? (
                   <p className="text-xs text-primary">
                     {isAutoSpecial ? 'Auto-applying: ' : 'Using: '}
@@ -1130,7 +1130,7 @@ function ManualEntryForm() {
 
           {/* Category (Stage Code 1 + 2) + Outflow Type */}
           <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Budget Allocation (optional)</p>
+            <p className="text-xs font-semibold text-gray-500">Budget Allocation (optional)</p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Category">
                 <select value={outflowS1} onChange={e => setOutflowS1(e.target.value)} className={iCls}>

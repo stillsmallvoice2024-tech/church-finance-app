@@ -466,28 +466,28 @@ export default function IntraFlow() {
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                      className="px-4 py-3 text-xs font-semibold"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[2]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                      className="px-4 py-3 text-xs font-semibold"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[3]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                      className="px-4 py-3 text-xs font-semibold"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[1]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                      className="px-4 py-3 text-xs font-semibold"
                       rightAlign
                     />
                     <SortableHeader
@@ -495,10 +495,10 @@ export default function IntraFlow() {
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                      className="px-4 py-3 text-xs font-semibold"
                     />
                     {['Remark', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                         {h}
                       </th>
                     ))}

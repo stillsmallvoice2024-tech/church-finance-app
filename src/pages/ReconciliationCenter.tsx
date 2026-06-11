@@ -177,10 +177,10 @@ function IssueCard({ issue }: { issue: ReconciliationIssue }) {
   const [expanded, setExpanded] = useState(false)
   const plain = RULE_PLAIN[issue.ruleId]
   return (
-    <div className={`rounded-xl border p-4 ${
-      issue.severity === 'critical' ? 'border-red-200 bg-red-50/40' :
-      issue.severity === 'warning'  ? 'border-amber-200 bg-amber-50/40' :
-      'border-blue-200 bg-blue-50/40'
+    <div className={`rounded-xl border border-gray-100 bg-white p-4 border-l-4 shadow-sm ${
+      issue.severity === 'critical' ? 'border-l-red-400' :
+      issue.severity === 'warning'  ? 'border-l-amber-400' :
+      'border-l-blue-400'
     }`}>
       <div className="flex items-start gap-3">
         <SeverityIcon severity={issue.severity} />
@@ -415,7 +415,7 @@ export default function ReconciliationCenter() {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       {['Account', 'Status', 'Book Balance', 'Reference Balance', 'Difference', 'Issues'].map(h => (
-                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
+                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -565,7 +565,7 @@ export default function ReconciliationCenter() {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       {['Bank', 'Statement Balance', 'Statement Date', 'Last Saved', ''].map(h => (
-                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
+                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -609,7 +609,7 @@ export default function ReconciliationCenter() {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       {['Run Time', 'Status', 'Critical', 'Warnings', 'Info', 'Total'].map(h => (
-                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
+                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">{h}</th>
                       ))}
                     </tr>
                   </thead>

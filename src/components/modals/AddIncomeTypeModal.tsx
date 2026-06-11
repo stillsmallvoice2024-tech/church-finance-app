@@ -222,7 +222,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
         {/* Recognition Rules */}
         <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Recognition Rules</p>
+            <p className="text-xs font-semibold text-gray-500">Recognition Rules</p>
             <button
               type="button" onClick={addRule}
               className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary-light transition-colors"

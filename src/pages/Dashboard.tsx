@@ -433,7 +433,7 @@ export default function Dashboard() {
 
         {/* ── FX currency strip ────────────────────────────────────────────── */}
         <Card>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">
             Foreign Currency Holdings
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

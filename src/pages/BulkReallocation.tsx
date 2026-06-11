@@ -278,7 +278,7 @@ export default function BulkReallocation() {
               <thead>
                 <tr className="border-b border-gray-100">
                   {['Category', 'Source Balance', 'Amount to Move', 'Dest Balance (after)', ''].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -500,16 +500,16 @@ export default function BulkReallocation() {
                     }
                   </button>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
                   Category
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   {srcPortion} Balance
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   {dstPortion} Balance
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   Amount to Move
                 </th>
               </tr>

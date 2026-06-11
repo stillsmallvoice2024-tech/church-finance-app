@@ -234,9 +234,9 @@ export default function ChangeLog() {
                   activeSortKey={clState.sortKey}
                   activeSortDir={clState.sortDir}
                   onSort={clState.setSort}
-                  className="text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                  className="text-left text-xs font-semibold whitespace-nowrap"
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                   User
                 </th>
                 <SortableHeader
@@ -244,9 +244,9 @@ export default function ChangeLog() {
                   activeSortKey={clState.sortKey}
                   activeSortDir={clState.sortDir}
                   onSort={clState.setSort}
-                  className="text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                  className="text-left text-xs font-semibold whitespace-nowrap"
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                   Record ID
                 </th>
                 <SortableHeader
@@ -254,12 +254,12 @@ export default function ChangeLog() {
                   activeSortKey={clState.sortKey}
                   activeSortDir={clState.sortDir}
                   onSort={clState.setSort}
-                  className="text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                  className="text-left text-xs font-semibold whitespace-nowrap"
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                   Old Value
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                   New Value
                 </th>
               </tr>

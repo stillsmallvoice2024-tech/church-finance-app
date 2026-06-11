@@ -88,6 +88,15 @@ html.dark .bg-amber-50 { background-color: rgba(217,119,6,0.2)  !important; }
   to   { opacity: 1; }
 }
 
+/* ── Page content fade — subtle entrance for route changes ─────────────────── */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.page-enter {
+  animation: pageEnter 0.18s ease-out;
+}
+
 /* ── Reduced motion ──────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

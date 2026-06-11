@@ -353,7 +353,7 @@ export default function ReversalTransactions() {
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
                   {['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                   {canWrite() && <th className="px-2 py-3 w-20" />}
                 </tr>

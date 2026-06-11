@@ -326,7 +326,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
         {/* Opening Balances by Portion */}
         <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening Balances by Portion</p>
+            <p className="text-xs font-semibold text-gray-500">Opening Balances by Portion</p>
             <button
               type="button"
               onClick={() => setObRows(prev => [...prev, { budget_portion: '', amount: '' }])}
