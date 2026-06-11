@@ -39,6 +39,8 @@ import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
 import { useOrgStore }             from '../store/orgStore'
 import { getOrgTimezone }          from '../utils/timezones'
 import { useHealthStore }          from '../store/healthStore'
+import { useCountUp }              from '../hooks/useCountUp'
+import { ConfidenceGauge }         from '../components/ui/ConfidenceGauge'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,12 @@ function greeting() {
   return 'Good evening'
 }
 
+// Mounted only once data is loaded, so the count-up runs exactly once.
+function AnimatedStat({ value, format }: { value: number; format: (v: number) => string }) {
+  const animated = useCountUp(value)
+  return <>{format(animated)}</>
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -93,6 +101,12 @@ export default function Dashboard() {
   const healthRunAt   = useHealthStore(s => s.runAt)
   const healthSkipped = useHealthStore(s => s.skipped)
   const setSkipped    = useHealthStore(s => s.setSkipped)
+  const cleanSince    = useHealthStore(s => s.cleanSince)
+
+  const stableDays = useMemo(() => {
+    if (!cleanSince) return 0
+    return Math.floor((Date.now() - new Date(cleanSince).getTime()) / 86_400_000)
+  }, [cleanSince])
 
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
@@ -239,6 +253,11 @@ export default function Dashboard() {
               {healthStatus && healthRunAt && (
                 <p className="text-xs text-gray-400 mt-0.5">
                   Last verified {formatWithTimezone(healthRunAt, orgTimezone)}
+                  {healthStatus === 'healthy' && stableDays >= 7 && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-green-600 font-medium">
+                      ✓ Stable for {stableDays} days
+                    </span>
+                  )}
                 </p>
               )}
             </div>
@@ -286,28 +305,28 @@ export default function Dashboard() {
             <>
               <StatCard
                 title={`Total Inflows (${year})`}
-                value={formatCurrencyCompact(stats.totalInflow, baseCurrencyCode)}
+                value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<TrendingUp className="w-5 h-5 text-success" />}
                 iconBgClass="bg-green-50"
                 href="/inflows"
               />
               <StatCard
                 title={`Total Outflows (${year})`}
-                value={formatCurrencyCompact(stats.totalOutflow, baseCurrencyCode)}
+                value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<TrendingDown className="w-5 h-5 text-danger" />}
                 iconBgClass="bg-red-50"
                 href="/outflows"
               />
               <StatCard
                 title="Net Balance"
-                value={formatCurrencyCompact(stats.netBalance, baseCurrencyCode)}
+                value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<Wallet className="w-5 h-5 text-primary" />}
                 iconBgClass="bg-primary-100"
                 href="/bank-ledger"
               />
               <StatCard
                 title="Categories"
-                value={String(categories.length)}
+                value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
                 icon={<Layers className="w-5 h-5 text-accent" />}
                 iconBgClass="bg-yellow-50"
                 href="/categories"
@@ -316,8 +335,9 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Monthly area chart ───────────────────────────────────────────── */}
-        <Card data-tour="dashboard-chart">
+        {/* ── Monthly area chart + Record Confidence ───────────────────────── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
+        <Card data-tour="dashboard-chart" className="xl:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-700">
               Monthly Inflows vs Outflows
@@ -392,6 +412,8 @@ export default function Dashboard() {
             </>
           )}
         </Card>
+        <ConfidenceGauge />
+        </div>
 
         {/* ── Recent transactions ──────────────────────────────────────────── */}
         <Card padding={false} data-tour="recent-transactions">

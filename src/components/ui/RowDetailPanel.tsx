@@ -11,14 +11,17 @@ export interface DetailItem {
 export const RowDetailPanel = memo(function RowDetailPanel({
   items,
   colSpan,
+  footer,
 }: {
   items:   DetailItem[]
   colSpan: number
+  /** Optional full-width content rendered below the detail grid (e.g. history timeline). */
+  footer?: React.ReactNode
 }) {
   const visible = items.filter(({ value }) =>
     value !== null && value !== undefined && value !== '' && value !== false,
   )
-  if (!visible.length) return null
+  if (!visible.length && !footer) return null
   return (
     <tr className="bg-gray-50/70 border-b border-gray-100">
       <td colSpan={colSpan} className="px-6 py-4">
@@ -45,6 +48,7 @@ export const RowDetailPanel = memo(function RowDetailPanel({
               )}
             </div>
           ))}
+          {footer}
         </div>
       </td>
     </tr>

@@ -41,6 +41,7 @@ import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
+import { TransactionStory } from '../components/ui/TransactionStory'
 import { inflowDetailItems } from '../utils/rowDetailItems'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
@@ -571,7 +572,18 @@ export default function Inflows() {
                     ]
                     if (expanded) {
                       rows.push(
-                        <RowDetailPanel key={`${row.id}-detail`} items={inflowDetailItems(row, baseCurrencyCode)} colSpan={9} />,
+                        <RowDetailPanel
+                          key={`${row.id}-detail`}
+                          items={inflowDetailItems(row, baseCurrencyCode)}
+                          colSpan={9}
+                          footer={
+                            <TransactionStory
+                              table="inflow_transactions"
+                              recordId={row.id}
+                              createdAt={row.created_at}
+                            />
+                          }
+                        />,
                       )
                     }
                     return rows

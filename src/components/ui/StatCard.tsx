@@ -5,7 +5,7 @@ import { Card } from './Card'
 
 interface StatCardProps {
   title: string
-  value: string
+  value: ReactNode
   icon: ReactNode
   trend?: { value: number; label: string }
   iconBgClass?: string

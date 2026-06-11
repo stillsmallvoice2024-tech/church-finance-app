@@ -60,6 +60,83 @@ const RULE_PLAIN: Record<string, { headline: string; why: string }> = {
   },
 }
 
+// ── Evidence display ───────────────────────────────────────────────────────────
+// Maps well-known evidence keys to human labels so the facts needed for action
+// (transaction ID, description, date, amount, bank) are visible on the card
+// itself — not buried in raw JSON.
+
+const EVIDENCE_LABELS: Record<string, string> = {
+  description:      'Description',
+  date:             'Date',
+  statementDate:    'Statement date',
+  amount:           'Amount',
+  bank:             'Bank',
+  fromBank:         'From bank',
+  toBank:           'To bank',
+  ref:              'Transaction ref',
+  transactionId:    'Record ID',
+  transferId:       'Transfer ID',
+  depositId:        'Deposit ID',
+  matchedInflowId:  'Matched inflow ID',
+  count:            'Times it appears',
+  bookBalance:      'Book balance',
+  referenceBalance: 'Statement balance',
+  difference:       'Difference',
+  computedBalance:  'Computed balance',
+  configName:       'Distribution rule',
+  percentageTotal:  'Percentage total',
+  missingCount:     'Rows missing fund type',
+  rowCount:         'Rows',
+  totalRows:        'Total rows',
+  transactionType:  'Transaction type',
+}
+
+const EVIDENCE_CURRENCY_KEYS = new Set(['amount', 'bookBalance', 'referenceBalance', 'difference', 'computedBalance'])
+const EVIDENCE_DATE_KEYS     = new Set(['date', 'statementDate'])
+
+// Ordered for scanning: identity first, then what/when/where, then numbers.
+const EVIDENCE_KEY_ORDER = [
+  'description', 'ref', 'transactionId', 'transferId', 'depositId', 'matchedInflowId',
+  'date', 'statementDate', 'bank', 'fromBank', 'toBank', 'transactionType',
+  'amount', 'count', 'bookBalance', 'referenceBalance', 'difference', 'computedBalance',
+  'configName', 'percentageTotal', 'missingCount', 'rowCount', 'totalRows',
+]
+
+function EvidenceFacts({ evidence, currency }: { evidence: Record<string, unknown>; currency: string }) {
+  const entries = EVIDENCE_KEY_ORDER
+    .filter(k => k in evidence && evidence[k] !== null && evidence[k] !== undefined && evidence[k] !== '')
+    .map(k => {
+      const raw = evidence[k]
+      let display: string
+      if (EVIDENCE_CURRENCY_KEYS.has(k) && typeof raw === 'number') display = formatCurrency(raw, currency)
+      else if (EVIDENCE_DATE_KEYS.has(k) && typeof raw === 'string') display = formatDate(raw)
+      else if (k === 'percentageTotal' && typeof raw === 'number')   display = `${raw}%`
+      else display = String(raw)
+      return { key: k, label: EVIDENCE_LABELS[k], value: display }
+    })
+
+  if (entries.length === 0) return null
+
+  return (
+    <div className="mt-2.5 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Affected record</p>
+      <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5">
+        {entries.map(({ key, label, value }) => (
+          <div key={key} className="min-w-0">
+            <dt className="text-[10px] text-gray-400">{label}</dt>
+            <dd className={`text-xs text-gray-700 break-words ${
+              key === 'transactionId' || key === 'transferId' || key === 'depositId' || key === 'matchedInflowId' || key === 'ref'
+                ? 'font-mono select-all' : 'font-medium'
+            }`}>
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
 // ── Small helpers ──────────────────────────────────────────────────────────────
 
 function HealthIcon({ status, size = 'md' }: { status: HealthStatus; size?: 'sm' | 'md' | 'lg' }) {
@@ -173,9 +250,12 @@ function RefBalanceRow({ bank, existing, currency, onSave }: RefBalanceRowProps)
 
 // ── Issue card ─────────────────────────────────────────────────────────────────
 
-function IssueCard({ issue }: { issue: ReconciliationIssue }) {
+function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: string }) {
   const [expanded, setExpanded] = useState(false)
   const plain = RULE_PLAIN[issue.ruleId]
+  const hasFacts = EVIDENCE_KEY_ORDER.some(
+    k => k in issue.evidence && issue.evidence[k] !== null && issue.evidence[k] !== undefined && issue.evidence[k] !== '',
+  )
   return (
     <div className={`rounded-xl border border-gray-100 bg-white p-4 border-l-4 shadow-sm ${
       issue.severity === 'critical' ? 'border-l-red-400' :
@@ -187,6 +267,9 @@ function IssueCard({ issue }: { issue: ReconciliationIssue }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-800">
             {plain?.headline ?? issue.message}
+            {hasFacts && (
+              <span className="font-normal text-gray-400"> — the affected record is shown below.</span>
+            )}
           </p>
           {plain?.why && (
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">{plain.why}</p>
@@ -194,6 +277,10 @@ function IssueCard({ issue }: { issue: ReconciliationIssue }) {
           {!plain?.why && issue.suggestedFix && (
             <p className="text-xs text-gray-500 mt-1">{issue.suggestedFix}</p>
           )}
+
+          {/* The facts needed to act — always visible, no expand required */}
+          <EvidenceFacts evidence={issue.evidence} currency={currency} />
+
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <RuleActionLink issue={issue} />
             <button
@@ -472,7 +559,7 @@ export default function ReconciliationCenter() {
               </button>
               {showCritical && (
                 <div className="space-y-2">
-                  {diag.bySeverity.critical.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+                  {diag.bySeverity.critical.map(issue => <IssueCard key={issue.id} issue={issue} currency={baseCurrencyCode} />)}
                 </div>
               )}
             </div>
@@ -491,7 +578,7 @@ export default function ReconciliationCenter() {
               </button>
               {showWarning && (
                 <div className="space-y-2">
-                  {diag.bySeverity.warning.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+                  {diag.bySeverity.warning.map(issue => <IssueCard key={issue.id} issue={issue} currency={baseCurrencyCode} />)}
                 </div>
               )}
             </div>
@@ -510,7 +597,7 @@ export default function ReconciliationCenter() {
               </button>
               {showInfo && (
                 <div className="space-y-2">
-                  {diag.bySeverity.info.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+                  {diag.bySeverity.info.map(issue => <IssueCard key={issue.id} issue={issue} currency={baseCurrencyCode} />)}
                 </div>
               )}
             </div>
