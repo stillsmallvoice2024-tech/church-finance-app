@@ -38,6 +38,7 @@ import RefundTransactions   from './pages/RefundTransactions'
 import ReversalTransactions from './pages/ReversalTransactions'
 import Receipts             from './pages/Receipts'
 import ChangeLog            from './pages/ChangeLog'
+import ReconciliationCenter from './pages/ReconciliationCenter'
 import ResetPassword        from './pages/ResetPassword'
 import AcceptInvite         from './pages/AcceptInvite'
 
@@ -154,7 +155,8 @@ export default function App() {
             <Route path="specific-givings" element={<ErrorBoundary><SpecificGivings /></ErrorBoundary>} />
             <Route path="savings-portions" element={<ErrorBoundary><SavingsPortions /></ErrorBoundary>} />
             <Route path="category-ledger"      element={<ErrorBoundary><CategoryLedger /></ErrorBoundary>} />
-            <Route path="bank-ledger"          element={<ErrorBoundary><BankLedger /></ErrorBoundary>} />
+            <Route path="bank-ledger"           element={<ErrorBoundary><BankLedger /></ErrorBoundary>} />
+            <Route path="reconciliation"        element={<ErrorBoundary><ReconciliationCenter /></ErrorBoundary>} />
             <Route path="bank-movement"         element={<ErrorBoundary><BankMovement /></ErrorBoundary>} />
             <Route path="refunds"              element={<ErrorBoundary><RefundTransactions /></ErrorBoundary>} />
             <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />

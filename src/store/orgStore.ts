@@ -7,6 +7,7 @@ export interface OrgMembership {
   role:                 UserRole
   onboarding_complete?: boolean | null
   default_currency?:    string | null
+  timezone?:            string | null
   org_status?:          OrgStatus | null
   org_deleted_at?:      string | null
   org_purge_at?:        string | null
@@ -20,6 +21,7 @@ interface OrgState {
   orgRole:             UserRole | null
   onboardingComplete:  boolean | null
   defaultCurrency:     string | null
+  timezone:            string | null
   orgStatus:           OrgStatus | null
   orgDeletedAt:        string | null
   orgPurgeAt:          string | null
@@ -30,6 +32,7 @@ interface OrgState {
   setMemberships:       (ms: OrgMembership[]) => void
   setOnboardingComplete:(v: boolean | null) => void
   setOrgStatus:         (status: OrgStatus, deletedAt?: string | null, purgeAt?: string | null) => void
+  setTimezone:          (tz: string | null) => void
   setSwitching:         (v: boolean) => void
   clearOrg:             () => void
   persistActive:        (userId: string, orgId: string) => void
@@ -42,6 +45,7 @@ export const useOrgStore = create<OrgState>((set) => ({
   orgRole:            null,
   onboardingComplete: null,
   defaultCurrency:    null,
+  timezone:           null,
   orgStatus:          null,
   orgDeletedAt:       null,
   orgPurgeAt:         null,
@@ -54,6 +58,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     orgRole:            m.role,
     onboardingComplete: m.onboarding_complete !== undefined ? (m.onboarding_complete ?? null) : null,
     defaultCurrency:    m.default_currency !== undefined ? (m.default_currency ?? null) : null,
+    timezone:           m.timezone !== undefined ? (m.timezone ?? null) : null,
     orgStatus:          m.org_status ?? 'active',
     orgDeletedAt:       m.org_deleted_at ?? null,
     orgPurgeAt:         m.org_purge_at ?? null,
@@ -66,11 +71,13 @@ export const useOrgStore = create<OrgState>((set) => ({
   setOrgStatus: (status, deletedAt = null, purgeAt = null) =>
     set({ orgStatus: status, orgDeletedAt: deletedAt, orgPurgeAt: purgeAt }),
 
+  setTimezone: (tz) => set({ timezone: tz }),
+
   setSwitching: (v) => set({ switching: v }),
 
   clearOrg: () => set({
     orgId: null, orgName: null, orgRole: null,
-    onboardingComplete: null, defaultCurrency: null,
+    onboardingComplete: null, defaultCurrency: null, timezone: null,
     orgStatus: null, orgDeletedAt: null, orgPurgeAt: null,
     memberships: [], switching: false,
   }),

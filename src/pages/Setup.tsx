@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -32,6 +32,8 @@ import { formatDate } from '../utils/formatters'
 import { supabase } from '../lib/supabase'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
+import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
 const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
@@ -141,10 +143,44 @@ function GeneralTab() {
   const [saved, setSaved] = useState(false)
   const [pending, setPending] = useState(year)
 
+  const orgId          = useOrgStore(s => s.orgId)
+  const storedTimezone = useOrgStore(s => s.timezone)
+  const setTimezone    = useOrgStore(s => s.setTimezone)
+  const { baseCurrencyCode } = useOrgCurrency()
+
+  const effectiveTz    = getOrgTimezone(storedTimezone, baseCurrencyCode)
+  const [pendingTz, setPendingTz] = useState(effectiveTz)
+  const [tzSaved,   setTzSaved]   = useState(false)
+  const [tzSaving,  setTzSaving]  = useState(false)
+  const [tzError,   setTzError]   = useState<string | null>(null)
+
+  // Keep pendingTz in sync if the store changes (e.g. org switch)
+  useEffect(() => {
+    setPendingTz(getOrgTimezone(storedTimezone, baseCurrencyCode))
+  }, [storedTimezone, baseCurrencyCode])
+
   const handleSave = () => {
     setYear(pending)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleSaveTz = async () => {
+    if (!orgId) return
+    setTzSaving(true)
+    setTzError(null)
+    const { error } = await supabase
+      .from('organizations')
+      .update({ timezone: pendingTz })
+      .eq('id', orgId)
+    setTzSaving(false)
+    if (error) {
+      setTzError(error.message)
+    } else {
+      setTimezone(pendingTz)
+      setTzSaved(true)
+      setTimeout(() => setTzSaved(false), 2000)
+    }
   }
 
   return (
@@ -188,6 +224,54 @@ function GeneralTab() {
             </span>
           )}
           {pending !== year && !saved && (
+            <span className="text-xs text-gray-400">Unsaved change</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Timezone ─────────────────────────────────────────────────────────── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-2 text-gray-800">
+          <Globe className="w-5 h-5 text-primary" />
+          <h2 className="text-base font-semibold">Organisation Timezone</h2>
+        </div>
+        <p className="text-sm text-gray-500">
+          Controls how timestamps (e.g. last reconciliation check) are displayed throughout the app.
+          Defaults to the timezone of your organisation's base currency.
+        </p>
+
+        <div className="pt-1">
+          <select
+            value={pendingTz}
+            onChange={e => setPendingTz(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          >
+            {COMMON_TIMEZONES.map(tz => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label} (UTC{tz.offset})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {tzError && (
+          <p className="text-xs text-danger">{tzError}</p>
+        )}
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={handleSaveTz}
+            disabled={pendingTz === effectiveTz || tzSaving}
+            className="px-5 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-50 transition-colors"
+          >
+            {tzSaving ? 'Saving…' : 'Save'}
+          </button>
+          {tzSaved && (
+            <span className="flex items-center gap-1.5 text-sm text-success font-medium">
+              <CheckCircle2 className="w-4 h-4" /> Saved
+            </span>
+          )}
+          {pendingTz !== effectiveTz && !tzSaved && !tzSaving && (
             <span className="text-xs text-gray-400">Unsaved change</span>
           )}
         </div>
@@ -2147,6 +2231,59 @@ CREATE TRIGGER trg_prevent_outflow_offset_chaining
   BEFORE INSERT OR UPDATE ON public.outflow_transactions
   FOR EACH ROW EXECUTE FUNCTION public.prevent_offset_chaining();
 
+NOTIFY pgrst, 'reload schema';
+
+-- ── Reconciliation Center tables ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.reconciliation_runs (
+  id             uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  run_at         timestamptz NOT NULL DEFAULT now(),
+  issue_count    int         NOT NULL DEFAULT 0,
+  critical_count int         NOT NULL DEFAULT 0,
+  warning_count  int         NOT NULL DEFAULT 0,
+  info_count     int         NOT NULL DEFAULT 0,
+  health_status  text        NOT NULL CHECK (health_status IN ('healthy','warning','critical')),
+  run_by         uuid        REFERENCES public.profiles(id),
+  issues_json    jsonb       NOT NULL DEFAULT '[]',
+  org_id         uuid        NOT NULL DEFAULT public.get_current_org_id()
+                 REFERENCES public.organizations(id) ON DELETE SET NULL
+);
+ALTER TABLE public.reconciliation_runs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "recon_runs_select" ON public.reconciliation_runs FOR SELECT USING (org_id = public.get_current_org_id());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "recon_runs_insert" ON public.reconciliation_runs FOR INSERT WITH CHECK (public.is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS idx_recon_runs_org_at ON public.reconciliation_runs(org_id, run_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.bank_statement_balances (
+  id                uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  bank_name         text        NOT NULL,
+  bank_id           uuid        REFERENCES public.banks(id) ON DELETE SET NULL,
+  reference_balance numeric(15,2) NOT NULL,
+  statement_date    date        NOT NULL,
+  notes             text,
+  entered_by        uuid        REFERENCES public.profiles(id),
+  org_id            uuid        NOT NULL DEFAULT public.get_current_org_id()
+                    REFERENCES public.organizations(id) ON DELETE SET NULL,
+  created_at        timestamptz DEFAULT now(),
+  UNIQUE (org_id, bank_name)
+);
+ALTER TABLE public.bank_statement_balances ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "bsb_select" ON public.bank_statement_balances FOR SELECT USING (org_id = public.get_current_org_id());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "bsb_insert" ON public.bank_statement_balances FOR INSERT WITH CHECK (public.is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "bsb_update" ON public.bank_statement_balances FOR UPDATE USING (public.is_finance_user());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "bsb_delete" ON public.bank_statement_balances FOR DELETE USING (public.is_admin());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS idx_bsb_org_bank ON public.bank_statement_balances(org_id, bank_name);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
@@ -2308,7 +2445,7 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
       {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+          <span>The <code className="font-mono text-xs">outflow_types</code> table doesn't exist yet. Please contact your administrator to apply the required database migration.</span>
         </div>
       )}
       {isCacheStale && (
@@ -2436,7 +2573,7 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
       {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">departments</code> table doesn't exist yet. Run the migration in Developer Tools below.</span>
+          <span>The <code className="font-mono text-xs">departments</code> table doesn't exist yet. Please contact your administrator to apply the required database migration.</span>
         </div>
       )}
 
@@ -2912,27 +3049,8 @@ export default function SetupPage() {
           {activeTab === 'Currencies'     && <CurrenciesTab />}
         </div>
 
-        {/* Developer Tools */}
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setDevToolsOpen(o => !o)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <Terminal className="w-4 h-4 text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-500">Developer Tools</p>
-                <p className="text-xs text-gray-400">Advanced setup and troubleshooting utilities</p>
-              </div>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${devToolsOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {devToolsOpen && (
-            <div className="border-t border-gray-100 p-5">
-              <DatabaseTab />
-            </div>
-          )}
-        </div>
+        {/* Developer Tools — hidden from UI; code kept in DatabaseTab for developer reference.
+             See archive/devtools-removal branch (PR #304) for full clean-up when ready. */}
 
         {/* Danger Zone */}
         <div className="border border-red-200 rounded-xl p-5 space-y-3 bg-red-50/40">

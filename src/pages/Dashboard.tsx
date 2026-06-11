@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -7,7 +8,7 @@ import {
 import {
   TrendingUp, TrendingDown, Layers,
   PlusCircle, MinusCircle, FileSpreadsheet,
-  RefreshCw, AlertCircle, Wallet,
+  RefreshCw, AlertCircle, Wallet, ShieldCheck, ShieldAlert, ShieldX,
 } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -25,7 +26,7 @@ import { useCategories }           from '../hooks/useCategories'
 import { useAuth }                 from '../hooks/useAuth'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
-import { formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/formatters'
+import { formatCurrencyCompact, formatDate, formatWithTimezone, getCurrencyLocale } from '../utils/formatters'
 import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
@@ -35,6 +36,10 @@ import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBa
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
+import { getStoredHealthStatus }   from '../hooks/useReconciliation'
+import { healthStatusLabel } from '../utils/reconciliationAggregator'
+import { useOrgStore }             from '../store/orgStore'
+import { getOrgTimezone }          from '../utils/timezones'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +76,9 @@ export default function Dashboard() {
   const { user, profile } = useAuth()
   const { foreignCurrencies, baseCurrencyCode } = useOrgCurrency()
   const { role } = useRole()
-  const year   = useAccountingYearStore(s => s.year)
+  const year        = useAccountingYearStore(s => s.year)
+  const storedTz    = useOrgStore(s => s.timezone)
+  const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
   const stats  = useDashboardStats(year)
   const { categories, loading: categoriesLoading } = useCategories()
 
@@ -82,6 +89,8 @@ export default function Dashboard() {
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
   const [showImport,     setShowImport]     = useState(false)
+
+  const storedHealth = getStoredHealthStatus()
 
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
@@ -190,6 +199,29 @@ export default function Dashboard() {
 
         {/* ── Onboarding checklist ─────────────────────────────────────────── */}
         <OnboardingChecklist />
+
+        {/* ── Health status strip ──────────────────────────────────────────── */}
+        {storedHealth && (
+          <Link
+            to="/reconciliation"
+            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+              storedHealth.status === 'critical' ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
+              storedHealth.status === 'warning'  ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' :
+              'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+            }`}
+          >
+            {storedHealth.status === 'critical' ? <ShieldX     className="w-4 h-4 shrink-0" /> :
+             storedHealth.status === 'warning'  ? <ShieldAlert className="w-4 h-4 shrink-0" /> :
+             <ShieldCheck className="w-4 h-4 shrink-0" />}
+            <span>
+              System health: <strong>{healthStatusLabel(storedHealth.status)}</strong>
+            </span>
+            <span className="text-xs opacity-60 hidden sm:inline">
+              · last checked {formatWithTimezone(storedHealth.runAt, orgTimezone)}
+            </span>
+            <span className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0">View →</span>
+          </Link>
+        )}
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
         <div data-tour="summary-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
