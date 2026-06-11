@@ -534,6 +534,8 @@ export default function Categories() {
   const q = catState.search.trim().toLowerCase()
   const searchCol = catState.searchCol
   const visible  = categories.filter(c => {
+    if (activeTab === 'fx'    && !c.currency) return false
+    if (activeTab === 'local' &&  c.currency) return false
     if (!showHidden && c.is_hidden) return false
     if (!q) return true
     const groupName = groups.find(g => g.id === c.group_id)?.name ?? ''
