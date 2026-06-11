@@ -26,8 +26,6 @@ const BASE_PRIMARY_TABS: PrimaryTab[] = [
   { label: 'Ledger',   path: '/bank-ledger', icon: BookOpen                 },
 ]
 
-const IMPORT_TAB: PrimaryTab = { label: 'Import', path: '/import', icon: FileUp }
-
 interface DrawerItem {
   label: string
   path: string

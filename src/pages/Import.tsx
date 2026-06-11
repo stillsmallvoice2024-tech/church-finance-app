@@ -269,6 +269,29 @@ export default function Import() {
       {activeTab === 'file' && (
         <div className="space-y-4">
 
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 text-xs">
+            {[
+              { n: 1, label: 'Choose file',      active: !parseResult,                       done: !!parseResult },
+              { n: 2, label: 'Review & confirm', active: !!parseResult && !importOpen,       done: importOpen },
+              { n: 3, label: 'Map & import',     active: importOpen,                         done: false },
+            ].map(({ n, label, active, done }, i) => (
+              <div key={n} className="flex items-center gap-2">
+                {i > 0 && <div className={`w-6 h-px ${done || active ? 'bg-primary/40' : 'bg-gray-200'}`} />}
+                <div className={`flex items-center gap-1.5 ${active ? 'text-primary font-semibold' : done ? 'text-primary/60' : 'text-gray-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                    active ? 'bg-primary text-white border-primary' :
+                    done   ? 'bg-primary/10 text-primary border-primary/30' :
+                             'bg-white text-gray-400 border-gray-200'
+                  }`}>
+                    {done ? '✓' : n}
+                  </span>
+                  <span className="hidden sm:inline">{label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* Drop zone */}
           {!parseResult ? (
             <div
@@ -366,7 +389,7 @@ export default function Import() {
                     <div className="flex items-center gap-2 px-4 py-3 border-b border-red-100">
                       <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
                       <span className="text-sm font-semibold text-red-700">
-                        {duplicates.length} duplicate transaction ID{duplicates.length !== 1 ? 's' : ''} already exist in the database
+                        {duplicates.length} transaction{duplicates.length !== 1 ? 's' : ''} in this file {duplicates.length !== 1 ? 'were' : 'was'} already imported before
                       </span>
                     </div>
                     <ul className="divide-y divide-red-100 max-h-48 overflow-y-auto">
@@ -1023,8 +1046,8 @@ function ManualEntryForm() {
           )}
 
           {/* Specific Seed Description */}
-          <Field label="Specific Seed Description">
-            <input type="text" placeholder="For specific seed entries" value={v('specific_seed_description')} onChange={e => set('specific_seed_description', e.target.value)} className={iCls} />
+          <Field label="Designated Purpose">
+            <input type="text" placeholder="What is this gift designated for? (if any)" value={v('specific_seed_description')} onChange={e => set('specific_seed_description', e.target.value)} className={iCls} />
           </Field>
 
           {/* Remark */}
@@ -1109,17 +1132,17 @@ function ManualEntryForm() {
           <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Budget Allocation (optional)</p>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Category (Stage Code 1)">
+              <Field label="Category">
                 <select value={outflowS1} onChange={e => setOutflowS1(e.target.value)} className={iCls}>
                   <option value="">— None —</option>
                   {filteredManualCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </Field>
-              <Field label="Budget Portion (Stage Code 2)">
+              <Field label="Fund Type">
                 <select value={outflowS2} onChange={e => setOutflowS2(e.target.value)} className={iCls}>
                   <option value="">— None —</option>
-                  <option value="Percentage Allocation">Percentage Allocation</option>
-                  <option value="Specific Seed">Specific Seed</option>
+                  <option value="Percentage Allocation">Regular Funds</option>
+                  <option value="Specific Seed">Designated Gift</option>
                   <option value="Savings">Savings</option>
                 </select>
               </Field>

@@ -196,12 +196,12 @@ export function EditFXConversionModal({ open, onClose, onSuccess, conversion }: 
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600">Stage Code 1</label>
+                <label className="text-xs font-medium text-gray-600">Category</label>
                 <input type="text" value={stageCode1} onChange={e => setStageCode1(e.target.value)}
                   placeholder="Keep current" className={iCls} />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600">Stage Code 2</label>
+                <label className="text-xs font-medium text-gray-600">Fund Type</label>
                 <input type="text" value={stageCode2} onChange={e => setStageCode2(e.target.value)}
                   placeholder="Keep current" className={iCls} />
               </div>

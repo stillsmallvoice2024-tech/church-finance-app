@@ -9,7 +9,7 @@ import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReconciliation } from '../hooks/useReconciliation'
 import { useBanks } from '../hooks/useBanks'
-import { formatCurrency, formatWithTimezone } from '../utils/formatters'
+import { formatCurrency, formatDate, formatWithTimezone } from '../utils/formatters'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
 import { getOrgTimezone } from '../utils/timezones'
@@ -452,6 +452,12 @@ export default function ReconciliationCenter() {
               </span>
             )}
           </div>
+          {diag.criticalIssues > 0 && (
+            <p className="text-xs text-gray-500">
+              Start with critical issues — they have the biggest effect on your balances.
+              Each issue includes a link to the page where it can be fixed.
+            </p>
+          )}
 
           {/* Critical */}
           {diag.bySeverity.critical.length > 0 && (

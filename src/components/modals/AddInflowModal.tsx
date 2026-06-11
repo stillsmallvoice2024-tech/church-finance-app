@@ -530,9 +530,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           )}
         </Field>
 
-        {/* Stage Code 1 + 2 */}
+        {/* Stage Code 1 + 2 (display labels: Category / Fund Type) */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Stage Code 1" error={errors.stage_code_1?.message}
+          <Field label="Category" error={errors.stage_code_1?.message}
             help="The category assigned to this inflow. Used in reports to group income by type (e.g. Tithes, Offerings, Donations). Drives budget allocation.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
@@ -540,12 +540,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                 placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
             )} />
           </Field>
-          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}
-            help="Specifies how this inflow's allocation portion is handled: Percentage Allocation applies percentage splits, Specific Seed earmarks a fixed amount, Savings routes to a savings fund.">
+          <Field label="Fund Type" error={errors.stage_code_2?.message}
+            help="How this inflow is routed: Regular Funds applies the percentage distribution rule, Designated Gift earmarks the full amount for a specific purpose, Savings routes it to a savings fund.">
             <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
               <option value="">— Select —</option>
-              <option value="Percentage Allocation">Percentage Allocation</option>
-              <option value="Specific Seed">Specific Seed</option>
+              <option value="Percentage Allocation">Regular Funds (percentage split)</option>
+              <option value="Specific Seed">Designated Gift (earmarked)</option>
               <option value="Savings">Savings</option>
             </select>
           </Field>
@@ -557,8 +557,9 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </Field>
 
         {/* Specific Seed Description */}
-        <Field label="Specific Seed Description" error={errors.specific_seed_description?.message}>
-          <input type="text" placeholder="Specific seed description (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
+        <Field label="Designated Purpose" error={errors.specific_seed_description?.message}
+          help="For designated gifts: describe what this gift is earmarked for (e.g. Building Project, Missions).">
+          <input type="text" placeholder="What is this gift designated for? (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
         </Field>
 
         {/* Remark */}

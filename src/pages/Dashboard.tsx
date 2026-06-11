@@ -36,7 +36,6 @@ import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBa
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
-import { healthStatusLabel } from '../utils/reconciliationAggregator'
 import { useOrgStore }             from '../store/orgStore'
 import { getOrgTimezone }          from '../utils/timezones'
 import { useHealthStore }          from '../store/healthStore'
@@ -171,6 +170,11 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500 mt-0.5">
               {format(new Date(), 'EEEE, d MMMM yyyy')} &nbsp;·&nbsp; {year} overview
             </p>
+            {!isLoading && stats.recentTransactions.length > 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                Records up to date — latest transaction recorded {formatDate(stats.recentTransactions[0].date)}
+              </p>
+            )}
           </div>
           <CanWrite>
             <div className="flex flex-wrap gap-2 shrink-0">

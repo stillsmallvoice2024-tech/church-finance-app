@@ -85,18 +85,18 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess }: {
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Stage Code 1 (Category)</label>
+          <label className="text-xs font-medium text-gray-500">Category</label>
           <SearchableSelect value={stageCode1} onChange={setStageCode1}
             options={categories.map(c => ({ value: c.name, label: c.name }))}
             placeholder="— Keep existing —" className={filterInputCls} />
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Stage Code 2 (Portion Type)</label>
+          <label className="text-xs font-medium text-gray-500">Fund Type</label>
           <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
             <option value="">— Keep existing —</option>
-            <option value="Percentage Allocation">Percentage Allocation</option>
-            <option value="Specific Seed">Specific Seed</option>
+            <option value="Percentage Allocation">Regular Funds</option>
+            <option value="Specific Seed">Designated Gift</option>
             <option value="Savings">Savings</option>
           </select>
         </div>

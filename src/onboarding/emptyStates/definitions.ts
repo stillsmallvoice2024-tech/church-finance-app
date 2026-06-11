@@ -9,22 +9,22 @@ export const EMPTY_STATES: EmptyStateDefinition[] = [
   {
     pageId: 'inflows',
     iconName: 'ArrowDownCircle',
-    title: 'No inflows yet',
-    description: 'Import your first bank statement to see inflow transactions here.',
-    action: { label: 'Import Statement', href: '/import' },
+    title: 'No income recorded yet',
+    description: 'Income appears here after you import a bank statement. Each transaction is automatically matched to its bank and category.',
+    action: { label: 'Import a Statement', href: '/import' },
   },
   {
     pageId: 'outflows',
     iconName: 'ArrowUpCircle',
-    title: 'No outflows yet',
-    description: 'Import your first bank statement to see outflow transactions here.',
-    action: { label: 'Import Statement', href: '/import' },
+    title: 'No expenses recorded yet',
+    description: 'Expenses appear here after you import a bank statement. Each transaction is automatically matched to its bank and category.',
+    action: { label: 'Import a Statement', href: '/import' },
   },
   {
     pageId: 'bank-ledger',
     iconName: 'Landmark',
     title: 'No bank accounts yet',
-    description: 'Add your first bank account in Setup to start tracking transactions.',
+    description: 'Bank accounts appear here once transactions with a bank name are recorded. Add your first bank in Setup to get started.',
     action: { label: 'Go to Setup', href: '/setup' },
   },
   {
@@ -89,14 +89,14 @@ export const EMPTY_STATES: EmptyStateDefinition[] = [
   {
     pageId: 'savings-portions',
     iconName: 'PiggyBank',
-    title: 'No savings portions configured',
-    description: 'Set up savings portion allocations to track dedicated savings funds.',
+    title: 'No savings funds yet',
+    description: 'Savings fund balances build up automatically as inflows are distributed. Set up a distribution rule that includes a savings share to get started.',
   },
   {
     pageId: 'specific-givings',
     iconName: 'Gift',
-    title: 'No special givings yet',
-    description: 'Designated or special-purpose contributions will appear here.',
+    title: 'No designated gifts yet',
+    description: 'Gifts given for a specific purpose — like a building project or mission — will appear here once recorded.',
   },
 ]
 

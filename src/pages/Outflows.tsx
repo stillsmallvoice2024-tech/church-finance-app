@@ -64,7 +64,7 @@ const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
   { key: 'transaction_type', label: 'Type',          sortType: 'text',    accessor: r => TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '' },
   { key: 'amount_disbursed', label: 'Disbursed',     sortType: 'numeric', accessor: r => String(r.amount_disbursed) },
   { key: 'outflow_type',     label: 'Outflow Type',  sortType: 'text',    accessor: r => r.outflow_type_name ?? '' },
-  { key: 'stage_code_1',     label: 'Stage Code',                         accessor: r => r.stage_code_1 ?? '' },
+  { key: 'stage_code_1',     label: 'Category',                           accessor: r => r.stage_code_1 ?? '' },
   { key: 'net',              label: 'Net',                                accessor: r => String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge)) },
 ]
 
@@ -328,7 +328,7 @@ export default function Outflows() {
               <FilterGroup label="To">
                 <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
               </FilterGroup>
-              <FilterGroup label="Stage Code 1" className="min-w-[180px]">
+              <FilterGroup label="Category" className="min-w-[180px]">
                 <SearchableSelect value={stageCode} onChange={setStageCode}
                   options={categories.map(c => ({ value: c.name, label: c.name }))}
                   placeholder="All categories" className={`${filterInputCls} bg-white`} />

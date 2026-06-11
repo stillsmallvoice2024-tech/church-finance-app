@@ -2496,14 +2496,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       </span>
                       <SearchableSelect value={applyS1} onChange={setApplyS1}
                         options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
-                        placeholder="Stage Code 1"
+                        placeholder="Category"
                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                         wrapperClassName="flex-1 min-w-[100px]" />
                       <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
                         className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
-                        <option value="">Stage Code 2</option>
-                        <option value="Percentage Allocation">Percentage Allocation</option>
-                        <option value="Specific Seed">Specific Seed</option>
+                        <option value="">Fund Type</option>
+                        <option value="Percentage Allocation">Regular Funds</option>
+                        <option value="Specific Seed">Designated Gift</option>
                         <option value="Savings">Savings</option>
                       </select>
                       {outflowTypeOptions.length > 0 && (
@@ -2642,7 +2642,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         }}
                         className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                       />
-                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Stage Code 1</span><span>Stage Code 2</span><span>Pending</span><span>Type</span>
+                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Category</span><span>Fund Type</span><span>Pending</span><span>Type</span>
                     </div>
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                       {filtered.length === 0
@@ -2848,7 +2848,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                   <div className="px-4 py-3 bg-gray-50/40 space-y-3">
                                     {/* Stage Code 1 */}
                                     <div>
-                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Stage Code 1</label>
+                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Category</label>
                                       <select value={sc.s1}
                                         onChange={e => {
                                           const s1 = e.target.value
@@ -2871,13 +2871,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     </div>
                                     {/* Stage Code 2 */}
                                     <div>
-                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Stage Code 2</label>
+                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Fund Type</label>
                                       <select value={sc.s2}
                                         onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                         <option value="">— None —</option>
-                                        <option value="Percentage Allocation">Percentage Allocation</option>
-                                        <option value="Specific Seed">Specific Seed</option>
+                                        <option value="Percentage Allocation">Regular Funds</option>
+                                        <option value="Specific Seed">Designated Gift</option>
                                         <option value="Savings">Savings</option>
                                       </select>
                                     </div>
