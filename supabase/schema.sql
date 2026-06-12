@@ -420,7 +420,8 @@ create table public.project_entries (
   created_by        uuid        references public.profiles(id),
   org_id            uuid        not null default public.get_current_org_id()
                     references public.organizations(id) on delete set null,
-  created_at        timestamptz default now()
+  created_at        timestamptz default now(),
+  import_seq        bigint      generated always as identity
 );
 
 -- ── Departments / Units ───────────────────────────────────────────────────────
@@ -467,6 +468,7 @@ create table public.inflow_transactions (
   recorded_at               timestamptz default now(),
   created_at                timestamptz default now(),
   updated_at                timestamptz default now(),
+  import_seq                bigint      generated always as identity,
   org_id                    uuid        not null default public.get_current_org_id()
                             references public.organizations(id) on delete set null
 );
@@ -503,6 +505,7 @@ create table public.outflow_transactions (
   recorded_at             timestamptz default now(),
   created_at              timestamptz default now(),
   updated_at              timestamptz default now(),
+  import_seq              bigint      generated always as identity,
   org_id                  uuid        not null default public.get_current_org_id()
                           references public.organizations(id) on delete set null
 );
@@ -530,7 +533,8 @@ create table public.intra_flows (
   created_by          uuid        references public.profiles(id),
   org_id              uuid        not null default public.get_current_org_id()
                       references public.organizations(id) on delete set null,
-  created_at          timestamptz default now()
+  created_at          timestamptz default now(),
+  import_seq          bigint      generated always as identity
 );
 
 -- ── FX Transactions ───────────────────────────────────────────────────────────
@@ -547,7 +551,8 @@ create table public.fx_transactions (
   created_by      uuid        references public.profiles(id),
   org_id          uuid        not null default public.get_current_org_id()
                   references public.organizations(id) on delete set null,
-  created_at      timestamptz default now()
+  created_at      timestamptz default now(),
+  import_seq      bigint      generated always as identity
 );
 
 -- ── FX Conversions (atomic link: fx withdrawal ↔ naira inflow) ────────────────
@@ -581,7 +586,8 @@ create table public.bank_deposits (
   remarks         text,
   org_id          uuid        not null default public.get_current_org_id()
                   references public.organizations(id) on delete set null,
-  created_at      timestamptz default now()
+  created_at      timestamptz default now(),
+  import_seq      bigint      generated always as identity
 );
 
 -- ── Intrabank Transfers ───────────────────────────────────────────────────────
@@ -598,7 +604,8 @@ create table public.intrabank_transfers (
   remarks         text,
   org_id          uuid        not null default public.get_current_org_id()
                   references public.organizations(id) on delete set null,
-  created_at      timestamptz default now()
+  created_at      timestamptz default now(),
+  import_seq      bigint      generated always as identity
 );
 
 -- ── Receipts ──────────────────────────────────────────────────────────────────
@@ -1459,6 +1466,13 @@ create index if not exists idx_outflow_date           on public.outflow_transact
 create index if not exists idx_intra_date             on public.intra_flows(date);
 create index if not exists idx_bank_dep_date          on public.bank_deposits(date);
 create index if not exists idx_intrabank_date         on public.intrabank_transfers(date);
+create index if not exists idx_inflow_import_seq        on public.inflow_transactions(import_seq);
+create index if not exists idx_outflow_import_seq       on public.outflow_transactions(import_seq);
+create index if not exists idx_fx_import_seq            on public.fx_transactions(import_seq);
+create index if not exists idx_intraflow_import_seq     on public.intra_flows(import_seq);
+create index if not exists idx_bank_deposits_import_seq on public.bank_deposits(import_seq);
+create index if not exists idx_intrabank_import_seq     on public.intrabank_transfers(import_seq);
+create index if not exists idx_project_entries_import_seq on public.project_entries(import_seq);
 create index if not exists idx_fx_date                on public.fx_transactions(date);
 create index if not exists idx_project_entries        on public.project_entries(project_id);
 create index if not exists idx_receipts_entity        on public.receipts(entity_type, entity_id);

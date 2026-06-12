@@ -51,6 +51,7 @@ interface DepositRow {
   source:              'bank_deposits' | 'inflow' | 'outflow'
   offset_role:         string | null
   root_transaction_id: string | null
+  import_seq?:         number
   inflowData?:         InflowTransaction
   outflowData?:        OutflowTransaction
 }
@@ -69,6 +70,7 @@ interface TransferRow {
   source:              'intrabank_transfers' | 'inflow' | 'outflow'
   offset_role:         string | null
   root_transaction_id: string | null
+  import_seq?:         number
   inflowData?:         InflowTransaction
   outflowData?:        OutflowTransaction
 }
@@ -171,9 +173,10 @@ function DepositsPanel() {
     const [depRes, inflowRes, outflowRes] = await Promise.all([
       supabase
         .from('bank_deposits')
-        .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks')
+        .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks, import_seq')
         .eq('org_id', orgId)
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .order('import_seq', { ascending: false }),
       supabase.from('inflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
       supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
     ])
@@ -182,6 +185,7 @@ function DepositsPanel() {
     const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as Omit<DepositRow, 'source' | 'offset_role' | 'root_transaction_id'>),
       source: 'bank_deposits' as const, offset_role: null, root_transaction_id: null,
+      import_seq: r.import_seq as number | undefined,
     }))
     const inflowRows: DepositRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string, date: r.date as string, bank_id: null,
@@ -189,6 +193,7 @@ function DepositsPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_ref as string | null,
       remarks: r.remark as string | null, source: 'inflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: r.import_seq as number | undefined,
       inflowData: r as unknown as InflowTransaction,
     }))
     const outflowRows: DepositRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -197,10 +202,11 @@ function DepositsPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_id as string | null,
       remarks: r.remarks as string | null, source: 'outflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: r.import_seq as number | undefined,
       outflowData: r as unknown as OutflowTransaction,
     }))
 
-    setRows([...depositRows, ...inflowRows, ...outflowRows].sort((a, b) => b.date.localeCompare(a.date)))
+    setRows([...depositRows, ...inflowRows, ...outflowRows].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)))
     setLoading(false)
   }, [orgId])
 
@@ -578,7 +584,7 @@ function TransfersPanel() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     const [transferRes, inflowRes, outflowRes] = await Promise.all([
-      supabase.from('intrabank_transfers').select('*').order('date', { ascending: false }),
+      supabase.from('intrabank_transfers').select('*').order('date', { ascending: false }).order('import_seq', { ascending: false }),
       ...(orgId ? [
         supabase.from('inflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
         supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
@@ -588,6 +594,7 @@ function TransfersPanel() {
 
     const transferRows: TransferRow[] = (transferRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as unknown as TransferRow), source: 'intrabank_transfers' as const, offset_role: null, root_transaction_id: null,
+      import_seq: r.import_seq as number | undefined,
     }))
     const inRows: TransferRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string, date: r.date as string, from_bank_id: null, from_bank_name: r.bank_name as string | null,
@@ -595,6 +602,7 @@ function TransfersPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_ref as string | null,
       remarks: r.remark as string | null, source: 'inflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: r.import_seq as number | undefined,
       inflowData: r as unknown as InflowTransaction,
     }))
     const outRows: TransferRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -603,9 +611,10 @@ function TransfersPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_id as string | null,
       remarks: r.remarks as string | null, source: 'outflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: r.import_seq as number | undefined,
       outflowData: r as unknown as OutflowTransaction,
     }))
-    setRows([...transferRows, ...inRows, ...outRows].sort((a, b) => b.date.localeCompare(a.date)))
+    setRows([...transferRows, ...inRows, ...outRows].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)))
     setLoading(false)
   }, [orgId])
 

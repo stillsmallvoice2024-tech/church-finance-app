@@ -2285,6 +2285,27 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_bsb_org_bank ON public.bank_statement_balances(org_id, bank_name);
 
+NOTIFY pgrst, 'reload schema';
+
+-- ── Import sequence: stable ordering within and across import batches ──────────
+-- BIGSERIAL auto-populates existing rows in heap order (≈ insertion order).
+-- New rows after this migration are assigned deterministic file-order values.
+ALTER TABLE public.inflow_transactions    ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.outflow_transactions   ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.fx_transactions        ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.intra_flows            ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.bank_deposits          ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.intrabank_transfers    ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.project_entries        ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+
+CREATE INDEX IF NOT EXISTS idx_inflow_import_seq        ON public.inflow_transactions(import_seq);
+CREATE INDEX IF NOT EXISTS idx_outflow_import_seq       ON public.outflow_transactions(import_seq);
+CREATE INDEX IF NOT EXISTS idx_fx_import_seq            ON public.fx_transactions(import_seq);
+CREATE INDEX IF NOT EXISTS idx_intraflow_import_seq     ON public.intra_flows(import_seq);
+CREATE INDEX IF NOT EXISTS idx_bank_deposits_import_seq ON public.bank_deposits(import_seq);
+CREATE INDEX IF NOT EXISTS idx_intrabank_import_seq     ON public.intrabank_transfers(import_seq);
+CREATE INDEX IF NOT EXISTS idx_project_entries_import_seq ON public.project_entries(import_seq);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────

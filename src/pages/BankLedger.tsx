@@ -56,6 +56,7 @@ interface LedgerRow {
   balance:             number   // running
   transaction_type:    string | null
   entity_type:         'inflow' | 'outflow'
+  import_seq?:         number
   // source distinguishes rows from dedicated tables vs inflow/outflow_transactions
   source?:             'bank_deposits' | 'intrabank_transfers'
   inflowData?:         InflowTransaction
@@ -87,7 +88,7 @@ export default function BankLedger() {
 
   const [selectedBank, setSelectedBank] = useState('')
   const didAutoSelect = useRef(false)
-  const blState = useDataViewState({ storageKey: 'bl', defaultSortKey: 'date', defaultSortDir: 'asc' })
+  const blState = useDataViewState({ storageKey: 'bl', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const [ledgerRows,   setLedgerRows]   = useState<LedgerRow[]>([])
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState<string | null>(null)
@@ -110,24 +111,28 @@ export default function BankLedger() {
         .select('*')
         .eq('bank_name', bankName)
         .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)
-        .order('date', { ascending: true }),
+        .order('date', { ascending: true })
+        .order('import_seq', { ascending: true }),
       supabase
         .from('outflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
-        .order('date', { ascending: true }),
+        .order('date', { ascending: true })
+        .order('import_seq', { ascending: true }),
       // Bank deposit slip records for this bank
       supabase
         .from('bank_deposits')
-        .select('id, date, bank_name, amount, description')
+        .select('id, date, bank_name, amount, description, import_seq')
         .eq('bank_name', bankName)
-        .order('date', { ascending: true }),
+        .order('date', { ascending: true })
+        .order('import_seq', { ascending: true }),
       // Intrabank transfers: this bank as source (outflow) or destination (inflow)
       supabase
         .from('intrabank_transfers')
-        .select('id, date, from_bank_name, to_bank_name, amount, description')
+        .select('id, date, from_bank_name, to_bank_name, amount, description, import_seq')
         .or(`from_bank_name.eq.${bankName},to_bank_name.eq.${bankName}`)
-        .order('date', { ascending: true }),
+        .order('date', { ascending: true })
+        .order('import_seq', { ascending: true }),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -137,7 +142,7 @@ export default function BankLedger() {
     }
 
     // Merge & sort chronologically (B/F DB rows excluded above)
-    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; source?: 'bank_deposits' | 'intrabank_transfers'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
+    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; import_seq?: number; source?: 'bank_deposits' | 'intrabank_transfers'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
@@ -145,6 +150,7 @@ export default function BankLedger() {
         inflow: r.amount as number, outflow: 0,
         transaction_type: (r.transaction_type as string | null) ?? null,
         entity_type: 'inflow' as const,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -153,6 +159,7 @@ export default function BankLedger() {
         inflow: 0, outflow: r.amount_disbursed as number,
         transaction_type: (r.transaction_type as string | null) ?? null,
         entity_type: 'outflow' as const,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         outflowData: r as unknown as OutflowTransaction,
       })),
       // Bank deposit slip entries — show as inflow with Bank Deposit tag
@@ -162,6 +169,7 @@ export default function BankLedger() {
         inflow: r.amount as number, outflow: 0,
         transaction_type: 'bank_deposit',
         entity_type: 'inflow' as const,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         source: 'bank_deposits' as const,
       })) : []),
       // Intrabank transfer entries — outflow for source bank, inflow for destination
@@ -174,6 +182,7 @@ export default function BankLedger() {
             inflow: 0, outflow: r.amount as number,
             transaction_type: 'intrabank_transfer',
             entity_type: 'outflow' as const,
+            import_seq: (r.import_seq as number | null) ?? undefined,
             source: 'intrabank_transfers' as const,
           })
         }
@@ -184,12 +193,13 @@ export default function BankLedger() {
             inflow: r.amount as number, outflow: 0,
             transaction_type: 'intrabank_transfer',
             entity_type: 'inflow' as const,
+            import_seq: (r.import_seq as number | null) ?? undefined,
             source: 'intrabank_transfers' as const,
           })
         }
         return rows
       }) : []),
-    ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    ].sort((a, b) => a.date.localeCompare(b.date) || (a.import_seq ?? 0) - (b.import_seq ?? 0))
 
     // Running balance starts from opening balance so all subsequent rows are correct
     let running = openingBalance
@@ -272,7 +282,7 @@ export default function BankLedger() {
   // Totals based on date-filtered (not search-filtered or paged) — summary strip unchanged
   const totalInflow  = dateFiltered.reduce((s, r) => s + r.inflow,  0)
   const totalOutflow = dateFiltered.reduce((s, r) => s + r.outflow, 0)
-  const netBalance   = totalInflow - totalOutflow
+  const netBalance   = dateFiltered[dateFiltered.length - 1]?.balance ?? 0
 
   const selectedBankObj  = banks.find(b => b.id === selectedBank)
   const selectedBankName = selectedBankObj?.name ?? ''
@@ -351,7 +361,7 @@ export default function BankLedger() {
             { label: 'Total Inflows',  value: formatCurrency(totalInflow, displayCurrency),  color: 'text-green-700', tip: undefined },
             { label: 'Total Outflows', value: formatCurrency(totalOutflow, displayCurrency), color: 'text-red-700',   tip: undefined },
             { label: 'Net Balance',    value: formatCurrency(netBalance, displayCurrency),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700',
-              tip: 'Total inflows minus total outflows for this bank account over the selected date range. The ledger table below shows a running balance updated after every transaction.' },
+              tip: 'Running balance at the end of the selected period (opening balance plus all inflows minus all outflows). Matches the balance shown on the last row of the ledger table.' },
           ].map(({ label, value, color, tip }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
               <div className="flex items-center gap-1 mb-1">
@@ -413,7 +423,7 @@ export default function BankLedger() {
           sortDir={blState.sortDir}
           onSort={blState.setSort}
           defaultSortKey="date"
-          defaultSortDir="asc"
+          defaultSortDir="desc"
           view={blState.view}
           onViewChange={blState.setView}
           search={blState.search}

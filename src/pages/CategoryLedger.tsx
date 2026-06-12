@@ -76,6 +76,7 @@ interface LedgerRow {
   inflow:           number
   outflow:          number
   balance:          number
+  import_seq?:      number
   intraflowMeta?:   IntraflowMeta
   isReversalCredit?: boolean
 }
@@ -336,12 +337,12 @@ export default function CategoryLedger() {
       if (ledgerPortion === 'Percentage') {
         const [inflowRes, outflowRes] = await Promise.all([
           fetchAllRows(() => supabase.from('inflow_transactions')
-            .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type, offset_role')
-            .order('date')),
+            .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type, offset_role, import_seq')
+            .order('date').order('import_seq', { ascending: true })),
           fetchAllRows(() => supabase.from('outflow_transactions')
-            .select('id, date, description, amount_disbursed, stage_code_2, offset_role')
+            .select('id, date, description, amount_disbursed, stage_code_2, offset_role, import_seq')
             .eq('stage_code_1', activeCategory)
-            .order('date')),
+            .order('date').order('import_seq', { ascending: true })),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
@@ -371,6 +372,7 @@ export default function CategoryLedger() {
             inflow:      allocated,
             outflow:     0,
             balance:     0,
+            import_seq:  (r as Record<string, unknown>).import_seq as number | undefined,
           })
         }
 
@@ -387,6 +389,7 @@ export default function CategoryLedger() {
               inflow:           amt,
               outflow:          0,
               balance:          0,
+              import_seq:       (r as Record<string, unknown>).import_seq as number | undefined,
               isReversalCredit: true,
             })
           } else {
@@ -397,6 +400,7 @@ export default function CategoryLedger() {
               inflow:      0,
               outflow:     amt,
               balance:     0,
+              import_seq:  (r as Record<string, unknown>).import_seq as number | undefined,
             })
           }
         }
@@ -404,21 +408,21 @@ export default function CategoryLedger() {
         const sc2 = ledgerPortion
         const [inflowRes, outflowRes, cfgInflowRes] = await Promise.all([
           fetchAllRows(() => supabase.from('inflow_transactions')
-            .select('id, date, description, amount')
+            .select('id, date, description, amount, import_seq')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
-            .order('date')),
+            .order('date').order('import_seq', { ascending: true })),
           fetchAllRows(() => supabase.from('outflow_transactions')
-            .select('id, date, description, amount_disbursed, offset_role')
+            .select('id, date, description, amount_disbursed, offset_role, import_seq')
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
-            .order('date')),
+            .order('date').order('import_seq', { ascending: true })),
           // Config-split inflows where this category's row has matching budget_portion
           fetchAllRows(() => supabase.from('inflow_transactions')
-            .select('id, date, description, amount, allocation_config_id')
+            .select('id, date, description, amount, allocation_config_id, import_seq')
             .not('allocation_config_id', 'is', null)
             .is('stage_code_2', null)
-            .order('date')),
+            .order('date').order('import_seq', { ascending: true })),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
@@ -431,6 +435,7 @@ export default function CategoryLedger() {
             inflow:      Number(r.amount),
             outflow:     0,
             balance:     0,
+            import_seq:  (r as Record<string, unknown>).import_seq as number | undefined,
           })
         }
         for (const r of outflowRes.data ?? []) {
@@ -444,6 +449,7 @@ export default function CategoryLedger() {
               inflow:           amt,
               outflow:          0,
               balance:          0,
+              import_seq:       (r as Record<string, unknown>).import_seq as number | undefined,
               isReversalCredit: true,
             })
           } else {
@@ -454,6 +460,7 @@ export default function CategoryLedger() {
               inflow:      0,
               outflow:     amt,
               balance:     0,
+              import_seq:  (r as Record<string, unknown>).import_seq as number | undefined,
             })
           }
         }
@@ -478,6 +485,7 @@ export default function CategoryLedger() {
             inflow:      allocated,
             outflow:     0,
             balance:     0,
+            import_seq:  (r as Record<string, unknown>).import_seq as number | undefined,
           })
         }
       }
@@ -499,17 +507,17 @@ export default function CategoryLedger() {
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
         supabase.from('intra_flows')
-          .select('id, date, description, total_amount, account_to, account_to_stage2, status')
+          .select('id, date, description, total_amount, account_to, account_to_stage2, status, import_seq')
           .eq('account_from', activeCategory)
           .eq('account_from_stage2', portionStage2)
           .eq('status', 'active')
-          .order('date'),
+          .order('date').order('import_seq', { ascending: true }),
         supabase.from('intra_flows')
-          .select('id, date, description, total_amount, account_from, account_from_stage2, status')
+          .select('id, date, description, total_amount, account_from, account_from_stage2, status, import_seq')
           .eq('account_to', activeCategory)
           .eq('account_to_stage2', portionStage2)
           .eq('status', 'active')
-          .order('date'),
+          .order('date').order('import_seq', { ascending: true }),
       ])
       if (intraFromRes.error) throw intraFromRes.error
       if (intraToRes.error) throw intraToRes.error
@@ -538,6 +546,7 @@ export default function CategoryLedger() {
           inflow:      0,
           outflow:     amount,
           balance:     0,
+          import_seq:  (r as Record<string, unknown>).import_seq as number | undefined,
           intraflowMeta: {
             intraflowId:  r.id as string,
             fromCategory: activeCategory,
@@ -559,6 +568,7 @@ export default function CategoryLedger() {
           inflow:      amount,
           outflow:     0,
           balance:     0,
+          import_seq:  (r as Record<string, unknown>).import_seq as number | undefined,
           intraflowMeta: {
             intraflowId:  r.id as string,
             fromCategory: (r.account_from       as string) ?? '',
@@ -572,7 +582,7 @@ export default function CategoryLedger() {
       }
 
       // balance is intentionally 0 here — ledgerFilteredWithBalance owns all balance computation
-      const combined = [...bfRow, ...inRows, ...outRows].sort((a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1))
+      const combined = [...bfRow, ...inRows, ...outRows].sort((a, b) => a.date.localeCompare(b.date) || (a.import_seq ?? 0) - (b.import_seq ?? 0))
       setLedgerRows(combined)
     } catch (e: unknown) {
       setLedgerError(e instanceof Error ? e.message : 'Failed to load ledger')
@@ -694,7 +704,7 @@ export default function CategoryLedger() {
   //    DESC → reverse-chronological within date (last event at top); ASC → chronological
   const { ledgerFilteredWithBalance, closingBalance, seqById } = useMemo(() => {
     const chronological = [...ledgerFiltered].sort(
-      (a, b) => a.date.localeCompare(b.date) || (a.inflow > 0 ? -1 : 1),
+      (a, b) => a.date.localeCompare(b.date) || (a.import_seq ?? 0) - (b.import_seq ?? 0),
     )
     let running = 0
     const balanceById = new Map<string, number>()
