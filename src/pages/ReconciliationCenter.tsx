@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ShieldCheck, ShieldAlert, ShieldX, RefreshCw, AlertCircle,
@@ -8,6 +8,7 @@ import {
 import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReconciliation } from '../hooks/useReconciliation'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { useBanks } from '../hooks/useBanks'
 import { formatCurrency, formatDate, formatWithTimezone } from '../utils/formatters'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -22,6 +23,141 @@ import {
   healthStatusBg,
   healthStatusDot,
 } from '../utils/reconciliationAggregator'
+
+// ── Plain-language issue explanations ─────────────────────────────────────────
+
+const RULE_PLAIN: Record<string, { headline: string; why: ReactNode }> = {
+  orphan_transfer: {
+    headline: 'A transfer was recorded but has no matching deposit.',
+    why: 'Until this is resolved, your bank balance and book records will be out of sync. Check bank movements for an unmatched entry.',
+  },
+  missing_transfer_pair: {
+    headline: 'A deposit exists without a corresponding transfer record.',
+    why: 'This usually means a transaction was imported on one side but not the other. Your bank balance may appear incorrect.',
+  },
+  duplicate_import: {
+    headline: 'This transaction ID appears more than once in your records.',
+    why: 'A duplicate entry means the same income or expense is being counted twice, overstating your totals.',
+  },
+  balance_mismatch: {
+    headline: 'Your recorded balance does not match your reference bank statement.',
+    why: (
+      <>
+        This difference means your reports are showing an inaccurate balance.{' '}
+        Review <Link to="/bank-ledger" className="underline text-primary hover:text-primary-light">recent transactions</Link>,{' '}
+        update your <Link to="/setup" className="underline text-primary hover:text-primary-light">bank opening balance</Link>,{' '}
+        or <a href="#account-status" className="underline text-primary hover:text-primary-light">review your statement balance</a> to find the gap.
+      </>
+    ),
+  },
+  allocation_inconsistency: {
+    headline: 'A transaction\'s fund allocation does not match the active distribution rule.',
+    why: 'Fund category totals may be off. This can cause incorrect balances in Regular Funds, Designated Gifts, or Savings Funds.',
+  },
+  negative_balance: {
+    headline: 'This bank account is showing a negative balance.',
+    why: 'A negative balance usually means an outflow was recorded before the corresponding inflow arrived, or a transaction amount is incorrect.',
+  },
+  incomplete_reversal: {
+    headline: 'A reversal was started but the original transaction has not been fully reversed.',
+    why: 'Partial reversals leave your records in an inconsistent state. The affected amount may be double-counted.',
+  },
+  pending_deduction: {
+    headline: 'There are outflow transactions that have not yet been deducted from the account.',
+    why: 'Your bank ledger balance is higher than it should be until these deductions are processed.',
+  },
+}
+
+
+// Plain-language suggested-fix overrides — shown in the expanded Technical details
+// panel in place of the raw suggestedFix string from reconciliationRules.ts.
+const RULE_FIX: Record<string, string> = {
+  allocation_inconsistency: 'Open Distribution Rules, unlock the relevant config, and correct the row percentages or fund types.',
+  orphan_transfer:          'Open Bank Deposits & Transfers, locate this transfer, and verify the bank name matches a current account.',
+  missing_transfer_pair:    'Open Bank Deposits & Transfers and check whether both a deposit record and an inflow transaction exist for this entry.',
+  balance_mismatch:         'Open the Bank Ledger for this account and compare recent entries against your bank statement.',
+  negative_balance:         'Open the Bank Ledger for this account and review recent outflows for missing inflows or incorrect amounts.',
+  incomplete_reversal:      'Open the relevant transactions page, edit the record, and link it to its counterpart transaction.',
+  pending_deduction:        'Open Upcoming Deductions, locate this transaction, and either clear it or mark it resolved.',
+  duplicate_import:         'Open the relevant transactions page, filter by this reference number, and delete the duplicate entry.',
+}
+
+// ── Evidence display ───────────────────────────────────────────────────────────
+// Maps well-known evidence keys to human labels so the facts needed for action
+// (transaction ID, description, date, amount, bank) are visible on the card
+// itself — not buried in raw JSON.
+
+const EVIDENCE_LABELS: Record<string, string> = {
+  description:      'Description',
+  date:             'Date',
+  statementDate:    'Statement date',
+  amount:           'Amount',
+  bank:             'Bank',
+  fromBank:         'From bank',
+  toBank:           'To bank',
+  ref:              'Transaction ref',
+  transactionId:    'Record ID',
+  transferId:       'Transfer ID',
+  depositId:        'Deposit ID',
+  matchedInflowId:  'Matched inflow ID',
+  count:            'Times it appears',
+  bookBalance:      'Book balance',
+  referenceBalance: 'Statement balance',
+  difference:       'Difference',
+  computedBalance:  'Computed balance',
+  configName:       'Distribution rule',
+  percentageTotal:  'Percentage total',
+  missingCount:     'Rows missing fund type',
+  rowCount:         'Rows',
+  totalRows:        'Total rows',
+  transactionType:  'Transaction type',
+}
+
+const EVIDENCE_CURRENCY_KEYS = new Set(['amount', 'bookBalance', 'referenceBalance', 'difference', 'computedBalance'])
+const EVIDENCE_DATE_KEYS     = new Set(['date', 'statementDate'])
+
+// Ordered for scanning: identity first, then what/when/where, then numbers.
+const EVIDENCE_KEY_ORDER = [
+  'description', 'ref', 'transactionId', 'transferId', 'depositId', 'matchedInflowId',
+  'date', 'statementDate', 'bank', 'fromBank', 'toBank', 'transactionType',
+  'amount', 'count', 'bookBalance', 'referenceBalance', 'difference', 'computedBalance',
+  'configName', 'percentageTotal', 'missingCount', 'rowCount', 'totalRows',
+]
+
+function EvidenceFacts({ evidence, currency }: { evidence: Record<string, unknown>; currency: string }) {
+  const entries = EVIDENCE_KEY_ORDER
+    .filter(k => k in evidence && evidence[k] !== null && evidence[k] !== undefined && evidence[k] !== '')
+    .map(k => {
+      const raw = evidence[k]
+      let display: string
+      if (EVIDENCE_CURRENCY_KEYS.has(k) && typeof raw === 'number') display = formatCurrency(raw, currency)
+      else if (EVIDENCE_DATE_KEYS.has(k) && typeof raw === 'string') display = formatDate(raw)
+      else if (k === 'percentageTotal' && typeof raw === 'number')   display = `${raw}%`
+      else display = String(raw)
+      return { key: k, label: EVIDENCE_LABELS[k], value: display }
+    })
+
+  if (entries.length === 0) return null
+
+  return (
+    <div className="mt-2.5 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Affected record</p>
+      <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5">
+        {entries.map(({ key, label, value }) => (
+          <div key={key} className="min-w-0">
+            <dt className="text-[10px] text-gray-400">{label}</dt>
+            <dd className={`text-xs text-gray-700 break-words ${
+              key === 'transactionId' || key === 'transferId' || key === 'depositId' || key === 'matchedInflowId' || key === 'ref'
+                ? 'font-mono select-all' : 'font-medium'
+            }`}>
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
 
 // ── Small helpers ──────────────────────────────────────────────────────────────
 
@@ -75,19 +211,59 @@ function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
 
 // ── Issue card ─────────────────────────────────────────────────────────────────
 
-function IssueCard({ issue }: { issue: ReconciliationIssue }) {
+function getIncompleteReversalHeadline(evidence: Record<string, unknown>, issueId: string): string {
+  const txnType = evidence.transactionType as string | undefined
+
+  if (txnType === 'bank_deposit') {
+    return 'A bank deposit was recorded but the corresponding cash on hand reduction has not been indicated.'
+  }
+
+  if (txnType === 'intrabank_transfer') {
+    return issueId.includes('-inflow-')
+      ? 'An intra-bank transfer inflow was recorded but the initiating bank outflow has not been indicated.'
+      : 'An intra-bank transfer outflow was recorded but the associated bank inflow has not been indicated.'
+  }
+
+  if (txnType === 'reversal') return 'A reversal was recorded but the original transaction has not been indicated.'
+  if (txnType === 'refund')   return 'A refund was recorded but the original transaction has not been indicated.'
+
+  return 'A transaction was marked as an offset but the original transaction it relates to has not been linked.'
+}
+
+function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: string }) {
   const [expanded, setExpanded] = useState(false)
+  const plain = RULE_PLAIN[issue.ruleId]
+  const headline = issue.ruleId === 'incomplete_reversal'
+    ? getIncompleteReversalHeadline(issue.evidence, issue.id)
+    : (plain?.headline ?? issue.message)
+  const hasFacts = EVIDENCE_KEY_ORDER.some(
+    k => k in issue.evidence && issue.evidence[k] !== null && issue.evidence[k] !== undefined && issue.evidence[k] !== '',
+  )
   return (
-    <div className={`rounded-xl border p-4 ${
-      issue.severity === 'critical' ? 'border-red-200 bg-red-50/40' :
-      issue.severity === 'warning'  ? 'border-amber-200 bg-amber-50/40' :
-      'border-blue-200 bg-blue-50/40'
+    <div className={`rounded-xl border border-gray-100 bg-white p-4 border-l-4 shadow-sm ${
+      issue.severity === 'critical' ? 'border-l-red-400' :
+      issue.severity === 'warning'  ? 'border-l-amber-400' :
+      'border-l-blue-400'
     }`}>
       <div className="flex items-start gap-3">
         <SeverityIcon severity={issue.severity} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-800">{issue.message}</p>
-          <p className="text-xs text-gray-500 mt-1">{issue.suggestedFix}</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {headline}
+            {hasFacts && (
+              <span className="font-normal text-gray-400"> — the affected record is shown below.</span>
+            )}
+          </p>
+          {plain?.why && (
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">{plain.why}</p>
+          )}
+          {!plain?.why && issue.suggestedFix && (
+            <p className="text-xs text-gray-500 mt-1">{issue.suggestedFix}</p>
+          )}
+
+          {/* The facts needed to act — always visible, no expand required */}
+          <EvidenceFacts evidence={issue.evidence} currency={currency} />
+
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <RuleActionLink issue={issue} />
             <button
@@ -95,13 +271,18 @@ function IssueCard({ issue }: { issue: ReconciliationIssue }) {
               className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
             >
               {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              Evidence
+              Technical details
             </button>
           </div>
           {expanded && (
-            <pre className="mt-2 text-xs text-gray-500 bg-white/70 border border-gray-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">
-              {JSON.stringify(issue.evidence, null, 2)}
-            </pre>
+            <div className="mt-2 space-y-1">
+              {(RULE_FIX[issue.ruleId] ?? (plain && issue.suggestedFix)) && (
+                <p className="text-xs text-gray-500 italic">{RULE_FIX[issue.ruleId] ?? issue.suggestedFix}</p>
+              )}
+              <pre className="text-xs text-gray-500 bg-white/70 border border-gray-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">
+                {JSON.stringify(issue.evidence, null, 2)}
+              </pre>
+            </div>
           )}
         </div>
         <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${severityBadge(issue.severity)}`}>
@@ -241,6 +422,7 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
 
 export default function ReconciliationCenter() {
   usePageTitle('Reconciliation Center')
+  useFirstVisitTour('reconciliation')
   const { baseCurrencyCode } = useOrgCurrency()
   const storedTz    = useOrgStore(s => s.timezone)
   const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
@@ -282,12 +464,13 @@ export default function ReconciliationCenter() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div data-tour="recon-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reconciliation Center</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Reconciliation Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Verify your app records match your actual bank records</p>
         </div>
         <button
+          data-tour="recon-run-button"
           onClick={handleRun}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors shrink-0"
@@ -306,8 +489,21 @@ export default function ReconciliationCenter() {
       )}
 
       {/* ── Section A: Health Summary ──────────────────────────────────────── */}
-      {diag ? (
-        <div className={`rounded-xl border p-6 ${healthStatusBg(diag.healthStatus)}`}>
+      {loading ? (
+        <Card>
+          <div className="flex flex-col items-center gap-3 py-12 text-center" aria-busy="true">
+            <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center animate-pulse">
+              <ShieldCheck className="w-8 h-8 text-primary/40" />
+            </div>
+            <div className="space-y-2 w-full max-w-xs">
+              <div className="animate-pulse bg-gray-200 rounded h-4 w-2/3 mx-auto" />
+              <div className="animate-pulse bg-gray-200 rounded h-3 w-full" />
+            </div>
+            <p className="text-xs text-gray-400">Checking your records…</p>
+          </div>
+        </Card>
+      ) : diag ? (
+        <div data-tour="recon-health-summary" className={`rounded-xl border p-6 shadow-md ${healthStatusBg(diag.healthStatus)}`}>
           <div className="flex items-start gap-4">
             <HealthIcon status={diag.healthStatus} size="lg" />
             <div className="flex-1 min-w-0">
@@ -345,16 +541,30 @@ export default function ReconciliationCenter() {
       ) : (
         <Card>
           <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <ShieldCheck className="w-12 h-12 text-gray-200" />
-            <p className="text-sm font-medium text-gray-600">No reconciliation run yet</p>
-            <p className="text-xs text-gray-400">Press "Run Reconciliation" to check your records.</p>
+            <div className="w-14 h-14 rounded-full bg-gray-50 flex items-center justify-center">
+              <ShieldCheck className="w-8 h-8 text-gray-300" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-700">Records not yet verified</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Run a reconciliation check to confirm your records are accurate and complete.
+              </p>
+            </div>
+            <button
+              onClick={handleRun}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Run Reconciliation Check
+            </button>
           </div>
         </Card>
       )}
 
       {/* ── Section B: Account Status Table ───────────────────────────────── */}
       {diag && diag.bankSummaries.length > 0 && (
-        <div>
+        <div id="account-status" data-tour="recon-account-status">
           <button
             onClick={() => setShowAccountStatus(v => !v)}
             className="flex items-center gap-2 w-full text-left"
@@ -370,7 +580,7 @@ export default function ReconciliationCenter() {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       {['Account', 'Status', 'Book Balance', 'Reference Balance', 'Difference', 'Issues'].map(h => (
-                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
+                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -395,8 +605,31 @@ export default function ReconciliationCenter() {
 
       {/* ── Section C: Diagnostics Feed ───────────────────────────────────── */}
       {diag && diag.totalIssues > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700">Diagnostics</h2>
+        <div data-tour="recon-issues" className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold text-gray-700">Issues to Resolve</h2>
+            {diag.criticalIssues > 0 && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                {diag.criticalIssues} critical
+              </span>
+            )}
+            {diag.warningIssues > 0 && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                {diag.warningIssues} warning
+              </span>
+            )}
+            {diag.bySeverity.info.length > 0 && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                {diag.bySeverity.info.length} info
+              </span>
+            )}
+          </div>
+          {diag.criticalIssues > 0 && (
+            <p className="text-xs text-gray-500">
+              Start with critical issues — they have the biggest effect on your balances.
+              Each issue includes a link to the page where it can be fixed.
+            </p>
+          )}
 
           {/* Critical */}
           {diag.bySeverity.critical.length > 0 && (
@@ -411,7 +644,7 @@ export default function ReconciliationCenter() {
               </button>
               {showCritical && (
                 <div className="space-y-2">
-                  {diag.bySeverity.critical.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+                  {diag.bySeverity.critical.map(issue => <IssueCard key={issue.id} issue={issue} currency={baseCurrencyCode} />)}
                 </div>
               )}
             </div>
@@ -430,7 +663,7 @@ export default function ReconciliationCenter() {
               </button>
               {showWarning && (
                 <div className="space-y-2">
-                  {diag.bySeverity.warning.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+                  {diag.bySeverity.warning.map(issue => <IssueCard key={issue.id} issue={issue} currency={baseCurrencyCode} />)}
                 </div>
               )}
             </div>
@@ -449,7 +682,7 @@ export default function ReconciliationCenter() {
               </button>
               {showInfo && (
                 <div className="space-y-2">
-                  {diag.bySeverity.info.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+                  {diag.bySeverity.info.map(issue => <IssueCard key={issue.id} issue={issue} currency={baseCurrencyCode} />)}
                 </div>
               )}
             </div>
@@ -459,11 +692,20 @@ export default function ReconciliationCenter() {
 
       {diag && diag.totalIssues === 0 && (
         <Card>
-          <div className="flex items-center gap-3 py-6">
-            <CheckCircle className="w-8 h-8 text-green-500 shrink-0" />
+          <div className="flex flex-col sm:flex-row items-center gap-4 py-8 text-center sm:text-left">
+            <div className="shrink-0 w-14 h-14 rounded-full bg-green-50 flex items-center justify-center">
+              <CheckCircle className="w-8 h-8 text-green-500" />
+            </div>
             <div>
-              <p className="text-sm font-semibold text-gray-800">No issues found</p>
-              <p className="text-xs text-gray-500">All reconciliation rules passed. Your records appear consistent.</p>
+              <p className="text-base font-semibold text-gray-900">Everything looks good</p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                All records are reconciled and consistent. No action needed.
+              </p>
+              {result && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Verified {formatWithTimezone(result.runAt, orgTimezone)}
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -491,7 +733,7 @@ export default function ReconciliationCenter() {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       {['Run Time', 'Status', 'Critical', 'Warnings', 'Info', 'Total'].map(h => (
-                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
+                        <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">{h}</th>
                       ))}
                     </tr>
                   </thead>

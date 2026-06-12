@@ -2088,7 +2088,17 @@ export default function FinancialReport() {
 
       {/* Content */}
       <div className="overflow-x-auto">
-        {editMode ? renderEditMode() : renderReportView()}
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="rounded-xl border border-gray-100 bg-white p-4">
+                <div className="animate-pulse bg-gray-200 rounded h-4 w-1/4 mb-3" />
+                <div className="animate-pulse bg-gray-200 rounded h-3 w-full mb-2" />
+                <div className="animate-pulse bg-gray-200 rounded h-3 w-2/3" />
+              </div>
+            ))}
+          </div>
+        ) : editMode ? renderEditMode() : renderReportView()}
       </div>
 
       {/* Save template modal */}

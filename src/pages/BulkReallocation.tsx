@@ -12,6 +12,7 @@ import { useToastStore } from '../store/toastStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { filterInputCls } from '../components/ui/FormField'
 import type { ReportCategoryBalance } from '../types'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -191,7 +192,7 @@ export default function BulkReallocation() {
       setStep('configure')
       setSelectedIds(new Set())
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Execution failed', 'error')
+      toast(friendlyError(e, 'execute the reallocation'), 'error')
     } finally {
       setExecuting(false)
     }
@@ -278,7 +279,7 @@ export default function BulkReallocation() {
               <thead>
                 <tr className="border-b border-gray-100">
                   {['Category', 'Source Balance', 'Amount to Move', 'Dest Balance (after)', ''].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -500,16 +501,16 @@ export default function BulkReallocation() {
                     }
                   </button>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
                   Category
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   {srcPortion} Balance
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   {dstPortion} Balance
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   Amount to Move
                 </th>
               </tr>

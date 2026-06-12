@@ -33,7 +33,7 @@ const SVP_COLUMNS: TableColumnDef<SavingsRow>[] = [
 const SVP_SORT_FIELDS = deriveSortFields(SVP_COLUMNS)
 
 export default function SavingsPortions() {
-  usePageTitle('Savings Portions')
+  usePageTitle('Savings Funds')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const [rows,    setRows]    = useState<SavingsRow[]>([])
@@ -206,9 +206,9 @@ export default function SavingsPortions() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Savings Portions</h1>
+          <h1 className="text-xl font-bold text-gray-900">Savings Funds</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Accumulated savings balances per category — all time
+            Accumulated savings fund balances per category — all time
           </p>
         </div>
         <div className="flex items-center gap-2">

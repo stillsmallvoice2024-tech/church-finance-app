@@ -13,10 +13,10 @@ const MAX_TOASTS = 3
 
 // Default auto-dismiss durations by type
 const DEFAULT_DURATION: Record<ToastType, number> = {
-  success: 4000,
+  success: 3000,
   info:    4000,
-  warning: 6000,
-  error:   8000,
+  warning: 4000,
+  error:   5000,
 }
 
 interface ToastState {

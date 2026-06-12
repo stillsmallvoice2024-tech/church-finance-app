@@ -177,9 +177,9 @@ export default function RefundTransactions() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Refund Transactions</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Refund Transactions</h1>
           <p className="text-sm text-gray-500 mt-0.5">Inflow and outflow rows tagged as refunds</p>
         </div>
         <div className="flex items-center gap-2">
@@ -334,7 +334,7 @@ export default function RefundTransactions() {
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
                   {['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                   {canWrite() && <th className="px-4 py-3 w-10" />}
                 </tr>

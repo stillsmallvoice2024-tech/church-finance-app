@@ -16,10 +16,10 @@ export function inflowDetailItems(row: InflowTransaction, _currency: string): De
     { label: 'Recorded',        value: row.recorded_at ? formatDate(row.recorded_at.slice(0, 10)) : null },
     { label: 'Raw Description', value: row.description,              breakAll: true },
     { label: 'Remark',          value: row.remark,                   breakAll: true },
-    { label: 'Stage Code 1',    value: row.stage_code_1 },
-    { label: 'Stage Code 2',    value: row.stage_code_2 },
-    { label: 'Stage Code 3',    value: row.stage_code_3 },
-    { label: 'Specific Seed',   value: row.specific_seed_description },
+    { label: 'Department',       value: row.stage_code_1 },
+    { label: 'Fund Type',        value: row.stage_code_2 },
+    { label: 'Sub-category',     value: row.stage_code_3 },
+    { label: 'Designated Gift', value: row.specific_seed_description },
     {
       label: 'FX',
       value: row.fx_currency
@@ -53,8 +53,8 @@ export function outflowDetailItems(row: OutflowTransaction, currency: string): D
     { label: `Refunded (${sym})`,        value: Number(row.amount_refunded) > 0 ? formatCurrency(Number(row.amount_refunded), currency) : null, mono: true },
     { label: `Transfer Charge (${sym})`, value: Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge), currency) : null, mono: true },
     { label: `Net (${sym})`,             value: net !== Number(row.amount_disbursed) ? formatCurrency(net, currency) : null, mono: true },
-    { label: 'Stage Code 1',        value: row.stage_code_1 },
-    { label: 'Stage Code 2',        value: row.stage_code_2 },
+    { label: 'Department',           value: row.stage_code_1 },
+    { label: 'Fund Type',            value: row.stage_code_2 },
     { label: 'Outflow Type',        value: row.outflow_type_name },
     {
       label: 'FX',

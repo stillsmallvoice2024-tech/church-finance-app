@@ -30,11 +30,11 @@ import { useBanks } from '../hooks/useBanks'
 // ── Sort field definitions ────────────────────────────────────────────────────
 
 const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
-  { key: 'name',                label: 'Category',      sortType: 'text',    primary: true, accessor: r => r.name },
-  { key: 'percentage',          label: '% Alloc',       sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
-  { key: 'percentageAllocated', label: 'Allocation',      sortType: 'numeric', primary: true },
-  { key: 'specificSeed',        label: 'Specific Seed', sortType: 'numeric', primary: true },
-  { key: 'savingsNet',          label: 'Savings Net',   sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut },
+  { key: 'name',                label: 'Category',         sortType: 'text',    primary: true, accessor: r => r.name },
+  { key: 'percentage',          label: 'Share %',          sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
+  { key: 'percentageAllocated', label: 'Regular Funds',    sortType: 'numeric', primary: true },
+  { key: 'specificSeed',        label: 'Designated Gifts', sortType: 'numeric', primary: true },
+  { key: 'savingsNet',          label: 'Savings Balance',  sortType: 'numeric', primary: true, accessor: r => r.savingsIn - r.savingsOut },
 ]
 
 const LEDGER_COLUMNS: TableColumnDef<LedgerRow>[] = [
@@ -87,10 +87,18 @@ type LedgerPortion = 'Percentage' | 'Specific Seed' | 'Savings'
 const PORTIONS: Portion[]             = ['All', 'Percentage', 'Specific Seed', 'Savings']
 const LEDGER_PORTIONS: LedgerPortion[] = ['Percentage', 'Specific Seed', 'Savings']
 
+// Display labels only — internal values above are unchanged (used as DB keys).
+const PORTION_LABELS: Record<Portion, string> = {
+  'All':           'All',
+  'Percentage':    'Regular Funds',
+  'Specific Seed': 'Designated Gifts',
+  'Savings':       'Savings',
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CategoryLedger() {
-  usePageTitle('Category Ledger')
+  usePageTitle('Category Accounts')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const { categories }                           = useCategories()
@@ -781,10 +789,10 @@ export default function CategoryLedger() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Category Ledger</h1>
+          <h1 className="text-xl font-bold text-gray-900">Category Accounts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {viewMode === 'summary' ? 'Aggregated view of all budget portions per category' :
-             viewMode === 'ledger'  ? 'Transaction-level ledger per category and portion' :
+            {viewMode === 'summary' ? 'Aggregated view of all fund balances per category' :
+             viewMode === 'ledger'  ? 'Transaction-level view per category and fund type' :
                                       'Foreign-currency transaction history by currency'}
           </p>
         </div>
@@ -837,19 +845,19 @@ export default function CategoryLedger() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-xl bg-primary/5 border border-primary/20 px-3 py-3 min-w-0 overflow-hidden">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1.5 flex items-center gap-1">
-                  <Percent className="w-3 h-3 shrink-0" /><span className="truncate">% Allocation</span>
+                  <Percent className="w-3 h-3 shrink-0" /><span className="truncate">Regular Funds</span>
                 </p>
                 <p className="text-sm font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc, baseCurrencyCode)}</p>
               </div>
               <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-3 min-w-0 overflow-hidden">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1.5 flex items-center gap-1">
-                  <Gift className="w-3 h-3 shrink-0" /><span className="truncate">Specific Seeds</span>
+                  <Gift className="w-3 h-3 shrink-0" /><span className="truncate">Designated Gifts</span>
                 </p>
                 <p className="text-sm font-mono font-bold text-amber-700 tabular-nums">{formatCurrency(globalTotals.seed, baseCurrencyCode)}</p>
               </div>
               <div className={`rounded-xl border px-3 py-3 min-w-0 overflow-hidden ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <p className={`text-[10px] font-bold uppercase tracking-wide mb-1.5 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
-                  <Archive className="w-3 h-3 shrink-0" /><span className="truncate">Savings Net</span>
+                  <Archive className="w-3 h-3 shrink-0" /><span className="truncate">Savings Balance</span>
                 </p>
                 <p className={`text-sm font-mono font-bold tabular-nums ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav, baseCurrencyCode)}</p>
               </div>
@@ -871,7 +879,7 @@ export default function CategoryLedger() {
                     activePortion === p ? 'bg-primary text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {p}
+                  {PORTION_LABELS[p]}
                 </button>
               ))}
             </div>
@@ -900,7 +908,7 @@ export default function CategoryLedger() {
               </div>
               <div>
                 <p className="font-semibold text-gray-800">No categories found</p>
-                <p className="text-sm text-gray-500 mt-1">Create categories and tag transactions with Stage Codes to populate this view.</p>
+                <p className="text-sm text-gray-500 mt-1">Create categories and tag transactions with a category and fund type to populate this view.</p>
               </div>
             </div>
           )}
@@ -958,7 +966,7 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-4 py-3"
                         >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> % Alloc</span>
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> Share %</span>
                         </SortableHeader>
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[2]}
@@ -968,7 +976,7 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-4 py-3 hidden md:table-cell"
                         >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> {baseCurrencySymbol} Allocation</span>
+                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> Regular Funds</span>
                         </SortableHeader>
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[3]}
@@ -978,7 +986,7 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-4 py-3 hidden md:table-cell"
                         >
-                          <span className="flex items-center justify-end gap-1"><Gift className="w-3 h-3" /> Specific Seed</span>
+                          <span className="flex items-center justify-end gap-1"><Gift className="w-3 h-3" /> Designated Gifts</span>
                         </SortableHeader>
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[4]}
@@ -988,7 +996,7 @@ export default function CategoryLedger() {
                           rightAlign
                           className="px-5 py-3"
                         >
-                          <span className="flex items-center justify-end gap-1"><Archive className="w-3 h-3" /> Savings Net</span>
+                          <span className="flex items-center justify-end gap-1"><Archive className="w-3 h-3" /> Savings Balance</span>
                         </SortableHeader>
                       </tr>
                     </thead>
@@ -1049,7 +1057,7 @@ export default function CategoryLedger() {
                               <Fragment key={group.id}>
                                 <tr className="bg-gray-100 border-y border-gray-200">
                                   <td colSpan={5} className="px-5 py-2">
-                                    <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{group.name}</span>
+                                    <span className="text-xs font-semibold text-gray-500">{group.name}</span>
                                   </td>
                                 </tr>
                                 {gRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
@@ -1059,7 +1067,7 @@ export default function CategoryLedger() {
                             {ungroupedRows.length > 0 && groupedSections.length > 0 && (
                               <tr className="bg-gray-100 border-y border-gray-200">
                                 <td colSpan={5} className="px-5 py-2">
-                                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Other</span>
+                                  <span className="text-xs font-semibold text-gray-500">Other</span>
                                 </td>
                               </tr>
                             )}
@@ -1125,7 +1133,7 @@ export default function CategoryLedger() {
                     ledgerPortion === p ? 'bg-primary text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {p}
+                  {PORTION_LABELS[p]}
                 </button>
               ))}
             </div>

@@ -171,7 +171,7 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
       {/* Panel — full-screen on mobile, centered card on sm+ */}
       <div
         ref={panelRef}
-        className={`relative w-full bg-white flex flex-col h-full sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh]`}
+        className={`relative w-full bg-white flex flex-col h-full sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh] [animation:modal-enter_150ms_ease-out]`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">

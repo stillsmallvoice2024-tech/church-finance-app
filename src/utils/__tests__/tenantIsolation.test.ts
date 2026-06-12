@@ -817,10 +817,10 @@ describe('LB-11: ReversalTransactions scoped to org and limited', () => {
 })
 
 describe('LB-11: BankDeposits scoped to org in load() and loadRecon()', () => {
-  const code = src('pages/BankDeposits.tsx')
+  const code = src('pages/BankMovement.tsx')
 
   it('uses useOrgStore hook in main component', () => {
-    const mainComponent = code.slice(code.indexOf('export default function BankDeposits'))
+    const mainComponent = code.slice(code.indexOf('export default function BankMovement'))
     expect(mainComponent).toContain("useOrgStore((s) => s.orgId)")
   })
 

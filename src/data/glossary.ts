@@ -17,23 +17,23 @@ export const GLOSSARY: GlossaryTerm[] = [
     definition: 'A running record of every transaction (in and out) for a specific bank account, like a bank statement you can filter and search.',
   },
   {
-    term:       'Allocation',
-    definition: 'How an inflow is divided across departments or budget lines. For example, 60% to General Fund, 30% to Missions, 10% to Youth.',
+    term:       'Distribution Rule',
+    definition: 'A preset rule that divides incoming funds across Regular Funds, Designated Gifts, and Savings. For example, 60% to Regular Funds, 30% to a project, 10% to Savings.',
   },
   {
-    term:       'Percentage Allocation',
-    definition: 'A preset rule that automatically splits incoming funds across departments by percentage. Set it once and every qualifying inflow follows that split.',
+    term:       'Regular Funds',
+    definition: 'The account that holds the percentage-based share of regular income. Funds arrive here through your Distribution Rules and cover everyday operations.',
   },
   {
-    term:       'Specific Giving',
+    term:       'Designated Gifts',
     definition: 'A donation earmarked for one particular purpose (e.g. "Building Fund"). The money is restricted and should only be spent on that purpose.',
   },
   {
-    term:       'Savings Portion',
-    definition: 'A portion of income set aside as savings or a reserve fund. It shows on the allocation as a deduction before operating expenses.',
+    term:       'Savings Funds',
+    definition: 'A portion of income set aside as savings or a reserve fund. It is deducted by your Distribution Rules before operating expenses.',
   },
   {
-    term:       'IntraFlow',
+    term:       'Category Fund Transfer',
     definition: 'A transfer of funds between two bank accounts within the same organisation — not income or expense, just a movement of money.',
   },
   {
@@ -41,7 +41,7 @@ export const GLOSSARY: GlossaryTerm[] = [
     definition: 'Cash physically deposited into a bank account. Records the deposit date, amount, and which bank received it.',
   },
   {
-    term:       'Category Ledger',
+    term:       'Category Accounts',
     definition: 'A view of all spending grouped by outflow category (e.g. Utilities, Salaries) so you can see where money is going.',
   },
   {

@@ -415,20 +415,20 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
         {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Stage Code 1" error={errors.stage_code_1?.message}
-            help="The fund or category this outflow is charged against. Used to match outflows to the correct budget line and allocation portion.">
+          <Field label="Category" error={errors.stage_code_1?.message}
+            help="The fund or category this outflow is charged against. Used to match outflows to the correct budget line and fund balance.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                 options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
                 placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
             )} />
           </Field>
-          <Field label="Stage Code 2 (Portion Type)" error={errors.stage_code_2?.message}
-            help="The allocation portion this outflow is drawn from: Percentage Allocation, Specific Seed, or Savings.">
+          <Field label="Fund Type" error={errors.stage_code_2?.message}
+            help="The fund this outflow is drawn from: Regular Funds, a Designated Gift, or Savings.">
             <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
               <option value="">— Select —</option>
-              <option value="Percentage Allocation">Percentage Allocation</option>
-              <option value="Specific Seed">Specific Seed</option>
+              <option value="Percentage Allocation">Regular Funds</option>
+              <option value="Specific Seed">Designated Gift</option>
               <option value="Savings">Savings</option>
             </select>
           </Field>

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, TrendingUp, TrendingDown, FileUp, Receipt,
-  BookOpen, Repeat2, Globe,
+  BookOpen, Repeat2, Globe, ShieldCheck,
   Hourglass, RotateCcw, Undo2,
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
@@ -38,45 +38,46 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Daily Finance',
     defaultOpen: true,
     items: [
-      { label: 'Dashboard', path: '/',        icon: LayoutDashboard },
-      { label: 'Inflows',   path: '/inflows',  icon: TrendingUp      },
-      { label: 'Outflows',  path: '/outflows', icon: TrendingDown    },
-      { label: 'Import',    path: '/import',   icon: FileUp,         canWriteOnly: true },
-      { label: 'Intra-Account Flows', path: '/intra-flow', icon: Repeat2 },
-      { label: 'Receipts',  path: '/receipts', icon: Receipt         },
+      { label: 'Dashboard',         path: '/',           icon: LayoutDashboard },
+      { label: 'Inflows',           path: '/inflows',    icon: TrendingUp      },
+      { label: 'Outflows',          path: '/outflows',   icon: TrendingDown    },
+      { label: 'Import',            path: '/import',     icon: FileUp,         canWriteOnly: true },
+      { label: 'Category Fund Transfers', path: '/intra-flow', icon: Repeat2 },
+      { label: 'Receipts',          path: '/receipts',   icon: Receipt         },
     ],
   },
   {
     id: 'banking',
     label: 'Banking',
-    defaultOpen: true,
+    defaultOpen: false,
     items: [
-      { label: 'Bank Ledger',         path: '/bank-ledger',         icon: BookOpen       },
-      { label: 'Deposits & Transfers', path: '/bank-movement', icon: BankMovementIcon },
-      { label: 'Foreign Currency',    path: '/foreign-currency',    icon: Globe          },
+      { label: 'Bank Ledger',          path: '/bank-ledger',      icon: BookOpen       },
+      { label: 'Bank Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
+      { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe          },
     ],
   },
   {
     id: 'review',
     label: 'Review & Processing',
-    defaultOpen: true,
+    defaultOpen: false,
     items: [
-      { label: 'Pending Deductions', path: '/pending-deductions', icon: Hourglass },
-      { label: 'Refunds',            path: '/refunds',            icon: RotateCcw },
-      { label: 'Reversals',          path: '/reversals',          icon: Undo2     },
+      { label: 'Upcoming Deductions', path: '/pending-deductions', icon: Hourglass },
+      { label: 'Refunds',             path: '/refunds',            icon: RotateCcw },
+      { label: 'Reversals',           path: '/reversals',          icon: Undo2     },
+      { label: 'Reconciliation',      path: '/reconciliation',     icon: ShieldCheck },
     ],
   },
   {
     id: 'budget',
     label: 'Budget & Allocation',
-    defaultOpen: true,
+    defaultOpen: false,
     items: [
-      { label: 'Categories',          path: '/categories',             icon: Layers     },
-      { label: 'Allocation Configs',  path: '/percentage-allocations', icon: Percent    },
-      { label: 'Category Ledger',     path: '/category-ledger',        icon: LayoutList },
-      { label: 'Percentage Allocation', path: '/percentage-allocation', icon: PieChart   },
-      { label: 'Specific Givings',    path: '/specific-givings',       icon: HandCoins  },
-      { label: 'Savings Portions',    path: '/savings-portions',       icon: PiggyBank  },
+      { label: 'Categories',        path: '/categories',             icon: Layers     },
+      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent    },
+      { label: 'Category Accounts', path: '/category-ledger',        icon: LayoutList },
+      { label: 'Regular Funds',     path: '/percentage-allocation',  icon: PieChart   },
+      { label: 'Designated Gifts',  path: '/specific-givings',       icon: HandCoins  },
+      { label: 'Savings Funds',     path: '/savings-portions',       icon: PiggyBank  },
     ],
   },
   {
@@ -86,7 +87,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     items: [
       { label: 'Reports',          path: '/reports',          icon: BarChart3    },
       { label: 'Financial Report', path: '/financial-report', icon: FileText     },
-      { label: 'Dynamic Reports',  path: '/dynamic-reports',  icon: NotebookPen  },
+      { label: 'Custom Reports',   path: '/dynamic-reports',  icon: NotebookPen  },
     ],
   },
   {
@@ -94,10 +95,10 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Administration',
     defaultOpen: false,
     items: [
-      { label: 'Setup',           path: '/setup',       icon: SlidersHorizontal, canWriteOnly: true },
-      { label: 'Settings',        path: '/settings',    icon: Settings          },
-      { label: 'User Management', path: '/users',       icon: Users,         adminOnly: true },
-      { label: 'Change Log',      path: '/change-log',  icon: ClipboardList, adminOnly: true },
+      { label: 'Setup',             path: '/setup',       icon: SlidersHorizontal, canWriteOnly: true },
+      { label: 'Settings',          path: '/settings',    icon: Settings          },
+      { label: 'User Management',   path: '/users',       icon: Users,         adminOnly: true },
+      { label: 'Activity History',  path: '/change-log',  icon: ClipboardList, adminOnly: true },
     ],
   },
 ]
@@ -166,7 +167,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={`
           sidebar-panel
-          fixed inset-y-0 left-0 z-30 w-64 flex flex-col bg-primary
+          fixed inset-y-0 left-0 z-30 w-72 flex flex-col bg-nav
           transform transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
@@ -269,12 +270,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <div className="relative shrink-0">
               <HelpCircle className="w-4 h-4" />
               {unread.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent border border-primary" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent border border-nav" />
               )}
             </div>
             <span>Help Center</span>
             {unread.length > 0 && (
-              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-primary text-[10px] font-bold leading-none">
+              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-nav text-[10px] font-bold leading-none">
                 {unread.length}
               </span>
             )}

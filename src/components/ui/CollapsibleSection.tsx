@@ -18,7 +18,7 @@ export function CollapsibleSection({ label, defaultOpen = false, children }: Col
         onClick={() => setOpen(v => !v)}
         aria-expanded={open}
         aria-controls={contentId}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 hover:bg-gray-100 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 bg-gray-50 hover:bg-gray-100 transition-colors"
       >
         {label}
         <ChevronDown

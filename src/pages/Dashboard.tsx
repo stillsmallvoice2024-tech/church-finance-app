@@ -36,14 +36,24 @@ import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBa
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
-import { healthStatusLabel } from '../utils/reconciliationAggregator'
 import { useOrgStore }             from '../store/orgStore'
 import { getOrgTimezone }          from '../utils/timezones'
 import { useHealthStore }          from '../store/healthStore'
+import { useCountUp }              from '../hooks/useCountUp'
+import { ConfidenceGauge }         from '../components/ui/ConfidenceGauge'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+const visitKey = (userId: string) => `church-finance-visit-${userId}`
+
+interface VisitSnapshot {
+  visitedAt:    string
+  totalInflow:  number
+  totalOutflow: number
+  netBalance:   number
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +80,12 @@ function greeting() {
   return 'Good evening'
 }
 
+// Mounted only once data is loaded, so the count-up runs exactly once.
+function AnimatedStat({ value, format }: { value: number; format: (v: number) => string }) {
+  const animated = useCountUp(value)
+  return <>{format(animated)}</>
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -89,11 +105,18 @@ export default function Dashboard() {
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
   const [showImport,     setShowImport]     = useState(false)
+  const [lastVisit,      setLastVisit]      = useState<VisitSnapshot | null>(null)
 
   const healthStatus  = useHealthStore(s => s.status)
   const healthRunAt   = useHealthStore(s => s.runAt)
   const healthSkipped = useHealthStore(s => s.skipped)
   const setSkipped    = useHealthStore(s => s.setSkipped)
+  const cleanSince    = useHealthStore(s => s.cleanSince)
+
+  const stableDays = useMemo(() => {
+    if (!cleanSince) return 0
+    return Math.floor((Date.now() - new Date(cleanSince).getTime()) / 86_400_000)
+  }, [cleanSince])
 
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
@@ -121,6 +144,27 @@ export default function Dashboard() {
   )
 
   const isLoading = stats.loading || categoriesLoading
+
+  // ── Since-last-visit snapshot ──────────────────────────────────────────────
+  // Must run after isLoading is declared — its dep array reads it during render.
+  useEffect(() => {
+    if (isLoading || !user) return
+    const key = visitKey(user.id)
+    try {
+      const raw  = localStorage.getItem(key)
+      const prev = raw ? (JSON.parse(raw) as VisitSnapshot) : null
+      const oneHourAgo = Date.now() - 3_600_000
+      if (prev && new Date(prev.visitedAt).getTime() < oneHourAgo) {
+        setLastVisit(prev)
+      }
+      localStorage.setItem(key, JSON.stringify({
+        visitedAt:    new Date().toISOString(),
+        totalInflow:  stats.totalInflow,
+        totalOutflow: stats.totalOutflow,
+        netBalance:   stats.netBalance,
+      } satisfies VisitSnapshot))
+    } catch { /* storage unavailable */ }
+  }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const firstName =
     profile?.full_name?.split(' ')[0] ??
@@ -163,14 +207,19 @@ export default function Dashboard() {
         )}
 
         {/* ── Welcome + Quick Actions ──────────────────────────────────────── */}
-        <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-3xl font-semibold text-gray-900">
               {greeting()}, {firstName}
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
               {format(new Date(), 'EEEE, d MMMM yyyy')} &nbsp;·&nbsp; {year} overview
             </p>
+            {!isLoading && stats.recentTransactions.length > 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                Records up to date — latest transaction recorded {formatDate(stats.recentTransactions[0].date)}
+              </p>
+            )}
           </div>
           <CanWrite>
             <div className="flex flex-wrap gap-2 shrink-0">
@@ -203,45 +252,79 @@ export default function Dashboard() {
         {/* ── Onboarding checklist ─────────────────────────────────────────── */}
         <OnboardingChecklist />
 
-        {/* ── Health status strip ──────────────────────────────────────────── */}
-        {/* Strip is a div so the dismiss × button doesn't trigger navigation */}
-        <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-          healthSkipped || !healthStatus              ? 'bg-gray-50 border-gray-200 text-gray-400'           :
-          healthStatus === 'critical'                 ? 'bg-red-50 border-red-200 text-red-700'              :
-          healthStatus === 'warning'                  ? 'bg-amber-50 border-amber-200 text-amber-700'        :
-          'bg-green-50 border-green-200 text-green-700'
-        }`}>
-          {(healthSkipped || !healthStatus)           ? <ShieldCheck className="w-4 h-4 shrink-0 opacity-40" /> :
-           healthStatus === 'critical'                ? <ShieldX     className="w-4 h-4 shrink-0" />          :
-           healthStatus === 'warning'                 ? <ShieldAlert className="w-4 h-4 shrink-0" />          :
-           <ShieldCheck className="w-4 h-4 shrink-0" />}
-          <span>
-            System health:{' '}
-            <strong>
-              {healthSkipped ? 'Paused' : healthStatus ? healthStatusLabel(healthStatus) : 'Not checked yet'}
-            </strong>
-          </span>
-          {healthStatus && !healthSkipped && healthRunAt && (
-            <span className="text-xs opacity-60 hidden sm:inline">
-              · last checked {formatWithTimezone(healthRunAt, orgTimezone)}
-            </span>
-          )}
-          <Link
-            to="/reconciliation"
-            className="ml-auto text-xs font-semibold opacity-70 hover:opacity-100 shrink-0"
-          >
-            {healthStatus && !healthSkipped ? 'View →' : 'Run check →'}
-          </Link>
-          <button
-            onClick={() => setSkipped(!healthSkipped)}
-            title={healthSkipped ? 'Resume health monitoring' : 'Dismiss health strip'}
-            className="shrink-0 p-0.5 rounded opacity-40 hover:opacity-80 transition-opacity"
-          >
-            {healthSkipped
-              ? <ShieldCheck className="w-3.5 h-3.5" />
-              : <span className="text-base leading-none">×</span>}
-          </button>
-        </div>
+        {/* ── Record confidence strip ───────────────────────────────────────── */}
+        {!healthSkipped && (
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-md text-sm transition-colors ${
+            !healthStatus                ? 'bg-gray-50 border-gray-200'                          :
+            healthStatus === 'critical'  ? 'bg-red-50 border-red-200'                            :
+            healthStatus === 'warning'   ? 'bg-amber-50 border-amber-200'                        :
+                                          'bg-green-50 border-green-200'
+          }`}>
+            <div className="shrink-0">
+              {!healthStatus              ? <ShieldCheck className="w-5 h-5 text-gray-300" /> :
+               healthStatus === 'critical' ? <ShieldX     className="w-5 h-5 text-red-500" /> :
+               healthStatus === 'warning'  ? <ShieldAlert className="w-5 h-5 text-amber-500" /> :
+               <ShieldCheck className="w-5 h-5 text-green-600" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${
+                !healthStatus              ? 'text-gray-500'    :
+                healthStatus === 'critical' ? 'text-red-700'    :
+                healthStatus === 'warning'  ? 'text-amber-700'  :
+                                             'text-green-700'
+              }`}>
+                {!healthStatus
+                  ? 'Records not yet verified — run a reconciliation check to confirm accuracy'
+                  : healthStatus === 'critical'
+                  ? 'Action needed: issues found that need your attention'
+                  : healthStatus === 'warning'
+                  ? 'Review recommended: some items may need attention'
+                  : 'All records reconciled — your books are in good order'}
+              </p>
+              {healthStatus && healthRunAt && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Last verified {formatWithTimezone(healthRunAt, orgTimezone)}
+                  {healthStatus === 'healthy' && stableDays >= 7 && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-green-600 font-medium">
+                      ✓ Stable for {stableDays} days
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                to="/reconciliation"
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                  healthStatus === 'critical' ? 'bg-red-100 text-red-700 hover:bg-red-200'     :
+                  healthStatus === 'warning'  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' :
+                  healthStatus === 'healthy'  ? 'bg-green-100 text-green-700 hover:bg-green-200' :
+                  'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {healthStatus === 'critical' || healthStatus === 'warning' ? 'View issues →' : 'View details →'}
+              </Link>
+              <button
+                onClick={() => setSkipped(true)}
+                title="Dismiss"
+                className="p-1 rounded text-gray-300 hover:text-gray-500 transition-colors"
+                aria-label="Dismiss health banner"
+              >
+                <span className="text-lg leading-none">×</span>
+              </button>
+            </div>
+          </div>
+        )}
+        {healthSkipped && (
+          <div className="flex items-center justify-end">
+            <button
+              onClick={() => setSkipped(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Show record health status
+            </button>
+          </div>
+        )}
 
         {/* ── KPI stat cards ───────────────────────────────────────────────── */}
         <div data-tour="summary-cards" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -253,28 +336,28 @@ export default function Dashboard() {
             <>
               <StatCard
                 title={`Total Inflows (${year})`}
-                value={formatCurrencyCompact(stats.totalInflow, baseCurrencyCode)}
+                value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<TrendingUp className="w-5 h-5 text-success" />}
                 iconBgClass="bg-green-50"
                 href="/inflows"
               />
               <StatCard
                 title={`Total Outflows (${year})`}
-                value={formatCurrencyCompact(stats.totalOutflow, baseCurrencyCode)}
+                value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<TrendingDown className="w-5 h-5 text-danger" />}
                 iconBgClass="bg-red-50"
                 href="/outflows"
               />
               <StatCard
                 title="Net Balance"
-                value={formatCurrencyCompact(stats.netBalance, baseCurrencyCode)}
+                value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<Wallet className="w-5 h-5 text-primary" />}
                 iconBgClass="bg-primary-100"
                 href="/bank-ledger"
               />
               <StatCard
                 title="Categories"
-                value={String(categories.length)}
+                value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
                 icon={<Layers className="w-5 h-5 text-accent" />}
                 iconBgClass="bg-yellow-50"
                 href="/categories"
@@ -283,8 +366,26 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Monthly area chart ───────────────────────────────────────────── */}
-        <Card data-tour="dashboard-chart">
+        {/* ── Since-last-visit note ────────────────────────────────────────── */}
+        {lastVisit && !isLoading && (() => {
+          const inflowΔ  = stats.totalInflow  - lastVisit.totalInflow
+          const outflowΔ = stats.totalOutflow - lastVisit.totalOutflow
+          const parts: string[] = []
+          if (Math.abs(inflowΔ)  >= 1) parts.push(`inflows ${inflowΔ  > 0 ? '+' : ''}${formatCurrencyCompact(inflowΔ,  baseCurrencyCode)}`)
+          if (Math.abs(outflowΔ) >= 1) parts.push(`outflows ${outflowΔ > 0 ? '+' : ''}${formatCurrencyCompact(outflowΔ, baseCurrencyCode)}`)
+          if (parts.length === 0) return null
+          const days = Math.floor((Date.now() - new Date(lastVisit.visitedAt).getTime()) / 86_400_000)
+          const timeAgo = days === 0 ? 'earlier today' : days === 1 ? 'yesterday' : `${days} days ago`
+          return (
+            <p className="text-xs text-gray-400 text-right -mt-2">
+              Since {timeAgo}: {parts.join(' · ')}
+            </p>
+          )
+        })()}
+
+        {/* ── Monthly area chart + Record Confidence ───────────────────────── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
+        <Card data-tour="dashboard-chart" className="xl:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-700">
               Monthly Inflows vs Outflows
@@ -359,6 +460,8 @@ export default function Dashboard() {
             </>
           )}
         </Card>
+        <ConfidenceGauge />
+        </div>
 
         {/* ── Recent transactions ──────────────────────────────────────────── */}
         <Card padding={false} data-tour="recent-transactions">
@@ -400,7 +503,7 @@ export default function Dashboard() {
 
         {/* ── FX currency strip ────────────────────────────────────────────── */}
         <Card>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">
             Foreign Currency Holdings
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

@@ -11,6 +11,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { HelpButton }      from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { ROLE_LABELS } from '../utils/constants'
+import { friendlyError } from '../utils/friendlyError'
 import { BackupModal }     from '../components/modals/BackupModal'
 import { RestoreModal }    from '../components/modals/RestoreModal'
 import { ExportCSVsModal } from '../components/modals/ExportCSVsModal'
@@ -99,7 +100,7 @@ export default function Settings() {
     setMfaLoading(true); setMfaError(null)
     const { error } = await supabase.auth.mfa.unenroll({ factorId })
     if (error) {
-      setMfaError(error.message)
+      setMfaError(friendlyError(error, 'update MFA'))
     } else {
       setMfaFactors(f => f.filter(x => x.id !== factorId))
     }
@@ -118,8 +119,8 @@ export default function Settings() {
       })
       .eq('id', user.id)
     setSavingName(false)
-    if (error) toast(error.message, 'error')
-    else        toast('Profile updated', 'success')
+    if (error) toast(friendlyError(error, 'save your profile'), 'error')
+    else        toast('Profile updated.', 'success')
   }
 
   const handleChangePassword = async () => {
@@ -130,7 +131,7 @@ export default function Settings() {
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     setChangingPw(false)
     if (error) {
-      setPwError(error.message)
+      setPwError(friendlyError(error, 'change your password'))
     } else {
       toast('Password updated successfully', 'success')
       setPwDone(true)

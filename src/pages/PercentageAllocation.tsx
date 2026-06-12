@@ -35,7 +35,7 @@ const PA_SORT_FIELDS = deriveSortFields(PA_COLUMNS)
 type ConfigRowShape = { category_name: string; budget_portion?: string; percentage?: number }
 
 export default function PercentageAllocation() {
-  usePageTitle('Percentage Allocation')
+  usePageTitle('Regular Funds')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const [rows,    setRows]    = useState<PctRow[]>([])
@@ -204,9 +204,9 @@ export default function PercentageAllocation() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Percentage Allocation</h1>
+          <h1 className="text-xl font-bold text-gray-900">Regular Funds</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Accumulated percentage-allocation balances per category — all time
+            Accumulated regular fund balances per category — all time
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -10,6 +10,7 @@ import { Modal }           from '../components/ui/Modal'
 import { DeleteDialog }    from '../components/ui/DeleteDialog'
 import { DeleteOrgModal }  from '../components/modals/DeleteOrgModal'
 import { exportCSV }    from '../utils/csvExport'
+import { friendlyError } from '../utils/friendlyError'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { Navigate } from 'react-router-dom'
 import { useAuth }      from '../hooks/useAuth'
@@ -175,7 +176,7 @@ function InviteUserModal({
 
     setLoading(false)
     if (error) {
-      toast(error.message, 'error')
+      toast(friendlyError(error), 'error')
     } else {
       setInviteUrl(`${window.location.origin}/invite/${token}`)
       setInviteEmail(values.email)
@@ -588,7 +589,7 @@ export default function UserManagement() {
       .order('joined_at', { ascending: true })
 
     if (error) {
-      toast(error.message, 'error')
+      toast(friendlyError(error), 'error')
       setLoading(false)
       return
     }
@@ -625,9 +626,9 @@ export default function UserManagement() {
     })
     setSavingId(null)
     if (error) {
-      toast(error.message, 'error')
+      toast(friendlyError(error), 'error')
     } else {
-      toast('Role updated', 'success')
+      toast('Role updated.', 'success')
       setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m))
     }
   }
@@ -638,9 +639,9 @@ export default function UserManagement() {
     const { error } = await supabase.rpc('remove_org_member', { p_member_id: removeId })
     setRemoving(false)
     if (error) {
-      toast(error.message, 'error')
+      toast(friendlyError(error), 'error')
     } else {
-      toast('Member removed', 'success')
+      toast('Member removed.', 'success')
       setMembers(prev => prev.filter(m => m.id !== removeId))
       setRemoveId(null)
     }
@@ -655,7 +656,7 @@ export default function UserManagement() {
     })
     setTransferring(false)
     if (error) {
-      toast(error.message, 'error')
+      toast(friendlyError(error), 'error')
     } else {
       toast(`Ownership transferred to ${transferTarget.full_name || transferTarget.email}`, 'success')
       setTransferTarget(null)

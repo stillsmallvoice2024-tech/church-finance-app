@@ -9,6 +9,7 @@ import { setupTour } from './setupTour'
 import { reportsTour } from './reportsTour'
 import { settingsTour } from './settingsTour'
 import { usersTour } from './usersTour'
+import { reconciliationTour } from './reconciliationTour'
 
 export const ALL_TOURS: TourDefinition[] = [
   dashboardTour,
@@ -21,6 +22,7 @@ export const ALL_TOURS: TourDefinition[] = [
   reportsTour,
   settingsTour,
   usersTour,
+  reconciliationTour,
 ]
 
 const TOUR_BY_ID = new Map<TourId, TourDefinition>(

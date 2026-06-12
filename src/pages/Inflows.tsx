@@ -6,6 +6,7 @@ import {
 import { Card }                    from '../components/ui/Card'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { BulkActionBar }           from '../components/ui/BulkActionBar'
+import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
 import { EditFXInflowModal }       from '../components/modals/EditFXInflowModal'
 import { BulkEditInflowModal }     from '../components/modals/BulkEditInflowModal'
@@ -24,6 +25,7 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
+import { friendlyError }           from '../utils/friendlyError'
 import { supabase }                from '../lib/supabase'
 import { useOrgStore }             from '../store/orgStore'
 import { fetchAllPaginated, EXPORT_MAX } from '../utils/paginatedExport'
@@ -41,6 +43,7 @@ import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
+import { TransactionStory } from '../components/ui/TransactionStory'
 import { inflowDetailItems } from '../utils/rowDetailItems'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
@@ -151,6 +154,7 @@ export default function Inflows() {
   const [deleteId,          setDeleteId]          = useState<string | null>(null)
   const [expandedId,        setExpandedId]        = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
 
   const { selectedIds, toggleRow, clearAll, selectAllRows, allSelected } = useBulkSelection(
@@ -196,18 +200,18 @@ export default function Inflows() {
       setDeleteId(null)
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete the transaction'), 'error')
     }
   }
 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds]
-    const { failed } = await executeBulkDelete(ids)
+    const { failed, failures } = await executeBulkDelete(ids)
     setConfirmBulkDelete(false)
     clearAll()
     refetch()
-    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
-    else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted.`, 'success')
+    else setBulkResults({ action: 'deleted', succeeded: ids.length - failed, failures })
   }
 
   const INF_CSV_HEADERS = ['Date', 'Description', `Amount (${baseCurrencySymbol})`, 'Transaction Type', 'Txn Ref', 'Remark']
@@ -255,7 +259,7 @@ export default function Inflows() {
       if (truncated) toast(`Export capped at ${EXPORT_MAX.toLocaleString()} records — use a full database export for larger datasets`, 'warning')
       exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, rows.map(inflowCsvRow))
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Export failed', 'error')
+      toast(friendlyError(e, 'export'), 'error')
     }
   }
 
@@ -275,9 +279,9 @@ export default function Inflows() {
       <div className="space-y-5">
 
         {/* Header */}
-        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Inflow Transactions</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Inflow Transactions</h1>
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
@@ -467,13 +471,13 @@ export default function Inflows() {
                       onChange={e => e.target.checked ? selectAllRows() : clearAll()} />
                   </th>
                   <th className="w-8" />
-                  <SortableHeader field={infSF('date')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={infSF('recorded_at')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Bank</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Type</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
-                  <SortableHeader field={infSF('amount')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
+                  <SortableHeader field={infSF('date')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <SortableHeader field={infSF('recorded_at')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Bank</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Type</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Description</th>
+                  <SortableHeader field={infSF('amount')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-success/80 hover:text-success" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -571,7 +575,18 @@ export default function Inflows() {
                     ]
                     if (expanded) {
                       rows.push(
-                        <RowDetailPanel key={`${row.id}-detail`} items={inflowDetailItems(row, baseCurrencyCode)} colSpan={9} />,
+                        <RowDetailPanel
+                          key={`${row.id}-detail`}
+                          items={inflowDetailItems(row, baseCurrencyCode)}
+                          colSpan={9}
+                          footer={
+                            <TransactionStory
+                              table="inflow_transactions"
+                              recordId={row.id}
+                              createdAt={row.created_at}
+                            />
+                          }
+                        />,
                       )
                     }
                     return rows
@@ -616,7 +631,9 @@ export default function Inflows() {
         ids={[...selectedIds]}
         banks={banks}
         onSuccess={() => { clearAll(); refetch() }}
+        onResults={setBulkResults}
       />
+      <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
       <DescriptionTooltip tooltip={descTooltip} />
       <EditFXInflowModal
         open={!!fxInflowEditRecord}

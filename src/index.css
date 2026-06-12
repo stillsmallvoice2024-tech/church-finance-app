@@ -25,7 +25,7 @@
   outline: none;
 }
 :focus-visible {
-  outline: 2px solid #1E3A8A;
+  outline: 2px solid #3B6FD4;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -88,6 +88,15 @@ html.dark .bg-amber-50 { background-color: rgba(217,119,6,0.2)  !important; }
   to   { opacity: 1; }
 }
 
+/* ── Page content fade — subtle entrance for route changes ─────────────────── */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.page-enter {
+  animation: pageEnter 0.18s ease-out;
+}
+
 /* ── Reduced motion ──────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -126,7 +135,7 @@ html.dark .bg-amber-50 { background-color: rgba(217,119,6,0.2)  !important; }
     text-align: center;
     font-size: 14pt;
     font-weight: 700;
-    border-bottom: 2px solid #1E3A8A;
+    border-bottom: 2px solid #3B6FD4;
     padding-bottom: 8px;
     margin-bottom: 20px;
   }
@@ -143,4 +152,16 @@ html.dark .bg-amber-50 { background-color: rgba(217,119,6,0.2)  !important; }
   /* Hide shadows / rounded borders for clean print */
   * { box-shadow: none !important; }
   .rounded-xl, .rounded-2xl { border-radius: 0 !important; }
+}
+
+/* ── Modal entry animation ─────────────────────────────────────────────────── */
+@keyframes modal-enter {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+/* ── Table row stagger fade ──────────────────────────────────────────────── */
+@keyframes row-fade-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0);   }
 }

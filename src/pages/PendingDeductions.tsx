@@ -4,6 +4,7 @@ import { Clock, CheckCircle2, Pencil, Trash2, AlertCircle, RefreshCw, Terminal, 
 import { Card }                     from '../components/ui/Card'
 import { DeleteDialog }             from '../components/ui/DeleteDialog'
 import { BulkActionBar }            from '../components/ui/BulkActionBar'
+import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { DataControlsBar }          from '../components/ui/DataControlsBar'
 import { SortableHeader }           from '../components/ui/SortableHeader'
 import { PaginationBar }            from '../components/ui/PaginationBar'
@@ -22,6 +23,7 @@ import { useToastStore }            from '../store/toastStore'
 import { useRole }                  from '../hooks/useRole'
 import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { outflowDetailItems } from '../utils/rowDetailItems'
 import { supabase }                 from '../lib/supabase'
@@ -56,6 +58,7 @@ export default function PendingDeductions() {
   const [modalOpen,     setModalOpen]     = useState(false)
   const [resolvingId,   setResolvingId]   = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkEditOpen,  setBulkEditOpen]  = useState(false)
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
@@ -95,7 +98,7 @@ export default function PendingDeductions() {
 
   const { selectedIds, toggleRow, clearAll, selectAllRows, headerRef: headerCheckboxRef } = useBulkSelection(displayed)
 
-  usePageTitle('Pending Deductions')
+  usePageTitle('Upcoming Deductions')
 
   // Reset page + selection when search changes
   useEffect(() => { pdState.setPage(0); clearAll() }, [pdState.search, pdState.setPage]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -134,7 +137,7 @@ export default function PendingDeductions() {
         : sortRows(rows, getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
       exportCSV(PD_CSV_FILE, PD_CSV_HEADERS, allSorted.map(pdCsvRow))
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Export failed', 'error')
+      toast(friendlyError(e, 'export'), 'error')
     }
   }
 
@@ -155,12 +158,12 @@ export default function PendingDeductions() {
 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds]
-    const { failed } = await executeBulkDelete(ids)
+    const { failed, failures } = await executeBulkDelete(ids)
     setConfirmBulkDelete(false)
     clearAll()
     refetch()
-    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
-    else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted.`, 'success')
+    else setBulkResults({ action: 'deleted', succeeded: ids.length - failed, failures })
   }
 
   const handleResolve = async (row: OutflowTransaction) => {
@@ -178,7 +181,7 @@ export default function PendingDeductions() {
       toast('Transaction marked as resolved', 'success')
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Update failed', 'error')
+      toast(friendlyError(e, 'update the deduction'), 'error')
     } finally {
       setResolvingId(null)
     }
@@ -247,11 +250,11 @@ export default function PendingDeductions() {
         </PageHelpBanner>
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <h1 className="text-3xl font-semibold text-gray-900 flex items-center gap-2">
               <Clock className="w-6 h-6 text-amber-500" />
-              Pending Deductions
+              Upcoming Deductions
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
               Outflow transactions awaiting deduction from the account — {count} pending
@@ -341,13 +344,13 @@ export default function PendingDeductions() {
                       onChange={e => e.target.checked ? selectAllRows() : clearAll()}
                     />
                   </th>
-                  <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Description</th>
-                  <SortableHeader field={PD_SORT_FIELDS[1]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Net ({baseCurrencySymbol})</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Stage Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Remarks</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
+                  <SortableHeader field={PD_SORT_FIELDS[0]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">Description</th>
+                  <SortableHeader field={PD_SORT_FIELDS[1]} activeSortKey={pdState.sortKey} activeSortDir={pdState.sortDir} onSort={pdState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">Net ({baseCurrencySymbol})</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">Stage Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">Remarks</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -461,6 +464,7 @@ export default function PendingDeductions() {
         ids={[...selectedIds]}
         banks={banks}
         onSuccess={() => { clearAll(); refetch() }}
+        onResults={setBulkResults}
       />
       <DeleteDialog
         open={confirmBulkDelete}
@@ -469,6 +473,8 @@ export default function PendingDeductions() {
         loading={bulkDeleting}
         label={`these ${selectedIds.size} pending deduction${selectedIds.size !== 1 ? 's' : ''}`}
       />
+
+      <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
     </>
   )
 }

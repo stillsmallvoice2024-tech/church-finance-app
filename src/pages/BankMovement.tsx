@@ -11,6 +11,7 @@ import { SortableHeader }   from '../components/ui/SortableHeader'
 import { PaginationBar }    from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
+import { friendlyError } from '../utils/friendlyError'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { Card }         from '../components/ui/Card'
@@ -104,8 +105,8 @@ export default function BankMovement() {
         Both use root/offset linking to pair the originating entry with its corresponding record.
       </PageHelpBanner>
 
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Bank Deposits &amp; Transfers</h1>
+      <div className="pb-4 border-b border-gray-100">
+        <h1 className="text-3xl font-semibold text-gray-900">Bank Deposits &amp; Transfers</h1>
         <p className="text-sm text-gray-500 mt-0.5">Deposits into banks and transfers between banks</p>
       </div>
 
@@ -176,7 +177,7 @@ function DepositsPanel() {
       supabase.from('inflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
       supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
     ])
-    if (depRes.error) { setError(depRes.error.message); setLoading(false); return }
+    if (depRes.error) { setError(friendlyError(depRes.error, 'load deposits')); setLoading(false); return }
 
     const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as Omit<DepositRow, 'source' | 'offset_role' | 'root_transaction_id'>),
@@ -226,8 +227,8 @@ function DepositsPanel() {
     setDeleting(true)
     const { error: err } = await supabase.from('bank_deposits').delete().eq('id', deleteTarget.id)
     setDeleting(false); setDeleteTarget(null)
-    if (err) { push(err.message, 'error'); return }
-    push('Deposit deleted', 'success'); load()
+    if (err) { push(friendlyError(err, 'delete the record'), 'error'); return }
+    push('Deposit deleted.', 'success'); load()
   }
 
   const selectedBankName = bankFilter ? (banks.find(b => b.id === bankFilter)?.name ?? null) : null
@@ -465,11 +466,11 @@ function DepositsPanel() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
-                  <SortableHeader field={BD_SORT_FIELDS[0]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={BD_SORT_FIELDS[2]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={BD_SORT_FIELDS[1]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
+                  <SortableHeader field={BD_SORT_FIELDS[0]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <SortableHeader field={BD_SORT_FIELDS[2]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <SortableHeader field={BD_SORT_FIELDS[1]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" />
                   {['Description', 'Remarks', 'Source', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -583,7 +584,7 @@ function TransfersPanel() {
         supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
       ] : [Promise.resolve({ data: [], error: null }), Promise.resolve({ data: [], error: null })]),
     ])
-    if (transferRes.error) { setError(transferRes.error.message); setLoading(false); return }
+    if (transferRes.error) { setError(friendlyError(transferRes.error, 'load transfers')); setLoading(false); return }
 
     const transferRows: TransferRow[] = (transferRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as unknown as TransferRow), source: 'intrabank_transfers' as const, offset_role: null, root_transaction_id: null,
@@ -631,8 +632,8 @@ function TransfersPanel() {
     setDeleting(true)
     const { error: err } = await supabase.from('intrabank_transfers').delete().eq('id', deleteId)
     setDeleting(false)
-    if (err) { toast(err.message, 'error'); return }
-    toast('Transfer deleted', 'success'); setDeleteId(null); load()
+    if (err) { toast(friendlyError(err, 'delete the transfer'), 'error'); return }
+    toast('Transfer deleted.', 'success'); setDeleteId(null); load()
   }
 
   if (error) return (
@@ -775,7 +776,7 @@ function TransfersPanel() {
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
                   {['Date', 'From Bank', 'To Bank', `Amount (${baseCurrencySymbol})`, 'Description', 'Ref', 'Remarks', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>

@@ -29,6 +29,7 @@ import {
 } from '../hooks/useMutations'
 import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { supabase } from '../lib/supabase'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -347,9 +348,9 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bank Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Number</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Bank Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Account Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Type</th>
                     <th className="px-4 py-3 w-24" />
                   </tr>
                 </thead>
@@ -493,10 +494,10 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Effective From</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total %</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Effective From</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Total %</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                     <th className="px-4 py-3 w-28" />
                   </tr>
                 </thead>
@@ -717,12 +718,12 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-100">
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Ver</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Effective From</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Effective To</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Type</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold uppercase tracking-wider">Status</th>
-                            <th className="px-4 py-2 text-right text-gray-500 font-semibold uppercase tracking-wider">Rows</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Type</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status</th>
+                            <th className="px-4 py-2 text-right text-gray-500 font-semibold">Rows</th>
                             <th className="px-4 py-2 w-10" />
                           </tr>
                         </thead>
@@ -849,7 +850,7 @@ function CurrenciesTab() {
       toast(`${currCode} removed`, 'success')
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete'), 'error')
     }
   }
 
@@ -882,7 +883,7 @@ function CurrenciesTab() {
 
       {/* Add form */}
       <form onSubmit={handleAdd} className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Add Currency</p>
+        <p className="text-xs font-semibold text-gray-500">Add Currency</p>
         {(formErr || addError) && (
           <p className="text-xs text-red-600">{formErr ?? addError}</p>
         )}
@@ -2690,7 +2691,7 @@ function DatabaseTab() {
       setBackfillResult({ inflows: inflowCount, outflows: outflowCount })
       toast(`Backfilled ${inflowCount} inflows and ${outflowCount} outflows`, 'success')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Backfill failed', 'error')
+      toast(friendlyError(e, 'backfill'), 'error')
     } finally {
       setBackfilling(false)
     }
@@ -2737,7 +2738,7 @@ function DatabaseTab() {
         'success',
       )
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Backfill failed', 'error')
+      toast(friendlyError(e, 'backfill'), 'error')
     } finally {
       setBackfillingCharge(false)
     }
@@ -2906,7 +2907,7 @@ export default function SetupPage() {
       setDeleteAllocTarget(null)
       reloadAllocs()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete'), 'error')
     }
   }
 
@@ -2918,7 +2919,7 @@ export default function SetupPage() {
       setLockTarget(null)
       reloadAllocs()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Lock failed', 'error')
+      toast(friendlyError(e, 'lock the config'), 'error')
     }
   }
 
@@ -2933,7 +2934,7 @@ export default function SetupPage() {
       setAllocModalOpen(true)
       reloadAllocs()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Unlock failed', 'error')
+      toast(friendlyError(e, 'unlock the config'), 'error')
     }
   }
 
@@ -2978,7 +2979,7 @@ export default function SetupPage() {
       setDeleteBankRecord(null)
       setBankRefetch(n => n + 1)
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete'), 'error')
     }
   }
 
@@ -2986,7 +2987,7 @@ export default function SetupPage() {
     <>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Setup</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Setup</h1>
           <p className="text-sm text-gray-500 mt-1">Configure your church finance settings</p>
         </div>
 
@@ -3204,7 +3205,7 @@ export default function SetupPage() {
             setIncomeTypeRefetch(n => n + 1)
             toast('Income type deleted', 'success')
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+            toast(friendlyError(e, 'delete'), 'error')
           }
         }}
         loading={false}
@@ -3227,7 +3228,7 @@ export default function SetupPage() {
             setOutflowTypeRefetch(n => n + 1)
             toast('Outflow type deleted', 'success')
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+            toast(friendlyError(e, 'delete'), 'error')
           }
         }}
         loading={false}
@@ -3250,7 +3251,7 @@ export default function SetupPage() {
             setDepartmentRefetch(n => n + 1)
             toast('Department deleted', 'success')
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+            toast(friendlyError(e, 'delete'), 'error')
           }
         }}
         loading={false}

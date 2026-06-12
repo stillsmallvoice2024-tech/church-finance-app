@@ -1093,6 +1093,13 @@ export function useUnlockAllocationConfig(): MutationHook<string> {
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
 
+// Per-row failure detail surfaced to bulk-results UI. Reasons come from the
+// DB error (chunk failures) or RLS row filtering (rows silently not affected).
+export interface BulkRowFailure {
+  id: string
+  reason: string
+}
+
 // ── useBulkDeleteTransaction ────────────────────────────────────────────────────
 // Processes IDs in chunks of BULK_CHUNK_SIZE to stay within PostgREST URL limits.
 // 3 queries per chunk (SELECT IN + DELETE IN + batch audit INSERT).
@@ -1101,13 +1108,14 @@ export function useUnlockAllocationConfig(): MutationHook<string> {
 export function useBulkDeleteTransaction(table: DeletableTable) {
   const [loading, setLoading] = useState(false)
 
-  const execute = useCallback(async (ids: string[]): Promise<{ failed: number; total: number }> => {
-    if (ids.length === 0) return { failed: 0, total: 0 }
+  const execute = useCallback(async (ids: string[]): Promise<{ failed: number; total: number; failures: BulkRowFailure[] }> => {
+    if (ids.length === 0) return { failed: 0, total: 0, failures: [] }
     const { user } = useAuthStore.getState()
     if (!user?.id) throw new Error('You must be signed in to delete records.')
 
     setLoading(true)
     let totalDeleted = 0
+    const failures: BulkRowFailure[] = []
     try {
       for (const chunk of chunkArray(ids, BULK_CHUNK_SIZE)) {
         try {
@@ -1124,6 +1132,12 @@ export function useBulkDeleteTransaction(table: DeletableTable) {
 
           const deletedIds = (deletedRows ?? []).map(r => r.id as string)
           totalDeleted += deletedIds.length
+          if (deletedIds.length < chunk.length) {
+            const deletedSet = new Set(deletedIds)
+            for (const id of chunk) {
+              if (!deletedSet.has(id)) failures.push({ id, reason: 'Not deleted — denied by permissions or record no longer exists' })
+            }
+          }
 
           batchLogAudit(
             deletedIds.map(id => ({
@@ -1137,15 +1151,17 @@ export function useBulkDeleteTransaction(table: DeletableTable) {
           )
         } catch (chunkErr) {
           handleAuthError(chunkErr)
-          console.warn('[bulkDelete] chunk failed:', extractMessage(chunkErr))
+          const reason = extractMessage(chunkErr)
+          console.warn('[bulkDelete] chunk failed:', reason)
           // chunk.length records counted as failed via totalDeleted not advancing
+          for (const id of chunk) failures.push({ id, reason })
         }
       }
 
       if (table === 'inflow_transactions')  useTransactionSyncStore.getState().bumpInflow()
       if (table === 'intra_flows') useTransactionSyncStore.getState().bumpIntraflow()
 
-      return { failed: ids.length - totalDeleted, total: ids.length }
+      return { failed: ids.length - totalDeleted, total: ids.length, failures }
     } finally {
       setLoading(false)
     }
@@ -1165,13 +1181,14 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
   const execute = useCallback(async (
     ids: string[],
     baseUpdates: Record<string, unknown>,
-  ): Promise<{ failed: number; total: number }> => {
-    if (ids.length === 0) return { failed: 0, total: 0 }
+  ): Promise<{ failed: number; total: number; failures: BulkRowFailure[] }> => {
+    if (ids.length === 0) return { failed: 0, total: 0, failures: [] }
     const { user } = useAuthStore.getState()
     if (!user?.id) throw new Error('You must be signed in to update records.')
 
     setLoading(true)
     let totalUpdated = 0
+    const failures: BulkRowFailure[] = []
 
     const updates: Record<string, unknown> = table !== 'intra_flows'
       ? { ...baseUpdates, updated_at: new Date().toISOString() }
@@ -1195,6 +1212,12 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
 
         const chunkUpdatedIds = (updatedRows ?? []).map(r => r.id as string)
         totalUpdated += chunkUpdatedIds.length
+        if (chunkUpdatedIds.length < chunk.length) {
+          const updatedSet = new Set(chunkUpdatedIds)
+          for (const id of chunk) {
+            if (!updatedSet.has(id)) failures.push({ id, reason: 'Not updated — denied by permissions or record no longer exists' })
+          }
+        }
 
         if (chunkUpdatedIds.length > 0) {
           batchLogAudit(
@@ -1236,7 +1259,7 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
       if (table === 'outflow_transactions') useTransactionSyncStore.getState().bumpOutflow()
       if (table === 'intra_flows')          useTransactionSyncStore.getState().bumpIntraflow()
 
-      return { failed: ids.length - totalUpdated, total: ids.length }
+      return { failed: ids.length - totalUpdated, total: ids.length, failures }
     } catch (err) {
       const msg = extractMessage(err)
       handleAuthError(err)

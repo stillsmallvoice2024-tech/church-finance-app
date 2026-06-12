@@ -244,7 +244,7 @@ export default function LoginPage() {
                 </div>
 
                 <div className="border-t border-gray-100 pt-4 space-y-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Your Account</p>
+                  <p className="text-xs font-semibold text-gray-500">Your Account</p>
 
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-600">Full Name *</label>

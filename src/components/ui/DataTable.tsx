@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode, type UIEvent } from 'react'
 import { TableRowSkeleton } from './LoadingSkeleton'
 
 export interface Column<T> {
@@ -26,15 +26,23 @@ export function DataTable<T>({
   emptyMessage = 'No records found.',
   emptyIcon,
 }: DataTableProps<T>) {
+  // Headers stick inside this scroll container; a soft shadow appears once
+  // rows have scrolled beneath them so the boundary stays visible.
+  const [scrolled, setScrolled] = useState(false)
+  const onScroll = (e: UIEvent<HTMLDivElement>) => {
+    const isScrolled = e.currentTarget.scrollTop > 0
+    setScrolled(prev => (prev === isScrolled ? prev : isScrolled))
+  }
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto max-h-[70vh]" onScroll={onScroll}>
       <table className="min-w-full">
-        <thead>
+        <thead className={`sticky top-0 z-10 transition-shadow ${scrolled ? 'shadow-sm' : ''}`}>
           <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ${col.rightAlign ? 'text-right' : 'text-left'} ${col.className ?? ''}`}
+                scope="col"
+                className={`px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 ${col.rightAlign ? 'text-right' : 'text-left'} ${col.className ?? ''}`}
               >
                 {col.header}
               </th>
@@ -56,8 +64,12 @@ export function DataTable<T>({
               </td>
             </tr>
           ) : (
-            data.map((row) => (
-              <tr key={keyExtractor(row)} className="hover:bg-gray-50 transition-colors">
+            data.map((row, index) => (
+              <tr
+                key={keyExtractor(row)}
+                className="hover:bg-gray-50 transition-colors"
+                style={{ animation: `row-fade-in 200ms ease-out ${Math.min(index, 12) * 28}ms both` }}
+              >
                 {columns.map((col) => (
                   <td
                     key={col.key}

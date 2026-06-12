@@ -291,9 +291,9 @@ export default function BankLedger() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Bank Ledger</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Bank Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">Per-bank transaction history with running balance</p>
         </div>
         <div className="flex items-center gap-2" data-tour="export-button">
@@ -523,12 +523,12 @@ export default function BankLedger() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="w-8" />
-                    <SortableHeader field={BL_SORT_FIELDS[0]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">Description</th>
-                    <SortableHeader field={BL_SORT_FIELDS[1]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-success/80 hover:text-success" />
-                    <SortableHeader field={BL_SORT_FIELDS[2]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
-                    <SortableHeader field={BL_SORT_FIELDS[3]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left">📎</th>
+                    <SortableHeader field={BL_SORT_FIELDS[0]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">Description</th>
+                    <SortableHeader field={BL_SORT_FIELDS[1]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-success/80 hover:text-success" />
+                    <SortableHeader field={BL_SORT_FIELDS[2]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-danger/80 hover:text-danger" />
+                    <SortableHeader field={BL_SORT_FIELDS[3]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" />
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">📎</th>
                     {canWrite() && <th className="px-4 py-3 w-10" />}
                   </tr>
                 </thead>

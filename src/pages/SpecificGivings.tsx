@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
@@ -67,7 +68,7 @@ function groupRows(rows: SpecificRow[]): GroupedCategory[] {
 }
 
 export default function SpecificGivings() {
-  usePageTitle('Specific Givings')
+  usePageTitle('Designated Gifts')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
 
   const year = useAccountingYearStore(s => s.year)
@@ -115,7 +116,7 @@ export default function SpecificGivings() {
     ])
 
     if (directRes.error) {
-      setError(directRes.error.message)
+      setError(friendlyError(directRes.error, 'load'))
       setLoading(false)
       return
     }
@@ -258,9 +259,9 @@ export default function SpecificGivings() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Specific Givings</h1>
+          <h1 className="text-xl font-bold text-gray-900">Designated Gifts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Designated and specific-seed inflows for {year}
+            Designated and earmarked inflows for {year}
           </p>
         </div>
         <div className="flex items-center gap-2">

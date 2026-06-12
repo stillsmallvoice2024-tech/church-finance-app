@@ -8,11 +8,12 @@ import { useCategories }          from '../../hooks/useCategories'
 
 const PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings']
 
-export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
+export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess, onResults }: {
   open: boolean
   onClose: () => void
   ids: string[]
   onSuccess: () => void
+  onResults?: (r: { action: string; succeeded: number; failures: { id: string; reason: string }[] }) => void
 }) {
   const { execute, loading: saving } = useBulkUpdateTransaction('intra_flows')
   const { push: toast }              = useToastStore()
@@ -51,9 +52,9 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess }: {
     if (description)       baseUpdates.description         = description
     if (remark)            baseUpdates.remark              = remark
 
-    const { failed } = await execute(ids, baseUpdates)
-    if (failed === 0) toast(`Updated ${ids.length} transfer${ids.length !== 1 ? 's' : ''}`, 'success')
-    else              toast(`${ids.length - failed} updated, ${failed} failed`, 'error')
+    const { failed, failures } = await execute(ids, baseUpdates)
+    if (failed === 0) toast(`${ids.length} transfer${ids.length !== 1 ? 's' : ''} updated.`, 'success')
+    else              onResults?.({ action: 'updated', succeeded: ids.length - failed, failures })
     onSuccess()
     onClose()
   }

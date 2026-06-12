@@ -6,6 +6,7 @@ import {
 import { Card }                    from '../components/ui/Card'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { BulkActionBar }           from '../components/ui/BulkActionBar'
+import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
 import { BulkEditOutflowModal }    from '../components/modals/BulkEditOutflowModal'
 import { ReceiptBadge }            from '../components/ui/ReceiptBadge'
@@ -24,6 +25,7 @@ import { useRole }                 from '../hooks/useRole'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { exportCSV }               from '../utils/csvExport'
+import { friendlyError }           from '../utils/friendlyError'
 import { supabase }                from '../lib/supabase'
 import { normalizeNarration }      from '../utils/normalizeNarration'
 import { useOrgStore }             from '../store/orgStore'
@@ -64,7 +66,7 @@ const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
   { key: 'transaction_type', label: 'Type',          sortType: 'text',    accessor: r => TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '' },
   { key: 'amount_disbursed', label: 'Disbursed',     sortType: 'numeric', accessor: r => String(r.amount_disbursed) },
   { key: 'outflow_type',     label: 'Outflow Type',  sortType: 'text',    accessor: r => r.outflow_type_name ?? '' },
-  { key: 'stage_code_1',     label: 'Stage Code',                         accessor: r => r.stage_code_1 ?? '' },
+  { key: 'stage_code_1',     label: 'Category',                           accessor: r => r.stage_code_1 ?? '' },
   { key: 'net',              label: 'Net',                                accessor: r => String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge)) },
 ]
 
@@ -160,6 +162,7 @@ export default function Outflows() {
   const [modalOpen,         setModalOpen]         = useState(false)
   const [deleteId,          setDeleteId]          = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
   const [expandedId,        setExpandedId]        = useState<string | null>(null)
 
@@ -200,18 +203,18 @@ export default function Outflows() {
       setDeleteId(null)
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete the transaction'), 'error')
     }
   }
 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds]
-    const { failed } = await executeBulkDelete(ids)
+    const { failed, failures } = await executeBulkDelete(ids)
     setConfirmBulkDelete(false)
     clearAll()
     refetch()
-    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
-    else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted.`, 'success')
+    else setBulkResults({ action: 'deleted', succeeded: ids.length - failed, failures })
   }
 
   const OUT_CSV_HEADERS = ['Date', 'Txn ID', 'Description', 'Bank Narration', `Disbursed (${baseCurrencySymbol})`, `Refunded (${baseCurrencySymbol})`, `Transfer Charge (${baseCurrencySymbol})`, `Net Amount (${baseCurrencySymbol})`, 'Stage Code 1', 'Outflow Type', 'Remarks']
@@ -269,7 +272,7 @@ export default function Outflows() {
       })) as OutflowTransaction[]
       exportCSV(OUT_CSV_FILE, OUT_CSV_HEADERS, allRows.map(outflowCsvRow))
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Export failed', 'error')
+      toast(friendlyError(e, 'export'), 'error')
     }
   }
 
@@ -289,9 +292,9 @@ export default function Outflows() {
       <div className="space-y-5">
 
         {/* Header */}
-        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Outflow Transactions</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Outflow Transactions</h1>
             <p className="text-sm text-gray-500 mt-0.5">All disbursements and payments</p>
           </div>
           <div className="flex items-center gap-2">
@@ -328,7 +331,7 @@ export default function Outflows() {
               <FilterGroup label="To">
                 <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
               </FilterGroup>
-              <FilterGroup label="Stage Code 1" className="min-w-[180px]">
+              <FilterGroup label="Category" className="min-w-[180px]">
                 <SearchableSelect value={stageCode} onChange={setStageCode}
                   options={categories.map(c => ({ value: c.name, label: c.name }))}
                   placeholder="All categories" className={`${filterInputCls} bg-white`} />
@@ -521,14 +524,14 @@ export default function Outflows() {
                     />
                   </th>
                   <th className="w-8 px-1 py-3" />
-                  <SortableHeader field={outSF('date')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={outSF('recorded_at')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={outSF('bank_name')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Description</th>
-                  <SortableHeader field={outSF('outflow_type')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" />
-                  <SortableHeader field={outSF('amount_disbursed')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold uppercase tracking-wider" inactiveCls="text-danger/80 hover:text-danger" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">📎</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-left whitespace-nowrap">Actions</th>
+                  <SortableHeader field={outSF('date')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <SortableHeader field={outSF('recorded_at')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <SortableHeader field={outSF('bank_name')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Description</th>
+                  <SortableHeader field={outSF('outflow_type')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                  <SortableHeader field={outSF('amount_disbursed')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-danger/80 hover:text-danger" />
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">📎</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -670,7 +673,9 @@ export default function Outflows() {
         ids={[...selectedIds]}
         banks={banks}
         onSuccess={() => { clearAll(); refetch() }}
+        onResults={setBulkResults}
       />
+      <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
       <DescriptionTooltip tooltip={descTooltip} />
     </>
   )

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { BottomTabBar } from './BottomTabBar'
@@ -13,6 +13,7 @@ import { CommandPalette } from '../ui/CommandPalette'
 export function Layout() {
   const [sidebarOpen,     setSidebarOpen]     = useState(false)
   const [paletteOpen,     setPaletteOpen]     = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -43,10 +44,13 @@ export function Layout() {
       */}
       <div id="layout-safe-zone" className="flex flex-1 min-h-0 relative overflow-hidden">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="flex flex-col flex-1 min-w-0 lg:ml-64">
+        <div className="flex flex-col flex-1 min-w-0 lg:ml-72">
           <TopBar onMenuClick={() => setSidebarOpen(true)} />
           <main id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 dark:bg-gray-900">
-            <Outlet />
+            {/* keyed by pathname so each route gets a subtle entrance fade */}
+            <div key={location.pathname} className="page-enter">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>

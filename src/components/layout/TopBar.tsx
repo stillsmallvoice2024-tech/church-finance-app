@@ -11,7 +11,7 @@ import { ROLE_BADGE_CLASSES, ROLE_LABELS } from '../../utils/constants'
 import { useHealthStore } from '../../store/healthStore'
 import type { HealthStatus } from '../../utils/reconciliationAggregator'
 
-function HealthBadge({ status, skipped }: { status: HealthStatus | null; skipped: boolean }) {
+function HealthBadge({ status, skipped, stableDays }: { status: HealthStatus | null; skipped: boolean; stableDays: number }) {
   const muted = skipped || !status
   const icon =
     !muted && status === 'critical' ? <ShieldX     className="h-3.5 w-3.5" /> :
@@ -27,10 +27,13 @@ function HealthBadge({ status, skipped }: { status: HealthStatus | null; skipped
     skipped  ? 'Paused' :
     status === 'critical' ? 'Critical' :
     status === 'warning'  ? 'Warning'  : 'Healthy'
+  const streakNote = !muted && status === 'healthy' && stableDays >= 7
+    ? ` · stable for ${stableDays} day${stableDays === 1 ? '' : 's'}`
+    : ''
   return (
     <Link
       to="/reconciliation"
-      title={muted ? 'System health check paused — click to view' : `System health: ${label} — view Reconciliation Center`}
+      title={muted ? 'System health check paused — click to view' : `System health: ${label}${streakNote} — view Reconciliation Center`}
       className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors ${cls}`}
     >
       {icon}
@@ -73,6 +76,10 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   const initials     = getInitials(displayName)
   const healthStatus  = useHealthStore(s => s.status)
   const healthSkipped = useHealthStore(s => s.skipped)
+  const cleanSince    = useHealthStore(s => s.cleanSince)
+  const stableDays    = cleanSince
+    ? Math.floor((Date.now() - new Date(cleanSince).getTime()) / 86_400_000)
+    : 0
 
   // Show the org-scoped role (orgRole) in the badge — more accurate than profile.role
   const badgeRole = orgRole ?? role
@@ -96,7 +103,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
 
       {/* Right: health badge + role badge + user avatar + sign out */}
       <div className="flex items-center gap-3">
-        <HealthBadge status={healthStatus} skipped={healthSkipped} />
+        <HealthBadge status={healthStatus} skipped={healthSkipped} stableDays={stableDays} />
         {roleLabel && (
           <span
             className={`hidden sm:inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleBadgeClass}`}
