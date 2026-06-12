@@ -14,6 +14,7 @@ export interface FXTransaction {
   running_balance: number
   created_by: string | null
   created_at: string
+  import_seq: number | null
 }
 
 // ── Derived summary per currency ───────────────────────────────────────────────
@@ -80,7 +81,7 @@ export function useFXTransactions(currency?: string): FXResult {
       .select('*')
       .eq('org_id', orgId)
       .order('date',       { ascending: false })
-      .order('created_at', { ascending: false }) // stable tiebreaker within same date
+      .order('import_seq', { ascending: false })
 
     if (currency) query = query.eq('currency', currency.toUpperCase())
 
