@@ -212,6 +212,8 @@ export default function ChangeLog() {
         onSort={clState.setSort}
         defaultSortKey="changed_at"
         defaultSortDir="desc"
+        view={clState.view}
+        onViewChange={clState.setView}
         search={clState.search}
         onSearchChange={v => { clState.setSearch(v); clState.setPage(0) }}
         searchCol={clState.searchCol}
@@ -223,10 +225,50 @@ export default function ChangeLog() {
         pageSizeOptions={[25, 50, 100, 200]}
       />
 
-      {/* Table */}
+      {/* Table / Cards */}
       <Card padding={false}>
+        {clState.view === 'cards' ? (
+          <div className="p-3 space-y-2">
+            {loading && displayed.length === 0 ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />
+              ))
+            ) : displayed.length === 0 ? (
+              <EmptyState icon={ClipboardList} title="No field changes recorded yet." compact />
+            ) : (
+              displayed.map(e => (
+                <div key={e.id} className="rounded-xl border border-gray-100 bg-white px-3 py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 break-words">{e.field_name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {TABLE_LABELS[e.table_name] ?? e.table_name}
+                        <span className="text-gray-400 font-mono"> · {e.record_id.slice(0, 8)}…</span>
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-500 whitespace-nowrap shrink-0">{fmtTs(e.changed_at, formatLocale)}</p>
+                  </div>
+                  {/* Stacked old → new diff — no panning to compare */}
+                  <div className="space-y-1">
+                    <div className="rounded-lg bg-red-50/70 border border-red-100 px-2.5 py-1.5">
+                      <p className="text-[11px] uppercase tracking-wide text-red-400">Old</p>
+                      <p className="text-sm text-red-700 break-words">{e.old_value ?? '—'}</p>
+                    </div>
+                    <div className="rounded-lg bg-green-50/70 border border-green-100 px-2.5 py-1.5">
+                      <p className="text-[11px] uppercase tracking-wide text-green-500">New</p>
+                      <p className="text-sm text-green-800 break-words">{e.new_value ?? '—'}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {e.profiles?.full_name ?? e.profiles?.email ?? 'Unknown user'}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
         <div className="overflow-x-auto scroll-x-fade">
-          <table className="min-w-full">
+          <table className="min-w-full table-sticky-col">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <SortableHeader
@@ -265,7 +307,7 @@ export default function ChangeLog() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading ? (
+              {loading && displayed.length === 0 ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
                     {Array.from({ length: 7 }).map((_, j) => (
@@ -313,6 +355,7 @@ export default function ChangeLog() {
             </tbody>
           </table>
         </div>
+        )}
         <PaginationBar
           variant="full"
           page={clState.page}

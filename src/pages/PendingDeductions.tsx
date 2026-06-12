@@ -297,6 +297,8 @@ export default function PendingDeductions() {
           onSort={pdState.setSort}
           defaultSortKey="date"
           defaultSortDir="desc"
+          view={pdState.view}
+          onViewChange={pdState.setView}
           search={pdState.search}
           onSearchChange={pdState.setSearch}
           searchCol={pdState.searchCol}
@@ -337,6 +339,113 @@ export default function PendingDeductions() {
               },
             ]}
           />
+          {pdState.view === 'cards' ? (
+            <div className="p-3 space-y-2">
+              {loading && displayed.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-28 rounded-xl bg-gray-100 animate-pulse" />
+                ))
+              ) : displayed.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-16 text-gray-400">
+                  <CheckCircle2 className="w-10 h-10 text-green-300" />
+                  <p className="text-sm font-medium text-gray-600">No pending deductions</p>
+                  <p className="text-xs text-gray-500">All outflow transactions have been processed.</p>
+                </div>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 px-1 py-1.5 text-xs font-medium text-gray-500 cursor-pointer w-fit">
+                    <input
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      aria-label="Select all on page"
+                      className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                      onChange={e => e.target.checked ? selectAllRows() : clearAll()}
+                    />
+                    Select all on page
+                  </label>
+                  {displayed.map(row => {
+                    const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
+                    const isResolving = resolvingId === row.id
+                    const isSelected  = selectedIds.has(row.id)
+                    const isExpanded  = expandedId === row.id
+                    return (
+                      <div
+                        key={row.id}
+                        className={`rounded-xl border px-3 py-3 space-y-2 transition-colors ${
+                          isSelected ? 'border-primary/40 bg-primary/5' : 'border-gray-100 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <label className="touch-target shrink-0 -m-2 p-2 flex items-center justify-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              aria-label="Select row"
+                              className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                              onChange={() => toggleRow(row.id)}
+                            />
+                          </label>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-gray-500">{formatDate(row.date)}{row.bank_name ? ` · ${row.bank_name}` : ''}</p>
+                            <p className="text-sm text-gray-800 mt-0.5 break-words">{row.description || '—'}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-mono font-semibold text-danger whitespace-nowrap">{formatCurrency(Number(row.amount_disbursed), baseCurrencyCode)}</p>
+                            <p className="text-xs text-gray-500 mt-0.5 whitespace-nowrap">Net {formatCurrency(net, baseCurrencyCode)}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {row.stage_code_1
+                            ? <span className="inline-flex px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">{row.stage_code_1}</span>
+                            : <span className="inline-flex px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-xs">No stage code</span>}
+                          {row.remarks && <span className="text-xs text-gray-500 truncate max-w-[180px]">{row.remarks}</span>}
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-primary min-h-[32px] px-1.5"
+                            aria-expanded={isExpanded}
+                          >
+                            Details {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                        {isExpanded && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 border-t border-gray-100 pt-2">
+                            {outflowDetailItems(row, baseCurrencyCode).map(item => (
+                              <div key={item.label} className="min-w-0">
+                                <p className="text-[11px] uppercase tracking-wide text-gray-500">{item.label}</p>
+                                <p className={`text-sm text-gray-700 ${item.mono ? 'font-mono' : ''} ${item.breakAll ? 'break-all' : 'break-words'}`}>
+                                  {item.value ?? '—'}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <CanWrite>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => openEdit(row)}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" /> Edit
+                            </button>
+                            <button
+                              onClick={() => handleResolve(row)}
+                              disabled={isResolving}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {isResolving
+                                ? <span className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                                : <CheckCircle2 className="w-3.5 h-3.5" />}
+                              Resolve
+                            </button>
+                          </div>
+                        </CanWrite>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          ) : (
           <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
@@ -363,7 +472,7 @@ export default function PendingDeductions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {loading ? (
+                {loading && displayed.length === 0 ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
                       {Array.from({ length: 9 }).map((_, j) => (
@@ -451,6 +560,7 @@ export default function PendingDeductions() {
               </tbody>
             </table>
           </div>
+          )}
           <PaginationBar
             page={pdState.page}
             pageSize={pdState.pageSize}

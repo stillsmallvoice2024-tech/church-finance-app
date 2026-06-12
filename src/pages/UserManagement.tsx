@@ -779,7 +779,74 @@ export default function UserManagement() {
         ) : members.length === 0 ? (
           <PageEmptyState pageId="users" compact />
         ) : (
-          <div className="overflow-x-auto scroll-x-fade">
+          <>
+          {/* Card list — phones (table requires panning for 6 columns) */}
+          <div className="md:hidden p-3 space-y-2">
+            {members.map(m => {
+              const isSelf  = m.user_id === user?.id
+              const saving  = savingId === m.id
+              const canEditRole = !isSelf && isAdmin() && !(m.role === 'owner' && !isOwner())
+              return (
+                <div key={m.id} className={`rounded-xl border px-3 py-3 space-y-2.5 ${isSelf ? 'border-blue-100 bg-blue-50/30' : 'border-gray-100 bg-white'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+                      {initials(m.full_name || m.email)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {m.full_name || '—'}
+                        {isSelf && <span className="ml-1.5 text-xs text-gray-500">(you)</span>}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{m.email}</p>
+                    </div>
+                    <div className="relative inline-block shrink-0">
+                      <select
+                        value={m.role}
+                        disabled={!canEditRole || saving}
+                        onChange={e => handleRoleChange(m.id, e.target.value as UserRole)}
+                        className={`appearance-none pr-6 pl-2.5 py-1.5 min-h-[32px] text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[m.role].pill} ${!canEditRole ? 'opacity-60' : ''}`}
+                        aria-label={`Role for ${m.full_name || m.email}`}
+                      >
+                        {isOwner() && <option value="owner">Owner</option>}
+                        <option value="admin">Admin</option>
+                        <option value="accountant">Accountant</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                      {canEditRole && (
+                        <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none" />
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Registered {m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}
+                    {' · '}Joined {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
+                  </p>
+                  {((canTransferOwnership() && !isSelf && m.role !== 'owner') || (!isSelf && isAdmin())) && (
+                    <div className="flex gap-2">
+                      {canTransferOwnership() && !isSelf && m.role !== 'owner' && (
+                        <button
+                          onClick={() => setTransferTarget(m)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 min-h-[40px] text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                        >
+                          <Shield className="w-3.5 h-3.5" /> Make Owner
+                        </button>
+                      )}
+                      {!isSelf && isAdmin() && (
+                        <button
+                          onClick={() => setRemoveId(m.id)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 min-h-[40px] text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Remove
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {/* Table — md and up */}
+          <div className="hidden md:block overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -882,6 +949,7 @@ export default function UserManagement() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

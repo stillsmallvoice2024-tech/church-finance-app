@@ -185,7 +185,19 @@ interface ParsedSheet {
 function StepDots({ step }: { step: number }) {
   const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Configure Rows', 'Import']
   return (
-    <div className="flex items-center gap-0 mb-5">
+    <div className="mb-5">
+      {/* Compact progress — phones (full dot row overflows narrow screens) */}
+      <div className="sm:hidden">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold text-primary">{STEPS[step - 1]}</p>
+          <p className="text-xs text-gray-500 whitespace-nowrap">Step {step} of {STEPS.length}</p>
+        </div>
+        <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden" role="progressbar" aria-valuemin={1} aria-valuemax={STEPS.length} aria-valuenow={step} aria-label={`Step ${step} of ${STEPS.length}: ${STEPS[step - 1]}`}>
+          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(step / STEPS.length) * 100}%` }} />
+        </div>
+      </div>
+      {/* Full dot row — sm+ */}
+      <div className="hidden sm:flex items-center gap-0">
       {STEPS.map((label, i) => {
         const n   = i + 1
         const done = n < step
@@ -200,7 +212,7 @@ function StepDots({ step }: { step: number }) {
               }`}>
                 {done ? <CheckCircle2 className="w-4 h-4" /> : n}
               </div>
-              <span className={`text-[10px] mt-1 whitespace-nowrap ${cur ? 'text-primary font-semibold' : 'text-gray-400'}`}>
+              <span className={`text-[11px] mt-1 whitespace-nowrap ${cur ? 'text-primary font-semibold' : 'text-gray-500'}`}>
                 {label}
               </span>
             </div>
@@ -210,6 +222,7 @@ function StepDots({ step }: { step: number }) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -2000,11 +2013,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                       />
                       <span className="text-xs text-gray-400">Amount</span>
-                      <input type="number" placeholder="from" value={f.amtFrom}
+                      <input type="text" inputMode="decimal" placeholder="from" value={f.amtFrom}
                         onChange={e => setInflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
                         className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                       />
-                      <input type="number" placeholder="to" value={f.amtTo}
+                      <input type="text" inputMode="decimal" placeholder="to" value={f.amtTo}
                         onChange={e => setInflowFilter(p => ({ ...p, amtTo: e.target.value }))}
                         className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                       />
@@ -2491,11 +2504,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                     />
                     <span className="text-xs text-gray-400">Amount</span>
-                    <input type="number" placeholder="from" value={f.amtFrom}
+                    <input type="text" inputMode="decimal" placeholder="from" value={f.amtFrom}
                       onChange={e => setOutflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
                       className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                     />
-                    <input type="number" placeholder="to" value={f.amtTo}
+                    <input type="text" inputMode="decimal" placeholder="to" value={f.amtTo}
                       onChange={e => setOutflowFilter(p => ({ ...p, amtTo: e.target.value }))}
                       className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                     />
@@ -3190,7 +3203,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     <p className="text-xs text-gray-400">Balance column not mapped — enter manually if needed:</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
-                        type="number"
+                        type="text" inputMode="decimal"
                         value={stmtBalance}
                         onChange={e => setStmtBalance(e.target.value)}
                         placeholder="Closing balance"

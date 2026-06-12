@@ -9,6 +9,7 @@ import { generateFallbackTransactionId } from '../../utils/generateTransactionId
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls, focusFirstInvalid, DateQuickChips } from '../ui/FormField'
+import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
@@ -369,18 +370,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         </div>
 
-        {/* Recorded Date — editable reporting/upload date */}
-        <Field label="Recorded Date" error={errors.recorded_at_date?.message}
-          help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
-          <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
-        </Field>
-
-        {/* Date Added (created_at) — edit mode only, legacy */}
-        {isEdit && (
-          <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
-            <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
-          </Field>
-        )}
+        {/* Recorded Date / legacy date / refs / remarks live in "More details" below
+            — the happy path stays a 5-field form on phones (F2 mobile audit) */}
 
         {/* Description — auto-assigns type on change */}
         <Field label="Description" error={errors.description?.message}>
@@ -413,7 +404,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           }} />
         </Field>
 
-        {/* Transaction Type */}
+        {/* Transaction Type / offsets — collapsed unless relevant */}
+        <CollapsibleSection label="Transaction type & offsets" defaultOpen={isEdit || isOffsetType}>
         <Field label="Transaction Type" error={errors.transaction_type?.message}
           help="Normal is a regular inflow. Refund/Reversal corrects a prior outflow or entry. Bank Deposit, Intrabank Transfer, and Balance Brought Forward are system types used for reconciliation.">
           <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
@@ -450,6 +442,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             />
           </Field>
         )}
+        </CollapsibleSection>
 
         {/* Income Type */}
         {incomeTypes.length > 0 && (
@@ -552,21 +545,32 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         </div>
 
-        {/* Transaction Ref */}
-        <Field label="Transaction Ref" error={errors.transaction_ref?.message}>
-          <input type="text" placeholder="Ref / cheque no." {...register('transaction_ref')} className={inputCls(!!errors.transaction_ref)} />
-        </Field>
+        {/* Optional details — collapsed by default to keep the form short */}
+        <CollapsibleSection label="More details (dates, refs, remarks)" defaultOpen={isEdit}>
+          <Field label="Recorded Date" error={errors.recorded_at_date?.message}
+            help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
+            <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
+          </Field>
 
-        {/* Specific Seed Description */}
-        <Field label="Designated Purpose" error={errors.specific_seed_description?.message}
-          help="For designated gifts: describe what this gift is earmarked for (e.g. Building Project, Missions).">
-          <input type="text" placeholder="What is this gift designated for? (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
-        </Field>
+          {isEdit && (
+            <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
+              <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
+            </Field>
+          )}
 
-        {/* Remark */}
-        <Field label="Remark" error={errors.remark?.message}>
-          <textarea rows={2} placeholder="Additional notes…" {...register('remark')} className={`${inputCls(!!errors.remark)} resize-none`} />
-        </Field>
+          <Field label="Transaction Ref" error={errors.transaction_ref?.message}>
+            <input type="text" placeholder="Ref / cheque no." {...register('transaction_ref')} className={inputCls(!!errors.transaction_ref)} />
+          </Field>
+
+          <Field label="Designated Purpose" error={errors.specific_seed_description?.message}
+            help="For designated gifts: describe what this gift is earmarked for (e.g. Building Project, Missions).">
+            <input type="text" placeholder="What is this gift designated for? (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
+          </Field>
+
+          <Field label="Remark" error={errors.remark?.message}>
+            <textarea rows={2} placeholder="Additional notes…" {...register('remark')} className={`${inputCls(!!errors.remark)} resize-none`} />
+          </Field>
+        </CollapsibleSection>
 
       </form>
     </Modal>

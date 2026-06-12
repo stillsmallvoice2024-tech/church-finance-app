@@ -146,7 +146,7 @@ function AnnualSummaryPanel() {
       {!loading && rows.length === 0 && <EmptyState />}
       {!loading && rows.length > 0 && (
         <div className="overflow-x-auto scroll-x-fade">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Year</th>
@@ -261,7 +261,7 @@ function MonthlyBreakdownPanel() {
       {loading && <Skeleton />}
       {!loading && (
         <div className="overflow-x-auto scroll-x-fade">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Month</th>
@@ -393,7 +393,7 @@ function IncomeTypeBreakdownPanel() {
       )}
       {!loading && rows.length > 0 && (
         <div className="overflow-x-auto scroll-x-fade">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Income Type</th>
@@ -541,7 +541,7 @@ function OutflowTypeBreakdownPanel() {
       )}
       {!loading && rows.length > 0 && (
         <div className="overflow-x-auto scroll-x-fade">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Outflow Type</th>
@@ -793,7 +793,7 @@ function DepartmentBreakdownPanel() {
         )}
         {!loading && rows.length > 0 && (
           <div className="overflow-x-auto scroll-x-fade">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-sticky-col">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                   <th className="px-5 py-3 text-left font-medium">Department</th>
@@ -954,7 +954,7 @@ function DepartmentBreakdownPanel() {
           )}
           {!crossLoading && crossTxns.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-gray-100">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-sticky-col">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
                     <th className="px-4 py-3 text-left font-medium">Date</th>
@@ -1015,7 +1015,7 @@ function FXHoldingsPanel() {
       {loading && <Skeleton />}
       {!loading && (
         <div className="overflow-x-auto scroll-x-fade">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Currency</th>
@@ -1087,7 +1087,7 @@ function AuditLogPanel() {
       {!loading && entries.length === 0 && <EmptyState />}
       {!loading && entries.length > 0 && (
         <div className="overflow-x-auto scroll-x-fade">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Timestamp</th>

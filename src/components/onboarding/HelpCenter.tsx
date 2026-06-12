@@ -54,7 +54,7 @@ function renderMarkdown(raw: string): JSX.Element {
         const [headerLine, ...bodyLines] = tableLines
         const headers = headerLine.split('|').filter(Boolean).map(c => c.trim())
         elements.push(
-          <div key={`tbl-${i}`} className="overflow-x-auto my-3">
+          <div key={`tbl-${i}`} className="overflow-x-auto scroll-x-fade my-3">
             <table className="min-w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
               <thead className="bg-gray-100 dark:bg-gray-800">
                 <tr>

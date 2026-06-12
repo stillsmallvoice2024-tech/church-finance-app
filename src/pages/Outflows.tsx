@@ -46,6 +46,7 @@ import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
+import { MobileFab } from '../components/ui/MobileFab'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -391,7 +392,7 @@ export default function Outflows() {
         {/* Cards / Table */}
         {outState.view === 'cards' ? (
           <div className="space-y-3">
-            {loading ? (
+            {loading && displayed.length === 0 ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
                   <div className="px-4 pt-3.5 pb-3 space-y-2">
@@ -535,7 +536,7 @@ export default function Outflows() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {loading ? (
+                {loading && displayed.length === 0 ? (
                   Array.from({ length: 9 }).map((_, i) => (
                     <tr key={i}>
                       {Array.from({ length: 10 }).map((_, j) => (
@@ -687,6 +688,7 @@ export default function Outflows() {
         onResults={setBulkResults}
       />
       <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
+      {canWrite() && <MobileFab icon={PlusCircle} label="Add Outflow" onClick={() => { setEditRecord(null); setModalOpen(true) }} />}
       <DescriptionTooltip tooltip={descTooltip} />
     </>
   )

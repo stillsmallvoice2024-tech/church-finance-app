@@ -140,7 +140,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           </Field>
           <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.total_amount?.message}>
             <input
-              type="number" min="0" step="0.01" placeholder="0.00"
+              type="text" inputMode="decimal" min="0" step="0.01" placeholder="0.00"
               {...register('total_amount')}
               className={inputCls(!!errors.total_amount)}
             />

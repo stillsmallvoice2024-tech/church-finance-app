@@ -454,7 +454,7 @@ export default function BankLedger() {
         <Card padding={false} data-tour="ledger-table">
           {blState.view === 'cards' ? (
             <div className="p-4 space-y-3">
-              {loading ? (
+              {loading && sortedRows.length === 0 ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
                     <div className="px-4 pt-3.5 pb-3 space-y-2">
@@ -543,7 +543,7 @@ export default function BankLedger() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {loading ? (
+                  {loading && sortedRows.length === 0 ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>{Array.from({ length: 5 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>

@@ -354,7 +354,7 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
         {editing ? (
           <div className="flex items-center gap-1.5 flex-wrap">
             <input
-              type="number"
+              type="text" inputMode="decimal"
               value={inputBalance}
               onChange={e => setInputBalance(e.target.value)}
               autoFocus

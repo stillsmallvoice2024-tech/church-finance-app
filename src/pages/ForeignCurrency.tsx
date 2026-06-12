@@ -214,7 +214,7 @@ export default function ForeignCurrency() {
                   {meta.code} Rate ({baseCurrencySymbol} per {meta.code})
                 </label>
                 <input
-                  type="number"
+                  type="text" inputMode="decimal"
                   min="0"
                   step="0.01"
                   placeholder="0.00"
@@ -287,6 +287,8 @@ export default function ForeignCurrency() {
             onSort={fxState.setSort}
             defaultSortKey="date"
             defaultSortDir="desc"
+            view={fxState.view}
+            onViewChange={fxState.setView}
             search={fxState.search}
             onSearchChange={fxState.setSearch}
             searchPlaceholder="Search narration or ref…"
@@ -308,6 +310,79 @@ export default function ForeignCurrency() {
         ) : fxSorted.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-400">
             No transactions found.
+          </div>
+        ) : fxState.view === 'cards' ? (
+          <div className="p-3 space-y-2">
+            {fxPage.map(t => {
+              const isDeposit  = t.deposit > 0
+              const meta       = FX_META.find(m => m.code === t.currency)!
+              const isExpanded = expandedId === t.id
+              return (
+                <div key={t.id} className="rounded-xl border border-gray-100 bg-white px-3 py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-xs font-semibold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{t.currency}</span>
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${isDeposit ? 'bg-green-50 text-success' : 'bg-red-50 text-danger'}`}>
+                          {isDeposit ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {isDeposit ? 'Deposit' : 'Withdrawal'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{t.date}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {/* 2dp on cards for compactness; tap Details for the 4dp figure */}
+                      <p className={`text-sm font-mono font-semibold break-all ${isDeposit ? 'text-success' : 'text-danger'}`}>
+                        {isDeposit ? '+' : '−'}{meta.symbol}{fmtFX(isDeposit ? t.deposit : t.withdrawal, meta.code, 2)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5 break-all">Bal {meta.symbol}{fmtFX(t.running_balance, meta.code, 2)}</p>
+                    </div>
+                  </div>
+                  {t.narration && (
+                    <div className="text-xs text-gray-500">
+                      <DescriptionCell id={`card-${t.id}`} text={t.narration} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-500" />
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    {t.transaction_ref && <span className="text-xs text-gray-400 font-mono truncate">{t.transaction_ref}</span>}
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : t.id)}
+                      className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-primary min-h-[32px] px-1.5"
+                      aria-expanded={isExpanded}
+                    >
+                      Details {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </button>
+                    {canWrite() && (
+                      <button
+                        onClick={() => setEditRecord(t)}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-primary min-h-[32px] px-1.5"
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Edit
+                      </button>
+                    )}
+                  </div>
+                  {isExpanded && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 border-t border-gray-100 pt-2">
+                      {fxDetailItems(t).map(item => (
+                        <div key={item.label} className="min-w-0">
+                          <p className="text-[11px] uppercase tracking-wide text-gray-500">{item.label}</p>
+                          <p className={`text-sm text-gray-700 ${item.mono ? 'font-mono' : ''} ${item.breakAll ? 'break-all' : 'break-words'}`}>
+                            {item.value ?? '—'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            <PaginationBar
+              page={fxState.page}
+              pageSize={fxState.pageSize}
+              total={fxSorted.length}
+              onPageChange={fxState.setPage}
+              variant="full"
+            />
           </div>
         ) : (
           <div className="overflow-x-auto scroll-x-fade">

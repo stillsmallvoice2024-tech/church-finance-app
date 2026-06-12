@@ -244,7 +244,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
               <div>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="text" inputMode="decimal"
                     step="0.1"
                     min="0"
                     max="100"

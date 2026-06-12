@@ -9,6 +9,7 @@ import { generateFallbackTransactionId } from '../../utils/generateTransactionId
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls, focusFirstInvalid, DateQuickChips } from '../ui/FormField'
+import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
@@ -310,18 +311,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           </Field>
         </div>
 
-        {/* Recorded Date — editable reporting/upload date */}
-        <Field label="Recorded Date" error={errors.recorded_at_date?.message}
-          help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
-          <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
-        </Field>
-
-        {/* Date Added (created_at) — edit mode only, legacy */}
-        {isEdit && (
-          <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
-            <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
-          </Field>
-        )}
+        {/* Recorded Date / legacy date / bank narration / remarks live in
+            "More details" below — happy path stays short on phones (F2) */}
 
         {/* Bank Account — FX banks excluded in add mode; FX transactions go through the FX module */}
         <Field label="Bank Account" error={errors.bank_name?.message}>
@@ -358,7 +349,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           />
         </Field>
 
-        {/* Transaction Type */}
+        {/* Transaction Type / offsets — collapsed unless relevant */}
+        <CollapsibleSection label="Transaction type & offsets" defaultOpen={isEdit || isOffsetType}>
         <Field label="Transaction Type" error={errors.transaction_type?.message}
           help="Normal is a regular outflow. Refund/Reversal corrects a prior entry. Bank Deposit and Intrabank Transfer are system types for inter-account movements.">
           <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
@@ -395,24 +387,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             />
           </Field>
         )}
-
-        {/* Bank Desc + Txn ID */}
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Bank Description" error={errors.bank_description?.message}>
-            <input
-              type="text" placeholder="Bank narration"
-              {...register('bank_description')}
-              className={inputCls(!!errors.bank_description)}
-            />
-          </Field>
-          <Field label="Transaction ID" error={errors.transaction_id?.message}>
-            <input
-              type="text" placeholder="Bank Txn ID"
-              {...register('transaction_id')}
-              className={inputCls(!!errors.transaction_id)}
-            />
-          </Field>
-        </div>
+        </CollapsibleSection>
 
         {/* Stage Code 1 + 2 */}
         <div className="grid grid-cols-2 gap-4">
@@ -464,6 +439,37 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           />
           <span className="text-sm font-medium text-gray-700">Mark as Pending Deduction</span>
         </label>
+
+        {/* Optional details — collapsed by default to keep the form short */}
+        <CollapsibleSection label="More details (dates, bank refs, remarks)" defaultOpen={isEdit}>
+          <Field label="Recorded Date" error={errors.recorded_at_date?.message}
+            help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
+            <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
+          </Field>
+
+          {isEdit && (
+            <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
+              <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
+            </Field>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Bank Description" error={errors.bank_description?.message}>
+              <input
+                type="text" placeholder="Bank narration"
+                {...register('bank_description')}
+                className={inputCls(!!errors.bank_description)}
+              />
+            </Field>
+            <Field label="Transaction ID" error={errors.transaction_id?.message}>
+              <input
+                type="text" placeholder="Bank Txn ID"
+                {...register('transaction_id')}
+                className={inputCls(!!errors.transaction_id)}
+              />
+            </Field>
+          </div>
+        </CollapsibleSection>
 
         {/* Remarks */}
         <Field label="Remarks" error={errors.remarks?.message}>

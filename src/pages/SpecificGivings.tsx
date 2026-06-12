@@ -339,7 +339,7 @@ export default function SpecificGivings() {
               </div>
 
               {/* Targets table */}
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-sticky-col">
                 <thead>
                   <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
                     <th className="px-5 py-2 text-left font-medium">Target / Recipient</th>

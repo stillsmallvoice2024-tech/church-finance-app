@@ -422,7 +422,7 @@ export function FloatingCalculator() {
 
       {/* FAB */}
       <div
-        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-[49]"
+        className="fixed bottom-[calc(var(--tab-bar-height)+5rem)] right-4 lg:bottom-6 lg:right-6 z-[49]"
         style={{ pointerEvents: 'auto' }}
       >
         <button

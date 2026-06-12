@@ -37,6 +37,7 @@ import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowMo
 import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { useBulkSelection }       from '../hooks/useBulkSelection'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { MobileFab } from '../components/ui/MobileFab'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
 
@@ -364,7 +365,7 @@ export default function IntraFlow() {
         <Card padding={false}>
           {iflState.view === 'cards' ? (
             <div className="p-4 space-y-3">
-              {loading ? (
+              {loading && displayed.length === 0 ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
                     <div className="px-4 pt-3.5 pb-3 space-y-2">
@@ -508,7 +509,7 @@ export default function IntraFlow() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {loading ? (
+                  {loading && displayed.length === 0 ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>
                         {Array.from({ length: 9 }).map((_, j) => (
@@ -618,6 +619,7 @@ export default function IntraFlow() {
         onResults={setBulkResults}
       />
       <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
+      {canWrite() && <MobileFab icon={Plus} label="Add Transfer" onClick={openAdd} />}
       <DeleteDialog
         open={bulkDeleteConfirmOpen}
         onClose={() => setBulkDeleteConfirmOpen(false)}

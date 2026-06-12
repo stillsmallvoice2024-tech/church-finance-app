@@ -3,6 +3,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -1059,7 +1060,11 @@ export default function FinancialReport() {
   const { balances, operationalBalances, loading, refetch } = useReportEngine(reportDate, reportBasis)
 
   const dndId = useId()
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Long-press to drag on touch — leaves normal scrolling intact
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
 
   // ── Layout from templates ─────────────────────────────────────────────────
 

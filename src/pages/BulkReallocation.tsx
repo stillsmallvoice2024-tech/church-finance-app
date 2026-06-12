@@ -416,7 +416,7 @@ export default function BulkReallocation() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">Percentage (%)</label>
               <input
-                type="number"
+                type="text" inputMode="decimal"
                 min={0}
                 max={100}
                 step={1}
@@ -431,7 +431,7 @@ export default function BulkReallocation() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">Amount ({baseCurrencySymbol})</label>
               <input
-                type="number"
+                type="text" inputMode="decimal"
                 min={0}
                 step={0.01}
                 value={fixedAmt}

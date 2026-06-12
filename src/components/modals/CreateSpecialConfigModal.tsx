@@ -324,7 +324,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Total Amount ({baseCurrencySymbol}) *</label>
             <input
-              type="number"
+              type="text" inputMode="decimal"
               min="0"
               step="0.01"
               value={totalAmount}
@@ -374,7 +374,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     <option value="Savings">Savings</option>
                   </select>
                   <input
-                    type="number"
+                    type="text" inputMode="decimal"
                     min="0"
                     step={allocType === 'percentage' ? '0.01' : '1'}
                     value={row.value}

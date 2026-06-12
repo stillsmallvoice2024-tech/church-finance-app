@@ -46,6 +46,7 @@ import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { TransactionStory } from '../components/ui/TransactionStory'
 import { inflowDetailItems } from '../utils/rowDetailItems'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { MobileFab } from '../components/ui/MobileFab'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -373,7 +374,7 @@ export default function Inflows() {
         {/* Cards / Table */}
         {infState.view === 'cards' ? (
           <div className="space-y-3">
-            {loading ? (
+            {loading && displayed.length === 0 ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
                   <div className="px-4 pt-3.5 pb-3 space-y-2">
@@ -481,7 +482,7 @@ export default function Inflows() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {loading ? (
+                {loading && displayed.length === 0 ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
                       {Array.from({ length: 9 }).map((_, j) => (
@@ -645,6 +646,7 @@ export default function Inflows() {
         onResults={setBulkResults}
       />
       <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
+      {canWrite() && <MobileFab icon={PlusCircle} label="Add Inflow" onClick={() => { setEditRecord(null); setModalOpen(true) }} />}
       <DescriptionTooltip tooltip={descTooltip} />
       <EditFXInflowModal
         open={!!fxInflowEditRecord}
