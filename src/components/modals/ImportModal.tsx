@@ -1849,25 +1849,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         {step === 4 && sheet && config && targetTable === 'bank_statement' && (
           <div className="space-y-5">
 
-            {/* Persistent bank bar */}
+            {/* Persistent bank bar — locked after duplicate check */}
             <div className="flex items-center gap-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
               <span className="text-xs font-medium text-gray-500 shrink-0">Bank</span>
-              <select
-                value={internalBank?.id ?? ''}
-                onChange={e => {
-                  const found = bankList.find(b => b.id === e.target.value)
-                  setInternalBank(found ? { id: found.id, name: found.name } : null)
-                }}
-                className={`flex-1 text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
-                  internalBank ? 'border-gray-300' : 'border-amber-400'
-                }`}
-              >
-                <option value="">— Select bank —</option>
-                {bankList.map(b => <option key={b.id} value={b.id}>{bankLabel(b)}</option>)}
-              </select>
-              {internalBank && (
-                <span className="text-xs font-semibold text-primary shrink-0">{internalBank.name}</span>
+              {internalBank ? (
+                <span className="flex-1 text-xs font-semibold text-primary">{internalBank.name}</span>
+              ) : (
+                <span className="flex-1 text-xs text-gray-400">—</span>
               )}
+              <span className="text-[10px] text-gray-400 shrink-0">locked after duplicate check</span>
             </div>
 
             {/* ── Foreign Currency Bank notice ─────────────────────────── */}
@@ -2066,7 +2056,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       <div className="flex flex-wrap items-center gap-2 justify-end">
                         <select value={batchTxnType} onChange={e => { setBatchTxnType(e.target.value); if (!isOffsetableType(e.target.value)) setBatchOffsetRole('') }}
                           className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[130px]">
-                          <option value="">— Type —</option>
+                          <option value="">— Txn Type —</option>
                           {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                         {isOffsetableType(batchTxnType) && (
@@ -2171,7 +2161,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           }}
                           className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                         />
-                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Income Type</span><span>Type</span>
+                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Income Type</span><span>Txn Type</span>
                       </div>
                       <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                         {filtered.length === 0
@@ -2559,7 +2549,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     <div className="flex flex-wrap items-center gap-2 justify-end">
                       <select value={batchTxnType} onChange={e => { setBatchTxnType(e.target.value); if (!isOffsetableType(e.target.value)) setBatchOffsetRole('') }}
                         className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[130px]">
-                        <option value="">— Type —</option>
+                        <option value="">— Txn Type —</option>
                         {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                       {isOffsetableType(batchTxnType) && (
@@ -2683,7 +2673,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         }}
                         className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                       />
-                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Category</span><span>Fund Type</span><span>Pending</span><span>Type</span>
+                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Category</span><span>Fund Type</span><span>Pending</span><span>Txn Type</span>
                     </div>
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                       {filtered.length === 0

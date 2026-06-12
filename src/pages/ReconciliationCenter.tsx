@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ShieldCheck, ShieldAlert, ShieldX, RefreshCw, AlertCircle,
@@ -25,7 +25,7 @@ import {
 
 // ── Plain-language issue explanations ─────────────────────────────────────────
 
-const RULE_PLAIN: Record<string, { headline: string; why: string }> = {
+const RULE_PLAIN: Record<string, { headline: string; why: ReactNode }> = {
   orphan_transfer: {
     headline: 'A transfer was recorded but has no matching deposit.',
     why: 'Until this is resolved, your bank balance and book records will be out of sync. Check bank movements for an unmatched entry.',
@@ -40,7 +40,14 @@ const RULE_PLAIN: Record<string, { headline: string; why: string }> = {
   },
   balance_mismatch: {
     headline: 'Your recorded balance does not match your reference bank statement.',
-    why: 'This difference means your reports are showing an inaccurate balance. Review recent transactions in the Bank Ledger to find the gap.',
+    why: (
+      <>
+        This difference means your reports are showing an inaccurate balance.{' '}
+        Review <Link to="/bank-ledger" className="underline text-primary hover:text-primary-light">recent transactions</Link>,{' '}
+        update your <Link to="/setup" className="underline text-primary hover:text-primary-light">bank opening balance</Link>,{' '}
+        or <a href="#account-status" className="underline text-primary hover:text-primary-light">review your statement balance</a> to find the gap.
+      </>
+    ),
   },
   allocation_inconsistency: {
     headline: 'A transaction\'s fund allocation does not match the active distribution rule.',
@@ -189,9 +196,26 @@ function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
 
 // ── Issue card ─────────────────────────────────────────────────────────────────
 
+function getIncompleteReversalHeadline(evidence: Record<string, unknown>): string {
+  const txnType = evidence.transactionType as string | undefined
+  const labels: Record<string, string> = {
+    reversal:           'A reversal',
+    refund:             'A refund',
+    bank_deposit:       'A bank deposit',
+    intrabank_transfer: 'An intrabank transfer',
+  }
+  if (txnType && labels[txnType]) {
+    return `${labels[txnType]} was recorded but the original transaction has not been indicated.`
+  }
+  return 'A transaction was marked as an offset but the original transaction it relates to has not been linked.'
+}
+
 function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: string }) {
   const [expanded, setExpanded] = useState(false)
   const plain = RULE_PLAIN[issue.ruleId]
+  const headline = issue.ruleId === 'incomplete_reversal'
+    ? getIncompleteReversalHeadline(issue.evidence)
+    : (plain?.headline ?? issue.message)
   const hasFacts = EVIDENCE_KEY_ORDER.some(
     k => k in issue.evidence && issue.evidence[k] !== null && issue.evidence[k] !== undefined && issue.evidence[k] !== '',
   )
@@ -205,7 +229,7 @@ function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: 
         <SeverityIcon severity={issue.severity} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-800">
-            {plain?.headline ?? issue.message}
+            {headline}
             {hasFacts && (
               <span className="font-normal text-gray-400"> — the affected record is shown below.</span>
             )}
@@ -505,7 +529,7 @@ export default function ReconciliationCenter() {
 
       {/* ── Section B: Account Status Table ───────────────────────────────── */}
       {diag && diag.bankSummaries.length > 0 && (
-        <div>
+        <div id="account-status">
           <button
             onClick={() => setShowAccountStatus(v => !v)}
             className="flex items-center gap-2 w-full text-left"

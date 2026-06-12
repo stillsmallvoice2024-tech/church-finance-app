@@ -272,9 +272,9 @@ export default function Import() {
           {/* Step indicator */}
           <div className="flex items-center gap-2 text-xs">
             {[
-              { n: 1, label: 'Choose file',      active: !parseResult,                       done: !!parseResult },
-              { n: 2, label: 'Review & confirm', active: !!parseResult && !importOpen,       done: importOpen },
-              { n: 3, label: 'Map & import',     active: importOpen,                         done: false },
+              { n: 'A', label: 'Choose file',      active: !parseResult,                       done: !!parseResult },
+              { n: 'B', label: 'Review & confirm', active: !!parseResult && !importOpen,       done: importOpen },
+              { n: 'C', label: 'Map & import',     active: importOpen,                         done: false },
             ].map(({ n, label, active, done }, i) => (
               <div key={n} className="flex items-center gap-2">
                 {i > 0 && <div className={`w-6 h-px ${done || active ? 'bg-primary/40' : 'bg-gray-200'}`} />}
