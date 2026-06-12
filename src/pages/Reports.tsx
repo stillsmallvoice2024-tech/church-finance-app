@@ -145,8 +145,8 @@ function AnnualSummaryPanel() {
       {loading && <Skeleton />}
       {!loading && rows.length === 0 && <EmptyState />}
       {!loading && rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto scroll-x-fade">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Year</th>
@@ -260,8 +260,8 @@ function MonthlyBreakdownPanel() {
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
       {!loading && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto scroll-x-fade">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Month</th>
@@ -385,15 +385,15 @@ function IncomeTypeBreakdownPanel() {
         <div className="py-16 text-center space-y-2">
           <p className="text-sm text-gray-400">No income-type-tagged transactions for {periodLabel}.</p>
           {incomeTypes.length === 0 && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               Set up income types in <span className="font-medium">Setup → Income Types</span>, then tag transactions when adding or importing.
             </p>
           )}
         </div>
       )}
       {!loading && rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto scroll-x-fade">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Income Type</th>
@@ -533,15 +533,15 @@ function OutflowTypeBreakdownPanel() {
         <div className="py-16 text-center space-y-2">
           <p className="text-sm text-gray-400">No outflow-type-tagged transactions for {periodLabel}.</p>
           {outflowTypes.length === 0 && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               Set up outflow types in <span className="font-medium">Setup → Outflow Types</span>, then tag transactions when adding or importing.
             </p>
           )}
         </div>
       )}
       {!loading && rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto scroll-x-fade">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Outflow Type</th>
@@ -785,15 +785,15 @@ function DepartmentBreakdownPanel() {
           <div className="py-16 text-center space-y-2">
             <p className="text-sm text-gray-400">No department-tagged transactions for {periodLabel}.</p>
             {departments.length === 0 && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 Set up departments in <span className="font-medium">Setup → Departments</span>, then tag transactions when adding.
               </p>
             )}
           </div>
         )}
         {!loading && rows.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto scroll-x-fade">
+            <table className="w-full text-sm table-sticky-col">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                   <th className="px-5 py-3 text-left font-medium">Department</th>
@@ -820,9 +820,9 @@ function DepartmentBreakdownPanel() {
                               {r.name}
                             </span>
                             {r.code && (
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">{r.code}</span>
+                              <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">{r.code}</span>
                             )}
-                            <span className="text-xs text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+                            <span className="text-xs text-gray-500">{isExpanded ? '▲' : '▼'}</span>
                           </div>
                         </td>
                         <td className="px-5 py-3 text-right text-gray-500">{r.count.toLocaleString()}</td>
@@ -852,13 +852,13 @@ function DepartmentBreakdownPanel() {
                                 </select>
                               </div>
                               {drillLoading ? (
-                                <div className="py-6 text-center text-xs text-gray-400">Loading…</div>
+                                <div className="py-6 text-center text-xs text-gray-500">Loading…</div>
                               ) : drillTxns.length === 0 ? (
-                                <div className="py-6 text-center text-xs text-gray-400">No transactions found.</div>
+                                <div className="py-6 text-center text-xs text-gray-500">No transactions found.</div>
                               ) : (
                                 <table className="w-full">
                                   <thead>
-                                    <tr className="text-[10px] text-gray-400 uppercase border-b border-gray-100">
+                                    <tr className="text-xs text-gray-500 uppercase border-b border-gray-100">
                                       <th className="px-4 py-2 text-left">Date</th>
                                       <th className="px-4 py-2 text-left">Description</th>
                                       <th className="px-4 py-2 text-left">Outflow Type</th>
@@ -937,7 +937,7 @@ function DepartmentBreakdownPanel() {
             {(filterDeptId || filterTypeId) && (
               <button
                 onClick={() => { setFilterDeptId(''); setFilterTypeId('') }}
-                className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded border border-gray-200 hover:border-gray-300 transition-colors"
+                className="text-xs text-gray-500 hover:text-gray-600 px-2 py-1 rounded border border-gray-200 hover:border-gray-300 transition-colors"
               >
                 Clear filters
               </button>
@@ -954,7 +954,7 @@ function DepartmentBreakdownPanel() {
           )}
           {!crossLoading && crossTxns.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-gray-100">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-sticky-col">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
                     <th className="px-4 py-3 text-left font-medium">Date</th>
@@ -1014,8 +1014,8 @@ function FXHoldingsPanel() {
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
       {!loading && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto scroll-x-fade">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Currency</th>
@@ -1035,7 +1035,7 @@ function FXHoldingsPanel() {
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{meta.flag}</span>
                         <span className="font-mono font-semibold text-xs">{meta.code}</span>
-                        <span className="text-gray-400 text-xs">{meta.name}</span>
+                        <span className="text-gray-500 text-xs">{meta.name}</span>
                       </div>
                     </td>
                     <td className={`px-5 py-3 text-right font-bold font-mono ${bal > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
@@ -1086,8 +1086,8 @@ function AuditLogPanel() {
       {loading && <Skeleton />}
       {!loading && entries.length === 0 && <EmptyState />}
       {!loading && entries.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto scroll-x-fade">
+          <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Timestamp</th>
@@ -1100,14 +1100,14 @@ function AuditLogPanel() {
             <tbody className="divide-y divide-gray-50">
               {entries.map(e => (
                 <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                  <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {new Date(e.created_at).toLocaleString()}
                   </td>
                   <td className="px-5 py-3">
                     <div className="font-medium text-gray-800">
                       {e.profiles?.full_name ?? 'System'}
                     </div>
-                    <div className="text-xs text-gray-400">{e.profiles?.email ?? '—'}</div>
+                    <div className="text-xs text-gray-500">{e.profiles?.email ?? '—'}</div>
                   </td>
                   <td className="px-5 py-3">
                     <span
@@ -1125,7 +1125,7 @@ function AuditLogPanel() {
                   <td className="px-5 py-3 font-mono text-xs text-gray-500">
                     {e.table_name ?? '—'}
                   </td>
-                  <td className="px-5 py-3 font-mono text-xs text-gray-400 max-w-[160px] truncate">
+                  <td className="px-5 py-3 font-mono text-xs text-gray-500 max-w-[160px] truncate">
                     {e.record_id ?? '—'}
                   </td>
                 </tr>

@@ -52,7 +52,7 @@ export function PaginationBar({
           type="button"
           onClick={() => onPageChange(page - 1)}
           disabled={page === 0}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-1 py-0.5 rounded"
+          className="touch-target flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-2 py-1 rounded"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
           Prev
@@ -66,7 +66,7 @@ export function PaginationBar({
           type="button"
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages - 1}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-1 py-0.5 rounded"
+          className="touch-target flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-2 py-1 rounded"
         >
           Next
           <ChevronRight className="w-3.5 h-3.5" />

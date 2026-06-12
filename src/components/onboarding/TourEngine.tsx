@@ -139,7 +139,7 @@ function TourCard({ step, stepIndex, totalSteps, pos, onNext, onPrev, onExit }: 
 
       {/* Footer */}
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400 dark:text-gray-500">
+        <span className="text-xs text-gray-500 dark:text-gray-500">
           {stepIndex + 1} / {totalSteps}
         </span>
         <div className="flex items-center gap-2">

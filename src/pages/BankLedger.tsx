@@ -454,7 +454,7 @@ export default function BankLedger() {
         <Card padding={false} data-tour="ledger-table">
           {blState.view === 'cards' ? (
             <div className="p-4 space-y-3">
-              {loading ? (
+              {loading && sortedRows.length === 0 ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
                     <div className="px-4 pt-3.5 pb-3 space-y-2">
@@ -476,10 +476,10 @@ export default function BankLedger() {
                   {/* Card header */}
                   <div className={`px-4 pt-3.5 pb-3 ${isBF ? 'bg-blue-50/60' : ''}`}>
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <p className="text-[11px] font-semibold text-gray-400">{isBF ? 'Opening' : formatDate(row.date)}</p>
+                      <p className="text-xs font-semibold text-gray-400">{isBF ? 'Opening' : formatDate(row.date)}</p>
                       <div className="flex items-center gap-1.5">
                         {row.transaction_type && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${isBF ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${isBF ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                             {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                           </span>
                         )}
@@ -488,8 +488,8 @@ export default function BankLedger() {
                             onClick={() => row.entity_type === 'inflow' && row.inflowData
                               ? setEditInflow(row.inflowData)
                               : row.outflowData && setEditOutflow(row.outflowData)}
-                            className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                            title="Edit source record"
+                            className="touch-target p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                            title="Edit source record" aria-label="Edit source record"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -507,7 +507,7 @@ export default function BankLedger() {
                   {/* Metrics footer */}
                   <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                     <div className="min-w-0">
-                      <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.inflow > 0 ? 'text-green-600/70' : 'text-red-600/70'}`}>
+                      <p className={`text-xs uppercase tracking-wide font-semibold mb-0.5 ${row.inflow > 0 ? 'text-green-600/70' : 'text-red-600/70'}`}>
                         {row.inflow > 0 ? 'Inflow' : 'Outflow'}
                       </p>
                       <p className={`text-sm font-mono font-bold tabular-nums ${row.inflow > 0 ? 'text-success' : 'text-danger'}`}>
@@ -516,7 +516,7 @@ export default function BankLedger() {
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400">Balance</p>
+                        <p className="text-xs uppercase tracking-wide font-semibold text-gray-400">Balance</p>
                         <ReceiptBadge entityType={row.entity_type} entityId={row.id} />
                       </div>
                       <p className={`text-sm font-mono font-bold tabular-nums ${row.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
@@ -528,7 +528,7 @@ export default function BankLedger() {
               )})}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scroll-x-fade">
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
@@ -543,7 +543,7 @@ export default function BankLedger() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {loading ? (
+                  {loading && sortedRows.length === 0 ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>{Array.from({ length: 5 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>
@@ -568,7 +568,7 @@ export default function BankLedger() {
                         {!isBF && !isTableRow && (
                           <button
                             onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                            className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                            className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                             title={isExpanded ? 'Collapse' : 'Expand details'}
                           >
                             {isExpanded
@@ -581,7 +581,7 @@ export default function BankLedger() {
                       <td className="px-4 py-3 text-sm max-w-[280px]">
                         <div className="flex items-start gap-1.5 min-w-0">
                           {row.transaction_type && (
-                            <span className={`inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${isBF ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                            <span className={`inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${isBF ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                               {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                             </span>
                           )}
@@ -605,8 +605,8 @@ export default function BankLedger() {
                               onClick={() => row.entity_type === 'inflow' && row.inflowData
                                 ? setEditInflow(row.inflowData)
                                 : row.outflowData && setEditOutflow(row.outflowData)}
-                              className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                              title="Edit source record"
+                              className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                              title="Edit source record" aria-label="Edit source record"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>

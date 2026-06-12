@@ -297,7 +297,7 @@ export default function PercentageAllocation() {
               onPageSizeChange={state.setPageSize}
             />
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-sticky-col">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                     <SortableHeader field={PA_SORT_FIELDS[0]} activeSortKey={state.sortKey} activeSortDir={state.sortDir} onSort={state.setSort} className="px-5 py-3" />

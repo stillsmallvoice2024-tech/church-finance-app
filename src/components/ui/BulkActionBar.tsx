@@ -20,11 +20,13 @@ export function BulkActionBar({ count, actions, onClear, summary }: {
   if (count === 0) return null
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-primary/10 bg-primary/5">
+    // On phones the bar docks above the bottom tab bar so selection count and
+    // actions stay visible (and thumb-reachable) while scrolling long lists.
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-4 py-2.5 border-b border-primary/10 bg-primary/5 max-md:fixed max-md:bottom-[var(--tab-bar-height)] max-md:left-0 max-md:right-0 max-md:z-40 max-md:bg-slate-50 max-md:border-t max-md:border-primary/20 max-md:shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
       <span className="text-sm font-medium text-primary">{count} selected</span>
       {summary}
       {actions.filter(a => a.show !== false).map(a => {
-        const base = 'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50'
+        const base = 'flex items-center gap-1.5 px-3 py-1.5 min-h-[40px] text-sm font-medium rounded-lg transition-colors disabled:opacity-50'
         const cls =
           a.variant === 'danger'
             ? `${base} text-white bg-danger hover:bg-red-700`
@@ -47,7 +49,7 @@ export function BulkActionBar({ count, actions, onClear, summary }: {
       })}
       <button
         onClick={onClear}
-        className="ml-auto px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+        className="ml-auto px-3 py-1.5 min-h-[40px] text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
       >
         Clear
       </button>

@@ -74,6 +74,27 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
   const panelRef = useRef<HTMLDivElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
 
+  // Swipe-down-to-close (mobile) — drag starts from the header/handle only,
+  // so body scrolling is never hijacked. Routes through the dirty guard.
+  const touchStartY = useRef<number | null>(null)
+  const [dragY, setDragY] = useState(0)
+  const onHeaderTouchStart = (e: React.TouchEvent) => {
+    if (disableClose) return
+    touchStartY.current = e.touches[0].clientY
+  }
+  const onHeaderTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return
+    const dy = e.touches[0].clientY - touchStartY.current
+    if (dy > 0) setDragY(dy)
+  }
+  const onHeaderTouchEnd = () => {
+    if (touchStartY.current === null) return
+    const shouldClose = dragY > 100
+    touchStartY.current = null
+    setDragY(0)
+    if (shouldClose) requestClose()
+  }
+
   const requestClose = useCallback(() => {
     if (disableClose) return
     if (isDirty) {
@@ -171,10 +192,19 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
       {/* Panel — full-screen on mobile, centered card on sm+ */}
       <div
         ref={panelRef}
-        className={`relative w-full bg-white flex flex-col h-full sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh] [animation:modal-enter_150ms_ease-out]`}
+        className={`relative w-full bg-white flex flex-col h-[100dvh] sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh] [animation:modal-enter_150ms_ease-out]`}
+        style={dragY > 0 ? { transform: `translateY(${dragY}px)`, transition: 'none' } : undefined}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        {/* Header — safe-area padding clears the notch when full-screen.
+            Touch-drag down on the header swipes the modal closed on phones. */}
+        <div
+          className="flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-4 border-b border-gray-100 shrink-0 relative"
+          onTouchStart={onHeaderTouchStart}
+          onTouchMove={onHeaderTouchMove}
+          onTouchEnd={onHeaderTouchEnd}
+        >
+          {/* Drag handle — visual swipe affordance, phones only */}
+          <span aria-hidden="true" className="sm:hidden absolute left-1/2 top-1.5 -translate-x-1/2 w-9 h-1 rounded-full bg-gray-300" />
           <h2 id="modal-title" className="text-base font-semibold text-gray-900">
             {title}
           </h2>
@@ -200,9 +230,9 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
           {children}
         </div>
 
-        {/* Sticky footer for action buttons */}
+        {/* Sticky footer for action buttons — stacked full-width on phones */}
         {footer && (
-          <div className="shrink-0 px-6 py-4 border-t border-gray-100 bg-white sm:rounded-b-2xl">
+          <div className="modal-footer-mobile shrink-0 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 border-t border-gray-100 bg-white sm:rounded-b-2xl">
             {footer}
           </div>
         )}

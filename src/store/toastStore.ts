@@ -16,7 +16,7 @@ const DEFAULT_DURATION: Record<ToastType, number> = {
   success: 3000,
   info:    4000,
   warning: 4000,
-  error:   5000,
+  error:   0,  // errors persist until dismissed — failed-save evidence must not vanish
 }
 
 interface ToastState {

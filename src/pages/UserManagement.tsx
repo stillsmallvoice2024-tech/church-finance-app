@@ -7,6 +7,7 @@ import {
   ChevronDown, Pencil, XCircle, MailOpen, Eye, EyeOff, KeyRound, Trash2,
 } from 'lucide-react'
 import { Modal }           from '../components/ui/Modal'
+import { focusFirstInvalid } from '../components/ui/FormField'
 import { DeleteDialog }    from '../components/ui/DeleteDialog'
 import { DeleteOrgModal }  from '../components/modals/DeleteOrgModal'
 import { exportCSV }    from '../utils/csvExport'
@@ -243,7 +244,7 @@ function InviteUserModal({
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} className="space-y-4" noValidate>
           <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700 flex gap-2">
             <MailOpen className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
@@ -273,7 +274,7 @@ function InviteUserModal({
               <option value="accountant">Accountant — can add and edit records</option>
               <option value="viewer">Viewer — read-only access</option>
             </select>
-            <p className="text-xs text-gray-400">Owner role can only be assigned via Transfer Ownership after the user joins.</p>
+            <p className="text-xs text-gray-500">Owner role can only be assigned via Transfer Ownership after the user joins.</p>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -381,7 +382,7 @@ function EditProfileModal({
             placeholder="e.g. johnsmith (for login)"
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           />
-          <p className="text-[11px] text-gray-400">
+          <p className="text-xs text-gray-500">
             Optional. Used to log in instead of your email address.
           </p>
         </div>
@@ -392,7 +393,7 @@ function EditProfileModal({
             {isMigrationError && (
               <>
                 <p className="mb-1 text-gray-500">Run this migration in Supabase first:</p>
-                <pre className="bg-gray-900 text-green-300 rounded p-2 overflow-x-auto whitespace-pre-wrap text-[10px]">
+                <pre className="bg-gray-900 text-green-300 rounded p-2 overflow-x-auto whitespace-pre-wrap text-xs">
                   {USERNAME_MIGRATION_SQL}
                 </pre>
               </>
@@ -711,10 +712,10 @@ export default function UserManagement() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900">{currentProfile.full_name || '—'}</span>
-                <span className="text-xs text-gray-400">(you)</span>
+                <span className="text-xs text-gray-500">(you)</span>
               </div>
               {currentProfile.username && (
-                <div className="text-xs text-gray-400 font-mono">@{currentProfile.username}</div>
+                <div className="text-xs text-gray-500 font-mono">@{currentProfile.username}</div>
               )}
               <div className="text-sm text-gray-500">{user?.email}</div>
               <div className="mt-1">
@@ -764,7 +765,7 @@ export default function UserManagement() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">All Members</h2>
-          <span className="text-xs text-gray-400">{totalCount} member{totalCount !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-gray-500">{totalCount} member{totalCount !== 1 ? 's' : ''}</span>
         </div>
 
         {loading ? (
@@ -778,7 +779,74 @@ export default function UserManagement() {
         ) : members.length === 0 ? (
           <PageEmptyState pageId="users" compact />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Card list — phones (table requires panning for 6 columns) */}
+          <div className="md:hidden p-3 space-y-2">
+            {members.map(m => {
+              const isSelf  = m.user_id === user?.id
+              const saving  = savingId === m.id
+              const canEditRole = !isSelf && isAdmin() && !(m.role === 'owner' && !isOwner())
+              return (
+                <div key={m.id} className={`rounded-xl border px-3 py-3 space-y-2.5 ${isSelf ? 'border-blue-100 bg-blue-50/30' : 'border-gray-100 bg-white'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+                      {initials(m.full_name || m.email)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {m.full_name || '—'}
+                        {isSelf && <span className="ml-1.5 text-xs text-gray-500">(you)</span>}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{m.email}</p>
+                    </div>
+                    <div className="relative inline-block shrink-0">
+                      <select
+                        value={m.role}
+                        disabled={!canEditRole || saving}
+                        onChange={e => handleRoleChange(m.id, e.target.value as UserRole)}
+                        className={`appearance-none pr-6 pl-2.5 py-1.5 min-h-[32px] text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[m.role].pill} ${!canEditRole ? 'opacity-60' : ''}`}
+                        aria-label={`Role for ${m.full_name || m.email}`}
+                      >
+                        {isOwner() && <option value="owner">Owner</option>}
+                        <option value="admin">Admin</option>
+                        <option value="accountant">Accountant</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                      {canEditRole && (
+                        <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none" />
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Registered {m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}
+                    {' · '}Joined {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
+                  </p>
+                  {((canTransferOwnership() && !isSelf && m.role !== 'owner') || (!isSelf && isAdmin())) && (
+                    <div className="flex gap-2">
+                      {canTransferOwnership() && !isSelf && m.role !== 'owner' && (
+                        <button
+                          onClick={() => setTransferTarget(m)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 min-h-[40px] text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                        >
+                          <Shield className="w-3.5 h-3.5" /> Make Owner
+                        </button>
+                      )}
+                      {!isSelf && isAdmin() && (
+                        <button
+                          onClick={() => setRemoveId(m.id)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 min-h-[40px] text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Remove
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {/* Table — md and up */}
+          <div className="hidden md:block overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -808,7 +876,7 @@ export default function UserManagement() {
                           <div>
                             <div className="font-medium text-gray-900">
                               {m.full_name || '—'}
-                              {isSelf && <span className="ml-1.5 text-xs text-gray-400">(you)</span>}
+                              {isSelf && <span className="ml-1.5 text-xs text-gray-500">(you)</span>}
                             </div>
                           </div>
                         </div>
@@ -842,12 +910,12 @@ export default function UserManagement() {
                       </td>
 
                       {/* Registered */}
-                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                      <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
                         {m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}
                       </td>
 
                       {/* Joined org */}
-                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                      <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
                         {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
                       </td>
 
@@ -858,7 +926,7 @@ export default function UserManagement() {
                             <button
                               onClick={() => setTransferTarget(m)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors"
-                              title="Transfer ownership"
+                              title="Transfer ownership" aria-label="Transfer ownership"
                             >
                               <Shield className="w-3.5 h-3.5" /> Make Owner
                             </button>
@@ -867,7 +935,7 @@ export default function UserManagement() {
                             <button
                               onClick={() => setRemoveId(m.id)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Remove from organisation"
+                              title="Remove from organisation" aria-label="Remove from organisation"
                             >
                               <XCircle className="w-3.5 h-3.5" /> Remove
                             </button>
@@ -881,6 +949,7 @@ export default function UserManagement() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

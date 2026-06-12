@@ -17,7 +17,7 @@ function AppIcon() {
 }
 
 const inputCls =
-  'w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none ' +
+  'w-full px-3 py-2.5 min-h-[44px] text-base sm:text-sm border border-gray-300 rounded-lg outline-none ' +
   'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors'
 
 export default function LoginPage() {
@@ -472,7 +472,7 @@ export default function LoginPage() {
                   Contact your administrator to request an account.
                 </span>
               </p>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 or{' '}
                 <button
                   onClick={() => { setMode('signup'); setError(null) }}

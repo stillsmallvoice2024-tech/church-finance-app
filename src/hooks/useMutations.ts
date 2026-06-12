@@ -1181,6 +1181,7 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
   const execute = useCallback(async (
     ids: string[],
     baseUpdates: Record<string, unknown>,
+    onProgress?: (done: number, total: number) => void,
   ): Promise<{ failed: number; total: number; failures: BulkRowFailure[] }> => {
     if (ids.length === 0) return { failed: 0, total: 0, failures: [] }
     const { user } = useAuthStore.getState()
@@ -1253,6 +1254,8 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
           }
           batchLogFieldChanges(fcRows)
         }
+
+        onProgress?.(Math.min(totalUpdated + failures.length, ids.length), ids.length)
       }
 
       if (table === 'inflow_transactions')  useTransactionSyncStore.getState().bumpInflow()

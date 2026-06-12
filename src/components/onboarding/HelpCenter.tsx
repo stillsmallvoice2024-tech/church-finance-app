@@ -15,6 +15,159 @@ import { TUTORIAL_CHAPTERS } from '../../onboarding/tutorial'
 import type { TutorialChapter } from '../../onboarding/tutorial'
 import type { HelpArticle, FAQEntry } from '../../types/onboarding'
 
+// ── Simple Markdown renderer ──────────────────────────────────────────────────
+// Handles: ## headings, **bold**, bullet lists (- ), tables (| ), blank lines
+
+function renderMarkdown(raw: string): JSX.Element {
+  const lines = raw.split('\n')
+  const elements: JSX.Element[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    if (line.startsWith('## ')) {
+      elements.push(
+        <h2 key={i} className="text-base font-semibold text-gray-800 dark:text-gray-100 mt-5 mb-2 first:mt-0">
+          {line.slice(3)}
+        </h2>,
+      )
+      i++
+      continue
+    }
+
+    if (line.startsWith('### ')) {
+      elements.push(
+        <h3 key={i} className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-4 mb-1">
+          {line.slice(4)}
+        </h3>,
+      )
+      i++
+      continue
+    }
+
+    // Table block
+    if (line.startsWith('|')) {
+      const tableLines: string[] = []
+      while (i < lines.length && lines[i].startsWith('|')) {
+        if (!lines[i].match(/^\|[-| ]+\|$/)) tableLines.push(lines[i])
+        i++
+      }
+      if (tableLines.length > 0) {
+        const [headerLine, ...bodyLines] = tableLines
+        const headers = headerLine.split('|').filter(Boolean).map(c => c.trim())
+        elements.push(
+          <div key={`tbl-${i}`} className="overflow-x-auto scroll-x-fade my-3">
+            <table className="min-w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <thead className="bg-gray-100 dark:bg-gray-800">
+                <tr>
+                  {headers.map((h, hi) => (
+                    <th key={hi} className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bodyLines.map((row, ri) => {
+                  const cells = row.split('|').filter(Boolean).map(c => c.trim())
+                  return (
+                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-850'}>
+                      {cells.map((cell, ci) => (
+                        <td key={ci} className="px-3 py-1.5 text-gray-700 dark:text-gray-300">
+                          <InlineMarkdown text={cell} />
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>,
+        )
+      }
+      continue
+    }
+
+    // Bullet list block
+    if (line.startsWith('- ')) {
+      const items: string[] = []
+      while (i < lines.length && lines[i].startsWith('- ')) {
+        items.push(lines[i].slice(2))
+        i++
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="list-none space-y-1 my-2 pl-1">
+          {items.map((item, ii) => (
+            <li key={ii} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+              <InlineMarkdown text={item} />
+            </li>
+          ))}
+        </ul>,
+      )
+      continue
+    }
+
+    // Numbered list block
+    if (/^\d+\. /.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^\d+\. /.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\. /, ''))
+        i++
+      }
+      elements.push(
+        <ol key={`ol-${i}`} className="space-y-1 my-2 pl-1">
+          {items.map((item, ii) => (
+            <li key={ii} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <span className="shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center mt-0.5">
+                {ii + 1}
+              </span>
+              <InlineMarkdown text={item} />
+            </li>
+          ))}
+        </ol>,
+      )
+      continue
+    }
+
+    // Empty line
+    if (line.trim() === '') {
+      i++
+      continue
+    }
+
+    // Paragraph
+    elements.push(
+      <p key={i} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-2">
+        <InlineMarkdown text={line} />
+      </p>,
+    )
+    i++
+  }
+
+  return <div>{elements}</div>
+}
+
+function InlineMarkdown({ text }: { text: string }) {
+  const parts: JSX.Element[] = []
+  const re = /\*\*(.+?)\*\*|`(.+?)`/g
+  let last = 0
+  let m: RegExpExecArray | null
+
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(<span key={last}>{text.slice(last, m.index)}</span>)
+    if (m[1] !== undefined) {
+      parts.push(<strong key={m.index} className="font-semibold text-gray-900 dark:text-gray-100">{m[1]}</strong>)
+    } else {
+      parts.push(<code key={m.index} className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">{m[2]}</code>)
+    }
+    last = m.index + m[0].length
+  }
+  if (last < text.length) parts.push(<span key={last}>{text.slice(last)}</span>)
+  return <>{parts}</>
+}
+
 // ── Tab type ──────────────────────────────────────────────────────────────────
 
 type TabId = 'articles' | 'tutorial' | 'faqs' | 'tours' | 'whats-new'
@@ -45,7 +198,7 @@ function ArticleCard({ article, onClick }: { article: HelpArticle; onClick: () =
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{article.summary}</p>
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         {article.tags.slice(0, 3).map(tag => (
-          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-[10px] text-gray-500 dark:text-gray-400">
+          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400">
             <Tag className="w-2.5 h-2.5" />
             {tag}
           </span>
@@ -67,7 +220,7 @@ function ArticleDetail({ article, onBack }: { article: HelpArticle; onBack: () =
         Back to Articles
       </button>
       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-1">{article.title}</h2>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Updated {article.updatedAt}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">Updated {article.updatedAt}</p>
       <div className="overflow-y-auto flex-1 pr-1">
         {renderMarkdown(article.content)}
       </div>
@@ -322,7 +475,7 @@ export function HelpCenter() {
               <Icon className="w-3.5 h-3.5" />
               {label}
               {id === 'articles' && q && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {filteredArticles.length}
                 </span>
               )}
@@ -332,12 +485,12 @@ export function HelpCenter() {
                 </span>
               )}
               {id === 'faqs' && q && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {filteredFAQs.length}
                 </span>
               )}
               {id === 'tours' && q && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {filteredTours.length}
                 </span>
               )}
@@ -442,7 +595,7 @@ export function HelpCenter() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t.title}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.description}</p>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                           {t.steps.length} step{t.steps.length !== 1 ? 's' : ''}
                         </p>
                       </div>
@@ -474,7 +627,7 @@ export function HelpCenter() {
                       <p className="text-sm font-bold text-gray-900 dark:text-gray-50">
                         v{note.version} — {note.title}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">{note.date}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">{note.date}</p>
                     </div>
                   </div>
                   <div className="px-4 py-3">
@@ -510,7 +663,7 @@ function EmptySearch({ query }: { query: string }) {
       <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
         No results for <span className="font-semibold">"{query}"</span>
       </p>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try different keywords</p>
+      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Try different keywords</p>
     </div>
   )
 }

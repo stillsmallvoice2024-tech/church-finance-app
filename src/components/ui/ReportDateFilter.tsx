@@ -146,7 +146,7 @@ export function ReportDateFilter({ hook }: { hook: ReportDateFilterHook }) {
             onChange={e => setDateFrom(e.target.value)}
             className={CTL}
           />
-          <span className="text-gray-400 text-xs shrink-0">–</span>
+          <span className="text-gray-500 text-xs shrink-0">–</span>
           <input
             type="date"
             value={dateTo}

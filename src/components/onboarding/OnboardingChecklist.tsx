@@ -197,7 +197,7 @@ export function OnboardingChecklist() {
                     )}
                   </p>
                   {!item.done && item.description && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 truncate">
                       {item.description}
                     </p>
                   )}

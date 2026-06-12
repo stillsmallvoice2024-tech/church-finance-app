@@ -98,7 +98,7 @@ export function TransactionStory({ table, recordId, createdAt, locale }: Transac
       {open && (
         <div className="mt-3">
           {loading ? (
-            <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+            <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading history…
             </div>
           ) : (
@@ -107,7 +107,7 @@ export function TransactionStory({ table, recordId, createdAt, locale }: Transac
                 <li className="pl-4 relative">
                   <span className="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-primary/70 border-2 border-white" />
                   <p className="text-xs text-gray-700 font-medium">Recorded</p>
-                  <p className="text-[10px] text-gray-400">{fmtWhen(createdAt, locale)}</p>
+                  <p className="text-xs text-gray-500">{fmtWhen(createdAt, locale)}</p>
                 </li>
               )}
               {(events ?? []).map(e => (
@@ -119,14 +119,14 @@ export function TransactionStory({ table, recordId, createdAt, locale }: Transac
                     {e.new_value != null && <> to <span className="font-mono text-gray-700">"{e.new_value}"</span></>}
                     {e.who && <span className="text-gray-400"> · {e.who}</span>}
                   </p>
-                  <p className="text-[10px] text-gray-400">{fmtWhen(e.changed_at, locale)}</p>
+                  <p className="text-xs text-gray-500">{fmtWhen(e.changed_at, locale)}</p>
                 </li>
               ))}
               {(events ?? []).length === 0 && !createdAt && (
-                <li className="pl-4 text-xs text-gray-400">No changes recorded for this transaction.</li>
+                <li className="pl-4 text-xs text-gray-500">No changes recorded for this transaction.</li>
               )}
               {(events ?? []).length === 0 && createdAt && (
-                <li className="pl-4 text-xs text-gray-400">Unchanged since it was recorded.</li>
+                <li className="pl-4 text-xs text-gray-500">Unchanged since it was recorded.</li>
               )}
             </ol>
           )}

@@ -249,9 +249,9 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
               <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
                   <Terminal className="w-3 h-3 text-gray-400" />
-                  <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+                  <span className="text-xs text-gray-500 font-mono">Supabase SQL Editor</span>
                 </div>
-                <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+                <pre className="px-3 py-3 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
               </div>
             )}
           </div>
@@ -339,7 +339,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           </div>
 
           {obRows.length === 0 && (
-            <p className="text-[11px] text-gray-400">No opening balances. Click Add to set a balance brought forward per budget portion.</p>
+            <p className="text-xs text-gray-500">No opening balances. Click Add to set a balance brought forward per budget portion.</p>
           )}
 
           <div className="space-y-2">
@@ -366,7 +366,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
                   <button
                     type="button"
                     onClick={() => setObRows(prev => prev.filter((_, j) => j !== i))}
-                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -374,7 +374,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
               )
             })}
           </div>
-          <p className="text-[11px] text-gray-400">Balance brought forward per budget portion. Each portion can only appear once.</p>
+          <p className="text-xs text-gray-500">Balance brought forward per budget portion. Each portion can only appear once.</p>
         </div>
 
         <div className="flex justify-end gap-3 pt-1">
@@ -698,17 +698,17 @@ export default function Categories() {
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <p className="text-sm font-semibold text-gray-800 leading-snug">
                       {cat.name}
-                      {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
+                      {cat.is_hidden && <span className="ml-2 text-xs text-amber-500 font-semibold uppercase">hidden</span>}
                     </p>
                     {displayBalances.length > 0 && (
                       <div className="flex flex-col items-end gap-0.5 shrink-0">
                         {displayBalances.map(b => (
-                          <span key={b.budget_portion} className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{b.budget_portion}</span>
+                          <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{b.budget_portion}</span>
                         ))}
                       </div>
                     )}
                   </div>
-                  {group && <p className="text-[11px] font-semibold text-gray-400">{group.name}</p>}
+                  {group && <p className="text-xs font-semibold text-gray-400">{group.name}</p>}
                   {cat.description && <p className="text-xs text-gray-500 mt-1.5 break-words">{cat.description}</p>}
                 </div>
                 {/* Footer: opening balances + actions */}
@@ -716,7 +716,7 @@ export default function Categories() {
                   <div className="min-w-0">
                     {displayBalances.length > 0 ? (
                       <div className="space-y-0.5">
-                        <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Bal. B/F</p>
+                        <p className="text-xs uppercase tracking-wide font-semibold mb-0.5 text-gray-400">Bal. B/F</p>
                         {displayBalances.map(b => (
                           <p key={b.budget_portion} className="text-sm font-mono font-bold tabular-nums text-gray-700">
                             {cat.currency
@@ -726,17 +726,17 @@ export default function Categories() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-300">No balance</p>
+                      <p className="text-xs uppercase tracking-wide font-semibold text-gray-300">No balance</p>
                     )}
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                    <button onClick={() => openEdit(cat)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                    <button onClick={() => openEdit(cat)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => handleDeleteClick(cat)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                    <button onClick={() => handleDeleteClick(cat)} className="touch-target p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => handleToggleHide(cat, !cat.is_hidden)} className="p-1.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title={cat.is_hidden ? 'Show' : 'Hide'}>
+                    <button onClick={() => handleToggleHide(cat, !cat.is_hidden)} className="touch-target p-1.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title={cat.is_hidden ? 'Show' : 'Hide'}>
                       {cat.is_hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                     </button>
                   </div>
@@ -780,11 +780,11 @@ export default function Categories() {
                               className="flex-1 text-xs px-2 py-0.5 border border-primary/40 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white font-semibold"
                             />
                             <button type="submit" disabled={savingGroup || !editGroupName.trim()}
-                              className="p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-40" title="Save">
+                              className="touch-target p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-40" title="Save">
                               <Check className="w-3.5 h-3.5" />
                             </button>
                             <button type="button" onClick={() => setEditGroupId(null)}
-                              className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors" title="Cancel">
+                              className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 transition-colors" title="Cancel" aria-label="Cancel">
                               <X className="w-3 h-3" />
                             </button>
                           </form>
@@ -794,11 +794,11 @@ export default function Categories() {
                             <div className="flex items-center gap-0.5">
                               <button
                                 onClick={() => { setEditGroupId(g.id); setEditGroupName(g.name) }}
-                                className="p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors" title="Rename group">
+                                className="touch-target p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors" title="Rename group">
                                 <Pencil className="w-3 h-3" />
                               </button>
                               <button onClick={() => handleDeleteGroup(g)}
-                                className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors" title="Remove group">
+                                className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors" title="Remove group">
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
@@ -900,7 +900,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
     <tr className={`hover:bg-gray-50 transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
       <td className="px-5 py-3 font-medium text-gray-800">
         {cat.name}
-        {cat.is_hidden && <span className="ml-2 text-[10px] text-amber-500 font-semibold uppercase">hidden</span>}
+        {cat.is_hidden && <span className="ml-2 text-xs text-amber-500 font-semibold uppercase">hidden</span>}
       </td>
       <td className="px-5 py-3 text-gray-500 hidden sm:table-cell max-w-[200px]">
         <DescriptionCell id={cat.id} text={cat.description} tooltip={tooltip} setTooltip={setTooltip} />
@@ -932,17 +932,17 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         <div className="flex items-center justify-end gap-1">
           {cat.is_hidden ? (
             <button onClick={() => onToggleHide(cat, false)}
-              className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Restore">
+              className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Restore">
               <Eye className="w-4 h-4" />
             </button>
           ) : (
             <button onClick={() => onEdit(cat)}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
               <Pencil className="w-4 h-4" />
             </button>
           )}
           <button onClick={() => onDelete(cat)} disabled={checking}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors disabled:opacity-40" title="Delete">
+            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors disabled:opacity-40" title="Delete" aria-label="Delete">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>

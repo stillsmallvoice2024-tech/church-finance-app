@@ -240,7 +240,7 @@ export function BackupModal({ open, onClose }: Props) {
                   {showMigSQL ? 'Hide' : 'Show'} migration SQL
                 </button>
                 {showMigSQL && (
-                  <pre className="text-[10px] font-mono bg-white border border-amber-200 rounded p-2 whitespace-pre-wrap break-all select-all text-gray-700 mt-1">
+                  <pre className="text-xs font-mono bg-white border border-amber-200 rounded p-2 whitespace-pre-wrap break-all select-all text-gray-700 mt-1">
                     {SCHEMA_DISCOVERY_MIGRATION_SQL}
                   </pre>
                 )}
@@ -257,7 +257,7 @@ export function BackupModal({ open, onClose }: Props) {
 
             {/* Managed tables progress */}
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">
                 Managed tables ({managedItems.length})
               </p>
               <div className="space-y-0.5 max-h-48 overflow-y-auto rounded-lg border border-gray-100 p-2.5 bg-gray-50">
@@ -272,7 +272,7 @@ export function BackupModal({ open, onClose }: Props) {
               <div className="space-y-1">
                 <button
                   onClick={() => setShowUnmanaged(v => !v)}
-                  className="w-full flex items-center justify-between text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1"
+                  className="w-full flex items-center justify-between text-xs font-semibold text-gray-400 uppercase tracking-wide px-1"
                 >
                   <span>
                     Unmanaged tables
@@ -294,7 +294,7 @@ export function BackupModal({ open, onClose }: Props) {
                   </div>
                 )}
                 {unmanagedItems.length === 0 && isReady && (
-                  <p className="px-1 text-xs text-gray-400">None detected.</p>
+                  <p className="px-1 text-xs text-gray-500">None detected.</p>
                 )}
               </div>
             )}
@@ -369,7 +369,7 @@ export function BackupModal({ open, onClose }: Props) {
         {/* ── Ready actions ── */}
         {step === 'ready' && (
           <div className="space-y-3 pt-2 border-t border-gray-100">
-            <p className="text-xs text-gray-400">Receipt files are not included — only attachment metadata is saved.</p>
+            <p className="text-xs text-gray-500">Receipt files are not included — only attachment metadata is saved.</p>
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={handleDownload}
@@ -422,7 +422,7 @@ function ProgressRow({ item, muted }: { item: TableProgress; muted?: boolean }) 
       }>
         {item.label}
         {item.status === 'done' && item.count !== undefined && (
-          <span className="ml-1.5 text-xs text-gray-400">({item.count.toLocaleString()})</span>
+          <span className="ml-1.5 text-xs text-gray-500">({item.count.toLocaleString()})</span>
         )}
         {item.status === 'error' && (
           <span className="ml-1 text-xs">(unavailable — skipped)</span>

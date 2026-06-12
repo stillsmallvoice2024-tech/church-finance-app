@@ -147,7 +147,7 @@ export function EditFXConversionModal({ open, onClose, onSuccess, conversion }: 
           {/* Rate (editable — triggers cascade) */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Exchange Rate ({baseCurrencySymbol} per {conversion.fx_currency}) *</label>
-            <input type="number" min="0.01" step="0.01" value={rate}
+            <input type="text" inputMode="decimal" min="0.01" step="0.01" value={rate}
               onChange={e => setRate(e.target.value)} className={iCls} />
           </div>
 

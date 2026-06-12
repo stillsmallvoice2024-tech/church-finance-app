@@ -181,7 +181,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
               <Upload className="w-8 h-8 text-gray-300" />
               <div className="text-center">
                 <p className="text-sm font-medium text-gray-700">Click to choose backup file</p>
-                <p className="text-xs text-gray-400 mt-0.5">church-finance-backup-*.json</p>
+                <p className="text-xs text-gray-500 mt-0.5">church-finance-backup-*.json</p>
               </div>
               <input
                 ref={fileInputRef}
@@ -243,7 +243,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
 
             {/* Managed tables by module */}
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 Supported restore — {summary.totalManagedRecords.toLocaleString()} records
               </p>
               {groupedManaged.map(g => (
@@ -257,7 +257,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
                           <span className="text-gray-700">{t.label}</span>
                           <div className="flex items-center gap-2">
                             {def && (
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${RESTORE_MODE_COLORS[def.restoreMode]}`}>
+                              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${RESTORE_MODE_COLORS[def.restoreMode]}`}>
                                 {def.restoreMode}
                               </span>
                             )}
@@ -280,7 +280,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
                 >
                   <span className="text-xs font-semibold text-amber-800">
                     Unmanaged tables — {summary.totalUnmanagedRecords.toLocaleString()} records
-                    <span className="ml-1.5 text-[10px] font-normal text-amber-600">(raw, unverified)</span>
+                    <span className="ml-1.5 text-xs font-normal text-amber-600">(raw, unverified)</span>
                   </span>
                   <ChevronDown className={`w-3.5 h-3.5 text-amber-600 transition-transform ${showUnmanaged ? 'rotate-180' : ''}`} />
                 </button>
@@ -305,7 +305,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
                     />
                     <div>
                       <p className="text-xs font-semibold text-amber-800">Attempt advanced restore for unmanaged tables</p>
-                      <p className="text-[10px] text-amber-700 mt-0.5">Runs after managed restore, fully isolated. Failures will not affect managed data.</p>
+                      <p className="text-xs text-amber-700 mt-0.5">Runs after managed restore, fully isolated. Failures will not affect managed data.</p>
                     </div>
                   </label>
                 </div>
@@ -314,7 +314,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
 
             {/* Mode selector */}
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Restore Mode</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Restore Mode</p>
               <div className="space-y-2">
                 <label className={`flex items-start gap-3 cursor-pointer rounded-xl border-2 px-4 py-3 transition-colors ${mode === 'merge' ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}>
                   <input type="radio" name="restore-mode" value="merge" checked={mode === 'merge'} onChange={() => setMode('merge')} className="mt-0.5" />
@@ -398,13 +398,13 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
 
             {managedItems.length > 0 && (
               <div className="space-y-1">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-0.5">Supported restore</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-0.5">Supported restore</p>
                 <ProgressList items={managedItems} />
               </div>
             )}
             {unmanagedItems.length > 0 && (
               <div className="space-y-1">
-                <p className="text-[11px] font-semibold text-amber-500 uppercase tracking-wide px-0.5">Advanced restore</p>
+                <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide px-0.5">Advanced restore</p>
                 <ProgressList items={unmanagedItems} />
               </div>
             )}
@@ -451,13 +451,13 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
             {/* Result summary */}
             {managedItems.length > 0 && (
               <div className="space-y-1">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-0.5">Supported restore</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-0.5">Supported restore</p>
                 <ProgressList items={managedItems} compact />
               </div>
             )}
             {unmanagedItems.length > 0 && (
               <div className="space-y-1">
-                <p className="text-[11px] font-semibold text-amber-500 uppercase tracking-wide px-0.5">Advanced restore</p>
+                <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide px-0.5">Advanced restore</p>
                 <ProgressList items={unmanagedItems} compact />
               </div>
             )}
@@ -496,7 +496,7 @@ function ProgressList({ items, compact }: { items: TableProgress[]; compact?: bo
           }>
             {item.label}
             {item.status === 'done' && item.count !== undefined && (
-              <span className="ml-1.5 text-xs text-gray-400">({item.count.toLocaleString()} records)</span>
+              <span className="ml-1.5 text-xs text-gray-500">({item.count.toLocaleString()} records)</span>
             )}
           </span>
         </div>

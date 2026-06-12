@@ -280,7 +280,7 @@ export default function Import() {
               <div key={n} className="flex items-center gap-2">
                 {i > 0 && <div className={`w-6 h-px ${done || active ? 'bg-primary/40' : 'bg-gray-200'}`} />}
                 <div className={`flex items-center gap-1.5 ${active ? 'text-primary font-semibold' : done ? 'text-primary/60' : 'text-gray-400'}`}>
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold border ${
                     active ? 'bg-primary text-white border-primary' :
                     done   ? 'bg-primary/10 text-primary border-primary/30' :
                              'bg-white text-gray-400 border-gray-200'
@@ -315,7 +315,7 @@ export default function Import() {
                   Drop your file here, or{' '}
                   <span className="text-primary underline underline-offset-2">click to browse</span>
                 </p>
-                <p className="text-xs text-gray-400 mt-1">Accepts .xlsx, .xls, and .pdf</p>
+                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .pdf</p>
               </div>
             </div>
           ) : (
@@ -330,12 +330,12 @@ export default function Import() {
                   }
                   <span className="text-sm font-medium text-gray-700 truncate">{parseResult.fileName}</span>
                   {parseResult.rowCount > 0 && (
-                    <span className="text-xs text-gray-400 shrink-0">· {parseResult.rowCount.toLocaleString()} rows</span>
+                    <span className="text-xs text-gray-500 shrink-0">· {parseResult.rowCount.toLocaleString()} rows</span>
                   )}
                 </div>
                 <button
                   onClick={reset}
-                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors shrink-0"
+                  className="touch-target p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors shrink-0"
                   title="Remove file"
                 >
                   <X className="w-4 h-4" />
@@ -397,7 +397,7 @@ export default function Import() {
                       {duplicates.map(({ id, table }) => (
                         <li key={`${table}:${id}`} className="flex items-center justify-between px-4 py-2">
                           <span className="text-sm font-mono text-red-700">{id}</span>
-                          <span className="text-[10px] font-medium text-red-400 bg-red-100 px-2 py-0.5 rounded">
+                          <span className="text-xs font-medium text-red-400 bg-red-100 px-2 py-0.5 rounded">
                             {table === 'inflow_transactions' ? 'Inflow' : 'Outflow'}
                           </span>
                         </li>
@@ -413,7 +413,7 @@ export default function Import() {
                     <div className="flex items-center gap-3">
                       <label className="text-xs font-medium text-gray-600 shrink-0">Bank</label>
                       {banks.length === 0 ? (
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-gray-500">
                           No banks configured.{' '}
                           <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks →</Link>
                         </p>
@@ -448,7 +448,7 @@ export default function Import() {
                           >
                             Import Anyway
                           </button>
-                          <p className="w-full text-xs text-gray-400">
+                          <p className="w-full text-xs text-gray-500">
                             "Skip" removes the {duplicates.length} duplicate row{duplicates.length !== 1 ? 's' : ''} before inserting.
                             "Import Anyway" includes them all.
                           </p>
@@ -900,7 +900,7 @@ function ManualEntryForm() {
           {/* Bank */}
           <Field label="Bank *" error={errors.bank_id}>
             {!banksLoading && banks.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">
+              <p className="text-xs text-gray-500 py-1">
                 No banks configured.{' '}
                 <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
               </p>
@@ -918,7 +918,7 @@ function ManualEntryForm() {
                   ))}
                 </select>
                 {hasFxBanks && (
-                  <p className="text-[11px] text-amber-600 mt-0.5">
+                  <p className="text-xs text-amber-600 mt-0.5">
                     Foreign currency banks are managed in the{' '}
                     <Link to="/foreign-currency" className="underline hover:text-amber-700">FX module</Link>.
                   </p>
@@ -933,7 +933,7 @@ function ManualEntryForm() {
               {txnType ? (
                 <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
                   {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label ?? txnType}
-                  <span className="text-xs text-gray-400 ml-2">— auto-set from transaction type</span>
+                  <span className="text-xs text-gray-500 ml-2">— auto-set from transaction type</span>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -948,7 +948,7 @@ function ManualEntryForm() {
                     ))}
                   </select>
                   {incomeTypeId && !incomeTypeAutoSet && (
-                    <p className="text-[10px] flex items-center gap-1 text-indigo-500">
+                    <p className="text-xs flex items-center gap-1 text-indigo-500">
                       <Sparkles className="w-3 h-3" />
                       Auto-detected · change above to override
                     </p>
@@ -962,7 +962,7 @@ function ManualEntryForm() {
           {txnType ? (
             <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
               <p className="text-xs font-semibold text-gray-500">Allocation Config</p>
-              <p className="text-xs text-gray-400 italic mt-1">Not applicable for non-Normal transactions</p>
+              <p className="text-xs text-gray-500 italic mt-1">Not applicable for non-Normal transactions</p>
             </div>
           ) : cfgLoaded && v('date') && (() => {
             const selIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
@@ -1092,7 +1092,7 @@ function ManualEntryForm() {
           {/* Bank */}
           <Field label="Bank *" error={errors.bank_id}>
             {!banksLoading && banks.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">
+              <p className="text-xs text-gray-500 py-1">
                 No banks configured.{' '}
                 <Link to="/setup" className="text-primary underline hover:text-primary-light">Set up banks in Setup →</Link>
               </p>
@@ -1110,7 +1110,7 @@ function ManualEntryForm() {
                   ))}
                 </select>
                 {hasFxBanks && (
-                  <p className="text-[11px] text-amber-600 mt-0.5">
+                  <p className="text-xs text-amber-600 mt-0.5">
                     Foreign currency banks are managed in the{' '}
                     <Link to="/foreign-currency" className="underline hover:text-amber-700">FX module</Link>.
                   </p>
@@ -1155,7 +1155,7 @@ function ManualEntryForm() {
                   placeholder="— None —" className={iCls} />
               </Field>
             )}
-            <p className="text-[11px] text-gray-400">Links this outflow to the category ledger for tracking.</p>
+            <p className="text-xs text-gray-500">Links this outflow to the category ledger for tracking.</p>
           </div>
 
           {/* Pending Deduction */}

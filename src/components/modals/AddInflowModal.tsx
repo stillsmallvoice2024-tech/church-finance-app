@@ -8,7 +8,8 @@ import { Link } from 'react-router-dom'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
-import { Field, inputCls } from '../ui/FormField'
+import { Field, inputCls, focusFirstInvalid, DateQuickChips } from '../ui/FormField'
+import { CollapsibleSection } from '../ui/CollapsibleSection'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
@@ -337,7 +338,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       disableClose={loading}
       footer={footerEl}
     >
-      <form id="add-inflow-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form id="add-inflow-form" onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-4">
 
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -360,6 +361,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
+            <DateQuickChips onPick={d => setValue('date', d, { shouldDirty: true, shouldValidate: true })} />
           </Field>
           <Field label={`Amount (${baseCurrencySymbol}) *`} error={errors.amount?.message}>
             <Controller control={control} name="amount" render={({ field }) => (
@@ -368,18 +370,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         </div>
 
-        {/* Recorded Date — editable reporting/upload date */}
-        <Field label="Recorded Date" error={errors.recorded_at_date?.message}
-          help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
-          <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
-        </Field>
-
-        {/* Date Added (created_at) — edit mode only, legacy */}
-        {isEdit && (
-          <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
-            <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
-          </Field>
-        )}
+        {/* Recorded Date / legacy date / refs / remarks live in "More details" below
+            — the happy path stays a 5-field form on phones (F2 mobile audit) */}
 
         {/* Description — auto-assigns type on change */}
         <Field label="Description" error={errors.description?.message}>
@@ -399,7 +391,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                   options={bankOptions}
                   placeholder="— None —" className={inputCls(!!errors.bank_name)} />
                 {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
-                  <p className="flex items-center gap-1 text-[11px] text-amber-600 mt-0.5">
+                  <p className="flex items-center gap-1 text-xs text-amber-600 mt-0.5">
                     <ExternalLink className="w-3 h-3 shrink-0" />
                     Foreign currency transactions are managed in the{' '}
                     <Link to="/foreign-currency" className="underline hover:text-amber-700" onClick={onClose}>
@@ -412,7 +404,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           }} />
         </Field>
 
-        {/* Transaction Type */}
+        {/* Transaction Type / offsets — collapsed unless relevant */}
+        <CollapsibleSection label="Transaction type & offsets" defaultOpen={isEdit || isOffsetType}>
         <Field label="Transaction Type" error={errors.transaction_type?.message}
           help="Normal is a regular inflow. Refund/Reversal corrects a prior outflow or entry. Bank Deposit, Intrabank Transfer, and Balance Brought Forward are system types used for reconciliation.">
           <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
@@ -449,6 +442,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             />
           </Field>
         )}
+        </CollapsibleSection>
 
         {/* Income Type */}
         {incomeTypes.length > 0 && (
@@ -457,7 +451,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             {transactionType ? (
               <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
                 {TXN_TYPES.find(t => t.value === transactionType)?.label ?? transactionType}
-                <span className="text-xs text-gray-400 ml-2">— auto-set from transaction type</span>
+                <span className="text-xs text-gray-500 ml-2">— auto-set from transaction type</span>
               </div>
             ) : (
               <>
@@ -480,7 +474,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                   </div>
                 </div>
                 {incomeTypeAutoSet && incomeTypeId && (
-                  <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
+                  <p className="flex items-center gap-1 text-xs text-primary mt-1">
                     <Sparkles className="w-3 h-3" /> Auto-suggested from description · click to change
                   </p>
                 )}
@@ -493,7 +487,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         <Field label="Allocation Config"
           help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the config active on the transaction date. Choose a specific config to override.">
           {transactionType ? (
-            <p className="text-xs text-gray-400 italic">Not applicable for non-Normal transactions</p>
+            <p className="text-xs text-gray-500 italic">Not applicable for non-Normal transactions</p>
           ) : selectedIncomeType?.special_config_id && !configManuallySet ? (
             <div className="space-y-1">
               <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
@@ -503,7 +497,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                 <button
                   type="button"
                   onClick={() => setConfigManuallySet(true)}
-                  className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+                  className="text-xs text-gray-500 hover:text-gray-600 underline"
                 >
                   Override
                 </button>
@@ -522,7 +516,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                 ))}
               </select>
               {!selectedConfigId && watchedDate && (
-                <p className="text-[10px] text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-500 mt-0.5">
                   Auto: {getConfigForDate(lockedConfigs, watchedDate)?.name ?? 'no config found for this date'}
                 </p>
               )}
@@ -551,21 +545,32 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         </div>
 
-        {/* Transaction Ref */}
-        <Field label="Transaction Ref" error={errors.transaction_ref?.message}>
-          <input type="text" placeholder="Ref / cheque no." {...register('transaction_ref')} className={inputCls(!!errors.transaction_ref)} />
-        </Field>
+        {/* Optional details — collapsed by default to keep the form short */}
+        <CollapsibleSection label="More details (dates, refs, remarks)" defaultOpen={isEdit}>
+          <Field label="Recorded Date" error={errors.recorded_at_date?.message}
+            help="The date this transaction was logged in the system, which may differ from the bank transaction date. Financial reports use the bank date; audit logs use the recorded date.">
+            <input type="date" {...register('recorded_at_date')} className={inputCls(!!errors.recorded_at_date)} />
+          </Field>
 
-        {/* Specific Seed Description */}
-        <Field label="Designated Purpose" error={errors.specific_seed_description?.message}
-          help="For designated gifts: describe what this gift is earmarked for (e.g. Building Project, Missions).">
-          <input type="text" placeholder="What is this gift designated for? (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
-        </Field>
+          {isEdit && (
+            <Field label="Date Added — legacy (financial reports)" error={errors.created_at_date?.message}>
+              <input type="date" {...register('created_at_date')} className={inputCls(!!errors.created_at_date)} />
+            </Field>
+          )}
 
-        {/* Remark */}
-        <Field label="Remark" error={errors.remark?.message}>
-          <textarea rows={2} placeholder="Additional notes…" {...register('remark')} className={`${inputCls(!!errors.remark)} resize-none`} />
-        </Field>
+          <Field label="Transaction Ref" error={errors.transaction_ref?.message}>
+            <input type="text" placeholder="Ref / cheque no." {...register('transaction_ref')} className={inputCls(!!errors.transaction_ref)} />
+          </Field>
+
+          <Field label="Designated Purpose" error={errors.specific_seed_description?.message}
+            help="For designated gifts: describe what this gift is earmarked for (e.g. Building Project, Missions).">
+            <input type="text" placeholder="What is this gift designated for? (if any)" {...register('specific_seed_description')} className={inputCls(!!errors.specific_seed_description)} />
+          </Field>
+
+          <Field label="Remark" error={errors.remark?.message}>
+            <textarea rows={2} placeholder="Additional notes…" {...register('remark')} className={`${inputCls(!!errors.remark)} resize-none`} />
+          </Field>
+        </CollapsibleSection>
 
       </form>
     </Modal>

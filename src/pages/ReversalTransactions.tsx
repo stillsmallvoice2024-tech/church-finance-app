@@ -242,7 +242,7 @@ export default function ReversalTransactions() {
           <td className="w-8 pl-1 py-2">
             <button
               onClick={() => setExpandedId(isExpanded ? null : row.id)}
-              className="p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors"
+              className="touch-target p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors"
               aria-label={isExpanded ? 'Collapse' : 'Expand'}
             >
               {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -284,11 +284,11 @@ export default function ReversalTransactions() {
           {canWrite() && (
             <td className="px-2 py-3">
               <div className="flex items-center gap-0.5">
-                <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 {row.root_transaction_id === null && row.offset_role !== 'root' && (
-                  <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
+                  <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root" aria-label="Link to root">
                     <Link2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -322,7 +322,7 @@ export default function ReversalTransactions() {
         <div className="px-4 pt-3.5 pb-3">
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-2">
-              <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+              <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
               {rowKind === 'root' && (
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide leading-none">
                   Original
@@ -334,18 +334,18 @@ export default function ReversalTransactions() {
                 </span>
               )}
             </div>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
               {row.direction === 'in' ? 'Inflow' : 'Outflow'}
             </span>
           </div>
-          {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
+          {row.bank_name && <p className="text-xs text-gray-500 mb-1.5">{row.bank_name}</p>}
           {row.description && (
             <div className="text-sm mb-1">
               <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
             </div>
           )}
           {row.original_transaction_id && (
-            <p className="text-[11px] text-gray-400 font-mono truncate">Orig: {row.original_transaction_id}</p>
+            <p className="text-xs text-gray-500 font-mono truncate">Orig: {row.original_transaction_id}</p>
           )}
           {row.remarks && (
             <div className="text-xs mt-1.5">
@@ -355,7 +355,7 @@ export default function ReversalTransactions() {
         </div>
         <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 flex items-center justify-between">
           <div>
-            <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-emerald-600/70' : 'text-red-500/70'}`}>
+            <p className={`text-xs uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-emerald-600/70' : 'text-red-500/70'}`}>
               {roleLabel}
             </p>
             <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
@@ -364,11 +364,11 @@ export default function ReversalTransactions() {
           </div>
           {canWrite() && (
             <div className="flex items-center gap-0.5">
-              <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+              <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                 <Pencil className="w-3.5 h-3.5" />
               </button>
               {row.root_transaction_id === null && row.offset_role !== 'root' && (
-                <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
+                <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root" aria-label="Link to root">
                   <Link2 className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -416,12 +416,12 @@ export default function ReversalTransactions() {
         <div className="flex items-center gap-2">
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={filtered.length === 0} />
           <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-            <button onClick={() => setDisplayMode('table')} title="Table view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+            <button onClick={() => setDisplayMode('table')} title="Table view" aria-label="Table view"
+              className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
               <LayoutList className="w-4 h-4" />
             </button>
-            <button onClick={() => setDisplayMode('cards')} title="Card view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+            <button onClick={() => setDisplayMode('cards')} title="Card view" aria-label="Card view"
+              className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
@@ -476,7 +476,7 @@ export default function ReversalTransactions() {
             {summaryCards.map(({ label, sub, value, accent }) => (
               <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
                 <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
-                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {sub && <p className="text-xs text-gray-500 mb-1 leading-tight">{sub}</p>}
                 {loading
                   ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
                   : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
@@ -553,8 +553,8 @@ export default function ReversalTransactions() {
                   <div className="space-y-3 pt-1">
                     <div className="flex items-center gap-3 px-1">
                       <div className="h-px flex-1 bg-rose-100" />
-                      <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Unmatched</span>
-                      <span className="text-[10px] font-semibold text-rose-400 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
+                      <span className="text-xs font-bold text-rose-400 uppercase tracking-widest">Unmatched</span>
+                      <span className="text-xs font-semibold text-rose-400 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
                         {unmatched.length}
                       </span>
                       <div className="h-px flex-1 bg-rose-100" />
@@ -571,7 +571,7 @@ export default function ReversalTransactions() {
           </div>
         ) : (
           /* ── TABLE VIEW ────────────────────────────────────────────────────── */
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -633,8 +633,8 @@ export default function ReversalTransactions() {
                         <td colSpan={totalCols} className="px-4 pt-6 pb-2">
                           <div className="flex items-center gap-3">
                             <div className="h-px flex-1 bg-rose-100" />
-                            <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Unmatched</span>
-                            <span className="text-[10px] font-semibold text-rose-400 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
+                            <span className="text-xs font-bold text-rose-400 uppercase tracking-widest">Unmatched</span>
+                            <span className="text-xs font-semibold text-rose-400 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
                               {unmatched.length}
                             </span>
                             <div className="h-px flex-1 bg-rose-100" />

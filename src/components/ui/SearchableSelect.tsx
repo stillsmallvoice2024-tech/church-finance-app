@@ -159,7 +159,7 @@ export function SearchableSelect({
           id={listId}
           role="listbox"
           aria-label="Options"
-          className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+          className="absolute z-50 left-0 right-0 mt-1 max-h-60 sm:max-h-60 max-sm:max-h-[40dvh] overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
           {/* Placeholder / clear option — only when not filtering */}
           {!hasQuery && (

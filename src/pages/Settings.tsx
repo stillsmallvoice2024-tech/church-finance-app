@@ -198,7 +198,7 @@ export default function Settings() {
               placeholder="Optional — used to log in instead of email"
               className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             />
-            <p className="text-xs text-gray-400">Leave blank to log in with your email only.</p>
+            <p className="text-xs text-gray-500">Leave blank to log in with your email only.</p>
           </div>
 
           {/* Email (read-only) */}
@@ -210,7 +210,7 @@ export default function Settings() {
               readOnly
               className="w-full px-3 py-2.5 text-sm border border-gray-100 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
             />
-            <p className="text-xs text-gray-400">Email address cannot be changed here.</p>
+            <p className="text-xs text-gray-500">Email address cannot be changed here.</p>
           </div>
 
           {/* Role (read-only) */}
@@ -222,7 +222,7 @@ export default function Settings() {
               readOnly
               className="w-full px-3 py-2.5 text-sm border border-gray-100 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
             />
-            <p className="text-xs text-gray-400">Roles are assigned by an administrator.</p>
+            <p className="text-xs text-gray-500">Roles are assigned by an administrator.</p>
           </div>
 
           <button

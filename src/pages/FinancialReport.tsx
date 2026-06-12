@@ -3,6 +3,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -226,7 +227,7 @@ function SortableItem({
           </span>
         )}
         {rowType !== 'category' && (
-          <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-primary/60">
+          <span className="ml-1 text-xs font-semibold uppercase tracking-wide text-primary/60">
             {rowType === 'inflow_type' ? 'Income Type' : 'Txn Type'}
           </span>
         )}
@@ -252,7 +253,7 @@ function SortableItem({
             <select
               value={currentSubgroupId ?? ''}
               onChange={e => onAssignSubgroup(e.target.value)}
-              className="text-[10px] border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 shrink-0 max-w-[88px]"
+              className="text-xs border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 shrink-0 max-w-[88px]"
               title="Move to subgroup / group root"
             >
               <option value="">— Root —</option>
@@ -267,7 +268,7 @@ function SortableItem({
               onClick={onMoveUp}
               disabled={!onMoveUp}
               className={`text-gray-400 hover:text-gray-600 ${!onMoveUp ? 'opacity-25 cursor-not-allowed' : ''}`}
-              title="Move up"
+              title="Move up" aria-label="Move up"
             >
               <ChevronUp className="w-3 h-3" />
             </button>
@@ -276,7 +277,7 @@ function SortableItem({
               onClick={onMoveDown}
               disabled={!onMoveDown}
               className={`text-gray-400 hover:text-gray-600 ${!onMoveDown ? 'opacity-25 cursor-not-allowed' : ''}`}
-              title="Move down"
+              title="Move down" aria-label="Move down"
             >
               <ChevronDown className="w-3 h-3" />
             </button>
@@ -442,7 +443,7 @@ function SortableSubgroup({
 
       {/* Subgroup subtotal */}
       <div className="flex items-center justify-between px-3 py-1 bg-gray-100/70 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-600">
-        <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
           {sg.label} Sub-Total
         </span>
         <span className="font-mono font-bold text-xs">{baseCurrencySymbol}{fmt(sgTotal, formatLocale)}</span>
@@ -1059,7 +1060,11 @@ export default function FinancialReport() {
   const { balances, operationalBalances, loading, refetch } = useReportEngine(reportDate, reportBasis)
 
   const dndId = useId()
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Long-press to drag on touch — leaves normal scrolling intact
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
 
   // ── Layout from templates ─────────────────────────────────────────────────
 
@@ -1668,7 +1673,7 @@ export default function FinancialReport() {
                 <h3 className="text-sm font-bold text-primary dark:text-blue-300 uppercase tracking-wide">{table.title}</h3>
               </div>
             )}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500 dark:text-gray-400">
@@ -1961,8 +1966,8 @@ export default function FinancialReport() {
             type="button"
             onClick={() => refetch()}
             disabled={loading}
-            className="p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
-            title="Refresh balances"
+            className="touch-target p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+            title="Refresh balances" aria-label="Refresh balances"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -1984,7 +1989,7 @@ export default function FinancialReport() {
               <div className="absolute right-0 top-full mt-1 w-60 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-20 py-1">
                 <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Saved Templates</div>
                 {templates.length === 0 && (
-                  <p className="px-3 py-2 text-xs text-gray-400">No templates yet</p>
+                  <p className="px-3 py-2 text-xs text-gray-500">No templates yet</p>
                 )}
                 {templates.map(tpl => {
                   const isPinned = pinnedTemplateId === tpl.id
@@ -2002,7 +2007,7 @@ export default function FinancialReport() {
                         type="button"
                         title={isPinned ? 'Unpin template' : 'Pin template'}
                         onClick={() => isPinned ? unpinTemplate() : pinTemplate(tpl.id)}
-                        className={`p-1 rounded transition ${isPinned ? 'text-primary hover:text-primary/70' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
+                        className={`touch-target p-1 rounded transition ${isPinned ? 'text-primary hover:text-primary/70' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
                       >
                         {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                       </button>
@@ -2087,7 +2092,7 @@ export default function FinancialReport() {
       )}
 
       {/* Content */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto scroll-x-fade">
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (

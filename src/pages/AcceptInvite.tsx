@@ -364,7 +364,7 @@ export default function AcceptInvite() {
 
               <button
                 onClick={() => { setFlow('register'); setError(null) }}
-                className="mt-3 w-full text-xs text-gray-400 hover:text-gray-600 hover:underline"
+                className="mt-3 w-full text-xs text-gray-500 hover:text-gray-600 hover:underline"
               >
                 ← Back
               </button>

@@ -854,25 +854,25 @@ export default function CategoryLedger() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-xl bg-primary/5 border border-primary/20 px-3 py-3 min-w-0 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1.5 flex items-center gap-1">
+                <p className="text-xs font-bold uppercase tracking-wide text-primary mb-1.5 flex items-center gap-1">
                   <Percent className="w-3 h-3 shrink-0" /><span className="truncate">Regular Funds</span>
                 </p>
                 <p className="text-sm font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc, baseCurrencyCode)}</p>
               </div>
               <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-3 min-w-0 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1.5 flex items-center gap-1">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-700 mb-1.5 flex items-center gap-1">
                   <Gift className="w-3 h-3 shrink-0" /><span className="truncate">Designated Gifts</span>
                 </p>
                 <p className="text-sm font-mono font-bold text-amber-700 tabular-nums">{formatCurrency(globalTotals.seed, baseCurrencyCode)}</p>
               </div>
               <div className={`rounded-xl border px-3 py-3 min-w-0 overflow-hidden ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                <p className={`text-[10px] font-bold uppercase tracking-wide mb-1.5 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
+                <p className={`text-xs font-bold uppercase tracking-wide mb-1.5 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
                   <Archive className="w-3 h-3 shrink-0" /><span className="truncate">Savings Balance</span>
                 </p>
                 <p className={`text-sm font-mono font-bold tabular-nums ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav, baseCurrencyCode)}</p>
               </div>
               <div className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3 min-w-0 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300 mb-1.5 truncate">Grand Total</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-300 mb-1.5 truncate">Grand Total</p>
                 <p className="text-sm font-mono font-bold text-white tabular-nums">{formatCurrency(globalTotals.alloc + globalTotals.seed + globalTotals.sav, baseCurrencyCode)}</p>
               </div>
             </div>
@@ -1180,18 +1180,24 @@ export default function CategoryLedger() {
           {activeCategory && !ledgerLoading && !ledgerError && (
             <>
               {/* Summary strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="col-span-2 sm:col-span-1 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 min-w-0 overflow-hidden">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1 truncate">{activeCategory}</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-primary mb-1 truncate">{activeCategory}</p>
                   <p className="text-xs text-gray-500">{ledgerPortion} portion</p>
                 </div>
                 <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 min-w-0 overflow-hidden">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-success mb-1">Total Inflow</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-success mb-1">Total Inflow</p>
                   <p className="text-sm font-mono font-semibold text-success tabular-nums">{formatCurrency(ledgerTotals.inflow, ledgerDisplayCurrency)}</p>
                 </div>
                 <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 min-w-0 overflow-hidden">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-danger mb-1">Total Outflow</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-danger mb-1">Total Outflow</p>
                   <p className="text-sm font-mono font-semibold text-danger tabular-nums">{formatCurrency(ledgerTotals.outflow, ledgerDisplayCurrency)}</p>
+                </div>
+                <div className="col-span-2 sm:col-span-1 rounded-xl bg-white border border-gray-200 px-4 py-3 min-w-0 overflow-hidden">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Closing Balance</p>
+                  <p className={`text-sm font-mono font-semibold tabular-nums ${closingBalance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
+                    {formatCurrency(closingBalance, ledgerDisplayCurrency)}
+                  </p>
                 </div>
               </div>
 
@@ -1200,7 +1206,7 @@ export default function CategoryLedger() {
                   <Layers className="w-8 h-8 text-gray-300" />
                   <div>
                     <p className="text-sm font-medium text-gray-600">No transactions found</p>
-                    <p className="text-xs text-gray-400 mt-0.5">No {ledgerPortion} transactions for {activeCategory}.</p>
+                    <p className="text-xs text-gray-500 mt-0.5">No {ledgerPortion} transactions for {activeCategory}.</p>
                   </div>
                 </div>
               )}
@@ -1304,7 +1310,7 @@ export default function CategoryLedger() {
                                   <td className="px-4 py-3 text-gray-700 max-w-xs">
                                     <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                                     {row.isReversalCredit && (
-                                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                      <span className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
                                         <RotateCcw className="w-3 h-3" />
                                         Reversal Credit
                                       </span>
@@ -1313,7 +1319,7 @@ export default function CategoryLedger() {
                                       <button
                                         type="button"
                                         onClick={() => setExpandedLedgerId(isExpanded ? null : row.id)}
-                                        className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 transition-colors"
+                                        className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 transition-colors"
                                       >
                                         <ArrowLeftRight className="w-3 h-3" />
                                         Transfer
@@ -1359,7 +1365,7 @@ export default function CategoryLedger() {
                   {ledgerSorted.length > 0 && ledgerViewState.view === 'cards' && (
                     <div className="space-y-3">
                       {activeLedgerField && (ledgerViewState.sortKey !== 'date' || ledgerViewState.sortDir !== 'asc' || ledgerViewState.search) && (
-                        <p className="text-xs text-gray-400 px-0.5">
+                        <p className="text-xs text-gray-500 px-0.5">
                           {ledgerViewState.search
                             ? `${ledgerSorted.length} result${ledgerSorted.length !== 1 ? 's' : ''} · `
                             : ''}
@@ -1383,7 +1389,7 @@ export default function CategoryLedger() {
                             }`}
                           >
                             <div className="px-4 pt-3.5 pb-3">
-                              <p className={`text-[11px] font-semibold mb-1.5 ${
+                              <p className={`text-xs font-semibold mb-1.5 ${
                                 row.id === 'bal-bf'
                                   ? 'text-blue-500 uppercase tracking-wide'
                                   : 'text-gray-400'
@@ -1402,7 +1408,7 @@ export default function CategoryLedger() {
                                     textCls="text-gray-800"
                                   />
                                   {row.isReversalCredit && (
-                                    <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                    <span className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
                                       <RotateCcw className="w-3 h-3" />
                                       Reversal Credit
                                     </span>
@@ -1411,7 +1417,7 @@ export default function CategoryLedger() {
                                     <button
                                       type="button"
                                       onClick={() => setExpandedLedgerId(isExpanded ? null : row.id)}
-                                      className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 transition-colors"
+                                      className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 transition-colors"
                                     >
                                       <ArrowLeftRight className="w-3 h-3" />
                                       Transfer details
@@ -1427,9 +1433,9 @@ export default function CategoryLedger() {
                                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 pt-3">
                                   {buildIntraflowDetailItems(meta, row).filter(i => i.value !== null && i.value !== undefined && i.value !== '').map((item, idx) => (
                                     <div key={idx} className="min-w-0">
-                                      <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">{item.label}</p>
+                                      <p className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-0.5">{item.label}</p>
                                       {item.badge ? (
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${item.badge}`}>{item.value}</span>
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold ${item.badge}`}>{item.value}</span>
                                       ) : (
                                         <p className="text-xs text-gray-700 break-words">{item.value}</p>
                                       )}
@@ -1447,7 +1453,7 @@ export default function CategoryLedger() {
                                 : 'border-gray-100 bg-gray-50/40'
                             }`}>
                               <div className="min-w-0">
-                                <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${
+                                <p className={`text-xs uppercase tracking-wide font-semibold mb-0.5 ${
                                   row.inflow > 0 ? 'text-green-600/70' : 'text-red-600/70'
                                 }`}>
                                   {row.id === 'bal-bf' ? 'B/F Amount' : (row.inflow > 0 ? 'Inflow' : 'Outflow')}
@@ -1459,7 +1465,7 @@ export default function CategoryLedger() {
                                 </p>
                               </div>
                               <div className="border-l border-gray-200/80 pl-4 min-w-0">
-                                <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Balance</p>
+                                <p className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-0.5">Balance</p>
                                 <p className={`text-sm font-mono font-bold tabular-nums ${
                                   row.balance >= 0 ? 'text-gray-900' : 'text-danger'
                                 }`}>
@@ -1538,7 +1544,7 @@ export default function CategoryLedger() {
                   <p className="text-base font-bold text-gray-900 tabular-nums break-all">
                     {s.currency} {s.currentBalance.toLocaleString(getCurrencyLocale(s.currency), { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                   </p>
-                  <div className="text-[11px] space-y-0.5">
+                  <div className="text-xs space-y-0.5">
                     <div className="flex items-center gap-1 text-success">
                       <TrendingUp className="w-3 h-3 shrink-0" />
                       {s.currency} {s.totalDeposits.toLocaleString(getCurrencyLocale(s.currency), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1570,7 +1576,7 @@ export default function CategoryLedger() {
                   FX Transactions{filterFxCcy ? ` — ${filterFxCcy}` : ' (All currencies)'}
                 </h2>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scroll-x-fade">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
@@ -1588,14 +1594,14 @@ export default function CategoryLedger() {
                       <tr className="bg-blue-50/40">
                         <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs italic">—</td>
                         <td className="px-4 py-3">
-                          <span className="text-[11px] font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{filterFxCcy}</span>
+                          <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{filterFxCcy}</span>
                         </td>
                         <td className="px-4 py-3 text-right font-mono tabular-nums text-primary text-xs font-semibold">
                           {fxOpeningBalance.toLocaleString(getCurrencyLocale(filterFxCcy), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="px-4 py-3 text-right text-xs text-gray-300">—</td>
                         <td className="px-4 py-3 text-right text-xs text-gray-300">—</td>
-                        <td className="px-4 py-3 text-xs text-gray-400 italic hidden md:table-cell">Balance Brought Forward</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 italic hidden md:table-cell">Balance Brought Forward</td>
                       </tr>
                     )}
                     {fxTransactions
@@ -1606,7 +1612,7 @@ export default function CategoryLedger() {
                           <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
                             <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{formatDate(r.date)}</td>
                             <td className="px-4 py-3">
-                              <span className="text-[11px] font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{r.currency}</span>
+                              <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{r.currency}</span>
                             </td>
                             <td className="px-4 py-3 text-right font-mono tabular-nums text-success text-xs">
                               {r.deposit > 0 ? fmt(r.deposit) : '—'}

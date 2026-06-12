@@ -47,7 +47,7 @@ const KEYBOARD_MAP: Record<string, string> = {
   '%': '%',
 }
 
-const PANEL_W = 320
+const PANEL_W = Math.min(320, typeof window !== 'undefined' ? window.innerWidth - 16 : 320)
 
 function formatDisplay(val: string): string {
   if (val === 'Error') return 'Error'
@@ -422,7 +422,7 @@ export function FloatingCalculator() {
 
       {/* FAB */}
       <div
-        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-[49]"
+        className="fixed bottom-[calc(var(--tab-bar-height)+5rem)] right-4 lg:bottom-6 lg:right-6 z-[49]"
         style={{ pointerEvents: 'auto' }}
       >
         <button
@@ -491,7 +491,7 @@ function HistoryPanel({ history, onRecall, onClear, onBack }: HistoryPanelProps)
         {history.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center px-4">
             <History className="w-6 h-6 text-gray-300 mb-2" />
-            <p className="text-xs text-gray-400">No calculations yet on this page</p>
+            <p className="text-xs text-gray-500">No calculations yet on this page</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-50">
@@ -503,7 +503,7 @@ function HistoryPanel({ history, onRecall, onClear, onBack }: HistoryPanelProps)
                 title="Use this result"
                 className="w-full px-4 py-2.5 text-right hover:bg-gray-50 transition-colors block"
               >
-                <div className="text-[11px] text-gray-400 truncate">{entry.expression}</div>
+                <div className="text-xs text-gray-500 truncate">{entry.expression}</div>
                 <div className="text-sm font-mono font-semibold text-gray-800">{entry.result}</div>
               </button>
             ))}

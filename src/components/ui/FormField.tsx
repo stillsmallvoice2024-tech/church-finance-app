@@ -1,14 +1,60 @@
 import React, { useId, type ReactNode } from 'react'
 import { HelpTooltip } from './HelpTooltip'
 
+// 16px font below sm prevents iOS Safari auto-zoom on input focus
 export function inputCls(hasError: boolean): string {
-  return `w-full px-3 py-2 min-h-[44px] text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
+  return `w-full px-3 py-2 min-h-[44px] text-base sm:text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
     hasError ? 'border-red-400 focus:border-red-400' : 'border-gray-300 focus:border-primary'
   }`
 }
 
 // For filter/search inputs that don't need error-state styling
-export const filterInputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white'
+export const filterInputCls = 'w-full px-3 py-2 text-base sm:text-sm border border-gray-300 rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white'
+
+/** Quick date presets for entry forms — most records are "today" or "last Sunday". */
+export function DateQuickChips({ onPick }: { onPick: (iso: string) => void }) {
+  const iso = (d: Date) => {
+    const tz = d.getTimezoneOffset() * 60000
+    return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+  }
+  const today = new Date()
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+  const lastSunday = new Date(today); lastSunday.setDate(today.getDate() - ((today.getDay() + 7) % 7 || 7))
+  const chips: Array<[string, string]> = [
+    ['Today', iso(today)],
+    ['Yesterday', iso(yesterday)],
+    ['Last Sunday', iso(lastSunday)],
+  ]
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1">
+      {chips.map(([label, value]) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => onPick(value)}
+          className="px-2.5 py-1 min-h-[28px] text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Scroll + focus the first invalid field inside the closest form/modal panel.
+ * Pass as the onInvalid handler to react-hook-form's handleSubmit:
+ *   handleSubmit(onSubmit, focusFirstInvalid)
+ */
+export function focusFirstInvalid() {
+  requestAnimationFrame(() => {
+    const el = document.querySelector<HTMLElement>('[role="dialog"] [aria-invalid="true"], form [aria-invalid="true"]')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.focus({ preventScroll: true })
+    }
+  })
+}
 
 interface FieldProps {
   label: string
