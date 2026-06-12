@@ -196,17 +196,22 @@ function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
 
 // ── Issue card ─────────────────────────────────────────────────────────────────
 
-function getIncompleteReversalHeadline(evidence: Record<string, unknown>): string {
+function getIncompleteReversalHeadline(evidence: Record<string, unknown>, issueId: string): string {
   const txnType = evidence.transactionType as string | undefined
-  const labels: Record<string, string> = {
-    reversal:           'A reversal',
-    refund:             'A refund',
-    bank_deposit:       'A bank deposit',
-    intrabank_transfer: 'An intrabank transfer',
+
+  if (txnType === 'bank_deposit') {
+    return 'A bank deposit was recorded but the corresponding cash on hand reduction has not been indicated.'
   }
-  if (txnType && labels[txnType]) {
-    return `${labels[txnType]} was recorded but the original transaction has not been indicated.`
+
+  if (txnType === 'intrabank_transfer') {
+    return issueId.includes('-inflow-')
+      ? 'An intra-bank transfer inflow was recorded but the initiating bank outflow has not been indicated.'
+      : 'An intra-bank transfer outflow was recorded but the associated bank inflow has not been indicated.'
   }
+
+  if (txnType === 'reversal') return 'A reversal was recorded but the original transaction has not been indicated.'
+  if (txnType === 'refund')   return 'A refund was recorded but the original transaction has not been indicated.'
+
   return 'A transaction was marked as an offset but the original transaction it relates to has not been linked.'
 }
 
@@ -214,7 +219,7 @@ function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: 
   const [expanded, setExpanded] = useState(false)
   const plain = RULE_PLAIN[issue.ruleId]
   const headline = issue.ruleId === 'incomplete_reversal'
-    ? getIncompleteReversalHeadline(issue.evidence)
+    ? getIncompleteReversalHeadline(issue.evidence, issue.id)
     : (plain?.headline ?? issue.message)
   const hasFacts = EVIDENCE_KEY_ORDER.some(
     k => k in issue.evidence && issue.evidence[k] !== null && issue.evidence[k] !== undefined && issue.evidence[k] !== '',
