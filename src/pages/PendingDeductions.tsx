@@ -4,6 +4,7 @@ import { Clock, CheckCircle2, Pencil, Trash2, AlertCircle, RefreshCw, Terminal, 
 import { Card }                     from '../components/ui/Card'
 import { DeleteDialog }             from '../components/ui/DeleteDialog'
 import { BulkActionBar }            from '../components/ui/BulkActionBar'
+import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { DataControlsBar }          from '../components/ui/DataControlsBar'
 import { SortableHeader }           from '../components/ui/SortableHeader'
 import { PaginationBar }            from '../components/ui/PaginationBar'
@@ -56,6 +57,7 @@ export default function PendingDeductions() {
   const [modalOpen,     setModalOpen]     = useState(false)
   const [resolvingId,   setResolvingId]   = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkEditOpen,  setBulkEditOpen]  = useState(false)
 
   const { data, count, loading, error, refetch } = useOutflowTransactions({
@@ -155,12 +157,12 @@ export default function PendingDeductions() {
 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds]
-    const { failed } = await executeBulkDelete(ids)
+    const { failed, failures } = await executeBulkDelete(ids)
     setConfirmBulkDelete(false)
     clearAll()
     refetch()
-    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
-    else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted.`, 'success')
+    else setBulkResults({ action: 'deleted', succeeded: ids.length - failed, failures })
   }
 
   const handleResolve = async (row: OutflowTransaction) => {
@@ -247,9 +249,9 @@ export default function PendingDeductions() {
         </PageHelpBanner>
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <h1 className="text-3xl font-semibold text-gray-900 flex items-center gap-2">
               <Clock className="w-6 h-6 text-amber-500" />
               Upcoming Deductions
             </h1>
@@ -461,6 +463,7 @@ export default function PendingDeductions() {
         ids={[...selectedIds]}
         banks={banks}
         onSuccess={() => { clearAll(); refetch() }}
+        onResults={setBulkResults}
       />
       <DeleteDialog
         open={confirmBulkDelete}
@@ -469,6 +472,8 @@ export default function PendingDeductions() {
         loading={bulkDeleting}
         label={`these ${selectedIds.size} pending deduction${selectedIds.size !== 1 ? 's' : ''}`}
       />
+
+      <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
     </>
   )
 }

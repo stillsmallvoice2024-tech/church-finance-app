@@ -51,12 +51,12 @@ export function StatCard({
   if (href) {
     return (
       <Link to={href} className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-2xl">
-        <Card className="transition-shadow group-hover:shadow-md group-hover:ring-2 group-hover:ring-primary/20 cursor-pointer">
+        <Card className="border-l-4 border-l-primary transition-shadow group-hover:shadow-md group-hover:ring-2 group-hover:ring-primary/20 cursor-pointer">
           {inner}
         </Card>
       </Link>
     )
   }
 
-  return <Card>{inner}</Card>
+  return <Card className="border-l-4 border-l-primary">{inner}</Card>
 }

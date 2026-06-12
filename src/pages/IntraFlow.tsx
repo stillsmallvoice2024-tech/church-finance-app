@@ -33,6 +33,7 @@ import { SearchableSelect }       from '../components/ui/SearchableSelect'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { BulkActionBar }          from '../components/ui/BulkActionBar'
 import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowModal'
+import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { useBulkSelection }       from '../hooks/useBulkSelection'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 
@@ -137,6 +138,7 @@ export default function IntraFlow() {
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
 
   function intraFlowDetailItems(row: IntraFlowRow): DetailItem[] {
@@ -183,9 +185,9 @@ export default function IntraFlow() {
 
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds)
-    const { failed, total } = await bulkDelete(ids)
-    if (failed === 0) toast(`Deleted ${total} transfer${total !== 1 ? 's' : ''}`, 'success')
-    else              toast(`${total - failed} deleted, ${failed} failed`, 'error')
+    const { failed, total, failures } = await bulkDelete(ids)
+    if (failed === 0) toast(`${total} transfer${total !== 1 ? 's' : ''} deleted.`, 'success')
+    else              setBulkResults({ action: 'deleted', succeeded: total - failed, failures })
     clearAll()
     setBulkDeleteConfirmOpen(false)
     refetch()
@@ -277,9 +279,9 @@ export default function IntraFlow() {
       <div className="space-y-5">
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Internal Transfers</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Internal Transfers</h1>
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">
@@ -612,7 +614,9 @@ export default function IntraFlow() {
         onClose={() => setBulkEditOpen(false)}
         ids={Array.from(selectedIds)}
         onSuccess={() => { clearAll(); refetch() }}
+        onResults={setBulkResults}
       />
+      <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
       <DeleteDialog
         open={bulkDeleteConfirmOpen}
         onClose={() => setBulkDeleteConfirmOpen(false)}

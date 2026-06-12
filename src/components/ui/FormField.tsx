@@ -46,7 +46,7 @@ export function Field({ label, help, error, children }: FieldProps) {
       </div>
       {enhanced}
       {error && (
-        <p id={errorId} className="text-xs text-red-500" role="alert">
+        <p id={errorId} className="text-xs text-red-600" role="alert">
           {error}
         </p>
       )}

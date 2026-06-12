@@ -11,6 +11,7 @@ import { SortableHeader }   from '../components/ui/SortableHeader'
 import { PaginationBar }    from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
+import { friendlyError } from '../utils/friendlyError'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { Card }         from '../components/ui/Card'
@@ -104,8 +105,8 @@ export default function BankMovement() {
         Both use root/offset linking to pair the originating entry with its corresponding record.
       </PageHelpBanner>
 
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Bank Deposits &amp; Transfers</h1>
+      <div className="pb-4 border-b border-gray-100">
+        <h1 className="text-3xl font-semibold text-gray-900">Bank Deposits &amp; Transfers</h1>
         <p className="text-sm text-gray-500 mt-0.5">Deposits into banks and transfers between banks</p>
       </div>
 
@@ -631,8 +632,8 @@ function TransfersPanel() {
     setDeleting(true)
     const { error: err } = await supabase.from('intrabank_transfers').delete().eq('id', deleteId)
     setDeleting(false)
-    if (err) { toast(err.message, 'error'); return }
-    toast('Transfer deleted', 'success'); setDeleteId(null); load()
+    if (err) { toast(friendlyError(err, 'delete the transfer'), 'error'); return }
+    toast('Transfer deleted.', 'success'); setDeleteId(null); load()
   }
 
   if (error) return (

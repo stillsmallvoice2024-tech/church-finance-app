@@ -7,12 +7,13 @@ import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
 import { useIncomeTypes }         from '../../hooks/useIncomeTypes'
 
-export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
+export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onResults }: {
   open: boolean
   onClose: () => void
   ids: string[]
   banks: { id: string; name: string }[]
   onSuccess: () => void
+  onResults?: (r: { action: string; succeeded: number; failures: { id: string; reason: string }[] }) => void
 }) {
   const { execute, loading: saving } = useBulkUpdateTransaction('inflow_transactions')
   const { push: toast }             = useToastStore()
@@ -49,9 +50,9 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess }: {
     if (stageCode1)   baseUpdates.stage_code_1    = stageCode1
     if (stageCode2)   baseUpdates.stage_code_2    = stageCode2
 
-    const { failed } = await execute(ids, baseUpdates)
-    if (failed === 0) toast(`Updated ${ids.length} transaction${ids.length !== 1 ? 's' : ''}`, 'success')
-    else toast(`${ids.length - failed} updated, ${failed} failed`, 'error')
+    const { failed, failures } = await execute(ids, baseUpdates)
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} updated.`, 'success')
+    else onResults?.({ action: 'updated', succeeded: ids.length - failed, failures })
     onSuccess()
     onClose()
   }

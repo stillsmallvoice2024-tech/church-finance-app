@@ -291,9 +291,9 @@ export default function BankLedger() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Bank Ledger</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Bank Ledger</h1>
           <p className="text-sm text-gray-500 mt-0.5">Per-bank transaction history with running balance</p>
         </div>
         <div className="flex items-center gap-2" data-tour="export-button">

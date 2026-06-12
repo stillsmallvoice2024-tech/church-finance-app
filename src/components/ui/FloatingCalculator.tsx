@@ -478,7 +478,7 @@ function HistoryPanel({ history, onRecall, onClear, onBack }: HistoryPanelProps)
           <button
             onMouseDown={(e) => e.preventDefault()}
             onClick={onClear}
-            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
+            className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 transition-colors"
           >
             <Trash2 className="w-3 h-3" />
             Clear

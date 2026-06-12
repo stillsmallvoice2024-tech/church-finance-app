@@ -43,9 +43,9 @@ export const FAQS: FAQEntry[] = [
   },
   {
     id: 'faq-percentage-allocation',
-    question: 'What are percentage allocations?',
+    question: 'What are distribution rules?',
     answer:
-      'Percentage allocations automatically split inflow amounts across categories or departments. For example, you can configure 10% of all tithes to go to the building fund and 90% to general operations. Configure this on the **Percentage Allocations** page.',
+      'Distribution rules automatically split inflow amounts across categories or departments. For example, you can configure 10% of all tithes to go to the building fund and 90% to general operations. Configure this on the **Distribution Rules** page.',
     category: 'transactions',
     tags: ['allocation', 'percentage', 'split'],
   },

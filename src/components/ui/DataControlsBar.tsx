@@ -276,7 +276,7 @@ export function DataControlsBar({
               {!isAdvanced && (
                 <>
                   <div className="px-3 pt-2.5 pb-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Sort By</p>
+                    <p className="text-xs font-semibold text-gray-500">Sort By</p>
                   </div>
                   <div className="pb-1">
                     {primaryFields.map(renderSortField)}
@@ -306,7 +306,7 @@ export function DataControlsBar({
               {/* Direction */}
               {!isAdvanced && activeField && (
                 <div className="border-t border-gray-100 px-3 py-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Direction</p>
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">Direction</p>
                   <div className="flex flex-col gap-0.5">
                     {(['desc', 'asc'] as SortDirection[]).map(d => (
                       <button

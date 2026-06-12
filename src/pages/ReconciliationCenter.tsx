@@ -448,9 +448,9 @@ export default function ReconciliationCenter() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reconciliation Center</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Reconciliation Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Verify your app records match your actual bank records</p>
         </div>
         <button
@@ -472,8 +472,21 @@ export default function ReconciliationCenter() {
       )}
 
       {/* ── Section A: Health Summary ──────────────────────────────────────── */}
-      {diag ? (
-        <div className={`rounded-xl border p-6 ${healthStatusBg(diag.healthStatus)}`}>
+      {loading ? (
+        <Card>
+          <div className="flex flex-col items-center gap-3 py-12 text-center" aria-busy="true">
+            <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center animate-pulse">
+              <ShieldCheck className="w-8 h-8 text-primary/40" />
+            </div>
+            <div className="space-y-2 w-full max-w-xs">
+              <div className="animate-pulse bg-gray-200 rounded h-4 w-2/3 mx-auto" />
+              <div className="animate-pulse bg-gray-200 rounded h-3 w-full" />
+            </div>
+            <p className="text-xs text-gray-400">Checking your records…</p>
+          </div>
+        </Card>
+      ) : diag ? (
+        <div className={`rounded-xl border p-6 shadow-md ${healthStatusBg(diag.healthStatus)}`}>
           <div className="flex items-start gap-4">
             <HealthIcon status={diag.healthStatus} size="lg" />
             <div className="flex-1 min-w-0">

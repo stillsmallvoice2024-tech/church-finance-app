@@ -167,7 +167,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={`
           sidebar-panel
-          fixed inset-y-0 left-0 z-30 w-64 flex flex-col bg-primary
+          fixed inset-y-0 left-0 z-30 w-64 flex flex-col bg-nav
           transform transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
@@ -270,12 +270,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <div className="relative shrink-0">
               <HelpCircle className="w-4 h-4" />
               {unread.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent border border-primary" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent border border-nav" />
               )}
             </div>
             <span>Help Center</span>
             {unread.length > 0 && (
-              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-primary text-[10px] font-bold leading-none">
+              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-nav text-[10px] font-bold leading-none">
                 {unread.length}
               </span>
             )}

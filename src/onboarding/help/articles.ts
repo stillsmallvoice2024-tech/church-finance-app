@@ -86,13 +86,13 @@ Every transaction is assigned a type:
 - **Income Types** for inflows (e.g. Tithes, Offerings, Building Fund)
 - **Outflow Types** for expenditure (e.g. Salaries, Rent, Supplies)
 
-Categories determine how transactions appear in reports and whether percentage allocations apply.
+Categories determine how transactions appear in reports and whether distribution rules apply.
 
 ## Why They Matter
 
 - Reports group transactions by category — clear naming makes reports readable by leadership.
-- Percentage allocations are configured per income type, letting you automatically split income across departments or purposes.
-- Special Givings (designated funds) are linked to specific categories.
+- Distribution rules are configured per income type, letting you automatically split income across departments or purposes.
+- Designated Gifts (restricted funds) are linked to specific categories.
 
 ## Best Practices
 

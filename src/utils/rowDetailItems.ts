@@ -19,7 +19,7 @@ export function inflowDetailItems(row: InflowTransaction, _currency: string): De
     { label: 'Stage Code 1',    value: row.stage_code_1 },
     { label: 'Stage Code 2',    value: row.stage_code_2 },
     { label: 'Stage Code 3',    value: row.stage_code_3 },
-    { label: 'Specific Seed',   value: row.specific_seed_description },
+    { label: 'Designated Gift', value: row.specific_seed_description },
     {
       label: 'FX',
       value: row.fx_currency

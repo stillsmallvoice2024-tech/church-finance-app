@@ -176,9 +176,9 @@ export default function Dashboard() {
         )}
 
         {/* ── Welcome + Quick Actions ──────────────────────────────────────── */}
-        <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-3xl font-semibold text-gray-900">
               {greeting()}, {firstName}
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
@@ -223,7 +223,7 @@ export default function Dashboard() {
 
         {/* ── Record confidence strip ───────────────────────────────────────── */}
         {!healthSkipped && (
-          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm transition-colors ${
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-md text-sm transition-colors ${
             !healthStatus                ? 'bg-gray-50 border-gray-200'                          :
             healthStatus === 'critical'  ? 'bg-red-50 border-red-200'                            :
             healthStatus === 'warning'   ? 'bg-amber-50 border-amber-200'                        :

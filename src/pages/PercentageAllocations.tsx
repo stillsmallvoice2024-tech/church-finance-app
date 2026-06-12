@@ -183,7 +183,7 @@ export default function PercentageAllocations() {
               />
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-500 flex items-center justify-between">
-                <span className="font-semibold uppercase tracking-wider">
+                <span className="font-semibold">
                   {config.name}
                 </span>
                 <span>Effective {formatDate(config.start_date)}</span>

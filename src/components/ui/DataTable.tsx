@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode, type UIEvent } from 'react'
 import { TableRowSkeleton } from './LoadingSkeleton'
 
 export interface Column<T> {
@@ -26,11 +26,18 @@ export function DataTable<T>({
   emptyMessage = 'No records found.',
   emptyIcon,
 }: DataTableProps<T>) {
+  // Headers stick inside this scroll container; a soft shadow appears once
+  // rows have scrolled beneath them so the boundary stays visible.
+  const [scrolled, setScrolled] = useState(false)
+  const onScroll = (e: UIEvent<HTMLDivElement>) => {
+    const isScrolled = e.currentTarget.scrollTop > 0
+    setScrolled(prev => (prev === isScrolled ? prev : isScrolled))
+  }
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto max-h-[70vh]" onScroll={onScroll}>
       <table className="min-w-full">
-        <thead>
-          <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
+        <thead className={`sticky top-0 z-10 transition-shadow ${scrolled ? 'shadow-sm' : ''}`}>
+          <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
             {columns.map((col) => (
               <th
                 key={col.key}

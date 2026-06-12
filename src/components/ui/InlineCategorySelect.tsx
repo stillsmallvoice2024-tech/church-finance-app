@@ -183,7 +183,7 @@ export function InlineCategorySelect({
             <X className="w-4 h-4" />
           </button>
         </div>
-        {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+        {saveError && <p className="text-xs text-red-600">{saveError}</p>}
       </div>
     )
   }

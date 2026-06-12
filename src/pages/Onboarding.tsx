@@ -169,7 +169,7 @@ export default function Onboarding() {
           <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
             <AppIcon />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-3xl font-semibold text-gray-900">
             {isNewOrg ? 'New Organisation' : 'Welcome!'}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -191,7 +191,7 @@ export default function Onboarding() {
                     ? <CheckCircle2 className="w-5 h-5" />
                     : s.n}
                 </div>
-                <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+                <span className={`text-xs font-semibold ${
                   step >= s.n ? 'text-primary' : 'text-gray-400'
                 }`}>
                   {s.label}

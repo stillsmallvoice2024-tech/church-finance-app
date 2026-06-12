@@ -1057,7 +1057,7 @@ export default function CategoryLedger() {
                               <Fragment key={group.id}>
                                 <tr className="bg-gray-100 border-y border-gray-200">
                                   <td colSpan={5} className="px-5 py-2">
-                                    <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{group.name}</span>
+                                    <span className="text-xs font-semibold text-gray-500">{group.name}</span>
                                   </td>
                                 </tr>
                                 {gRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
@@ -1067,7 +1067,7 @@ export default function CategoryLedger() {
                             {ungroupedRows.length > 0 && groupedSections.length > 0 && (
                               <tr className="bg-gray-100 border-y border-gray-200">
                                 <td colSpan={5} className="px-5 py-2">
-                                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Other</span>
+                                  <span className="text-xs font-semibold text-gray-500">Other</span>
                                 </td>
                               </tr>
                             )}

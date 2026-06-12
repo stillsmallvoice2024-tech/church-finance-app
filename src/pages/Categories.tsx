@@ -4,6 +4,7 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
+import { friendlyError } from '../utils/friendlyError'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields } from '../utils/tableColumns'
 import {
@@ -491,7 +492,7 @@ export default function Categories() {
       toast.success(`"${deleteTarget.name}" deleted.`)
       refetch()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed.')
+      toast.error(friendlyError(err, 'delete the category'))
     } finally {
       setDeleteTarget(null)
     }
@@ -503,7 +504,7 @@ export default function Categories() {
       toast.success(hide ? `"${cat.name}" hidden.` : `"${cat.name}" restored.`)
       refetch()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed.')
+      toast.error(friendlyError(err, 'update the category'))
     } finally {
       setHideTarget(null)
     }
@@ -516,7 +517,7 @@ export default function Categories() {
       refetchGroups()
       refetch()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed.')
+      toast.error(friendlyError(err, 'delete the group'))
     }
   }
 
@@ -529,7 +530,7 @@ export default function Categories() {
       toast.success(`Group renamed to "${name}".`)
       refetchGroups()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Rename failed.')
+      toast.error(friendlyError(err, 'rename the group'))
     } finally {
       setSavingGroup(false)
       setEditGroupId(null)
@@ -776,7 +777,7 @@ export default function Categories() {
                               type="text"
                               value={editGroupName}
                               onChange={e => setEditGroupName(e.target.value)}
-                              className="flex-1 text-xs px-2 py-0.5 border border-primary/40 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white font-semibold uppercase tracking-wider"
+                              className="flex-1 text-xs px-2 py-0.5 border border-primary/40 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white font-semibold"
                             />
                             <button type="submit" disabled={savingGroup || !editGroupName.trim()}
                               className="p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-40" title="Save">
@@ -789,7 +790,7 @@ export default function Categories() {
                           </form>
                         ) : (
                           <>
-                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{g.name}</span>
+                            <span className="text-xs font-semibold text-gray-500">{g.name}</span>
                             <div className="flex items-center gap-0.5">
                               <button
                                 onClick={() => { setEditGroupId(g.id); setEditGroupName(g.name) }}
@@ -813,7 +814,7 @@ export default function Categories() {
               {ungrouped.length > 0 && grouped.length > 0 && (
                 <tr className="bg-gray-50">
                   <td colSpan={5} className="px-5 py-2">
-                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Ungrouped</span>
+                    <span className="text-xs font-semibold text-gray-500">Ungrouped</span>
                   </td>
                 </tr>
               )}

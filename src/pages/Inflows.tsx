@@ -6,6 +6,7 @@ import {
 import { Card }                    from '../components/ui/Card'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { BulkActionBar }           from '../components/ui/BulkActionBar'
+import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
 import { EditFXInflowModal }       from '../components/modals/EditFXInflowModal'
 import { BulkEditInflowModal }     from '../components/modals/BulkEditInflowModal'
@@ -152,6 +153,7 @@ export default function Inflows() {
   const [deleteId,          setDeleteId]          = useState<string | null>(null)
   const [expandedId,        setExpandedId]        = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
 
   const { selectedIds, toggleRow, clearAll, selectAllRows, allSelected } = useBulkSelection(
@@ -203,12 +205,12 @@ export default function Inflows() {
 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds]
-    const { failed } = await executeBulkDelete(ids)
+    const { failed, failures } = await executeBulkDelete(ids)
     setConfirmBulkDelete(false)
     clearAll()
     refetch()
-    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted`, 'success')
-    else toast(`${ids.length - failed} deleted, ${failed} failed`, 'error')
+    if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted.`, 'success')
+    else setBulkResults({ action: 'deleted', succeeded: ids.length - failed, failures })
   }
 
   const INF_CSV_HEADERS = ['Date', 'Description', `Amount (${baseCurrencySymbol})`, 'Transaction Type', 'Txn Ref', 'Remark']
@@ -276,9 +278,9 @@ export default function Inflows() {
       <div className="space-y-5">
 
         {/* Header */}
-        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Inflow Transactions</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Inflow Transactions</h1>
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
@@ -628,7 +630,9 @@ export default function Inflows() {
         ids={[...selectedIds]}
         banks={banks}
         onSuccess={() => { clearAll(); refetch() }}
+        onResults={setBulkResults}
       />
+      <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
       <DescriptionTooltip tooltip={descTooltip} />
       <EditFXInflowModal
         open={!!fxInflowEditRecord}
