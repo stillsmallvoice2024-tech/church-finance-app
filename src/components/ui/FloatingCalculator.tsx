@@ -47,7 +47,7 @@ const KEYBOARD_MAP: Record<string, string> = {
   '%': '%',
 }
 
-const PANEL_W = 320
+const PANEL_W = Math.min(320, typeof window !== 'undefined' ? window.innerWidth - 16 : 320)
 
 function formatDisplay(val: string): string {
   if (val === 'Error') return 'Error'
