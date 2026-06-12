@@ -1,10 +1,10 @@
 ## What is this chapter about?
 
-This chapter shows you how to get into the app for the very first time: creating an account, signing in, fixing a forgotten password, and joining a church that invited you.
+This chapter shows you how to get into the app for the very first time: creating an account, signing in, fixing a forgotten password, and joining an organisation that invited you.
 
 ## Before you start
 
-- You need the web address (link) of the app. Your church administrator can give it to you.
+- You need the web address (link) of the app. Your organisation administrator can give it to you.
 - You need an email address you can open.
 
 ## How to sign in (you already have an account)
@@ -16,12 +16,12 @@ This chapter shows you how to get into the app for the very first time: creating
 5. If your account uses two-step security (2FA), a small window appears asking for a 6-digit code. Open your authenticator app on your phone (like Google Authenticator), find the code, type it in, and click **Verify**.
 6. You will land on the **Dashboard** — the home page of the app.
 
-## How to create a brand-new organisation (first person from your church)
+## How to create a brand-new organisation (first person from your organisation)
 
-Only do this if your church does NOT already use the app. If your church already uses it, ask an admin to invite you instead (see "How to join by invitation" below).
+Only do this if your organisation does NOT already use the app. If your organisation already uses it, ask an admin to invite you instead (see "How to join by invitation" below).
 
 1. On the sign-in page, click the link that says **Create a new organisation**.
-2. In **Organisation Name**, type your church's name. Example: Grace Community Church.
+2. In **Organisation Name**, type your organisation's name. Example: Grace Community Church.
 3. In **Full Name**, type your own name.
 4. In **Email**, type your email address.
 5. In **Password**, type a password with at least 8 characters.
@@ -49,7 +49,7 @@ Only do this if your church does NOT already use the app. If your church already
 
 ## What you'll see after signing in
 
-- The **Dashboard** with a greeting like "Good morning" and your church's money summary.
+- The **Dashboard** with a greeting like "Good morning" and your organisation's money summary.
 - A menu on the left (on a computer) or a row of buttons at the bottom (on a phone).
 - A **Help Center** button at the bottom of the left menu — that's where this tutorial lives!
 
