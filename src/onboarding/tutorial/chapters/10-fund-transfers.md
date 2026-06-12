@@ -1,0 +1,48 @@
+## What is this chapter about?
+
+Sometimes money needs to move between buckets — for example, from the "General Fund" bucket to the "Building Fund" bucket. No money enters or leaves the church; it just changes pockets. That's a **Category Fund Transfer**. When you need to move money for MANY categories at once, use **Bulk Reallocation**.
+
+Find both at **Daily Finance → Category Fund Transfers**. The page has two tabs: **Category Fund Transfers** and **Bulk Reallocation**.
+
+## Part 1: One transfer at a time
+
+### How to record a transfer
+
+1. Click **Add Transfer**.
+2. Pick the **Date** and type the **Amount**.
+3. Pick the **From Category** (where the money leaves) and the **From Portion** (which pocket: Percentage Allocation, Specific Seed, or Savings).
+4. Pick the **To Category** and the **To Portion**.
+5. Type a **Description** (example: "Move surplus to Building Fund").
+6. Optional: add a **Transaction Ref** and a **Remark**.
+7. Click **Save Transfer**.
+
+The transfer now shows in both categories' ledgers (Chapter 7): as money out of one and money into the other.
+
+### Finding, editing, and deleting transfers
+
+- Filter by dates, **From Category**, or **To Category**, or use the search box.
+- Click the **pencil** to edit a transfer, the **trash** to delete it.
+- Tick several rows to use **Edit selected** or **Delete selected**.
+
+## Part 2: Bulk Reallocation (move money for many categories at once)
+
+Example: at year end, you want to move half of every category's Regular Funds into Savings. Instead of typing dozens of transfers, do it in one go.
+
+### How to do a bulk reallocation
+
+1. Click the **Bulk Reallocation** tab.
+2. Pick the **Source Portion** (where money comes from) and the **Destination Portion** (where it goes). They must be different.
+3. Pick the **Mode**: **Full Balance** (move everything), **Percentage** (move a share, like 50%), or **Fixed Amount** (move the same amount from each).
+4. In the table, tick the categories you want to include (or tick the box in the header for all). The **Amount to Move** column shows exactly what will move for each.
+5. Check the summary cards: **Selected** and **Total to Move**.
+6. Click **Preview**.
+7. On the preview screen, check the table. Amber **Zero after** badges warn you that a category's source pocket will be emptied. Set the **Date** and adjust the **Description** if you like.
+8. Click **Confirm — N Transfer(s)**.
+
+The app creates one transfer per category and shows: "Bulk reallocation complete".
+
+## If something goes wrong
+
+- **"Source and destination must differ"** — you picked the same portion twice; change one.
+- **"N categories were skipped"** — those categories had nothing to move. That's okay.
+- **You made a mistake** — every bulk run is just a set of normal transfers. Go to the Category Fund Transfers tab, find them (same date and description), and edit or delete them.
