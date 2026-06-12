@@ -177,7 +177,7 @@ function DepositsPanel() {
       supabase.from('inflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
       supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
     ])
-    if (depRes.error) { setError(depRes.error.message); setLoading(false); return }
+    if (depRes.error) { setError(friendlyError(depRes.error, 'load deposits')); setLoading(false); return }
 
     const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as Omit<DepositRow, 'source' | 'offset_role' | 'root_transaction_id'>),
@@ -227,8 +227,8 @@ function DepositsPanel() {
     setDeleting(true)
     const { error: err } = await supabase.from('bank_deposits').delete().eq('id', deleteTarget.id)
     setDeleting(false); setDeleteTarget(null)
-    if (err) { push(err.message, 'error'); return }
-    push('Deposit deleted', 'success'); load()
+    if (err) { push(friendlyError(err, 'delete the record'), 'error'); return }
+    push('Deposit deleted.', 'success'); load()
   }
 
   const selectedBankName = bankFilter ? (banks.find(b => b.id === bankFilter)?.name ?? null) : null
@@ -584,7 +584,7 @@ function TransfersPanel() {
         supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
       ] : [Promise.resolve({ data: [], error: null }), Promise.resolve({ data: [], error: null })]),
     ])
-    if (transferRes.error) { setError(transferRes.error.message); setLoading(false); return }
+    if (transferRes.error) { setError(friendlyError(transferRes.error, 'load transfers')); setLoading(false); return }
 
     const transferRows: TransferRow[] = (transferRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as unknown as TransferRow), source: 'intrabank_transfers' as const, offset_role: null, root_transaction_id: null,

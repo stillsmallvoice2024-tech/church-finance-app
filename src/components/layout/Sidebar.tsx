@@ -42,7 +42,7 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Inflows',           path: '/inflows',    icon: TrendingUp      },
       { label: 'Outflows',          path: '/outflows',   icon: TrendingDown    },
       { label: 'Import',            path: '/import',     icon: FileUp,         canWriteOnly: true },
-      { label: 'Internal Transfers', path: '/intra-flow', icon: Repeat2 },
+      { label: 'Category Fund Transfers', path: '/intra-flow', icon: Repeat2 },
       { label: 'Receipts',          path: '/receipts',   icon: Receipt         },
     ],
   },
@@ -52,7 +52,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     defaultOpen: false,
     items: [
       { label: 'Bank Ledger',          path: '/bank-ledger',      icon: BookOpen       },
-      { label: 'Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
+      { label: 'Bank Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
       { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe          },
     ],
   },
@@ -167,7 +167,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={`
           sidebar-panel
-          fixed inset-y-0 left-0 z-30 w-64 flex flex-col bg-nav
+          fixed inset-y-0 left-0 z-30 w-72 flex flex-col bg-nav
           transform transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0

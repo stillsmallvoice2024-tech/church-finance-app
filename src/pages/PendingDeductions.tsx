@@ -23,6 +23,7 @@ import { useToastStore }            from '../store/toastStore'
 import { useRole }                  from '../hooks/useRole'
 import { usePageTitle }             from '../hooks/usePageTitle'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
 import { outflowDetailItems } from '../utils/rowDetailItems'
 import { supabase }                 from '../lib/supabase'
@@ -136,7 +137,7 @@ export default function PendingDeductions() {
         : sortRows(rows, getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
       exportCSV(PD_CSV_FILE, PD_CSV_HEADERS, allSorted.map(pdCsvRow))
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Export failed', 'error')
+      toast(friendlyError(e, 'export'), 'error')
     }
   }
 
@@ -180,7 +181,7 @@ export default function PendingDeductions() {
       toast('Transaction marked as resolved', 'success')
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Update failed', 'error')
+      toast(friendlyError(e, 'update the deduction'), 'error')
     } finally {
       setResolvingId(null)
     }

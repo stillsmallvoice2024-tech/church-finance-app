@@ -44,14 +44,14 @@ const DRAWER_SECTIONS: DrawerSection[] = [
     label: 'Daily Finance',
     items: [
       { label: 'Import',            path: '/import',           icon: FileUp,         canWriteOnly: true },
-      { label: 'Internal Transfers', path: '/intra-flow',      icon: Repeat2        },
+      { label: 'Category Fund Transfers', path: '/intra-flow',      icon: Repeat2        },
       { label: 'Receipts',          path: '/receipts',         icon: Receipt        },
     ],
   },
   {
     label: 'Banking',
     items: [
-      { label: 'Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
+      { label: 'Bank Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
       { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe          },
     ],
   },

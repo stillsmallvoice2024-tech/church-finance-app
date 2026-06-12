@@ -20,6 +20,7 @@ import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../store/allocationStore'
 import { getFinalConfig, type RowResolverState } from '../utils/configResolver'
 import { formatDate } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { formatCurrency } from '../utils/currency'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 // inflowTypes import removed — income type classification replaces hardcoded types
@@ -727,7 +728,7 @@ function ManualEntryForm() {
       setRootTxnLink(null)
       setErrors({})
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Save failed', 'error')
+      toast(friendlyError(e, 'save the import'), 'error')
     } finally {
       setSaving(false)
       setDupWarning(null)
@@ -790,7 +791,7 @@ function ManualEntryForm() {
       setRootTxnLink(null)
       setErrors({})
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Save failed', 'error')
+      toast(friendlyError(e, 'save the import'), 'error')
     } finally {
       setSaving(false)
       setDupWarning(null)

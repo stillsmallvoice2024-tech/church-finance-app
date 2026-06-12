@@ -64,8 +64,12 @@ export function DataTable<T>({
               </td>
             </tr>
           ) : (
-            data.map((row) => (
-              <tr key={keyExtractor(row)} className="hover:bg-gray-50 transition-colors">
+            data.map((row, index) => (
+              <tr
+                key={keyExtractor(row)}
+                className="hover:bg-gray-50 transition-colors"
+                style={{ animation: `row-fade-in 200ms ease-out ${Math.min(index, 12) * 28}ms both` }}
+              >
                 {columns.map((col) => (
                   <td
                     key={col.key}

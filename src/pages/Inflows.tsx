@@ -199,7 +199,7 @@ export default function Inflows() {
       setDeleteId(null)
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete the transaction'), 'error')
     }
   }
 
@@ -258,7 +258,7 @@ export default function Inflows() {
       if (truncated) toast(`Export capped at ${EXPORT_MAX.toLocaleString()} records — use a full database export for larger datasets`, 'warning')
       exportCSV(INF_CSV_FILE, INF_CSV_HEADERS, rows.map(inflowCsvRow))
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Export failed', 'error')
+      toast(friendlyError(e, 'export'), 'error')
     }
   }
 

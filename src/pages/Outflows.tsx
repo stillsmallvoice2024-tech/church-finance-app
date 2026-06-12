@@ -202,7 +202,7 @@ export default function Outflows() {
       setDeleteId(null)
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete the transaction'), 'error')
     }
   }
 
@@ -271,7 +271,7 @@ export default function Outflows() {
       })) as OutflowTransaction[]
       exportCSV(OUT_CSV_FILE, OUT_CSV_HEADERS, allRows.map(outflowCsvRow))
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Export failed', 'error')
+      toast(friendlyError(e, 'export'), 'error')
     }
   }
 

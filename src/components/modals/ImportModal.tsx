@@ -1433,7 +1433,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         const batch = newFxRows.slice(i, i + BATCH)
         const { error: err } = await supabase.from('fx_transactions').insert(batch)
         if (err) {
-          errors.push(`FX batch: ${err.message}`); skipped += batch.length
+          errors.push(`FX batch: ${friendlyError(err, 'process FX')}`); skipped += batch.length
         } else {
           imported += batch.length
         }
@@ -1443,7 +1443,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
     }
     } catch (e: unknown) {
-      errors.push(e instanceof Error ? e.message : 'Unexpected error during import')
+      errors.push(friendlyError(e, 'import'))
       setResult({ imported, skipped, errors, fallbackIdCount: 0, collisions: [] })
     } finally {
       setImporting(false)

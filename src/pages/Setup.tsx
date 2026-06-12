@@ -29,6 +29,7 @@ import {
 } from '../hooks/useMutations'
 import { Modal } from '../components/ui/Modal'
 import { formatDate } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { supabase } from '../lib/supabase'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -849,7 +850,7 @@ function CurrenciesTab() {
       toast(`${currCode} removed`, 'success')
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete'), 'error')
     }
   }
 
@@ -2690,7 +2691,7 @@ function DatabaseTab() {
       setBackfillResult({ inflows: inflowCount, outflows: outflowCount })
       toast(`Backfilled ${inflowCount} inflows and ${outflowCount} outflows`, 'success')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Backfill failed', 'error')
+      toast(friendlyError(e, 'backfill'), 'error')
     } finally {
       setBackfilling(false)
     }
@@ -2737,7 +2738,7 @@ function DatabaseTab() {
         'success',
       )
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Backfill failed', 'error')
+      toast(friendlyError(e, 'backfill'), 'error')
     } finally {
       setBackfillingCharge(false)
     }
@@ -2906,7 +2907,7 @@ export default function SetupPage() {
       setDeleteAllocTarget(null)
       reloadAllocs()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete'), 'error')
     }
   }
 
@@ -2918,7 +2919,7 @@ export default function SetupPage() {
       setLockTarget(null)
       reloadAllocs()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Lock failed', 'error')
+      toast(friendlyError(e, 'lock the config'), 'error')
     }
   }
 
@@ -2933,7 +2934,7 @@ export default function SetupPage() {
       setAllocModalOpen(true)
       reloadAllocs()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Unlock failed', 'error')
+      toast(friendlyError(e, 'unlock the config'), 'error')
     }
   }
 
@@ -2978,7 +2979,7 @@ export default function SetupPage() {
       setDeleteBankRecord(null)
       setBankRefetch(n => n + 1)
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete'), 'error')
     }
   }
 
@@ -3204,7 +3205,7 @@ export default function SetupPage() {
             setIncomeTypeRefetch(n => n + 1)
             toast('Income type deleted', 'success')
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+            toast(friendlyError(e, 'delete'), 'error')
           }
         }}
         loading={false}
@@ -3227,7 +3228,7 @@ export default function SetupPage() {
             setOutflowTypeRefetch(n => n + 1)
             toast('Outflow type deleted', 'success')
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+            toast(friendlyError(e, 'delete'), 'error')
           }
         }}
         loading={false}
@@ -3250,7 +3251,7 @@ export default function SetupPage() {
             setDepartmentRefetch(n => n + 1)
             toast('Department deleted', 'success')
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+            toast(friendlyError(e, 'delete'), 'error')
           }
         }}
         loading={false}

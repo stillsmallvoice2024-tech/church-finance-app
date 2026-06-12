@@ -153,3 +153,15 @@ html.dark .bg-amber-50 { background-color: rgba(217,119,6,0.2)  !important; }
   * { box-shadow: none !important; }
   .rounded-xl, .rounded-2xl { border-radius: 0 !important; }
 }
+
+/* ── Modal entry animation ─────────────────────────────────────────────────── */
+@keyframes modal-enter {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+/* ── Table row stagger fade ──────────────────────────────────────────────── */
+@keyframes row-fade-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}

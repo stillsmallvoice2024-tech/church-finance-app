@@ -26,6 +26,7 @@ export type PageId =
   | 'refunds'
   | 'reversals'
   | 'receipts'
+  | 'reconciliation'
 
 // ── Tour IDs ─────────────────────────────────────────────────────────────────
 export type TourId =
@@ -39,6 +40,7 @@ export type TourId =
   | 'reportsTour'
   | 'settingsTour'
   | 'usersTour'
+  | 'reconciliationTour'
 
 // ── Tour Definitions ──────────────────────────────────────────────────────────
 export type TourStepPlacement = 'top' | 'bottom' | 'left' | 'right' | 'center'

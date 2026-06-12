@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
@@ -115,7 +116,7 @@ export default function SpecificGivings() {
     ])
 
     if (directRes.error) {
-      setError(directRes.error.message)
+      setError(friendlyError(directRes.error, 'load'))
       setLoading(false)
       return
     }

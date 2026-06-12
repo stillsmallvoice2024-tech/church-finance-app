@@ -46,6 +46,15 @@ import { ConfidenceGauge }         from '../components/ui/ConfidenceGauge'
 
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+const visitKey = (userId: string) => `church-finance-visit-${userId}`
+
+interface VisitSnapshot {
+  visitedAt:    string
+  totalInflow:  number
+  totalOutflow: number
+  netBalance:   number
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function fillMonthlyGaps(
@@ -96,6 +105,7 @@ export default function Dashboard() {
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
   const [showImport,     setShowImport]     = useState(false)
+  const [lastVisit,      setLastVisit]      = useState<VisitSnapshot | null>(null)
 
   const healthStatus  = useHealthStore(s => s.status)
   const healthRunAt   = useHealthStore(s => s.runAt)
@@ -107,6 +117,26 @@ export default function Dashboard() {
     if (!cleanSince) return 0
     return Math.floor((Date.now() - new Date(cleanSince).getTime()) / 86_400_000)
   }, [cleanSince])
+
+  // ── Since-last-visit snapshot ──────────────────────────────────────────────
+  useEffect(() => {
+    if (isLoading || !user) return
+    const key = visitKey(user.id)
+    try {
+      const raw  = localStorage.getItem(key)
+      const prev = raw ? (JSON.parse(raw) as VisitSnapshot) : null
+      const oneHourAgo = Date.now() - 3_600_000
+      if (prev && new Date(prev.visitedAt).getTime() < oneHourAgo) {
+        setLastVisit(prev)
+      }
+      localStorage.setItem(key, JSON.stringify({
+        visitedAt:    new Date().toISOString(),
+        totalInflow:  stats.totalInflow,
+        totalOutflow: stats.totalOutflow,
+        netBalance:   stats.netBalance,
+      } satisfies VisitSnapshot))
+    } catch { /* storage unavailable */ }
+  }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
@@ -334,6 +364,23 @@ export default function Dashboard() {
             </>
           )}
         </div>
+
+        {/* ── Since-last-visit note ────────────────────────────────────────── */}
+        {lastVisit && !isLoading && (() => {
+          const inflowΔ  = stats.totalInflow  - lastVisit.totalInflow
+          const outflowΔ = stats.totalOutflow - lastVisit.totalOutflow
+          const parts: string[] = []
+          if (Math.abs(inflowΔ)  >= 1) parts.push(`inflows ${inflowΔ  > 0 ? '+' : ''}${formatCurrencyCompact(inflowΔ,  baseCurrencyCode)}`)
+          if (Math.abs(outflowΔ) >= 1) parts.push(`outflows ${outflowΔ > 0 ? '+' : ''}${formatCurrencyCompact(outflowΔ, baseCurrencyCode)}`)
+          if (parts.length === 0) return null
+          const days = Math.floor((Date.now() - new Date(lastVisit.visitedAt).getTime()) / 86_400_000)
+          const timeAgo = days === 0 ? 'earlier today' : days === 1 ? 'yesterday' : `${days} days ago`
+          return (
+            <p className="text-xs text-gray-400 text-right -mt-2">
+              Since {timeAgo}: {parts.join(' · ')}
+            </p>
+          )
+        })()}
 
         {/* ── Monthly area chart + Record Confidence ───────────────────────── */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">

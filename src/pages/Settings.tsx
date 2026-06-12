@@ -100,7 +100,7 @@ export default function Settings() {
     setMfaLoading(true); setMfaError(null)
     const { error } = await supabase.auth.mfa.unenroll({ factorId })
     if (error) {
-      setMfaError(error.message)
+      setMfaError(friendlyError(error, 'update MFA'))
     } else {
       setMfaFactors(f => f.filter(x => x.id !== factorId))
     }
@@ -131,7 +131,7 @@ export default function Settings() {
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     setChangingPw(false)
     if (error) {
-      setPwError(error.message)
+      setPwError(friendlyError(error, 'change your password'))
     } else {
       toast('Password updated successfully', 'success')
       setPwDone(true)

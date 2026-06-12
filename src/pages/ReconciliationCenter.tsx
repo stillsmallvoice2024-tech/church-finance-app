@@ -8,6 +8,7 @@ import {
 import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReconciliation } from '../hooks/useReconciliation'
+import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { useBanks } from '../hooks/useBanks'
 import { formatCurrency, formatDate, formatWithTimezone } from '../utils/formatters'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -65,6 +66,20 @@ const RULE_PLAIN: Record<string, { headline: string; why: ReactNode }> = {
     headline: 'There are outflow transactions that have not yet been deducted from the account.',
     why: 'Your bank ledger balance is higher than it should be until these deductions are processed.',
   },
+}
+
+
+// Plain-language suggested-fix overrides — shown in the expanded Technical details
+// panel in place of the raw suggestedFix string from reconciliationRules.ts.
+const RULE_FIX: Record<string, string> = {
+  allocation_inconsistency: 'Open Distribution Rules, unlock the relevant config, and correct the row percentages or fund types.',
+  orphan_transfer:          'Open Bank Deposits & Transfers, locate this transfer, and verify the bank name matches a current account.',
+  missing_transfer_pair:    'Open Bank Deposits & Transfers and check whether both a deposit record and an inflow transaction exist for this entry.',
+  balance_mismatch:         'Open the Bank Ledger for this account and compare recent entries against your bank statement.',
+  negative_balance:         'Open the Bank Ledger for this account and review recent outflows for missing inflows or incorrect amounts.',
+  incomplete_reversal:      'Open the relevant transactions page, edit the record, and link it to its counterpart transaction.',
+  pending_deduction:        'Open Upcoming Deductions, locate this transaction, and either clear it or mark it resolved.',
+  duplicate_import:         'Open the relevant transactions page, filter by this reference number, and delete the duplicate entry.',
 }
 
 // ── Evidence display ───────────────────────────────────────────────────────────
@@ -261,8 +276,8 @@ function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: 
           </div>
           {expanded && (
             <div className="mt-2 space-y-1">
-              {issue.suggestedFix && plain && (
-                <p className="text-xs text-gray-500 italic">{issue.suggestedFix}</p>
+              {(RULE_FIX[issue.ruleId] ?? (plain && issue.suggestedFix)) && (
+                <p className="text-xs text-gray-500 italic">{RULE_FIX[issue.ruleId] ?? issue.suggestedFix}</p>
               )}
               <pre className="text-xs text-gray-500 bg-white/70 border border-gray-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">
                 {JSON.stringify(issue.evidence, null, 2)}
@@ -407,6 +422,7 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
 
 export default function ReconciliationCenter() {
   usePageTitle('Reconciliation Center')
+  useFirstVisitTour('reconciliation')
   const { baseCurrencyCode } = useOrgCurrency()
   const storedTz    = useOrgStore(s => s.timezone)
   const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
@@ -448,12 +464,13 @@ export default function ReconciliationCenter() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
+      <div data-tour="recon-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
           <h1 className="text-3xl font-semibold text-gray-900">Reconciliation Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Verify your app records match your actual bank records</p>
         </div>
         <button
+          data-tour="recon-run-button"
           onClick={handleRun}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors shrink-0"
@@ -486,7 +503,7 @@ export default function ReconciliationCenter() {
           </div>
         </Card>
       ) : diag ? (
-        <div className={`rounded-xl border p-6 shadow-md ${healthStatusBg(diag.healthStatus)}`}>
+        <div data-tour="recon-health-summary" className={`rounded-xl border p-6 shadow-md ${healthStatusBg(diag.healthStatus)}`}>
           <div className="flex items-start gap-4">
             <HealthIcon status={diag.healthStatus} size="lg" />
             <div className="flex-1 min-w-0">
@@ -547,7 +564,7 @@ export default function ReconciliationCenter() {
 
       {/* ── Section B: Account Status Table ───────────────────────────────── */}
       {diag && diag.bankSummaries.length > 0 && (
-        <div id="account-status">
+        <div id="account-status" data-tour="recon-account-status">
           <button
             onClick={() => setShowAccountStatus(v => !v)}
             className="flex items-center gap-2 w-full text-left"
@@ -588,7 +605,7 @@ export default function ReconciliationCenter() {
 
       {/* ── Section C: Diagnostics Feed ───────────────────────────────────── */}
       {diag && diag.totalIssues > 0 && (
-        <div className="space-y-4">
+        <div data-tour="recon-issues" className="space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-sm font-semibold text-gray-700">Issues to Resolve</h2>
             {diag.criticalIssues > 0 && (

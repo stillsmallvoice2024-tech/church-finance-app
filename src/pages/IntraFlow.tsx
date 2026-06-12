@@ -20,6 +20,7 @@ import { useDataViewState }        from '../hooks/useDataViewState'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields } from '../utils/tableColumns'
 import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { exportCSV }               from '../utils/csvExport'
 import { supabase }                from '../lib/supabase'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
@@ -157,7 +158,7 @@ export default function IntraFlow() {
   const { execute: bulkDelete, loading: bulkDeleting } = useBulkDeleteTransaction('intra_flows')
   const { categories } = useCategories()
 
-  usePageTitle('Internal Transfers')
+  usePageTitle('Category Fund Transfers')
   const [tab, setTab] = useState<'transfers' | 'reallocation'>('transfers')
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
@@ -176,7 +177,7 @@ export default function IntraFlow() {
       setDeleteId(null)
       refetch()
     } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(friendlyError(e, 'delete the transfer'), 'error')
     }
   }
 
@@ -251,7 +252,7 @@ export default function IntraFlow() {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              {t === 'transfers' ? 'Internal Transfers' : 'Bulk Reallocation'}
+              {t === 'transfers' ? 'Category Fund Transfers' : 'Bulk Reallocation'}
             </button>
           ))}
         </nav>
@@ -260,7 +261,7 @@ export default function IntraFlow() {
       {tab === 'reallocation' ? (
         <BulkReallocation />
       ) : tab === 'transfers' && (
-        <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is an Internal Transfer?">
+        <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Category Fund Transfer?">
           An internal transfer moves money between two bank accounts within the organisation.
           It is not income or expenditure — no money enters or leaves the church.
           Record a transfer when, for example, cash collected in one account is consolidated into your main operating account.
@@ -281,7 +282,7 @@ export default function IntraFlow() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Internal Transfers</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Category Fund Transfers</h1>
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">

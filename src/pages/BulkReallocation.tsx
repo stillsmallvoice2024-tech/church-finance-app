@@ -12,6 +12,7 @@ import { useToastStore } from '../store/toastStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../utils/formatters'
+import { friendlyError } from '../utils/friendlyError'
 import { filterInputCls } from '../components/ui/FormField'
 import type { ReportCategoryBalance } from '../types'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -191,7 +192,7 @@ export default function BulkReallocation() {
       setStep('configure')
       setSelectedIds(new Set())
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Execution failed', 'error')
+      toast(friendlyError(e, 'execute the reallocation'), 'error')
     } finally {
       setExecuting(false)
     }
