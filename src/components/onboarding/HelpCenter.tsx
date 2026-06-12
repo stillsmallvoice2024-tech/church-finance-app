@@ -3,13 +3,16 @@ import { createPortal } from 'react-dom'
 import {
   X, Search, BookOpen, HelpCircle, Compass, Megaphone,
   ChevronDown, ChevronRight, Play, ArrowLeft, Tag,
-  Sparkles,
+  Sparkles, GraduationCap, ExternalLink,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { HELP_ARTICLES } from '../../onboarding/help/articles'
 import { FAQS } from '../../onboarding/help/faqs'
 import { RELEASE_NOTES } from '../../onboarding/help/releaseNotes'
 import { ALL_TOURS } from '../../onboarding/tours'
+import { renderMarkdown, InlineMarkdown } from '../../onboarding/help/markdown'
+import { TUTORIAL_CHAPTERS } from '../../onboarding/tutorial'
+import type { TutorialChapter } from '../../onboarding/tutorial'
 import type { HelpArticle, FAQEntry } from '../../types/onboarding'
 
 // ── Simple Markdown renderer ──────────────────────────────────────────────────
@@ -167,10 +170,11 @@ function InlineMarkdown({ text }: { text: string }) {
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
 
-type TabId = 'articles' | 'faqs' | 'tours' | 'whats-new'
+type TabId = 'articles' | 'tutorial' | 'faqs' | 'tours' | 'whats-new'
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: 'articles',  label: 'Articles',   Icon: BookOpen  },
+  { id: 'tutorial',  label: 'Tutorial',   Icon: GraduationCap },
   { id: 'faqs',      label: 'FAQs',       Icon: HelpCircle },
   { id: 'tours',     label: 'Tours',      Icon: Compass   },
   { id: 'whats-new', label: "What's New", Icon: Megaphone },
@@ -224,6 +228,96 @@ function ArticleDetail({ article, onBack }: { article: HelpArticle; onBack: () =
   )
 }
 
+function ChapterCard({ chapter, onClick }: { chapter: TutorialChapter; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/40 hover:shadow-sm transition-all group"
+    >
+      <div className="flex items-start gap-3">
+        <span className="shrink-0 w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center mt-0.5">
+          {chapter.number}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 group-hover:text-primary transition-colors">
+              {chapter.title}
+            </p>
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary shrink-0 mt-0.5 transition-colors" />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{chapter.summary}</p>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function ChapterDetail({
+  chapter, onBack, onNavigate,
+}: {
+  chapter: TutorialChapter
+  onBack: () => void
+  onNavigate: (chapter: TutorialChapter) => void
+}) {
+  const idx  = TUTORIAL_CHAPTERS.findIndex(c => c.id === chapter.id)
+  const prev = idx > 0 ? TUTORIAL_CHAPTERS[idx - 1] : null
+  const next = idx < TUTORIAL_CHAPTERS.length - 1 ? TUTORIAL_CHAPTERS[idx + 1] : null
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1 text-xs text-primary font-medium hover:underline"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          All Chapters
+        </button>
+        <a
+          href={`/tutorial/${chapter.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-xs text-primary font-medium hover:underline"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Open in new tab
+        </a>
+      </div>
+      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-1">
+        Chapter {chapter.number}: {chapter.title}
+      </h2>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Updated {chapter.updatedAt}</p>
+      <div className="overflow-y-auto flex-1 pr-1">
+        {renderMarkdown(chapter.content)}
+        <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+          {prev ? (
+            <button
+              type="button"
+              onClick={() => onNavigate(prev)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary/40 hover:text-primary transition-colors text-left"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+              <span className="line-clamp-1">{prev.title}</span>
+            </button>
+          ) : <span />}
+          {next && (
+            <button
+              type="button"
+              onClick={() => onNavigate(next)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary/40 hover:text-primary transition-colors text-right ml-auto"
+            >
+              <span className="line-clamp-1">{next.title}</span>
+              <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FAQItem({ faq, isOpen, onToggle }: { faq: FAQEntry; isOpen: boolean; onToggle: () => void }) {
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
@@ -257,6 +351,7 @@ export function HelpCenter() {
   const [query, setQuery]     = useState('')
   const [openFAQ, setOpenFAQ] = useState<string | null>(null)
   const [selectedArticle, setSelectedArticle] = useState<HelpArticle | null>(null)
+  const [selectedChapter, setSelectedChapter] = useState<TutorialChapter | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   // Reset state on open, respecting initialTab
@@ -265,6 +360,7 @@ export function HelpCenter() {
       setTab((initialTab as TabId | null) ?? 'articles')
       setQuery('')
       setSelectedArticle(null)
+      setSelectedChapter(null)
       setOpenFAQ(null)
       setTimeout(() => searchRef.current?.focus(), 50)
     }
@@ -292,6 +388,13 @@ export function HelpCenter() {
     f.question.toLowerCase().includes(q) ||
     f.answer.toLowerCase().includes(q) ||
     f.tags.some(t => t.includes(q)),
+  )
+
+  const filteredChapters = TUTORIAL_CHAPTERS.filter(c =>
+    !q ||
+    c.title.toLowerCase().includes(q) ||
+    c.summary.toLowerCase().includes(q) ||
+    c.content.toLowerCase().includes(q),
   )
 
   const filteredTours = ALL_TOURS.filter(t =>
@@ -349,8 +452,8 @@ export function HelpCenter() {
               ref={searchRef}
               type="search"
               value={query}
-              onChange={e => { setQuery(e.target.value); setSelectedArticle(null) }}
-              placeholder="Search articles, FAQs, and tours…"
+              onChange={e => { setQuery(e.target.value); setSelectedArticle(null); setSelectedChapter(null) }}
+              placeholder="Search the tutorial, articles, FAQs, and tours…"
               className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
             />
           </div>
@@ -362,7 +465,7 @@ export function HelpCenter() {
             <button
               key={id}
               type="button"
-              onClick={() => { setTab(id); setSelectedArticle(null) }}
+              onClick={() => { setTab(id); setSelectedArticle(null); setSelectedChapter(null) }}
               className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 tab === id
                   ? 'border-primary text-primary'
@@ -374,6 +477,11 @@ export function HelpCenter() {
               {id === 'articles' && q && (
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {filteredArticles.length}
+                </span>
+              )}
+              {id === 'tutorial' && q && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                  {filteredChapters.length}
                 </span>
               )}
               {id === 'faqs' && q && (
@@ -408,6 +516,47 @@ export function HelpCenter() {
 
           {tab === 'articles' && selectedArticle && (
             <ArticleDetail article={selectedArticle} onBack={() => setSelectedArticle(null)} />
+          )}
+
+          {/* ── Tutorial ── */}
+          {tab === 'tutorial' && !selectedChapter && (
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-3 p-4 rounded-xl bg-primary/5 border border-primary/15">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    The complete step-by-step tutorial
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Every page explained in simple steps — from your first login to reports.
+                    Open it in a new tab to read while you work.
+                  </p>
+                </div>
+                <a
+                  href="/tutorial"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors shrink-0"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open in new tab
+                </a>
+              </div>
+              {filteredChapters.length === 0 ? (
+                <EmptySearch query={query} />
+              ) : (
+                filteredChapters.map(c => (
+                  <ChapterCard key={c.id} chapter={c} onClick={() => setSelectedChapter(c)} />
+                ))
+              )}
+            </div>
+          )}
+
+          {tab === 'tutorial' && selectedChapter && (
+            <ChapterDetail
+              chapter={selectedChapter}
+              onBack={() => setSelectedChapter(null)}
+              onNavigate={setSelectedChapter}
+            />
           )}
 
           {/* ── FAQs ── */}
