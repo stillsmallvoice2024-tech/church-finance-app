@@ -28,6 +28,7 @@ import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
 import { isOffsetableType } from '../../utils/transactionTypes'
+import { friendlyError } from '../../utils/friendlyError'
 
 // ── ID normalization ──────────────────────────────────────────────────────────
 // Strips invisible characters (zero-width spaces, soft hyphen, BOM, NBSP, etc.),

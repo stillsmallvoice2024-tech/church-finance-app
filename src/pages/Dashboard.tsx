@@ -118,26 +118,6 @@ export default function Dashboard() {
     return Math.floor((Date.now() - new Date(cleanSince).getTime()) / 86_400_000)
   }, [cleanSince])
 
-  // ── Since-last-visit snapshot ──────────────────────────────────────────────
-  useEffect(() => {
-    if (isLoading || !user) return
-    const key = visitKey(user.id)
-    try {
-      const raw  = localStorage.getItem(key)
-      const prev = raw ? (JSON.parse(raw) as VisitSnapshot) : null
-      const oneHourAgo = Date.now() - 3_600_000
-      if (prev && new Date(prev.visitedAt).getTime() < oneHourAgo) {
-        setLastVisit(prev)
-      }
-      localStorage.setItem(key, JSON.stringify({
-        visitedAt:    new Date().toISOString(),
-        totalInflow:  stats.totalInflow,
-        totalOutflow: stats.totalOutflow,
-        netBalance:   stats.netBalance,
-      } satisfies VisitSnapshot))
-    } catch { /* storage unavailable */ }
-  }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
     const channel = supabase
@@ -164,6 +144,27 @@ export default function Dashboard() {
   )
 
   const isLoading = stats.loading || categoriesLoading
+
+  // ── Since-last-visit snapshot ──────────────────────────────────────────────
+  // Must run after isLoading is declared — its dep array reads it during render.
+  useEffect(() => {
+    if (isLoading || !user) return
+    const key = visitKey(user.id)
+    try {
+      const raw  = localStorage.getItem(key)
+      const prev = raw ? (JSON.parse(raw) as VisitSnapshot) : null
+      const oneHourAgo = Date.now() - 3_600_000
+      if (prev && new Date(prev.visitedAt).getTime() < oneHourAgo) {
+        setLastVisit(prev)
+      }
+      localStorage.setItem(key, JSON.stringify({
+        visitedAt:    new Date().toISOString(),
+        totalInflow:  stats.totalInflow,
+        totalOutflow: stats.totalOutflow,
+        netBalance:   stats.netBalance,
+      } satisfies VisitSnapshot))
+    } catch { /* storage unavailable */ }
+  }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const firstName =
     profile?.full_name?.split(' ')[0] ??
