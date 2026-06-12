@@ -366,7 +366,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
                   <button
                     type="button"
                     onClick={() => setObRows(prev => prev.filter((_, j) => j !== i))}
-                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -730,13 +730,13 @@ export default function Categories() {
                     )}
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                    <button onClick={() => openEdit(cat)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                    <button onClick={() => openEdit(cat)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => handleDeleteClick(cat)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                    <button onClick={() => handleDeleteClick(cat)} className="touch-target p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => handleToggleHide(cat, !cat.is_hidden)} className="p-1.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title={cat.is_hidden ? 'Show' : 'Hide'}>
+                    <button onClick={() => handleToggleHide(cat, !cat.is_hidden)} className="touch-target p-1.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title={cat.is_hidden ? 'Show' : 'Hide'}>
                       {cat.is_hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                     </button>
                   </div>
@@ -780,11 +780,11 @@ export default function Categories() {
                               className="flex-1 text-xs px-2 py-0.5 border border-primary/40 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white font-semibold"
                             />
                             <button type="submit" disabled={savingGroup || !editGroupName.trim()}
-                              className="p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-40" title="Save">
+                              className="touch-target p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-40" title="Save">
                               <Check className="w-3.5 h-3.5" />
                             </button>
                             <button type="button" onClick={() => setEditGroupId(null)}
-                              className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors" title="Cancel">
+                              className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 transition-colors" title="Cancel">
                               <X className="w-3 h-3" />
                             </button>
                           </form>
@@ -794,11 +794,11 @@ export default function Categories() {
                             <div className="flex items-center gap-0.5">
                               <button
                                 onClick={() => { setEditGroupId(g.id); setEditGroupName(g.name) }}
-                                className="p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors" title="Rename group">
+                                className="touch-target p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors" title="Rename group">
                                 <Pencil className="w-3 h-3" />
                               </button>
                               <button onClick={() => handleDeleteGroup(g)}
-                                className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors" title="Remove group">
+                                className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors" title="Remove group">
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
@@ -932,17 +932,17 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         <div className="flex items-center justify-end gap-1">
           {cat.is_hidden ? (
             <button onClick={() => onToggleHide(cat, false)}
-              className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Restore">
+              className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Restore">
               <Eye className="w-4 h-4" />
             </button>
           ) : (
             <button onClick={() => onEdit(cat)}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
               <Pencil className="w-4 h-4" />
             </button>
           )}
           <button onClick={() => onDelete(cat)} disabled={checking}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors disabled:opacity-40" title="Delete">
+            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors disabled:opacity-40" title="Delete">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>

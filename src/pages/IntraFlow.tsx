@@ -411,12 +411,12 @@ export default function IntraFlow() {
                       </div>
                       <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                         {canWrite() && (
-                          <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                          <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
                         {canDelete() && (
-                          <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                          <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
@@ -450,7 +450,7 @@ export default function IntraFlow() {
                   },
                 ]}
               />
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scroll-x-fade">
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
@@ -545,7 +545,7 @@ export default function IntraFlow() {
                             <td className="w-8 pl-2">
                               <button
                                 onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                                className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                className="touch-target p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
                                 aria-label={isExpanded ? 'Collapse' : 'Expand'}
                               >
                                 {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -564,12 +564,12 @@ export default function IntraFlow() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1">
                                 {canWrite() && (
-                                  <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                                  <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                                     <Pencil className="w-4 h-4" />
                                   </button>
                                 )}
                                 {canDelete() && (
-                                  <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                                  <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                                     <Trash2 className="w-4 h-4" />
                                   </button>
                                 )}

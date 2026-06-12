@@ -225,7 +225,7 @@ export default function ChangeLog() {
 
       {/* Table */}
       <Card padding={false}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="min-w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">

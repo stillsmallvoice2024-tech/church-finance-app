@@ -450,14 +450,14 @@ function DepositsPanel() {
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                     {admin && row.source === 'bank_deposits' && (
-                      <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     )}
                     {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                       <>
-                        <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                         {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                         {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
                         )}
                       </>
                     )}
@@ -467,7 +467,7 @@ function DepositsPanel() {
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -491,7 +491,7 @@ function DepositsPanel() {
                     <tr key={`${row.source}-${row.id}`} className="hover:bg-gray-50 transition-colors">
                       <td className="w-8 px-1 py-3">
                         <button onClick={() => setExpandedId(isExpanded ? null : `${row.source}-${row.id}`)}
-                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                          className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                           {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                         </button>
                       </td>
@@ -508,14 +508,14 @@ function DepositsPanel() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {admin && row.source === 'bank_deposits' && (
-                            <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                           )}
                           {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                             <>
-                              <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                               {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                               {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                                <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
                               )}
                             </>
                           )}
@@ -667,11 +667,11 @@ function TransfersPanel() {
         />
         <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
           <button onClick={() => setDisplayMode('table')} title="Table view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+            className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
             <LayoutList className="w-4 h-4" />
           </button>
           <button onClick={() => setDisplayMode('cards')} title="Card view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+            className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
             <LayoutGrid className="w-4 h-4" />
           </button>
         </div>
@@ -762,14 +762,14 @@ function TransfersPanel() {
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                     {row.source === 'intrabank_transfers' && canWrite() && (
-                      <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     )}
                     {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
                       <>
-                        <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                         {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                         {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
                         )}
                       </>
                     )}
@@ -779,7 +779,7 @@ function TransfersPanel() {
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -800,7 +800,7 @@ function TransfersPanel() {
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                       <td className="w-8 px-1 py-3">
                         <button onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                          className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                           {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                         </button>
                       </td>
@@ -818,14 +818,14 @@ function TransfersPanel() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {row.source === 'intrabank_transfers' && canDelete() && (
-                            <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
                           )}
                           {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
                             <>
-                              <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-4 h-4" /></button>
+                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-4 h-4" /></button>
                               {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                               {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                                <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-4 h-4" /></button>
                               )}
                             </>
                           )}

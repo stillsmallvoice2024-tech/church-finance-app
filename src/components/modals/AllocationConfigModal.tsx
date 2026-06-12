@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, Trash2 } from 'lucide-react'
 import { Modal, type ModalHandle } from '../ui/Modal'
-import { Field, inputCls } from '../ui/FormField'
+import { Field, inputCls, focusFirstInvalid } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { InlineCategorySelect } from '../ui/InlineCategorySelect'
 import {
@@ -163,7 +163,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
       isDirty={isDirty}
       disableClose={loading}
     >
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-5">
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
         )}

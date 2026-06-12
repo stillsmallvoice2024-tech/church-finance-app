@@ -242,7 +242,7 @@ export default function ReversalTransactions() {
           <td className="w-8 pl-1 py-2">
             <button
               onClick={() => setExpandedId(isExpanded ? null : row.id)}
-              className="p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors"
+              className="touch-target p-1 rounded text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors"
               aria-label={isExpanded ? 'Collapse' : 'Expand'}
             >
               {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -284,11 +284,11 @@ export default function ReversalTransactions() {
           {canWrite() && (
             <td className="px-2 py-3">
               <div className="flex items-center gap-0.5">
-                <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 {row.root_transaction_id === null && row.offset_role !== 'root' && (
-                  <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
+                  <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
                     <Link2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -364,11 +364,11 @@ export default function ReversalTransactions() {
           </div>
           {canWrite() && (
             <div className="flex items-center gap-0.5">
-              <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+              <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                 <Pencil className="w-3.5 h-3.5" />
               </button>
               {row.root_transaction_id === null && row.offset_role !== 'root' && (
-                <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
+                <button onClick={() => handleEdit(row)} className="touch-target p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
                   <Link2 className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -417,11 +417,11 @@ export default function ReversalTransactions() {
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={filtered.length === 0} />
           <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
             <button onClick={() => setDisplayMode('table')} title="Table view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+              className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
               <LayoutList className="w-4 h-4" />
             </button>
             <button onClick={() => setDisplayMode('cards')} title="Card view"
-              className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+              className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
@@ -571,7 +571,7 @@ export default function ReversalTransactions() {
           </div>
         ) : (
           /* ── TABLE VIEW ────────────────────────────────────────────────────── */
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">

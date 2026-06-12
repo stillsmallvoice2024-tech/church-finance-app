@@ -167,7 +167,7 @@ export function InlineCategorySelect({
             type="button"
             onClick={handleSave}
             disabled={saving || !newName.trim()}
-            className="p-1.5 rounded-lg bg-primary text-white hover:bg-primary-light disabled:opacity-50 transition-colors"
+            className="touch-target p-1.5 rounded-lg bg-primary text-white hover:bg-primary-light disabled:opacity-50 transition-colors"
             title="Save category"
           >
             {saving
@@ -177,7 +177,7 @@ export function InlineCategorySelect({
           <button
             type="button"
             onClick={handleCancel}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
             title="Cancel"
           >
             <X className="w-4 h-4" />

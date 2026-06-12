@@ -461,12 +461,12 @@ export default function Outflows() {
                     )}
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                       {canWrite() && (
-                        <button onClick={() => openEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                        <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
                       {canDelete() && (
-                        <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                        <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -511,7 +511,7 @@ export default function Outflows() {
               />
             )
           })()}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
@@ -574,7 +574,7 @@ export default function Outflows() {
                           <td className="w-8 px-1 py-3">
                             <button
                               onClick={() => toggleExpand(row.id)}
-                              className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                              className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                               title={isExpanded ? 'Collapse' : 'Expand details'}
                             >
                               {isExpanded
@@ -617,12 +617,12 @@ export default function Outflows() {
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1">
                               {canWrite() && (
-                                <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                                <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                                   <Pencil className="w-4 h-4" />
                                 </button>
                               )}
                               {canDelete() && (
-                                <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                                <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               )}
@@ -659,6 +659,17 @@ export default function Outflows() {
         onConfirm={handleDelete}
         loading={deleting}
         label="this outflow transaction"
+        detail={(() => {
+          const row = displayed.find(r => r.id === deleteId)
+          if (!row) return null
+          return (
+            <div className="space-y-0.5">
+              <p className="font-mono font-semibold">{formatCurrency(Number(row.amount_disbursed), baseCurrencyCode)}</p>
+              <p className="text-xs text-gray-500">{formatDate(row.date)}{row.bank_name ? ` · ${row.bank_name}` : ''}</p>
+              {row.display_description && <p className="text-xs text-gray-500 line-clamp-2">{row.display_description}</p>}
+            </div>
+          )
+        })()}
       />
       <DeleteDialog
         open={confirmBulkDelete}

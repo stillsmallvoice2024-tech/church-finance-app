@@ -385,7 +385,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                   <button
                     type="button"
                     onClick={() => removeRow(i)}
-                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

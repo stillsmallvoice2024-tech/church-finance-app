@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
-import { Field, inputCls } from '../ui/FormField'
+import { Field, inputCls, focusFirstInvalid, DateQuickChips } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
@@ -278,7 +278,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       disableClose={loading}
       footer={footerEl}
     >
-      <form id="add-outflow-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form id="add-outflow-form" onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-4">
 
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -301,6 +301,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         <div className="grid grid-cols-2 gap-4">
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={inputCls(!!errors.date)} />
+            <DateQuickChips onPick={d => setValue('date', d, { shouldDirty: true, shouldValidate: true })} />
           </Field>
           <Field label={`Amount Disbursed (${baseCurrencySymbol}) *`} error={errors.amount_disbursed?.message}>
             <Controller control={control} name="amount_disbursed" render={({ field }) => (

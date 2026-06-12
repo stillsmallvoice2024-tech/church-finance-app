@@ -307,7 +307,7 @@ export default function Dashboard() {
               <button
                 onClick={() => setSkipped(true)}
                 title="Dismiss"
-                className="p-1 rounded text-gray-300 hover:text-gray-500 transition-colors"
+                className="touch-target p-1 rounded text-gray-300 hover:text-gray-500 transition-colors"
                 aria-label="Dismiss health banner"
               >
                 <span className="text-lg leading-none">×</span>

@@ -274,7 +274,7 @@ export default function BulkReallocation() {
 
         {/* Category preview table */}
         <Card padding={false}>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -483,7 +483,7 @@ export default function BulkReallocation() {
 
       {/* Category table */}
       <Card padding={false}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-100">

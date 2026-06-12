@@ -39,7 +39,7 @@ export function OrgSwitcher() {
             <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
           </button>
           {open && (
-            <div className="absolute left-0 top-full mt-1 z-50 w-56 rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700">
+            <div className="absolute left-0 top-full mt-1 z-50 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700">
               <button
                 onClick={() => { setOpen(false); setCreateOrgOpen(true) }}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-primary hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -82,7 +82,7 @@ export function OrgSwitcher() {
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 top-full mt-1 z-50 w-64 rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700"
+          className="absolute left-0 top-full mt-1 z-50 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700"
         >
           <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
             Switch organisation

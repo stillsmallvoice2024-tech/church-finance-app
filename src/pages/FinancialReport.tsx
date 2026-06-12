@@ -1668,7 +1668,7 @@ export default function FinancialReport() {
                 <h3 className="text-sm font-bold text-primary dark:text-blue-300 uppercase tracking-wide">{table.title}</h3>
               </div>
             )}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500 dark:text-gray-400">
@@ -1961,7 +1961,7 @@ export default function FinancialReport() {
             type="button"
             onClick={() => refetch()}
             disabled={loading}
-            className="p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+            className="touch-target p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
             title="Refresh balances"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -2002,7 +2002,7 @@ export default function FinancialReport() {
                         type="button"
                         title={isPinned ? 'Unpin template' : 'Pin template'}
                         onClick={() => isPinned ? unpinTemplate() : pinTemplate(tpl.id)}
-                        className={`p-1 rounded transition ${isPinned ? 'text-primary hover:text-primary/70' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
+                        className={`touch-target p-1 rounded transition ${isPinned ? 'text-primary hover:text-primary/70' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
                       >
                         {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                       </button>
@@ -2087,7 +2087,7 @@ export default function FinancialReport() {
       )}
 
       {/* Content */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto scroll-x-fade">
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (

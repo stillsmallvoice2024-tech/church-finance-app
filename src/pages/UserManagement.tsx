@@ -7,6 +7,7 @@ import {
   ChevronDown, Pencil, XCircle, MailOpen, Eye, EyeOff, KeyRound, Trash2,
 } from 'lucide-react'
 import { Modal }           from '../components/ui/Modal'
+import { focusFirstInvalid } from '../components/ui/FormField'
 import { DeleteDialog }    from '../components/ui/DeleteDialog'
 import { DeleteOrgModal }  from '../components/modals/DeleteOrgModal'
 import { exportCSV }    from '../utils/csvExport'
@@ -243,7 +244,7 @@ function InviteUserModal({
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} className="space-y-4" noValidate>
           <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700 flex gap-2">
             <MailOpen className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
@@ -778,7 +779,7 @@ export default function UserManagement() {
         ) : members.length === 0 ? (
           <PageEmptyState pageId="users" compact />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">

@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal, type ModalHandle } from '../ui/Modal'
+import { focusFirstInvalid } from '../ui/FormField'
 import { useAddIntraFlow, useUpdateTransaction, type AddIntraFlowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import type { IntraFlowRow } from '../../hooks/useTransactions'
@@ -124,7 +125,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
       isDirty={isDirty}
       disableClose={loading}
     >
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-4">
 
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -237,7 +238,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function inputCls(hasError: boolean) {
-  return `w-full px-3 py-2 text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
+  return `w-full px-3 py-2 min-h-[44px] text-base sm:text-sm border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-primary/30 bg-white ${
     hasError ? 'border-red-400 focus:border-red-400' : 'border-gray-300 focus:border-primary'
   }`
 }

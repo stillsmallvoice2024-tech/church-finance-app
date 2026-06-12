@@ -145,7 +145,7 @@ function AnnualSummaryPanel() {
       {loading && <Skeleton />}
       {!loading && rows.length === 0 && <EmptyState />}
       {!loading && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -260,7 +260,7 @@ function MonthlyBreakdownPanel() {
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
       {!loading && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -392,7 +392,7 @@ function IncomeTypeBreakdownPanel() {
         </div>
       )}
       {!loading && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -540,7 +540,7 @@ function OutflowTypeBreakdownPanel() {
         </div>
       )}
       {!loading && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -792,7 +792,7 @@ function DepartmentBreakdownPanel() {
           </div>
         )}
         {!loading && rows.length > 0 && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -1014,7 +1014,7 @@ function FXHoldingsPanel() {
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
       {!loading && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -1086,7 +1086,7 @@ function AuditLogPanel() {
       {loading && <Skeleton />}
       {!loading && entries.length === 0 && <EmptyState />}
       {!loading && entries.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">

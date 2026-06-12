@@ -8,14 +8,100 @@
    * Mobile bottom tab bar height.
    * Consumed by: BottomTabBar (h-12), Layout spacer div, toast positioning.
    * Change here and in BottomTabBar h-12 class together.
+   * Includes the iOS home-indicator safe area so fixed elements clear it.
    */
-  --tab-bar-height: 3rem; /* 48px = h-12 */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tab-bar-height: calc(3rem + var(--safe-bottom)); /* 48px = h-12 + safe area */
 }
 
 /* Toast container sits above the mobile tab bar */
 @media (max-width: 767px) {
   .toast-safe-bottom {
     bottom: calc(var(--tab-bar-height) + 1rem);
+  }
+}
+
+/* ── Mobile touch ergonomics ─────────────────────────────────────────────── */
+/* 44px minimum hit area on coarse-pointer (touch) devices only — desktop
+   keeps the compact visual. Apply to small icon buttons (row actions,
+   pagination, expand chevrons, dismiss buttons). */
+@media (pointer: coarse) {
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Larger checkbox/radio hit area for bulk selection */
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-width: 20px;
+    min-height: 20px;
+  }
+}
+
+/* Pressed-state feedback for touch users (focus ring is keyboard-only) */
+@media (pointer: coarse) {
+  button:active,
+  a:active,
+  [role='button']:active {
+    opacity: 0.85;
+  }
+}
+
+/* ── Horizontal scroll affordance ────────────────────────────────────────── */
+/* Edge shadows hint at off-screen columns. background-attachment local/scroll
+   trick: covers fade when scrolled fully to that edge. Applied to table
+   wrappers via the .scroll-x-fade class. */
+.scroll-x-fade {
+  background:
+    linear-gradient(to right, var(--scroll-fade-bg, #fff) 30%, rgba(255, 255, 255, 0)) left center,
+    linear-gradient(to left,  var(--scroll-fade-bg, #fff) 30%, rgba(255, 255, 255, 0)) right center,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0)) left center,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0)) right center;
+  background-repeat: no-repeat;
+  background-size: 32px 100%, 32px 100%, 12px 100%, 12px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+html.dark .scroll-x-fade {
+  --scroll-fade-bg: #1f2937;
+}
+
+/* ── Sticky first column for horizontally scrolling tables ───────────────── */
+/* Apply .table-sticky-col to the <table>; first th/td of each row stays
+   visible while panning so the user never loses row context. */
+.table-sticky-col th:first-child,
+.table-sticky-col td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: inherit;
+}
+.table-sticky-col thead th:first-child {
+  background: #f9fafb; /* matches thead bg-gray-50 */
+}
+.table-sticky-col tbody td:first-child {
+  background: #fff;
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+}
+html.dark .table-sticky-col thead th:first-child { background: #1f2937; }
+html.dark .table-sticky-col tbody td:first-child { background: #111827; }
+
+/* ── Modal footer — stacked full-width buttons on phones ─────────────────── */
+/* Primary action (last in DOM) renders on top; every button becomes a
+   full-width 44px target in the thumb zone. Desktop layout untouched. */
+@media (max-width: 639px) {
+  .modal-footer-mobile > * {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .modal-footer-mobile button {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
   }
 }
 

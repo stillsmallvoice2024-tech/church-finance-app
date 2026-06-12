@@ -310,7 +310,7 @@ export default function ForeignCurrency() {
             No transactions found.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -335,7 +335,7 @@ export default function ForeignCurrency() {
                       <td className="w-8 px-1 py-3">
                         <button
                           onClick={() => setExpandedId(isExpanded ? null : t.id)}
-                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                          className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                           title={isExpanded ? 'Collapse' : 'Expand details'}
                         >
                           {isExpanded
@@ -383,7 +383,7 @@ export default function ForeignCurrency() {
                         <td className="px-2 py-3">
                           <button
                             onClick={() => setEditRecord(t)}
-                            className="p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                            className="touch-target p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
                             title="Edit transaction"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -426,7 +426,7 @@ export default function ForeignCurrency() {
         ) : conversions.length === 0 ? (
           <div className="py-10 text-center text-sm text-gray-400">No conversions recorded.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -454,7 +454,7 @@ export default function ForeignCurrency() {
                       {isAdmin() && (
                         <td className="px-2 py-3">
                           <button onClick={() => setEditConversion(c)}
-                            className="p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit conversion">
+                            className="touch-target p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit conversion">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         </td>

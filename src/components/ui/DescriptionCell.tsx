@@ -47,10 +47,12 @@ export function DescriptionCell({
 
 export function DescriptionTooltip({ tooltip }: { tooltip: TooltipState | null }) {
   if (!tooltip) return null
-  const left = Math.min(Math.max(tooltip.x, 8), window.innerWidth - 328)
+  // Clamp within viewport: on screens narrower than the tooltip the lower
+  // bound (8) must win, otherwise the popover slides off the left edge.
+  const left = Math.max(8, Math.min(tooltip.x, window.innerWidth - 328))
   return createPortal(
     <div
-      className="fixed z-[9999] max-w-xs sm:max-w-sm bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl pointer-events-none break-words leading-snug"
+      className="fixed z-[9999] max-w-[calc(100vw-16px)] sm:max-w-sm bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl pointer-events-none break-words leading-snug"
       style={{ top: tooltip.y, left }}
     >
       {tooltip.text}

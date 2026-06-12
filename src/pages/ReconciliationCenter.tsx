@@ -374,7 +374,7 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
             >
               {saving ? '…' : 'Save'}
             </button>
-            <button onClick={cancelEdit} className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors">
+            <button onClick={cancelEdit} className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 transition-colors">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -575,7 +575,7 @@ export default function ReconciliationCenter() {
           </button>
           {showAccountStatus && (
             <Card padding={false} className="mt-3">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scroll-x-fade">
                 <table className="min-w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
@@ -728,7 +728,7 @@ export default function ReconciliationCenter() {
             ) : history.length === 0 ? (
               <p className="text-sm text-gray-400 px-6 py-4">No previous runs recorded.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scroll-x-fade">
                 <table className="min-w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">

@@ -375,14 +375,14 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => onEdit(bank)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
                             title="Edit"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => onDelete(bank)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
                             title="Delete"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -519,14 +519,14 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
                               <>
                                 <button
                                   onClick={() => onLock(config)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                                   title="Approve & Lock"
                                 >
                                   <Lock className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => onEdit(config)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
                                   title="Edit"
                                 >
                                   <Pencil className="w-4 h-4" />
@@ -535,7 +535,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
                             ) : (
                               <button
                                 onClick={() => onEditLocked(config)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                                className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
                                 title="Edit locked config"
                               >
                                 <Pencil className="w-4 h-4" />
@@ -543,7 +543,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
                             )}
                             <button
                               onClick={() => onDelete(config)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
                               title="Delete"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -694,14 +694,14 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                     </button>
                     <button
                       onClick={() => toggleExpand(g.id)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-xs"
+                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-xs"
                       title={isExpanded ? 'Hide history' : 'View history'}
                     >
                       {isExpanded ? 'Hide' : 'History'}
                     </button>
                     <button
                       onClick={() => handleDeleteGroup(g)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
                       title="Delete group"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -755,7 +755,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                                 <td className="px-4 py-2">
                                   <button
                                     onClick={() => handleDeleteVersion(v)}
-                                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
                                     title="Delete version"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -947,7 +947,7 @@ function CurrenciesTab() {
                   <td className="px-4 py-2.5 text-right">
                     <button
                       onClick={() => handleDelete(c.code)}
-                      className="p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-danger transition-colors"
+                      className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-danger transition-colors"
                       title={`Remove ${c.code}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -2394,10 +2394,10 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                    <button onClick={() => onEdit(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                    <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -2530,10 +2530,10 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
                         </span>
                       ) : (
                         <>
-                          <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                          <button onClick={() => onEdit(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
-                          <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                          <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </>
@@ -2639,10 +2639,10 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => onEdit(d)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                    <button onClick={() => onEdit(d)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(d)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                    <button onClick={() => onDelete(d)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>

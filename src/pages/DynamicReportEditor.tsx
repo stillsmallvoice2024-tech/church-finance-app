@@ -324,7 +324,7 @@ function InsertBlockModal({
                 {term.fn === 'NET' && <span className="flex-1 text-xs text-gray-400 italic">all categories</span>}
                 <button type="button"
                   onClick={() => setFTerms(fTerms.filter((_, i) => i !== idx))}
-                  className="p-1 rounded text-gray-400 hover:text-danger shrink-0">
+                  className="touch-target p-1 rounded text-gray-400 hover:text-danger shrink-0">
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -928,7 +928,7 @@ function FormulaBlockEditor({
             <button
               type="button"
               onClick={() => removeTerm(idx)}
-              className="p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors shrink-0"
+              className="touch-target p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors shrink-0"
               title="Remove term"
             >
               <X className="w-3.5 h-3.5" />
@@ -1085,13 +1085,13 @@ function BlockCard({
         <span className="text-[10px] text-gray-300 font-mono">#{index + 1}</span>
         <div className="ml-auto flex items-center gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={onMoveUp} disabled={index === 0}
-            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="touch-target p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
           <button onClick={onMoveDown} disabled={index === total - 1}
-            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="touch-target p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
           <button onClick={onDelete}
-            className="p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+            className="touch-target p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
             title="Delete block"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
         <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
@@ -1328,7 +1328,7 @@ function TableBlockPreview({
         )}
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto scroll-x-fade">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">

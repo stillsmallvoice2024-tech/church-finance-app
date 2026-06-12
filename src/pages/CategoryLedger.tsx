@@ -1180,7 +1180,7 @@ export default function CategoryLedger() {
           {activeCategory && !ledgerLoading && !ledgerError && (
             <>
               {/* Summary strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="col-span-2 sm:col-span-1 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-1 truncate">{activeCategory}</p>
                   <p className="text-xs text-gray-500">{ledgerPortion} portion</p>
@@ -1192,6 +1192,12 @@ export default function CategoryLedger() {
                 <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-danger mb-1">Total Outflow</p>
                   <p className="text-sm font-mono font-semibold text-danger tabular-nums">{formatCurrency(ledgerTotals.outflow, ledgerDisplayCurrency)}</p>
+                </div>
+                <div className="col-span-2 sm:col-span-1 rounded-xl bg-white border border-gray-200 px-4 py-3 min-w-0 overflow-hidden">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Closing Balance</p>
+                  <p className={`text-sm font-mono font-semibold tabular-nums ${closingBalance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
+                    {formatCurrency(closingBalance, ledgerDisplayCurrency)}
+                  </p>
                 </div>
               </div>
 
@@ -1570,7 +1576,7 @@ export default function CategoryLedger() {
                   FX Transactions{filterFxCcy ? ` — ${filterFxCcy}` : ' (All currencies)'}
                 </h2>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scroll-x-fade">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">

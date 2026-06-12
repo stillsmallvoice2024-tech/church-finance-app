@@ -122,7 +122,7 @@ export default function DynamicReports() {
                     <button
                       onClick={() => setDeleteTarget(report)}
                       disabled={deleting}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
                       title="Delete report"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

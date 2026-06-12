@@ -488,7 +488,7 @@ export default function BankLedger() {
                             onClick={() => row.entity_type === 'inflow' && row.inflowData
                               ? setEditInflow(row.inflowData)
                               : row.outflowData && setEditOutflow(row.outflowData)}
-                            className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                            className="touch-target p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
                             title="Edit source record"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -528,7 +528,7 @@ export default function BankLedger() {
               )})}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scroll-x-fade">
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
@@ -568,7 +568,7 @@ export default function BankLedger() {
                         {!isBF && !isTableRow && (
                           <button
                             onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                            className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                            className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                             title={isExpanded ? 'Collapse' : 'Expand details'}
                           >
                             {isExpanded
@@ -605,7 +605,7 @@ export default function BankLedger() {
                               onClick={() => row.entity_type === 'inflow' && row.inflowData
                                 ? setEditInflow(row.inflowData)
                                 : row.outflowData && setEditOutflow(row.outflowData)}
-                              className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                              className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
                               title="Edit source record"
                             >
                               <Pencil className="w-3.5 h-3.5" />

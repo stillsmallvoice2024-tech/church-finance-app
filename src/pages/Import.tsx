@@ -335,7 +335,7 @@ export default function Import() {
                 </div>
                 <button
                   onClick={reset}
-                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors shrink-0"
+                  className="touch-target p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors shrink-0"
                   title="Remove file"
                 >
                   <X className="w-4 h-4" />

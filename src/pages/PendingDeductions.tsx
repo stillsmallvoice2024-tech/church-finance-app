@@ -57,6 +57,7 @@ export default function PendingDeductions() {
   const [editRecord,    setEditRecord]    = useState<OutflowTransaction | null>(null)
   const [modalOpen,     setModalOpen]     = useState(false)
   const [resolvingId,   setResolvingId]   = useState<string | null>(null)
+  const [bulkProgress,  setBulkProgress]  = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkEditOpen,  setBulkEditOpen]  = useState(false)
@@ -148,7 +149,12 @@ export default function PendingDeductions() {
     if (skipped > 0)
       toast(`${skipped} row(s) skipped — fill in both stage codes first`, 'info')
     if (valid.length === 0) return
-    const { failed, total } = await executeBulkResolve(valid.map(r => r.id), { is_pending_deduction: false })
+    const { failed, total } = await executeBulkResolve(
+      valid.map(r => r.id),
+      { is_pending_deduction: false },
+      (done, all) => setBulkProgress(`Resolving ${done}/${all}…`),
+    )
+    setBulkProgress(null)
     const resolved = total - failed
     if (failed   > 0) toast(`${failed} row(s) failed to resolve`, 'error')
     if (resolved > 0) toast(`${resolved} transaction(s) marked as resolved`, 'success')
@@ -307,6 +313,9 @@ export default function PendingDeductions() {
           <BulkActionBar
             count={selectedIds.size}
             onClear={clearAll}
+            summary={bulkProgress && (
+              <span className="text-xs font-medium text-primary animate-pulse">{bulkProgress}</span>
+            )}
             actions={[
               {
                 key: 'resolve', label: 'Resolve selected', variant: 'success',
@@ -328,7 +337,7 @@ export default function PendingDeductions() {
               },
             ]}
           />
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -386,7 +395,7 @@ export default function PendingDeductions() {
                           <td className="w-8 pl-2">
                             <button
                               onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                              className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                              className="touch-target p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
                               aria-label={isExpanded ? 'Collapse' : 'Expand'}
                             >
                               {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -414,7 +423,7 @@ export default function PendingDeductions() {
                               <CanWrite>
                                 <button
                                   onClick={() => openEdit(row)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
                                   title="Edit"
                                 >
                                   <Pencil className="w-4 h-4" />

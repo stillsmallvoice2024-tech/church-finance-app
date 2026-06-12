@@ -171,10 +171,10 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
       {/* Panel — full-screen on mobile, centered card on sm+ */}
       <div
         ref={panelRef}
-        className={`relative w-full bg-white flex flex-col h-full sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh] [animation:modal-enter_150ms_ease-out]`}
+        className={`relative w-full bg-white flex flex-col h-[100dvh] sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh] [animation:modal-enter_150ms_ease-out]`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        {/* Header — safe-area padding clears the notch when full-screen */}
+        <div className="flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-4 border-b border-gray-100 shrink-0">
           <h2 id="modal-title" className="text-base font-semibold text-gray-900">
             {title}
           </h2>
@@ -200,9 +200,9 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
           {children}
         </div>
 
-        {/* Sticky footer for action buttons */}
+        {/* Sticky footer for action buttons — stacked full-width on phones */}
         {footer && (
-          <div className="shrink-0 px-6 py-4 border-t border-gray-100 bg-white sm:rounded-b-2xl">
+          <div className="modal-footer-mobile shrink-0 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 border-t border-gray-100 bg-white sm:rounded-b-2xl">
             {footer}
           </div>
         )}
