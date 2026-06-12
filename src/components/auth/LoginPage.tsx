@@ -472,7 +472,7 @@ export default function LoginPage() {
                   Contact your administrator to request an account.
                 </span>
               </p>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 or{' '}
                 <button
                   onClick={() => { setMode('signup'); setError(null) }}

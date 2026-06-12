@@ -266,7 +266,7 @@ export function DataControlsBar({
               {isAdvanced && (
                 <div className="mx-3 mt-2 mb-1 px-2.5 py-1.5 bg-primary/5 rounded-lg">
                   <p className="text-xs text-primary font-medium">Multi-sort active · {advancedSort.length} levels</p>
-                  <p className="text-[10px] text-primary/60 mt-0.5">
+                  <p className="text-xs text-primary/60 mt-0.5">
                     {advancedSort.map(l => sortFields.find(f => f.key === l.key)?.label ?? l.key).join(' → ')}
                   </p>
                 </div>

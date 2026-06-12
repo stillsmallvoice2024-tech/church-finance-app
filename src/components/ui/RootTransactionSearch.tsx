@@ -184,7 +184,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
 
       {/* Bank scope toggle */}
       {bankName && (
-        <label className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer select-none">
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={allBanks}
@@ -205,7 +205,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
               onMouseDown={e => { e.preventDefault(); select(r) }}
               className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-primary/5 transition-colors"
             >
-              <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+              <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${
                 r.direction === 'in'
                   ? 'bg-green-100 text-green-700'
                   : 'bg-red-100 text-red-700'
@@ -213,7 +213,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
                 {r.direction === 'in' ? 'IN' : 'OUT'}
               </span>
               {r.offsetRole && (
-                <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${
                   r.offsetRole === 'root'
                     ? 'bg-green-50 text-green-600 border border-green-200'
                     : 'bg-amber-50 text-amber-600 border border-amber-200'
@@ -221,7 +221,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
                   {r.offsetRole === 'root' ? 'R' : 'O'}
                 </span>
               )}
-              <span className="text-xs text-gray-400 whitespace-nowrap">
+              <span className="text-xs text-gray-500 whitespace-nowrap">
                 {formatDate(r.date)}
               </span>
               <span className="text-xs font-semibold text-gray-800 whitespace-nowrap">
@@ -231,7 +231,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
                 {r.description ?? '—'}
               </span>
               {r.bank_name && r.bank_name !== bankName && (
-                <span className="text-[10px] text-gray-400 shrink-0 whitespace-nowrap">
+                <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
                   {r.bank_name}
                 </span>
               )}

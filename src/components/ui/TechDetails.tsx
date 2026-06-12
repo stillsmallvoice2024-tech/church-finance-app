@@ -13,14 +13,14 @@ export function TechDetails({ children }: Props) {
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-600 transition-colors"
       >
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         Technical details
       </button>
       {open && (
         <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-          <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre leading-relaxed">
+          <pre className="px-3 py-3 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre leading-relaxed">
             {children}
           </pre>
         </div>

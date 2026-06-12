@@ -341,7 +341,7 @@ export default function SpecificGivings() {
               {/* Targets table */}
               <table className="w-full text-sm table-sticky-col">
                 <thead>
-                  <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
+                  <tr className="text-xs text-gray-500 uppercase border-b border-gray-50">
                     <th className="px-5 py-2 text-left font-medium">Target / Recipient</th>
                     <th className="px-5 py-2 text-center font-medium hidden sm:table-cell">Entries</th>
                     <th className="px-5 py-2 text-center font-medium hidden sm:table-cell">Latest</th>
@@ -352,10 +352,10 @@ export default function SpecificGivings() {
                   {group.targets.sort((a, b) => b.total - a.total).map(t => (
                     <tr key={t.target} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3 text-gray-700">{t.target}</td>
-                      <td className="px-5 py-3 text-center text-gray-400 text-xs hidden sm:table-cell">
+                      <td className="px-5 py-3 text-center text-gray-500 text-xs hidden sm:table-cell">
                         {t.count}
                       </td>
-                      <td className="px-5 py-3 text-center text-gray-400 text-xs hidden sm:table-cell">
+                      <td className="px-5 py-3 text-center text-gray-500 text-xs hidden sm:table-cell">
                         {formatDate(t.latest)}
                       </td>
                       <td className="px-5 py-3 text-right font-semibold text-success">

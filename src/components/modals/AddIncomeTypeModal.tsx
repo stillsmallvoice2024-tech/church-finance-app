@@ -230,7 +230,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
               <Plus className="w-3.5 h-3.5" /> Add rule
             </button>
           </div>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-xs text-gray-500">
             Rules run top-to-bottom. A transaction matches this type if ANY rule fires.
           </p>
           <div className="space-y-2">
@@ -261,7 +261,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-xs text-gray-500">
             <span className="font-medium">Keyword:</span> substring match on description (case-insensitive).<br />
             <span className="font-medium">Stage Code:</span> exact match on the transaction's Stage Code 1 / category.
           </p>
@@ -280,7 +280,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
             ))}
           </select>
           {specialConfigGroup && (
-            <p className="text-[11px] text-gray-400 mt-1">
+            <p className="text-xs text-gray-500 mt-1">
               When this income type is selected on a transaction, the active version of this config group will be auto-applied.
             </p>
           )}

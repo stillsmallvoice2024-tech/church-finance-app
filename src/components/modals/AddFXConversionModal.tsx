@@ -170,7 +170,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
               className={iCls}
             />
             {isPartial && (
-              <p className="text-[10px] text-amber-600">Partial conversion — {meta.symbol}{fmtFX(balance - fxAmt, getCurrencyLocale(currency))} remains</p>
+              <p className="text-xs text-amber-600">Partial conversion — {meta.symbol}{fmtFX(balance - fxAmt, getCurrencyLocale(currency))} remains</p>
             )}
           </div>
 

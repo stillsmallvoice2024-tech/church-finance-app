@@ -365,7 +365,7 @@ export default function Onboarding() {
           )}
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-400">
+        <p className="mt-4 text-center text-xs text-gray-500">
           You can change these settings later from the Setup page.
         </p>
 

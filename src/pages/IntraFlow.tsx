@@ -387,7 +387,7 @@ export default function IntraFlow() {
                   <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                     {/* Card header */}
                     <div className="px-4 pt-3.5 pb-3">
-                      <p className="text-[11px] font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
+                      <p className="text-xs font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
                       <div className="flex items-center gap-2 text-sm text-gray-700 mb-1">
                         <span className="font-medium truncate">{row.account_from ?? '—'}</span>
                         <ArrowLeftRight className="w-3 h-3 text-gray-400 shrink-0" />
@@ -407,17 +407,17 @@ export default function IntraFlow() {
                     {/* Metrics footer */}
                     <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                       <div className="min-w-0">
-                        <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
+                        <p className="text-xs uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
                         <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(Number(row.total_amount), baseCurrencyCode)}</p>
                       </div>
                       <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                         {canWrite() && (
-                          <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                          <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
                         {canDelete() && (
-                          <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                          <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
@@ -565,12 +565,12 @@ export default function IntraFlow() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1">
                                 {canWrite() && (
-                                  <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                                  <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                                     <Pencil className="w-4 h-4" />
                                   </button>
                                 )}
                                 {canDelete() && (
-                                  <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                                  <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete">
                                     <Trash2 className="w-4 h-4" />
                                   </button>
                                 )}

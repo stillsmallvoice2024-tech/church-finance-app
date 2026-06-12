@@ -252,7 +252,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                     {...register(`rows.${idx}.percentage`)}
                     className={`${inputCls(!!errors.rows?.[idx]?.percentage)} pr-7 text-right`}
                   />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">%</span>
                 </div>
                 {errors.rows?.[idx]?.percentage && (
                   <p className="mt-0.5 text-xs text-red-500">{errors.rows[idx]!.percentage!.message}</p>

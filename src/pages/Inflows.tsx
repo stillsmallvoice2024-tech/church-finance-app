@@ -397,19 +397,19 @@ export default function Inflows() {
                   {/* Card header */}
                   <div className="px-4 pt-3.5 pb-3">
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
                       <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                         {it && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
                         )}
                         {row.transaction_type && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                             {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                           </span>
                         )}
                       </div>
                     </div>
-                    {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
+                    {row.bank_name && <p className="text-xs text-gray-500 mb-1.5">{row.bank_name}</p>}
                     <div className="text-sm">
                       <DescriptionCell id={`card-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
@@ -422,17 +422,17 @@ export default function Inflows() {
                   {/* Metrics footer */}
                   <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                     <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-green-600/70">Inflow</p>
+                      <p className="text-xs uppercase tracking-wide font-semibold mb-0.5 text-green-600/70">Inflow</p>
                       <p className="text-sm font-mono font-bold tabular-nums text-success">{formatCurrency(Number(row.amount), baseCurrencyCode)}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                       {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
-                        <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                        <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
                       {canDelete() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
-                        <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                        <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -539,18 +539,18 @@ export default function Inflows() {
                             {(() => {
                               const it = incomeTypes.find(t => t.id === row.income_type_id)
                               return it ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap" style={{ backgroundColor: `${it.color}22`, color: it.color }}>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap" style={{ backgroundColor: `${it.color}22`, color: it.color }}>
                                   {it.name}
                                 </span>
                               ) : null
                             })()}
                             {row.transaction_type ? (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                                 {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                               </span>
                             ) : null}
                             {!incomeTypes.find(t => t.id === row.income_type_id) && !row.transaction_type && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-gray-100 text-gray-400">—</span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap bg-gray-100 text-gray-400">—</span>
                             )}
                           </div>
                         </td>
@@ -561,12 +561,12 @@ export default function Inflows() {
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
-                              <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                              <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                                 <Pencil className="w-4 h-4" />
                               </button>
                             )}
                             {canDelete() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
-                              <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete">
+                              <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             )}

@@ -365,7 +365,7 @@ function DepositsPanel() {
             ].map(({ label, sub, value, accent }) => (
               <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
                 <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
-                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {sub && <p className="text-xs text-gray-500 mb-1 leading-tight">{sub}</p>}
                 {loading ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
                   : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
               </div>
@@ -427,16 +427,16 @@ function DepositsPanel() {
               <div key={`${row.source}-${row.id}`} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                 <div className="px-4 pt-3.5 pb-3">
                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+                    <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
                     <SourceBadge source={row.source} />
                   </div>
-                  {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
+                  {row.bank_name && <p className="text-xs text-gray-500 mb-1.5">{row.bank_name}</p>}
                   {row.description && (
                     <div className="text-sm mb-1">
                       <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                   )}
-                  {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono">Ref: {row.transaction_ref}</p>}
+                  {row.transaction_ref && <p className="text-xs text-gray-500 font-mono">Ref: {row.transaction_ref}</p>}
                   {row.remarks && (
                     <div className="text-xs mt-1.5">
                       <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
@@ -445,19 +445,19 @@ function DepositsPanel() {
                 </div>
                 <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Amount</p>
+                    <p className="text-xs uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Amount</p>
                     <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                     {admin && row.source === 'bank_deposits' && (
-                      <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     )}
                     {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                       <>
-                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                        {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
+                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                         {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
                         )}
                       </>
                     )}
@@ -508,14 +508,14 @@ function DepositsPanel() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {admin && row.source === 'bank_deposits' && (
-                            <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                           )}
                           {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                             <>
-                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                              {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
+                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                              {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                               {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
                               )}
                             </>
                           )}
@@ -666,11 +666,11 @@ function TransfersPanel() {
           disabled={filtered.length === 0}
         />
         <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-          <button onClick={() => setDisplayMode('table')} title="Table view"
+          <button onClick={() => setDisplayMode('table')} title="Table view" aria-label="Table view"
             className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
             <LayoutList className="w-4 h-4" />
           </button>
-          <button onClick={() => setDisplayMode('cards')} title="Card view"
+          <button onClick={() => setDisplayMode('cards')} title="Card view" aria-label="Card view"
             className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
             <LayoutGrid className="w-4 h-4" />
           </button>
@@ -719,7 +719,7 @@ function TransfersPanel() {
             ].map(({ label, sub, value, accent }) => (
               <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
                 <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
-                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {sub && <p className="text-xs text-gray-500 mb-1 leading-tight">{sub}</p>}
                 {loading ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
                   : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
               </div>
@@ -742,7 +742,7 @@ function TransfersPanel() {
             ) : filtered.map(row => (
               <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                 <div className="px-4 pt-3.5 pb-3">
-                  <p className="text-[11px] font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
+                  <p className="text-xs font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
                   <div className="flex items-center gap-2 text-sm text-gray-700 mb-1">
                     <span className="font-medium truncate">{row.from_bank_name ?? '—'}</span>
                     <ArrowRightLeft className="w-3 h-3 text-gray-400 shrink-0" />
@@ -753,23 +753,23 @@ function TransfersPanel() {
                       <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
                     </div>
                   )}
-                  {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono mt-1">{row.transaction_ref}</p>}
+                  {row.transaction_ref && <p className="text-xs text-gray-500 font-mono mt-1">{row.transaction_ref}</p>}
                 </div>
                 <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
+                    <p className="text-xs uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
                     <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                     {row.source === 'intrabank_transfers' && canWrite() && (
-                      <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     )}
                     {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
                       <>
-                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                        {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
+                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                         {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
                         )}
                       </>
                     )}
@@ -818,14 +818,14 @@ function TransfersPanel() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {row.source === 'intrabank_transfers' && canDelete() && (
-                            <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
                           )}
                           {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
                             <>
-                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-4 h-4" /></button>
-                              {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
+                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-4 h-4" /></button>
+                              {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                               {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-4 h-4" /></button>
                               )}
                             </>
                           )}
@@ -855,7 +855,7 @@ const SOURCE_LABEL: Record<DepositRow['source'], string> = { bank_deposits: 'Dep
 const SOURCE_CLS:   Record<DepositRow['source'], string> = { bank_deposits: 'bg-primary/10 text-primary', inflow: 'bg-green-100 text-green-700', outflow: 'bg-red-100 text-red-700' }
 
 function SourceBadge({ source }: { source: DepositRow['source'] }) {
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${SOURCE_CLS[source]}`}>{SOURCE_LABEL[source]}</span>
+  return <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${SOURCE_CLS[source]}`}>{SOURCE_LABEL[source]}</span>
 }
 
 function ReconRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {

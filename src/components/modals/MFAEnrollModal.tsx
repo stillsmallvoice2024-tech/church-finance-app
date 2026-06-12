@@ -113,7 +113,7 @@ export function MFAEnrollModal({ open, onClose, onDone }: Props) {
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Add an extra layer of security. After enabling 2FA you will need your authenticator app every time you sign in.
               </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-500">
                 Compatible with Google Authenticator, Authy, 1Password, and any TOTP app.
               </p>
               <button
@@ -142,7 +142,7 @@ export function MFAEnrollModal({ open, onClose, onDone }: Props) {
               </div>
               {secret && (
                 <div className="space-y-1">
-                  <p className="text-xs text-gray-400">Or enter the key manually:</p>
+                  <p className="text-xs text-gray-500">Or enter the key manually:</p>
                   <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
                     <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 break-all">
                       {secret}
@@ -180,6 +180,7 @@ export function MFAEnrollModal({ open, onClose, onDone }: Props) {
                 <input
                   type="text"
                   inputMode="numeric"
+                  autoComplete="one-time-code"
                   pattern="[0-9]*"
                   maxLength={6}
                   value={code}
@@ -209,7 +210,7 @@ export function MFAEnrollModal({ open, onClose, onDone }: Props) {
                   <CheckCircle2 className="w-7 h-7 text-green-600 dark:text-green-400" />
                 </div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">2FA enabled!</p>
-                <p className="text-xs text-gray-400 text-center">
+                <p className="text-xs text-gray-500 text-center">
                   Your account is now protected with two-factor authentication. You'll be asked for a code each time you sign in.
                 </p>
               </div>

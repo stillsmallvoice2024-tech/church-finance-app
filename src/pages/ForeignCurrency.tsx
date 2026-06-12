@@ -179,16 +179,16 @@ export default function ForeignCurrency() {
             >
               <div className="flex items-start justify-between mb-2 sm:mb-3 gap-1">
                 <span className="text-xl sm:text-2xl shrink-0 leading-none">{meta.flag}</span>
-                <span className="text-[10px] sm:text-xs font-mono font-semibold text-gray-400 bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded shrink-0">
+                <span className="text-xs sm:text-xs font-mono font-semibold text-gray-400 bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded shrink-0">
                   {meta.code}
                 </span>
               </div>
               <div className={`text-sm sm:text-base font-bold break-all leading-snug ${active ? 'text-gray-900' : 'text-gray-400'}`}>
                 {meta.symbol}{fmtFX(balance, meta.code, 2)}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5 truncate">{meta.name}</div>
+              <div className="text-xs sm:text-xs text-gray-500 mt-0.5 truncate">{meta.name}</div>
               {s && (
-                <div className="mt-2 sm:mt-3 space-y-0.5 text-[10px] sm:text-xs">
+                <div className="mt-2 sm:mt-3 space-y-0.5 text-xs sm:text-xs">
                   <div className="text-success truncate">↑ {meta.symbol}{fmtFX(s.totalDeposits, meta.code, 2)}</div>
                   <div className="text-danger truncate">↓ {meta.symbol}{fmtFX(s.totalWithdrawals, meta.code, 2)}</div>
                 </div>
@@ -224,7 +224,7 @@ export default function ForeignCurrency() {
                   }
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                 />
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-gray-500">
                   {meta.symbol}{fmtFX(bal, meta.code)} → {baseCurrencySymbol}{fmtBase(equiv)}
                 </div>
               </div>
@@ -344,7 +344,7 @@ export default function ForeignCurrency() {
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    {t.transaction_ref && <span className="text-xs text-gray-400 font-mono truncate">{t.transaction_ref}</span>}
+                    {t.transaction_ref && <span className="text-xs text-gray-500 font-mono truncate">{t.transaction_ref}</span>}
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : t.id)}
                       className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-primary min-h-[32px] px-1.5"
@@ -365,7 +365,7 @@ export default function ForeignCurrency() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 border-t border-gray-100 pt-2">
                       {fxDetailItems(t).map(item => (
                         <div key={item.label} className="min-w-0">
-                          <p className="text-[11px] uppercase tracking-wide text-gray-500">{item.label}</p>
+                          <p className="text-xs uppercase tracking-wide text-gray-500">{item.label}</p>
                           <p className={`text-sm text-gray-700 ${item.mono ? 'font-mono' : ''} ${item.breakAll ? 'break-all' : 'break-words'}`}>
                             {item.value ?? '—'}
                           </p>
@@ -459,7 +459,7 @@ export default function ForeignCurrency() {
                           <button
                             onClick={() => setEditRecord(t)}
                             className="touch-target p-1.5 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                            title="Edit transaction"
+                            title="Edit transaction" aria-label="Edit transaction"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>

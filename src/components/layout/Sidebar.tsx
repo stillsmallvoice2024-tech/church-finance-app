@@ -188,7 +188,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   Finance {activeYear}
                 </p>
                 {roleLabel && (
-                  <span className="text-[10px] text-white/50 font-medium">
+                  <span className="text-xs text-white/50 font-medium">
                     · {roleLabel}
                   </span>
                 )}
@@ -221,7 +221,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 <button
                   onClick={() => toggle(group.id)}
                   aria-expanded={isOpen}
-                  className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold text-white/40 uppercase tracking-widest hover:text-white/60 transition-colors rounded-lg group"
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-white/40 uppercase tracking-widest hover:text-white/60 transition-colors rounded-lg group"
                 >
                   <span>{group.label}</span>
                   <ChevronDown
@@ -275,12 +275,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             </div>
             <span>Help Center</span>
             {unread.length > 0 && (
-              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-nav text-[10px] font-bold leading-none">
+              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-nav text-xs font-bold leading-none">
                 {unread.length}
               </span>
             )}
           </button>
-          <p className="text-[10px] text-white/30 text-center pb-1">
+          <p className="text-xs text-white/30 text-center pb-1">
             © {new Date().getFullYear()} {displayName}
           </p>
         </div>

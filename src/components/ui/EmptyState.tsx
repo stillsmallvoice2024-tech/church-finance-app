@@ -23,7 +23,7 @@ export function EmptyState({
       </div>
       <p className={`font-medium text-gray-500 ${compact ? 'text-sm' : 'text-base'}`}>{title}</p>
       {message && (
-        <p className="text-xs text-gray-400 mt-1 max-w-xs">{message}</p>
+        <p className="text-xs text-gray-500 mt-1 max-w-xs">{message}</p>
       )}
       {action && (
         <button

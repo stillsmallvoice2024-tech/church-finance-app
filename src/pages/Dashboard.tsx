@@ -216,7 +216,7 @@ export default function Dashboard() {
               {format(new Date(), 'EEEE, d MMMM yyyy')} &nbsp;·&nbsp; {year} overview
             </p>
             {!isLoading && stats.recentTransactions.length > 0 && (
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 Records up to date — latest transaction recorded {formatDate(stats.recentTransactions[0].date)}
               </p>
             )}
@@ -282,7 +282,7 @@ export default function Dashboard() {
                   : 'All records reconciled — your books are in good order'}
               </p>
               {healthStatus && healthRunAt && (
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-500 mt-0.5">
                   Last verified {formatWithTimezone(healthRunAt, orgTimezone)}
                   {healthStatus === 'healthy' && stableDays >= 7 && (
                     <span className="ml-2 inline-flex items-center gap-1 text-green-600 font-medium">
@@ -319,7 +319,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-end">
             <button
               onClick={() => setSkipped(false)}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-600 transition-colors"
             >
               Show record health status
             </button>
@@ -377,7 +377,7 @@ export default function Dashboard() {
           const days = Math.floor((Date.now() - new Date(lastVisit.visitedAt).getTime()) / 86_400_000)
           const timeAgo = days === 0 ? 'earlier today' : days === 1 ? 'yesterday' : `${days} days ago`
           return (
-            <p className="text-xs text-gray-400 text-right -mt-2">
+            <p className="text-xs text-gray-500 text-right -mt-2">
               Since {timeAgo}: {parts.join(' · ')}
             </p>
           )
@@ -390,7 +390,7 @@ export default function Dashboard() {
             <h2 className="text-sm font-semibold text-gray-700">
               Monthly Inflows vs Outflows
             </h2>
-            <span className="text-xs text-gray-400">{year}</span>
+            <span className="text-xs text-gray-500">{year}</span>
           </div>
 
           {isLoading ? (
@@ -405,7 +405,7 @@ export default function Dashboard() {
             <>
               <div
                 role="img"
-                aria-label={`Monthly Inflows vs Outflows for ${year}`}
+                aria-label={`Monthly Inflows vs Outflows for ${year}. Total inflows ${chartData.reduce((s, d) => s + d.inflow, 0).toLocaleString()}, total outflows ${chartData.reduce((s, d) => s + d.outflow, 0).toLocaleString()}. Peak month ${chartData.reduce((m, d) => (d.inflow > m.inflow ? d : m), chartData[0])?.month ?? ''}.`}
                 className="h-72"
               >
                 <ResponsiveContainer width="100%" height="100%">
@@ -467,7 +467,7 @@ export default function Dashboard() {
         <Card padding={false} data-tour="recent-transactions">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-700">Recent Transactions</h2>
-            <span className="text-xs text-gray-400">Last 10 inflows</span>
+            <span className="text-xs text-gray-500">Last 10 inflows</span>
           </div>
 
           {isLoading ? (
@@ -486,7 +486,7 @@ export default function Dashboard() {
             <div className="divide-y divide-gray-100">
               {stats.recentTransactions.map(tx => (
                 <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 transition-colors">
-                  <span className="text-xs text-gray-400 whitespace-nowrap w-20 shrink-0">
+                  <span className="text-xs text-gray-500 whitespace-nowrap w-20 shrink-0">
                     {formatDate(tx.date)}
                   </span>
                   <span className="text-sm text-gray-700 truncate flex-1">

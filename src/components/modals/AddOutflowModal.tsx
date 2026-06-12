@@ -327,7 +327,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
                   options={bankOptions}
                   placeholder="— Select bank (optional) —" className={inputCls(!!errors.bank_name)} />
                 {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
-                  <p className="flex items-center gap-1 text-[11px] text-amber-600 mt-0.5">
+                  <p className="flex items-center gap-1 text-xs text-amber-600 mt-0.5">
                     <ExternalLink className="w-3 h-3 shrink-0" />
                     Foreign currency transactions are managed in the{' '}
                     <Link to="/foreign-currency" className="underline hover:text-amber-700" onClick={onClose}>

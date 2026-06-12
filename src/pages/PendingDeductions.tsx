@@ -230,7 +230,7 @@ export default function PendingDeductions() {
           <div className="rounded-xl border border-gray-200 bg-gray-900 overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
               <Terminal className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs text-gray-400 font-mono">Supabase SQL Editor</span>
+              <span className="text-xs text-gray-500 font-mono">Supabase SQL Editor</span>
             </div>
             <pre className="px-4 py-4 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{
 `ALTER TABLE outflow_transactions
@@ -411,7 +411,7 @@ export default function PendingDeductions() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 border-t border-gray-100 pt-2">
                             {outflowDetailItems(row, baseCurrencyCode).map(item => (
                               <div key={item.label} className="min-w-0">
-                                <p className="text-[11px] uppercase tracking-wide text-gray-500">{item.label}</p>
+                                <p className="text-xs uppercase tracking-wide text-gray-500">{item.label}</p>
                                 <p className={`text-sm text-gray-700 ${item.mono ? 'font-mono' : ''} ${item.breakAll ? 'break-all' : 'break-words'}`}>
                                   {item.value ?? '—'}
                                 </p>
@@ -488,7 +488,7 @@ export default function PendingDeductions() {
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <CheckCircle2 className="w-10 h-10 text-green-300" />
                         <p className="text-sm font-medium text-gray-600">No pending deductions</p>
-                        <p className="text-xs text-gray-400">All outflow transactions have been processed.</p>
+                        <p className="text-xs text-gray-500">All outflow transactions have been processed.</p>
                       </div>
                     </td>
                   </tr>
@@ -533,7 +533,7 @@ export default function PendingDeductions() {
                                 <button
                                   onClick={() => openEdit(row)}
                                   className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                                  title="Edit"
+                                  title="Edit" aria-label="Edit"
                                 >
                                   <Pencil className="w-4 h-4" />
                                 </button>
@@ -541,7 +541,7 @@ export default function PendingDeductions() {
                                   onClick={() => handleResolve(row)}
                                   disabled={isResolving}
                                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
-                                  title="Mark as resolved"
+                                  title="Mark as resolved" aria-label="Mark as resolved"
                                 >
                                   {isResolving
                                     ? <span className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />

@@ -162,9 +162,9 @@ export default function Receipts() {
             <div className="rounded-xl border border-gray-200 bg-gray-900 overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
                 <Terminal className="w-3.5 h-3.5 text-gray-400" />
-                <span className="text-[10px] text-gray-400 font-mono">Supabase SQL Editor</span>
+                <span className="text-xs text-gray-500 font-mono">Supabase SQL Editor</span>
               </div>
-              <pre className="px-4 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+              <pre className="px-4 py-3 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
             </div>
           )}
         </div>
@@ -266,11 +266,11 @@ export default function Receipts() {
                     {r.file_name}
                   </p>
                   <div className="text-center space-y-0.5">
-                    <p className="text-[10px] text-gray-400">{formatDate(r.created_at.slice(0, 10))}</p>
+                    <p className="text-xs text-gray-500">{formatDate(r.created_at.slice(0, 10))}</p>
                     {r.file_size && (
-                      <p className="text-[10px] text-gray-400">{formatBytes(r.file_size)}</p>
+                      <p className="text-xs text-gray-500">{formatBytes(r.file_size)}</p>
                     )}
-                    <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize">
+                    <span className="inline-block text-xs font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize">
                       {r.entity_type.replace('_', ' ')}
                     </span>
                   </div>
@@ -278,14 +278,14 @@ export default function Receipts() {
                     <button
                       onClick={() => handleDownload(r)}
                       className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                      title="Download"
+                      title="Download" aria-label="Download"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => remove(r)}
                       className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                      title="Delete"
+                      title="Delete" aria-label="Delete"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

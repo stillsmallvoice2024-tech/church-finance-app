@@ -511,7 +511,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             ))}
           </select>
           {isForeignCurrencyBank && (
-            <p className="text-[11px] text-amber-600 font-medium mt-0.5">
+            <p className="text-xs text-amber-600 font-medium mt-0.5">
               Foreign Currency Bank — import transactions will be restricted to FX Inflow / FX Outflow types.
             </p>
           )}
@@ -693,7 +693,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   <Plus className="w-3.5 h-3.5" /> Add row
                 </button>
 
-                <p className="text-[11px] text-gray-400">
+                <p className="text-xs text-gray-500">
                   <span className="font-medium">Count</span>: tick if this amount is new and should be added to the category balance. Untick if it already exists in the category's transaction records.
                 </p>
               </div>

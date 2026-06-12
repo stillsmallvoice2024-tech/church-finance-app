@@ -194,7 +194,7 @@ function ArticleCard({ article, onClick }: { article: HelpArticle; onClick: () =
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{article.summary}</p>
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         {article.tags.slice(0, 3).map(tag => (
-          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-[10px] text-gray-500 dark:text-gray-400">
+          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400">
             <Tag className="w-2.5 h-2.5" />
             {tag}
           </span>
@@ -216,7 +216,7 @@ function ArticleDetail({ article, onBack }: { article: HelpArticle; onBack: () =
         Back to Articles
       </button>
       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-1">{article.title}</h2>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Updated {article.updatedAt}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">Updated {article.updatedAt}</p>
       <div className="overflow-y-auto flex-1 pr-1">
         {renderMarkdown(article.content)}
       </div>
@@ -372,17 +372,17 @@ export function HelpCenter() {
               <Icon className="w-3.5 h-3.5" />
               {label}
               {id === 'articles' && q && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {filteredArticles.length}
                 </span>
               )}
               {id === 'faqs' && q && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {filteredFAQs.length}
                 </span>
               )}
               {id === 'tours' && q && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {filteredTours.length}
                 </span>
               )}
@@ -446,7 +446,7 @@ export function HelpCenter() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t.title}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.description}</p>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                           {t.steps.length} step{t.steps.length !== 1 ? 's' : ''}
                         </p>
                       </div>
@@ -478,7 +478,7 @@ export function HelpCenter() {
                       <p className="text-sm font-bold text-gray-900 dark:text-gray-50">
                         v{note.version} — {note.title}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">{note.date}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">{note.date}</p>
                     </div>
                   </div>
                   <div className="px-4 py-3">
@@ -514,7 +514,7 @@ function EmptySearch({ query }: { query: string }) {
       <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
         No results for <span className="font-semibold">"{query}"</span>
       </p>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try different keywords</p>
+      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Try different keywords</p>
     </div>
   )
 }

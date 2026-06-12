@@ -391,7 +391,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                   options={bankOptions}
                   placeholder="— None —" className={inputCls(!!errors.bank_name)} />
                 {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
-                  <p className="flex items-center gap-1 text-[11px] text-amber-600 mt-0.5">
+                  <p className="flex items-center gap-1 text-xs text-amber-600 mt-0.5">
                     <ExternalLink className="w-3 h-3 shrink-0" />
                     Foreign currency transactions are managed in the{' '}
                     <Link to="/foreign-currency" className="underline hover:text-amber-700" onClick={onClose}>
@@ -451,7 +451,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             {transactionType ? (
               <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
                 {TXN_TYPES.find(t => t.value === transactionType)?.label ?? transactionType}
-                <span className="text-xs text-gray-400 ml-2">— auto-set from transaction type</span>
+                <span className="text-xs text-gray-500 ml-2">— auto-set from transaction type</span>
               </div>
             ) : (
               <>
@@ -474,7 +474,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                   </div>
                 </div>
                 {incomeTypeAutoSet && incomeTypeId && (
-                  <p className="flex items-center gap-1 text-[10px] text-primary mt-1">
+                  <p className="flex items-center gap-1 text-xs text-primary mt-1">
                     <Sparkles className="w-3 h-3" /> Auto-suggested from description · click to change
                   </p>
                 )}
@@ -487,7 +487,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         <Field label="Allocation Config"
           help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the config active on the transaction date. Choose a specific config to override.">
           {transactionType ? (
-            <p className="text-xs text-gray-400 italic">Not applicable for non-Normal transactions</p>
+            <p className="text-xs text-gray-500 italic">Not applicable for non-Normal transactions</p>
           ) : selectedIncomeType?.special_config_id && !configManuallySet ? (
             <div className="space-y-1">
               <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
@@ -497,7 +497,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                 <button
                   type="button"
                   onClick={() => setConfigManuallySet(true)}
-                  className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+                  className="text-xs text-gray-500 hover:text-gray-600 underline"
                 >
                   Override
                 </button>
@@ -516,7 +516,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
                 ))}
               </select>
               {!selectedConfigId && watchedDate && (
-                <p className="text-[10px] text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-500 mt-0.5">
                   Auto: {getConfigForDate(lockedConfigs, watchedDate)?.name ?? 'no config found for this date'}
                 </p>
               )}

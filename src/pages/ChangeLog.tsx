@@ -95,7 +95,7 @@ export default function ChangeLog() {
       <AlertCircle className="w-10 h-10 text-danger" />
       <p className="font-semibold text-gray-800">Failed to load change log</p>
       <p className="text-sm text-gray-500">{error}</p>
-      <p className="text-xs text-gray-400 max-w-md">
+      <p className="text-xs text-gray-500 max-w-md">
         If this is a new installation, run the following SQL in Supabase:
       </p>
       <pre className="bg-gray-900 text-green-300 text-xs rounded-lg px-4 py-3 text-left max-w-2xl overflow-x-auto">{`-- Run the full schema.sql or apply migrations in order.
@@ -251,11 +251,11 @@ export default function ChangeLog() {
                   {/* Stacked old → new diff — no panning to compare */}
                   <div className="space-y-1">
                     <div className="rounded-lg bg-red-50/70 border border-red-100 px-2.5 py-1.5">
-                      <p className="text-[11px] uppercase tracking-wide text-red-400">Old</p>
+                      <p className="text-xs uppercase tracking-wide text-red-400">Old</p>
                       <p className="text-sm text-red-700 break-words">{e.old_value ?? '—'}</p>
                     </div>
                     <div className="rounded-lg bg-green-50/70 border border-green-100 px-2.5 py-1.5">
-                      <p className="text-[11px] uppercase tracking-wide text-green-500">New</p>
+                      <p className="text-xs uppercase tracking-wide text-green-500">New</p>
                       <p className="text-sm text-green-800 break-words">{e.new_value ?? '—'}</p>
                     </div>
                   </div>
@@ -333,7 +333,7 @@ export default function ChangeLog() {
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                       {TABLE_LABELS[e.table_name] ?? e.table_name}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-400 font-mono max-w-[120px] truncate" title={e.record_id}>
+                    <td className="px-4 py-3 text-xs text-gray-500 font-mono max-w-[120px] truncate" title={e.record_id}>
                       {e.record_id.slice(0, 8)}…
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-800">{e.field_name}</td>

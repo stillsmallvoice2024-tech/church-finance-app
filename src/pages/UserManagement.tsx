@@ -274,7 +274,7 @@ function InviteUserModal({
               <option value="accountant">Accountant — can add and edit records</option>
               <option value="viewer">Viewer — read-only access</option>
             </select>
-            <p className="text-xs text-gray-400">Owner role can only be assigned via Transfer Ownership after the user joins.</p>
+            <p className="text-xs text-gray-500">Owner role can only be assigned via Transfer Ownership after the user joins.</p>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -382,7 +382,7 @@ function EditProfileModal({
             placeholder="e.g. johnsmith (for login)"
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           />
-          <p className="text-[11px] text-gray-400">
+          <p className="text-xs text-gray-500">
             Optional. Used to log in instead of your email address.
           </p>
         </div>
@@ -393,7 +393,7 @@ function EditProfileModal({
             {isMigrationError && (
               <>
                 <p className="mb-1 text-gray-500">Run this migration in Supabase first:</p>
-                <pre className="bg-gray-900 text-green-300 rounded p-2 overflow-x-auto whitespace-pre-wrap text-[10px]">
+                <pre className="bg-gray-900 text-green-300 rounded p-2 overflow-x-auto whitespace-pre-wrap text-xs">
                   {USERNAME_MIGRATION_SQL}
                 </pre>
               </>
@@ -712,10 +712,10 @@ export default function UserManagement() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900">{currentProfile.full_name || '—'}</span>
-                <span className="text-xs text-gray-400">(you)</span>
+                <span className="text-xs text-gray-500">(you)</span>
               </div>
               {currentProfile.username && (
-                <div className="text-xs text-gray-400 font-mono">@{currentProfile.username}</div>
+                <div className="text-xs text-gray-500 font-mono">@{currentProfile.username}</div>
               )}
               <div className="text-sm text-gray-500">{user?.email}</div>
               <div className="mt-1">
@@ -765,7 +765,7 @@ export default function UserManagement() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">All Members</h2>
-          <span className="text-xs text-gray-400">{totalCount} member{totalCount !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-gray-500">{totalCount} member{totalCount !== 1 ? 's' : ''}</span>
         </div>
 
         {loading ? (
@@ -876,7 +876,7 @@ export default function UserManagement() {
                           <div>
                             <div className="font-medium text-gray-900">
                               {m.full_name || '—'}
-                              {isSelf && <span className="ml-1.5 text-xs text-gray-400">(you)</span>}
+                              {isSelf && <span className="ml-1.5 text-xs text-gray-500">(you)</span>}
                             </div>
                           </div>
                         </div>
@@ -910,12 +910,12 @@ export default function UserManagement() {
                       </td>
 
                       {/* Registered */}
-                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                      <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
                         {m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}
                       </td>
 
                       {/* Joined org */}
-                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                      <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
                         {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
                       </td>
 
@@ -926,7 +926,7 @@ export default function UserManagement() {
                             <button
                               onClick={() => setTransferTarget(m)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors"
-                              title="Transfer ownership"
+                              title="Transfer ownership" aria-label="Transfer ownership"
                             >
                               <Shield className="w-3.5 h-3.5" /> Make Owner
                             </button>
@@ -935,7 +935,7 @@ export default function UserManagement() {
                             <button
                               onClick={() => setRemoveId(m.id)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Remove from organisation"
+                              title="Remove from organisation" aria-label="Remove from organisation"
                             >
                               <XCircle className="w-3.5 h-3.5" /> Remove
                             </button>

@@ -155,7 +155,7 @@ function DepartmentsStep() {
       </form>
 
       {!loading && departments.length === 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic">
           No departments yet. Add at least one to continue.
         </p>
       )}
@@ -265,7 +265,7 @@ function BanksStep() {
       </form>
 
       {!loading && banks.length === 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic">
           No banks yet. Add at least one to continue.
         </p>
       )}
@@ -352,7 +352,7 @@ function IncomeTypesStep() {
       </form>
 
       {!loading && userIncomeTypes.length === 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic">
           No income types yet. Add at least one to continue.
         </p>
       )}
@@ -437,7 +437,7 @@ function OutflowTypesStep() {
       </form>
 
       {!loading && userTypes.length === 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic">
           No outflow types yet. Add at least one to continue.
         </p>
       )}
@@ -539,7 +539,7 @@ function TeamMembersStep() {
           {members.map(m => (
             <div key={m.id} className="flex items-center justify-between px-3 py-2 text-sm">
               <span className="text-gray-700 dark:text-gray-300 truncate">{m.email}</span>
-              <span className="text-xs text-gray-400 capitalize flex-shrink-0 ml-2">{m.role}</span>
+              <span className="text-xs text-gray-500 capitalize flex-shrink-0 ml-2">{m.role}</span>
             </div>
           ))}
         </div>
@@ -688,7 +688,7 @@ function FinishStep({ onClose }: { onClose: () => void }) {
             <Icon className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{label}</p>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{desc}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">{desc}</p>
             </div>
           </button>
         ))}
@@ -833,7 +833,7 @@ export function SetupWizard() {
             <div>
               <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Setup Wizard</h1>
               {remainingMinutes > 0 && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                <p className="text-xs text-gray-500 dark:text-gray-500 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   ~{remainingMinutes} min remaining
                 </p>
@@ -853,7 +853,7 @@ export function SetupWizard() {
         {/* Progress */}
         <div className="px-6 py-2">
           <ProgressBar current={currentIdx} total={WIZARD_STEP_IDS.length} />
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
             Step {currentIdx + 1} of {WIZARD_STEP_IDS.length}
           </p>
         </div>

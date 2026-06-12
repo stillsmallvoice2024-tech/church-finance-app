@@ -178,7 +178,7 @@ export function InlineCategorySelect({
             type="button"
             onClick={handleCancel}
             className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-            title="Cancel"
+            title="Cancel" aria-label="Cancel"
           >
             <X className="w-4 h-4" />
           </button>

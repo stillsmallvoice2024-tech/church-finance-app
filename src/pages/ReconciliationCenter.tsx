@@ -141,11 +141,11 @@ function EvidenceFacts({ evidence, currency }: { evidence: Record<string, unknow
 
   return (
     <div className="mt-2.5 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
-      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Affected record</p>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Affected record</p>
       <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5">
         {entries.map(({ key, label, value }) => (
           <div key={key} className="min-w-0">
-            <dt className="text-[10px] text-gray-400">{label}</dt>
+            <dt className="text-xs text-gray-500">{label}</dt>
             <dd className={`text-xs text-gray-700 break-words ${
               key === 'transactionId' || key === 'transferId' || key === 'depositId' || key === 'matchedInflowId' || key === 'ref'
                 ? 'font-mono select-all' : 'font-medium'
@@ -268,7 +268,7 @@ function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: 
             <RuleActionLink issue={issue} />
             <button
               onClick={() => setExpanded(v => !v)}
-              className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-600"
             >
               {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               Technical details
@@ -285,7 +285,7 @@ function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: 
             </div>
           )}
         </div>
-        <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${severityBadge(issue.severity)}`}>
+        <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${severityBadge(issue.severity)}`}>
           {issue.severity}
         </span>
       </div>
@@ -385,7 +385,7 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
                 {refBalance !== undefined ? formatCurrency(refBalance.balance, currency) : <span className="text-gray-400">—</span>}
               </span>
               {refBalance && (
-                <div className="text-xs text-gray-400">as of {formatDate(refBalance.date)}</div>
+                <div className="text-xs text-gray-500">as of {formatDate(refBalance.date)}</div>
               )}
             </div>
             <button
@@ -499,7 +499,7 @@ export default function ReconciliationCenter() {
               <div className="animate-pulse bg-gray-200 rounded h-4 w-2/3 mx-auto" />
               <div className="animate-pulse bg-gray-200 rounded h-3 w-full" />
             </div>
-            <p className="text-xs text-gray-400">Checking your records…</p>
+            <p className="text-xs text-gray-500">Checking your records…</p>
           </div>
         </Card>
       ) : diag ? (
@@ -512,7 +512,7 @@ export default function ReconciliationCenter() {
                   {healthStatusLabel(diag.healthStatus)}
                 </h2>
                 {result && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-500">
                     Last checked {formatWithTimezone(result.runAt, orgTimezone)}{result.durationMs > 0 ? ` · ${result.durationMs}ms` : ''}
                   </span>
                 )}
@@ -546,7 +546,7 @@ export default function ReconciliationCenter() {
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-700">Records not yet verified</p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 Run a reconciliation check to confirm your records are accurate and complete.
               </p>
             </div>
@@ -609,17 +609,17 @@ export default function ReconciliationCenter() {
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-sm font-semibold text-gray-700">Issues to Resolve</h2>
             {diag.criticalIssues > 0 && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                 {diag.criticalIssues} critical
               </span>
             )}
             {diag.warningIssues > 0 && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
                 {diag.warningIssues} warning
               </span>
             )}
             {diag.bySeverity.info.length > 0 && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                 {diag.bySeverity.info.length} info
               </span>
             )}
@@ -702,7 +702,7 @@ export default function ReconciliationCenter() {
                 All records are reconciled and consistent. No action needed.
               </p>
               {result && (
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-500 mt-1">
                   Verified {formatWithTimezone(result.runAt, orgTimezone)}
                 </p>
               )}

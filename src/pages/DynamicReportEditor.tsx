@@ -274,7 +274,7 @@ function InsertBlockModal({
             </div>
           </div>
           <DateFieldToggle value={mDateField} onChange={setMDateField} />
-          <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5 font-mono text-[11px] text-gray-500 break-all">
+          <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5 font-mono text-xs text-gray-500 break-all">
             {metricPreview}
           </div>
         </div>
@@ -285,7 +285,7 @@ function InsertBlockModal({
         <div className="space-y-3">
           <div className="space-y-2">
             {fTerms.length === 0 && (
-              <p className="text-xs text-gray-400 italic py-2 text-center">Add at least one term to compute a result.</p>
+              <p className="text-xs text-gray-500 italic py-2 text-center">Add at least one term to compute a result.</p>
             )}
             {fTerms.map((term, idx) => (
               <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100">
@@ -321,7 +321,7 @@ function InsertBlockModal({
                     {PORTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 )}
-                {term.fn === 'NET' && <span className="flex-1 text-xs text-gray-400 italic">all categories</span>}
+                {term.fn === 'NET' && <span className="flex-1 text-xs text-gray-500 italic">all categories</span>}
                 <button type="button"
                   onClick={() => setFTerms(fTerms.filter((_, i) => i !== idx))}
                   className="touch-target p-1 rounded text-gray-400 hover:text-danger shrink-0">
@@ -502,7 +502,7 @@ function TextBlockEditor({
           <Plus className="w-3 h-3" />
           Insert
         </button>
-        <span className="text-[10px] text-gray-400">
+        <span className="text-xs text-gray-500">
           metric, formula, or table — or type <code className="font-mono bg-gray-100 px-1 rounded">{'{{BALANCE:Cat}}'}</code> directly
         </span>
       </div>
@@ -604,7 +604,7 @@ function MetricBlockEditor({
             onChange={e => onChange({ ...cfg, dateFrom: e.target.value, dateTo: e.target.value })}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <p className="text-[10px] text-gray-400 mt-1">Sets a single day — or use Date From / Date To below for a range</p>
+          <p className="text-xs text-gray-500 mt-1">Sets a single day — or use Date From / Date To below for a range</p>
         </div>
       )}
 
@@ -862,7 +862,7 @@ function FormulaBlockEditor({
       {/* Terms list */}
       <div className="space-y-2">
         {terms.length === 0 && (
-          <p className="text-xs text-gray-400 italic py-2 text-center">
+          <p className="text-xs text-gray-500 italic py-2 text-center">
             No terms yet — add at least two to compute a result.
           </p>
         )}
@@ -908,7 +908,7 @@ function FormulaBlockEditor({
               </select>
             )}
             {term.fn === 'NET' && (
-              <span className="flex-1 text-xs text-gray-400 italic px-2">all categories</span>
+              <span className="flex-1 text-xs text-gray-500 italic px-2">all categories</span>
             )}
 
             {/* Portion */}
@@ -1028,7 +1028,7 @@ function DateFieldToggle({
           Recorded At
         </button>
       </div>
-      <p className="text-[10px] text-gray-400 mt-1">
+      <p className="text-xs text-gray-500 mt-1">
         {isRecorded
           ? 'Filters by when the transaction was entered into the system'
           : 'Filters by the transaction value date'}
@@ -1082,14 +1082,14 @@ function BlockCard({
         <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
           <Icon className="w-3.5 h-3.5" />{meta.label}
         </div>
-        <span className="text-[10px] text-gray-300 font-mono">#{index + 1}</span>
+        <span className="text-xs text-gray-300 font-mono">#{index + 1}</span>
         <div className="ml-auto flex items-center gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={onMoveUp} disabled={index === 0}
             className="touch-target p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
+            title="Move up" aria-label="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
           <button onClick={onMoveDown} disabled={index === total - 1}
             className="touch-target p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
+            title="Move down" aria-label="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
           <button onClick={onDelete}
             className="touch-target p-1 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
             title="Delete block"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -1185,7 +1185,7 @@ function TextBlockPreview({
         // Embed
         const embed = embeds.find(e => e.id === seg.id)
         if (!embed) {
-          return <span key={i} className="text-[10px] text-gray-300 font-mono">[missing embed]</span>
+          return <span key={i} className="text-xs text-gray-300 font-mono">[missing embed]</span>
         }
         if (embed.type === 'formula') {
           const fCfg = embed.config as Partial<FormulaBlockConfig>
@@ -1262,7 +1262,7 @@ function MetricBlockPreview({
       <div className="min-w-0">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate">{label}</p>
         {dateLabel && (
-          <p className="text-[10px] text-gray-400 mt-0.5">{dateLabel}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{dateLabel}</p>
         )}
       </div>
       <div className="text-2xl font-bold tabular-nums shrink-0">
@@ -1324,7 +1324,7 @@ function TableBlockPreview({
       <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-700">{label}</p>
         {cfg.dateFrom && cfg.dateTo && (
-          <p className="text-[10px] text-gray-400 font-mono">{cfg.dateFrom} → {cfg.dateTo}</p>
+          <p className="text-xs text-gray-500 font-mono">{cfg.dateFrom} → {cfg.dateTo}</p>
         )}
       </div>
 
@@ -1469,7 +1469,7 @@ function FormulaBlockPreview({
       <div className="px-5 py-3 border-b border-gray-100 flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
-          {dateLabel && <p className="text-[10px] text-gray-400 mt-0.5 font-mono">{dateLabel}</p>}
+          {dateLabel && <p className="text-xs text-gray-500 mt-0.5 font-mono">{dateLabel}</p>}
         </div>
         <Sigma className="w-4 h-4 text-gray-300 shrink-0 mt-0.5" />
       </div>
@@ -1951,7 +1951,7 @@ export default function DynamicReportEditor() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               <Sigma className="w-3.5 h-3.5" />Formula
             </button>
-            {isDirty && <span className="text-xs text-gray-400 ml-auto">Unsaved changes</span>}
+            {isDirty && <span className="text-xs text-gray-500 ml-auto">Unsaved changes</span>}
           </div>
 
           {blocks.length > 0 && (
@@ -1979,7 +1979,7 @@ export default function DynamicReportEditor() {
                 Snapshot: {viewingSnapshot.label} &middot; {new Date(viewingSnapshot.snapshot_at).toLocaleString()}
               </p>
             ) : (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 {resolving ? 'Fetching live data…' : 'Live data — values from your finance records'}
               </p>
             )}
@@ -2070,7 +2070,7 @@ export default function DynamicReportEditor() {
 
                 {/* Snapshot list */}
                 {snapshots.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-3">No snapshots yet — save the current live state above.</p>
+                  <p className="text-xs text-gray-500 text-center py-3">No snapshots yet — save the current live state above.</p>
                 ) : (
                   <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
                     {snapshots.map(snap => (

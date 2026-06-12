@@ -138,7 +138,7 @@ export function BottomTabBar() {
 
               return (
                 <div key={section.label}>
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 px-1">
+                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 px-1">
                     {section.label}
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -186,7 +186,7 @@ export function BottomTabBar() {
             {({ isActive }) => (
               <>
                 <Icon className="w-5 h-5" />
-                <span className={`text-[11px] leading-tight font-medium ${isActive ? 'font-semibold' : ''}`}>
+                <span className={`text-xs leading-tight font-medium ${isActive ? 'font-semibold' : ''}`}>
                   {label}
                 </span>
               </>
@@ -204,7 +204,7 @@ export function BottomTabBar() {
           }`}
         >
           <MoreHorizontal className="w-5 h-5" />
-          <span className="text-[11px] leading-tight font-medium">More</span>
+          <span className="text-xs leading-tight font-medium">More</span>
         </button>
       </nav>
     </>
