@@ -102,7 +102,7 @@ export default function RefundTransactions() {
       {
         label: 'Offset Role',
         value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
-        badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
+        badge: row.offset_role === 'root' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600',
       },
       { label: 'Root Txn ID', value: row.root_transaction_id, mono: true, breakAll: true },
     ]
@@ -110,63 +110,48 @@ export default function RefundTransactions() {
 
   const load = async () => {
     if (!orgId) { setLoading(false); return }
-    setLoading(true)
-    setError(null)
-    setTruncated(false)
+    setLoading(true); setError(null); setTruncated(false)
 
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions')
-        .select('*', { count: 'exact' })
-        .eq('org_id', orgId)
-        .eq('transaction_type', 'refund')
-        .order('date', { ascending: false })
-        .limit(REFUND_LIMIT),
+        .select('*', { count: 'exact' }).eq('org_id', orgId)
+        .eq('transaction_type', 'refund').order('date', { ascending: false }).limit(REFUND_LIMIT),
       supabase.from('outflow_transactions')
-        .select('*', { count: 'exact' })
-        .eq('org_id', orgId)
-        .eq('transaction_type', 'refund')
-        .order('date', { ascending: false })
-        .limit(REFUND_LIMIT),
+        .select('*', { count: 'exact' }).eq('org_id', orgId)
+        .eq('transaction_type', 'refund').order('date', { ascending: false }).limit(REFUND_LIMIT),
     ])
 
     if (inflowRes.error || outflowRes.error) {
-      setError((inflowRes.error ?? outflowRes.error)!.message)
-      setLoading(false)
-      return
+      setError((inflowRes.error ?? outflowRes.error)!.message); setLoading(false); return
     }
-
-    const isCapped =
-      (inflowRes.count ?? 0) > REFUND_LIMIT ||
-      (outflowRes.count ?? 0) > REFUND_LIMIT
-    setTruncated(isCapped)
+    setTruncated((inflowRes.count ?? 0) > REFUND_LIMIT || (outflowRes.count ?? 0) > REFUND_LIMIT)
 
     const merged: TxnRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string, direction: 'in' as const,
-        amount:                  r.amount                  as number,
-        description:             r.description             as string | null,
+        amount: r.amount as number,
+        description: r.description as string | null,
         original_transaction_id: r.original_transaction_id as string | null,
-        bank_name:               r.bank_name               as string | null,
-        remarks:                 r.remark                  as string | null,
-        offset_role:             r.offset_role             as string | null,
-        root_transaction_id:     r.root_transaction_id     as string | null,
+        bank_name: r.bank_name as string | null,
+        remarks: r.remark as string | null,
+        offset_role: r.offset_role as string | null,
+        root_transaction_id: r.root_transaction_id as string | null,
         inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string, direction: 'out' as const,
-        amount:                  r.amount_disbursed         as number,
-        description:             r.description              as string | null,
-        original_transaction_id: r.original_transaction_id  as string | null,
-        bank_name:               r.bank_name                as string | null,
-        remarks:                 r.remarks                  as string | null,
-        offset_role:             r.offset_role              as string | null,
-        root_transaction_id:     r.root_transaction_id      as string | null,
+        amount: r.amount_disbursed as number,
+        description: r.description as string | null,
+        original_transaction_id: r.original_transaction_id as string | null,
+        bank_name: r.bank_name as string | null,
+        remarks: r.remarks as string | null,
+        offset_role: r.offset_role as string | null,
+        root_transaction_id: r.root_transaction_id as string | null,
         outflowData: r as unknown as OutflowTransaction,
       })),
     ].sort((a, b) => b.date.localeCompare(a.date))
 
-    setRows(merged)
-    setLoading(false)
+    setRows(merged); setLoading(false)
   }
 
   const handleEdit = (row: TxnRow) => {
@@ -190,32 +175,92 @@ export default function RefundTransactions() {
   const handleExportView = () => exportCSV(RF_CSV_FILE, RF_CSV_HEADERS, filtered.map(rfCsvRow))
   const handleExportAll  = () => exportCSV(RF_CSV_FILE, RF_CSV_HEADERS, filtered.map(rfCsvRow))
 
-  const totalCols = 8 + (canWrite() ? 1 : 0)
+  // connector col + expand col + 7 data cols + optional actions col
+  const totalCols = 9 + (canWrite() ? 1 : 0)
 
-  const renderTableRow = (row: TxnRow, rowKind: 'root' | 'offset' | 'unmatched') => {
+  // ── Table row renderer ──────────────────────────────────────────────────────
+  const renderTableRow = (
+    row:     TxnRow,
+    rowKind: 'root' | 'offset' | 'unmatched',
+    opts?:   { hasOffsets?: boolean; isLastOffset?: boolean },
+  ) => {
     const isExpanded = expandedId === row.id
+
     const rowCls =
       rowKind === 'root'
-        ? 'hover:bg-green-50/30 border-l-4 border-green-400 transition-colors'
+        ? 'border-b border-gray-100/80 hover:bg-emerald-50/40 transition-colors'
         : rowKind === 'offset'
-        ? 'hover:bg-amber-50/30 border-l-4 border-amber-300 bg-amber-50/20 transition-colors'
-        : 'hover:bg-gray-50 border-l-4 border-gray-200 transition-colors'
-    const datePl = rowKind === 'offset' ? 'pl-8' : 'pl-4'
+        ? 'border-b border-gray-100/80 bg-slate-50/50 hover:bg-slate-100/50 transition-colors'
+        : 'border-b border-gray-100/80 hover:bg-gray-50/60 transition-colors'
+
+    // Tree connector cell
+    const connectorTd = (() => {
+      const base: React.CSSProperties = { position: 'relative', width: 24, minWidth: 24, padding: 0 }
+
+      if (rowKind === 'root') return (
+        <td style={base}>
+          {opts?.hasOffsets && (
+            <div style={{ position: 'absolute', left: 11, top: '50%', bottom: 0, width: 2, background: '#6ee7b7' }} />
+          )}
+          <div style={{
+            position: 'absolute', left: 7, top: '50%', transform: 'translateY(-50%)',
+            width: 9, height: 9, borderRadius: '50%',
+            background: '#34d399',
+            boxShadow: '0 0 0 2px #fff, 0 0 0 3px #a7f3d0',
+          }} />
+        </td>
+      )
+
+      if (rowKind === 'offset') return (
+        <td style={base}>
+          <div style={{ position: 'absolute', left: 11, top: 0, bottom: '50%', width: 2, background: '#6ee7b7' }} />
+          <div style={{ position: 'absolute', left: 11, right: 0, top: '50%', height: 2, transform: 'translateY(-50%)', background: '#6ee7b7' }} />
+          {!opts?.isLastOffset && (
+            <div style={{ position: 'absolute', left: 11, top: '50%', bottom: 0, width: 2, background: '#6ee7b7' }} />
+          )}
+          <div style={{
+            position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+            width: 7, height: 7, borderRadius: '50%',
+            background: '#94a3b8',
+            boxShadow: '0 0 0 2px #fff',
+          }} />
+        </td>
+      )
+
+      return <td style={base} />
+    })()
+
     return (
       <Fragment key={row.id}>
         <tr className={rowCls}>
-          <td className="w-8 px-1 py-3">
+          {connectorTd}
+          <td className="w-8 pl-1 py-2">
             <button
               onClick={() => setExpandedId(isExpanded ? null : row.id)}
-              className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              className="p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors"
               title={isExpanded ? 'Collapse' : 'Expand details'}
             >
-              {isExpanded
-                ? <ChevronDown className="w-3.5 h-3.5" />
-                : <ChevronRight className="w-3.5 h-3.5" />}
+              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
             </button>
           </td>
-          <td className={`${datePl} py-3 text-sm text-gray-600 whitespace-nowrap`}>{formatDate(row.date)}</td>
+
+          {/* Date + role chip */}
+          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+            <div className="flex items-center gap-2">
+              <span>{formatDate(row.date)}</span>
+              {rowKind === 'root' && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide leading-none">
+                  Original
+                </span>
+              )}
+              {rowKind === 'offset' && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-slate-100 text-slate-500 uppercase tracking-wide leading-none">
+                  ↩ Offset
+                </span>
+              )}
+            </div>
+          </td>
+
           <td className="px-4 py-3">
             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
               {row.direction === 'in' ? 'Inflow' : 'Outflow'}
@@ -226,21 +271,19 @@ export default function RefundTransactions() {
             <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
           </td>
           <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{row.bank_name ?? '—'}</td>
-          <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>
+          <td className="px-4 py-3 text-sm font-mono text-gray-400 max-w-[160px] truncate">{row.original_transaction_id ?? '—'}</td>
           <td className="px-4 py-3 text-sm text-gray-500 max-w-[160px]">
             <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
           </td>
+
           {canWrite() && (
             <td className="px-2 py-3">
               <div className="flex items-center gap-0.5">
                 <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
-                {row.offset_role === 'root' && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>
-                )}
                 {row.root_transaction_id === null && row.offset_role !== 'root' && (
-                  <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root">
+                  <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
                     <Link2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -253,17 +296,39 @@ export default function RefundTransactions() {
     )
   }
 
-  const renderCard = (row: TxnRow, rowKind: 'root' | 'offset' | 'unmatched') => {
-    const borderCls =
-      rowKind === 'root'    ? 'border-l-4 border-green-400' :
-      rowKind === 'offset'  ? 'border-l-4 border-amber-300' :
-                              'border-l-4 border-gray-200'
-    const label = rowKind === 'root' ? 'Original' : 'Refund'
+  // ── Card renderer ───────────────────────────────────────────────────────────
+  const renderCard = (
+    row:     TxnRow,
+    rowKind: 'root' | 'offset' | 'unmatched',
+    config?: { inCluster?: boolean; bgOverride?: string },
+  ) => {
+    const inCluster = config?.inCluster ?? false
+    const bg        = config?.bgOverride ?? 'bg-white'
+    const leftBorder = inCluster ? '' :
+      rowKind === 'root'    ? 'border-l-2 border-emerald-300' :
+      rowKind === 'offset'  ? 'border-l-2 border-slate-300'   :
+                              'border-l-2 border-rose-200'
+    const roleLabel =
+      rowKind === 'root'   ? 'Original' :
+      rowKind === 'offset' ? 'Refund'   : '—'
+
     return (
-      <div className={`bg-white ${borderCls}`}>
+      <div className={`${bg} ${leftBorder}`}>
         <div className="px-4 pt-3.5 pb-3">
           <div className="flex items-center justify-between gap-2 mb-1.5">
-            <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+              {rowKind === 'root' && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide leading-none">
+                  Original
+                </span>
+              )}
+              {rowKind === 'offset' && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-slate-100 text-slate-500 uppercase tracking-wide leading-none">
+                  ↩ Offset
+                </span>
+              )}
+            </div>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${row.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
               {row.direction === 'in' ? 'Inflow' : 'Outflow'}
             </span>
@@ -275,7 +340,7 @@ export default function RefundTransactions() {
             </div>
           )}
           {row.original_transaction_id && (
-            <p className="text-[11px] text-gray-400 font-mono">Orig: {row.original_transaction_id}</p>
+            <p className="text-[11px] text-gray-400 font-mono truncate">Orig: {row.original_transaction_id}</p>
           )}
           {row.remarks && (
             <div className="text-xs mt-1.5">
@@ -285,8 +350,8 @@ export default function RefundTransactions() {
         </div>
         <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 flex items-center justify-between">
           <div>
-            <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-green-600/70' : 'text-red-600/70'}`}>
-              {label}
+            <p className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-emerald-600/70' : 'text-red-500/70'}`}>
+              {roleLabel}
             </p>
             <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
               {formatCurrency(row.amount, baseCurrencyCode)}
@@ -297,11 +362,8 @@ export default function RefundTransactions() {
               <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                 <Pencil className="w-3.5 h-3.5" />
               </button>
-              {row.offset_role === 'root' && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>
-              )}
               {row.root_transaction_id === null && row.offset_role !== 'root' && (
-                <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root">
+                <button onClick={() => handleEdit(row)} className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors" title="Link to root">
                   <Link2 className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -391,30 +453,18 @@ export default function RefundTransactions() {
       {/* Summary strip */}
       {(() => {
         const summaryCards = [
-          {
-            label:  'Total rows',
-            sub:    null,
-            value:  filtered.length.toLocaleString(),
-            accent: 'border-gray-100 text-gray-900',
-          },
-          {
-            label:  'Originals',
-            sub:    'the entry that got refunded',
-            value:  `${groups.length.toLocaleString()} · ${formatCurrency(groups.reduce((s, g) => s + g.root.amount, 0), baseCurrencyCode)}`,
-            accent: 'border-green-200 text-green-700',
-          },
-          {
-            label:  'Refunds',
-            sub:    'the refund entry',
-            value:  `${allOffsets.length.toLocaleString()} · ${formatCurrency(allOffsets.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,
-            accent: 'border-amber-200 text-amber-700',
-          },
-          {
-            label:  'Unmatched',
-            sub:    'no root link found',
-            value:  unmatched.length.toLocaleString(),
-            accent: unmatched.length > 0 ? 'border-red-200 text-red-600' : 'border-gray-100 text-gray-900',
-          },
+          { label: 'Total rows', sub: null,
+            value: filtered.length.toLocaleString(),
+            accent: 'border-gray-100 text-gray-900' },
+          { label: 'Originals', sub: 'the entry that got refunded',
+            value: `${groups.length.toLocaleString()} · ${formatCurrency(groups.reduce((s, g) => s + g.root.amount, 0), baseCurrencyCode)}`,
+            accent: 'border-emerald-200 text-emerald-700' },
+          { label: 'Refunds', sub: 'the refund entry',
+            value: `${allOffsets.length.toLocaleString()} · ${formatCurrency(allOffsets.reduce((s, r) => s + r.amount, 0), baseCurrencyCode)}`,
+            accent: 'border-slate-200 text-slate-600' },
+          { label: 'Unmatched', sub: 'no root link found',
+            value: unmatched.length.toLocaleString(),
+            accent: unmatched.length > 0 ? 'border-rose-200 text-rose-500' : 'border-gray-100 text-gray-900' },
         ]
         return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -434,10 +484,12 @@ export default function RefundTransactions() {
       {/* Table / Cards */}
       <Card padding={false}>
         {displayMode === 'cards' ? (
-          <div className="p-4 space-y-3">
+          /* ── CARD VIEW ─────────────────────────────────────────────────────── */
+          <div className="p-4 space-y-4">
             {loading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
+                  <div className="h-8 bg-emerald-50" />
                   <div className="px-4 pt-3.5 pb-3 space-y-2">
                     <div className="h-3 bg-gray-200 rounded w-1/4" />
                     <div className="h-4 bg-gray-200 rounded w-3/4" />
@@ -454,26 +506,53 @@ export default function RefundTransactions() {
               </div>
             ) : (
               <>
+                {/* Matched clusters */}
                 {groups.map(({ root, offsets }) => (
-                  <div key={root.id} className="rounded-xl border border-gray-200 shadow-sm overflow-hidden divide-y divide-gray-100">
-                    {renderCard(root, 'root')}
-                    {offsets.map(off => (
-                      <div key={off.id} className="ml-4">
-                        {renderCard(off, 'offset')}
+                  <div key={root.id} className="rounded-2xl border border-emerald-200/70 shadow-md overflow-hidden">
+                    {/* Cluster header strip */}
+                    <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-b border-emerald-100">
+                      <Link2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-semibold text-emerald-700">
+                        Matched pair · 1 original + {offsets.length} {offsets.length === 1 ? 'refund' : 'refunds'}
+                      </span>
+                    </div>
+
+                    {/* Root card */}
+                    {renderCard(root, 'root', { inCluster: true, bgOverride: 'bg-white' })}
+
+                    {/* Offset cards with left gutter connector */}
+                    {offsets.map((off, offIdx) => (
+                      <div key={off.id} className="flex border-t border-emerald-100/80">
+                        {/* Gutter */}
+                        <div className="relative flex-shrink-0 w-5 bg-emerald-50/40">
+                          <div style={{ position: 'absolute', left: 9, top: 0, bottom: '50%', width: 2, background: '#6ee7b7' }} />
+                          {offIdx < offsets.length - 1 && (
+                            <div style={{ position: 'absolute', left: 9, top: '50%', bottom: 0, width: 2, background: '#6ee7b7' }} />
+                          )}
+                          <div style={{ position: 'absolute', left: 9, right: 0, top: '50%', height: 2, transform: 'translateY(-50%)', background: '#6ee7b7' }} />
+                        </div>
+                        {/* Card */}
+                        <div className="flex-1 min-w-0">
+                          {renderCard(off, 'offset', { inCluster: true, bgOverride: 'bg-slate-50/60' })}
+                        </div>
                       </div>
                     ))}
                   </div>
                 ))}
+
+                {/* Unmatched section */}
                 {unmatched.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    <div className="flex items-center gap-2 px-1">
-                      <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">
-                        Unmatched · {unmatched.length}
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-center gap-3 px-1">
+                      <div className="h-px flex-1 bg-rose-100" />
+                      <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Unmatched</span>
+                      <span className="text-[10px] font-semibold text-rose-400 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
+                        {unmatched.length}
                       </span>
-                      <div className="flex-1 h-px bg-gray-100" />
+                      <div className="h-px flex-1 bg-rose-100" />
                     </div>
                     {unmatched.map(row => (
-                      <div key={row.id} className="rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div key={row.id} className="rounded-xl border border-rose-100/80 shadow-sm overflow-hidden">
                         {renderCard(row, 'unmatched')}
                       </div>
                     ))}
@@ -483,10 +562,12 @@ export default function RefundTransactions() {
             )}
           </div>
         ) : (
+          /* ── TABLE VIEW ────────────────────────────────────────────────────── */
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th style={{ width: 24, minWidth: 24, padding: 0 }} />
                   <th className="w-8" />
                   {['Date', 'Direction', `Amount (${baseCurrencySymbol})`, 'Description', 'Bank', 'Original Txn ID', 'Remarks'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
@@ -494,50 +575,68 @@ export default function RefundTransactions() {
                   {canWrite() && <th className="px-4 py-3 w-10" />}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
-                {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={i}>{Array.from({ length: 7 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>
-                    ))}</tr>
-                  ))
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={totalCols} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-2 text-gray-400">
-                      <RotateCcw className="w-10 h-10 text-gray-200" />
-                      <p className="text-sm">No refund transactions found.</p>
-                    </div>
-                  </td></tr>
-                ) : (
-                  <>
-                    {groups.length > 0 && (
-                      <>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          <td colSpan={totalCols} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                            Matched Pairs · {groups.length} {groups.length === 1 ? 'group' : 'groups'}
-                          </td>
+
+              {loading ? (
+                <tbody>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={i} className="border-b border-gray-100/80">
+                      <td style={{ width: 24, padding: 0 }} />
+                      {Array.from({ length: totalCols - 1 }).map((_, j) => (
+                        <td key={j} className="px-4 py-3">
+                          <div className="h-4 bg-gray-200 rounded animate-pulse" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              ) : filtered.length === 0 ? (
+                <tbody>
+                  <tr>
+                    <td colSpan={totalCols} className="py-16 text-center">
+                      <div className="flex flex-col items-center gap-2 text-gray-400">
+                        <RotateCcw className="w-10 h-10 text-gray-200" />
+                        <p className="text-sm">No refund transactions found.</p>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              ) : (
+                <>
+                  {/* Matched groups — one <tbody> per group */}
+                  {groups.map(({ root, offsets }, groupIndex) => (
+                    <tbody key={root.id}>
+                      {groupIndex > 0 && (
+                        <tr>
+                          <td colSpan={totalCols} className="p-0 bg-gray-50/60" style={{ height: 10 }} />
                         </tr>
-                        {groups.map(({ root, offsets }) => (
-                          <Fragment key={root.id}>
-                            {renderTableRow(root, 'root')}
-                            {offsets.map(off => renderTableRow(off, 'offset'))}
-                          </Fragment>
-                        ))}
-                      </>
-                    )}
-                    {unmatched.length > 0 && (
-                      <>
-                        <tr className="bg-red-50/60 border-b border-t border-red-100">
-                          <td colSpan={totalCols} className="px-4 py-2 text-xs font-semibold text-red-400 uppercase tracking-wide">
-                            Unmatched · {unmatched.length}
-                          </td>
-                        </tr>
-                        {unmatched.map(row => renderTableRow(row, 'unmatched'))}
-                      </>
-                    )}
-                  </>
-                )}
-              </tbody>
+                      )}
+                      {renderTableRow(root, 'root', { hasOffsets: offsets.length > 0 })}
+                      {offsets.map((off, i) =>
+                        renderTableRow(off, 'offset', { isLastOffset: i === offsets.length - 1 })
+                      )}
+                    </tbody>
+                  ))}
+
+                  {/* Unmatched section */}
+                  {unmatched.length > 0 && (
+                    <tbody>
+                      <tr>
+                        <td colSpan={totalCols} className="px-4 pt-6 pb-2">
+                          <div className="flex items-center gap-3">
+                            <div className="h-px flex-1 bg-rose-100" />
+                            <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Unmatched</span>
+                            <span className="text-[10px] font-semibold text-rose-400 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
+                              {unmatched.length}
+                            </span>
+                            <div className="h-px flex-1 bg-rose-100" />
+                          </div>
+                        </td>
+                      </tr>
+                      {unmatched.map(row => renderTableRow(row, 'unmatched'))}
+                    </tbody>
+                  )}
+                </>
+              )}
             </table>
           </div>
         )}
