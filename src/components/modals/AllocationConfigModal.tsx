@@ -190,9 +190,9 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
         {/* Category rows */}
         <div className="space-y-2">
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] gap-2 px-0.5">
-            <span className="text-xs font-medium text-gray-600">Category</span>
-            <span className="text-xs font-medium text-gray-600">Budget Portion</span>
-            <span className="text-xs font-medium text-gray-600 text-right">Percentage</span>
+            <span className="text-xs font-medium text-gray-600">Category <span aria-hidden="true" className="text-danger">*</span></span>
+            <span className="text-xs font-medium text-gray-600">Budget Portion <span aria-hidden="true" className="text-danger">*</span></span>
+            <span className="text-xs font-medium text-gray-600 text-right">Percentage <span aria-hidden="true" className="text-danger">*</span></span>
             <span />
           </div>
 
