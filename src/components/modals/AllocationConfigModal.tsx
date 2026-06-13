@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, Trash2 } from 'lucide-react'
 import { Modal, type ModalHandle } from '../ui/Modal'
-import { Field, inputCls } from '../ui/FormField'
+import { Field, inputCls, focusFirstInvalid } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { InlineCategorySelect } from '../ui/InlineCategorySelect'
 import {
@@ -163,7 +163,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
       isDirty={isDirty}
       disableClose={loading}
     >
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-5">
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
@@ -190,9 +190,9 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
         {/* Category rows */}
         <div className="space-y-2">
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] gap-2 px-0.5">
-            <span className="text-xs font-medium text-gray-600">Category</span>
-            <span className="text-xs font-medium text-gray-600">Budget Portion</span>
-            <span className="text-xs font-medium text-gray-600 text-right">Percentage</span>
+            <span className="text-xs font-medium text-gray-600">Category <span aria-hidden="true" className="text-danger">*</span></span>
+            <span className="text-xs font-medium text-gray-600">Budget Portion <span aria-hidden="true" className="text-danger">*</span></span>
+            <span className="text-xs font-medium text-gray-600 text-right">Percentage <span aria-hidden="true" className="text-danger">*</span></span>
             <span />
           </div>
 
@@ -244,7 +244,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
               <div>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="text" inputMode="decimal"
                     step="0.1"
                     min="0"
                     max="100"
@@ -252,7 +252,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                     {...register(`rows.${idx}.percentage`)}
                     className={`${inputCls(!!errors.rows?.[idx]?.percentage)} pr-7 text-right`}
                   />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">%</span>
                 </div>
                 {errors.rows?.[idx]?.percentage && (
                   <p className="mt-0.5 text-xs text-red-500">{errors.rows[idx]!.percentage!.message}</p>

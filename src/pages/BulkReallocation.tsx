@@ -274,7 +274,7 @@ export default function BulkReallocation() {
 
         {/* Category preview table */}
         <Card padding={false}>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -302,7 +302,7 @@ export default function BulkReallocation() {
                       </td>
                       <td className="px-4 py-3 text-right pr-4">
                         {goesZero && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 whitespace-nowrap">
                             <AlertTriangle className="w-3 h-3" /> Zero after
                           </span>
                         )}
@@ -416,7 +416,7 @@ export default function BulkReallocation() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">Percentage (%)</label>
               <input
-                type="number"
+                type="text" inputMode="decimal"
                 min={0}
                 max={100}
                 step={1}
@@ -431,7 +431,7 @@ export default function BulkReallocation() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">Amount ({baseCurrencySymbol})</label>
               <input
-                type="number"
+                type="text" inputMode="decimal"
                 min={0}
                 step={0.01}
                 value={fixedAmt}
@@ -448,7 +448,7 @@ export default function BulkReallocation() {
           <button
             onClick={refetchBalances}
             disabled={balLoading}
-            title="Refresh balances"
+            title="Refresh balances" aria-label="Refresh balances"
             className="self-end mb-0.5 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${balLoading ? 'animate-spin' : ''}`} />
@@ -483,7 +483,7 @@ export default function BulkReallocation() {
 
       {/* Category table */}
       <Card padding={false}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scroll-x-fade">
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-100">
@@ -554,7 +554,7 @@ export default function BulkReallocation() {
                           {willGoZero && (
                             <span
                               title="Source balance will become zero"
-                              className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 whitespace-nowrap"
+                              className="inline-flex items-center gap-0.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 whitespace-nowrap"
                             >
                               <AlertTriangle className="w-2.5 h-2.5" /> Zero
                             </span>

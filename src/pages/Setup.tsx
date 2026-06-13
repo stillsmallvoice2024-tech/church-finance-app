@@ -225,7 +225,7 @@ function GeneralTab() {
             </span>
           )}
           {pending !== year && !saved && (
-            <span className="text-xs text-gray-400">Unsaved change</span>
+            <span className="text-xs text-gray-500">Unsaved change</span>
           )}
         </div>
       </div>
@@ -273,7 +273,7 @@ function GeneralTab() {
             </span>
           )}
           {pendingTz !== effectiveTz && !tzSaved && !tzSaving && (
-            <span className="text-xs text-gray-400">Unsaved change</span>
+            <span className="text-xs text-gray-500">Unsaved change</span>
           )}
         </div>
       </div>
@@ -335,7 +335,7 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
           <Landmark className="w-10 h-10 text-gray-300" />
           <div>
             <p className="text-sm font-medium text-gray-600">No banks configured yet</p>
-            <p className="text-xs text-gray-400 mt-1">Add a bank to link it to your transactions and reports.</p>
+            <p className="text-xs text-gray-500 mt-1">Add a bank to link it to your transactions and reports.</p>
           </div>
         </div>
       ) : (
@@ -361,7 +361,7 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
                         <span className="flex items-center gap-2">
                           {bank.name}
                           {bank.is_foreign_currency && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-100 text-amber-700 border border-amber-200 shrink-0">FX</span>
+                            <span className="px-1.5 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700 border border-amber-200 shrink-0">FX</span>
                           )}
                         </span>
                       </td>
@@ -375,15 +375,15 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => onEdit(bank)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                            title="Edit"
+                            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                            title="Edit" aria-label="Edit"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => onDelete(bank)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                            title="Delete"
+                            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                            title="Delete" aria-label="Delete"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -395,7 +395,7 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
               </table>
             </div>
           )}
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             {visible.length !== banks.length
               ? `${visible.length} of ${banks.length} banks`
               : `${banks.length} bank${banks.length !== 1 ? 's' : ''} configured`}
@@ -442,7 +442,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
           {isLocked ? 'Approved & Locked' : 'Draft'}
         </span>
         {!isLocked && (
-          <span className="text-[10px] text-gray-400">Not in use — approve &amp; lock to activate</span>
+          <span className="text-xs text-gray-500">Not in use — approve &amp; lock to activate</span>
         )}
       </div>
     )
@@ -479,7 +479,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
           <Layers className="w-10 h-10 text-gray-300" />
           <div>
             <p className="text-sm font-medium text-gray-600">No allocation configurations yet</p>
-            <p className="text-xs text-gray-400 mt-1">Create a configuration to define how income is split across categories.</p>
+            <p className="text-xs text-gray-500 mt-1">Create a configuration to define how income is split across categories.</p>
           </div>
         </div>
       )}
@@ -519,15 +519,15 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
                               <>
                                 <button
                                   onClick={() => onLock(config)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                                   title="Approve & Lock"
                                 >
                                   <Lock className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => onEdit(config)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                                  title="Edit"
+                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                                  title="Edit" aria-label="Edit"
                                 >
                                   <Pencil className="w-4 h-4" />
                                 </button>
@@ -535,7 +535,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
                             ) : (
                               <button
                                 onClick={() => onEditLocked(config)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                                className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
                                 title="Edit locked config"
                               >
                                 <Pencil className="w-4 h-4" />
@@ -543,8 +543,8 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
                             )}
                             <button
                               onClick={() => onDelete(config)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                              title="Delete"
+                              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                              title="Delete" aria-label="Delete"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -557,7 +557,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
               </table>
             </div>
           )}
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             {visible.length !== configs.length
               ? `${visible.length} of ${configs.length} configurations`
               : `${configs.length} configuration${configs.length !== 1 ? 's' : ''}`}
@@ -644,7 +644,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
           <Layers className="w-10 h-10 text-gray-300" />
           <div>
             <p className="text-sm font-medium text-gray-600">No special config groups yet</p>
-            <p className="text-xs text-gray-400 mt-1">Create a group to manage versioned special allocation configs.</p>
+            <p className="text-xs text-gray-500 mt-1">Create a group to manage versioned special allocation configs.</p>
           </div>
         </div>
       ) : (
@@ -682,7 +682,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                         <span className="text-green-700">Locked</span>
                       </p>
                     ) : (
-                      <p className="text-xs text-gray-400 mt-0.5">No active version for today</p>
+                      <p className="text-xs text-gray-500 mt-0.5">No active version for today</p>
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -694,14 +694,14 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                     </button>
                     <button
                       onClick={() => toggleExpand(g.id)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-xs"
+                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-xs"
                       title={isExpanded ? 'Hide history' : 'View history'}
                     >
                       {isExpanded ? 'Hide' : 'History'}
                     </button>
                     <button
                       onClick={() => handleDeleteGroup(g)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
                       title="Delete group"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -713,7 +713,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                 {isExpanded && (
                   <div className="border-t border-gray-100">
                     {g.versions.length === 0 ? (
-                      <p className="px-4 py-3 text-xs text-gray-400">No versions yet.</p>
+                      <p className="px-4 py-3 text-xs text-gray-500">No versions yet.</p>
                     ) : (
                       <table className="w-full text-xs">
                         <thead>
@@ -737,14 +737,14 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                                 <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
                                 <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
                                 <td className="px-4 py-2">
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
                                     vAmt ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
                                   }`}>
                                     {vAmt ? 'Amount' : 'Pct'}
                                   </span>
                                 </td>
                                 <td className="px-4 py-2">
-                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
                                     vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
                                   }`}>
                                     {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
@@ -755,7 +755,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                                 <td className="px-4 py-2">
                                   <button
                                     onClick={() => handleDeleteVersion(v)}
-                                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
                                     title="Delete version"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -776,7 +776,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
           )}
         </>
       )}
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-gray-500">
         {visible.length !== groups.length
           ? `${visible.length} of ${groups.length} groups`
           : `${groups.length} group${groups.length !== 1 ? 's' : ''}`}
@@ -875,7 +875,7 @@ function CurrenciesTab() {
         <p className="text-sm text-gray-500">Manage the currencies available across banks, FX transactions, and deposits.</p>
         <button
           onClick={() => setShowMigration(v => !v)}
-          className="text-xs text-gray-400 hover:text-gray-600 underline"
+          className="text-xs text-gray-500 hover:text-gray-600 underline"
         >
           {showMigration ? 'Hide' : 'Show'} migration SQL
         </button>
@@ -947,7 +947,7 @@ function CurrenciesTab() {
                   <td className="px-4 py-2.5 text-right">
                     <button
                       onClick={() => handleDelete(c.code)}
-                      className="p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-danger transition-colors"
+                      className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-danger transition-colors"
                       title={`Remove ${c.code}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -2305,6 +2305,27 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_bsb_org_bank ON public.bank_statement_balances(org_id, bank_name);
 
+NOTIFY pgrst, 'reload schema';
+
+-- ── Import sequence: stable ordering within and across import batches ──────────
+-- BIGSERIAL auto-populates existing rows in heap order (≈ insertion order).
+-- New rows after this migration are assigned deterministic file-order values.
+ALTER TABLE public.inflow_transactions    ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.outflow_transactions   ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.fx_transactions        ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.intra_flows            ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.bank_deposits          ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.intrabank_transfers    ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+ALTER TABLE public.project_entries        ADD COLUMN IF NOT EXISTS import_seq BIGSERIAL;
+
+CREATE INDEX IF NOT EXISTS idx_inflow_import_seq        ON public.inflow_transactions(import_seq);
+CREATE INDEX IF NOT EXISTS idx_outflow_import_seq       ON public.outflow_transactions(import_seq);
+CREATE INDEX IF NOT EXISTS idx_fx_import_seq            ON public.fx_transactions(import_seq);
+CREATE INDEX IF NOT EXISTS idx_intraflow_import_seq     ON public.intra_flows(import_seq);
+CREATE INDEX IF NOT EXISTS idx_bank_deposits_import_seq ON public.bank_deposits(import_seq);
+CREATE INDEX IF NOT EXISTS idx_intrabank_import_seq     ON public.intrabank_transfers(import_seq);
+CREATE INDEX IF NOT EXISTS idx_project_entries_import_seq ON public.project_entries(import_seq);
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
@@ -2381,7 +2402,7 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                     {t.rules.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {t.rules.map(r => (
-                          <span key={r.id} className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                          <span key={r.id} className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
                             <span className="text-gray-400">{r.rule_type === 'keyword' ? 'kw:' : 'sc:'}</span>
                             {r.rule_value}
                           </span>
@@ -2389,14 +2410,14 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                       </div>
                     )}
                     {t.special_config_name && (
-                      <p className="text-[11px] text-primary mt-1">↳ Auto-applies: {t.special_config_name}</p>
+                      <p className="text-xs text-primary mt-1">↳ Auto-applies: {t.special_config_name}</p>
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                    <button onClick={() => onEdit(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                    <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -2404,7 +2425,7 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
               ))}
             </div>
           )}
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             {visible.length !== incomeTypes.length
               ? `${visible.length} of ${incomeTypes.length} income types`
               : `${incomeTypes.length} income type${incomeTypes.length !== 1 ? 's' : ''}`}
@@ -2509,17 +2530,17 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium text-gray-900">{t.name}</p>
                         {t.is_system && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>
                         )}
                         {!t.is_system && linkedCats.length > 0 && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Linked Category</span>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Linked Category</span>
                         )}
                         {isStandalone && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Standalone</span>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Standalone</span>
                         )}
                       </div>
                       {linkedCats.length > 0 && (
-                        <p className="text-xs text-gray-400 mt-0.5 truncate">↳ {linkedCats.join(', ')}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">↳ {linkedCats.join(', ')}</p>
                       )}
                     </div>
                     <div className="flex gap-1 shrink-0">
@@ -2529,10 +2550,10 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
                         </span>
                       ) : (
                         <>
-                          <button onClick={() => onEdit(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                          <button onClick={() => onEdit(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
-                          <button onClick={() => onDelete(t)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                          <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </>
@@ -2543,7 +2564,7 @@ function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
               })}
             </div>
           )}
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             {visible.length !== outflowTypes.length
               ? `${visible.length} of ${outflowTypes.length} outflow types`
               : `${outflowTypes.length} outflow type${outflowTypes.length !== 1 ? 's' : ''}`}
@@ -2627,21 +2648,21 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium text-gray-900">{d.name}</p>
                       {d.code && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-mono">{d.code}</span>
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-mono">{d.code}</span>
                       )}
                       {!d.active && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>
                       )}
                     </div>
                     {d.description && (
-                      <p className="text-xs text-gray-400 mt-0.5 truncate">{d.description}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{d.description}</p>
                     )}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => onEdit(d)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
+                    <button onClick={() => onEdit(d)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(d)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                    <button onClick={() => onDelete(d)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -2649,7 +2670,7 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
               ))}
             </div>
           )}
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             {visible.length !== departments.length
               ? `${visible.length} of ${departments.length} departments`
               : `${departments.length} department${departments.length !== 1 ? 's' : ''}`}

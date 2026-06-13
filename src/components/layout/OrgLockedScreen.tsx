@@ -190,7 +190,7 @@ export function OrgLockedScreen() {
               Download backup (.json)
             </button>
 
-            <p className="text-center text-xs text-gray-400 dark:text-gray-500">
+            <p className="text-center text-xs text-gray-500 dark:text-gray-500">
               {days === 0
                 ? 'The restore window has passed. Organisation will be purged shortly.'
                 : `Restore window closes on ${dateStr}.`}
@@ -206,7 +206,7 @@ export function OrgLockedScreen() {
               Contact the organisation owner if you believe this is an error.
             </p>
             {days > 0 && (
-              <p className="text-xs text-gray-400 dark:text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-500">
                 Data will be permanently deleted on {dateStr} unless restored by the owner.
               </p>
             )}

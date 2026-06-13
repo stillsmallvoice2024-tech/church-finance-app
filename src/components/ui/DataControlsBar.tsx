@@ -231,7 +231,7 @@ export function DataControlsBar({
           <button
             type="button"
             onClick={() => setSortOpen(o => !o)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 min-h-[40px] text-sm border rounded-lg transition-colors whitespace-nowrap ${
               sortOpen || isAdvanced
                 ? 'border-primary/40 bg-primary/5 text-primary'
                 : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300 hover:text-gray-700 hover:bg-gray-50'
@@ -246,7 +246,7 @@ export function DataControlsBar({
           </button>
 
           {sortOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
 
               {/* Clear sort (when active) */}
               {isSortActive && (
@@ -266,7 +266,7 @@ export function DataControlsBar({
               {isAdvanced && (
                 <div className="mx-3 mt-2 mb-1 px-2.5 py-1.5 bg-primary/5 rounded-lg">
                   <p className="text-xs text-primary font-medium">Multi-sort active · {advancedSort.length} levels</p>
-                  <p className="text-[10px] text-primary/60 mt-0.5">
+                  <p className="text-xs text-primary/60 mt-0.5">
                     {advancedSort.map(l => sortFields.find(f => f.key === l.key)?.label ?? l.key).join(' → ')}
                   </p>
                 </div>
@@ -353,7 +353,7 @@ export function DataControlsBar({
               <select
                 value={pageSize}
                 onChange={e => onPageSizeChange(parseInt(e.target.value, 10))}
-                className="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="text-xs border border-gray-200 rounded-lg px-1.5 py-1 min-h-[36px] bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {pageSizeOptions.map(o => <option key={o} value={o}>{o}</option>)}
               </select>

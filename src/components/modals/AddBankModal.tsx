@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { AlertTriangle, Plus, Trash2, Check, X } from 'lucide-react'
 import { TechDetails } from '../ui/TechDetails'
 import { Modal, type ModalHandle } from '../ui/Modal'
-import { Field, inputCls } from '../ui/FormField'
+import { Field, inputCls, focusFirstInvalid } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
@@ -407,7 +407,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
   return (
     <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Edit Bank' : 'Add Bank'} isDirty={isDirty} disableClose={loading} footer={footerEl}>
-      <form id="add-bank-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form id="add-bank-form" onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-4">
 
         {checkingSchema && (
           <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
@@ -511,7 +511,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             ))}
           </select>
           {isForeignCurrencyBank && (
-            <p className="text-[11px] text-amber-600 font-medium mt-0.5">
+            <p className="text-xs text-amber-600 font-medium mt-0.5">
               Foreign Currency Bank — import transactions will be restricted to FX Inflow / FX Outflow types.
             </p>
           )}
@@ -596,7 +596,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                                 type="button"
                                 onClick={() => confirmNewCategory(i)}
                                 disabled={!newCatMode!.draft.trim() || newCatMode!.saving}
-                                className="p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-40 transition-colors shrink-0"
+                                className="touch-target p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-40 transition-colors shrink-0"
                               >
                                 <Check className="w-3.5 h-3.5" />
                               </button>
@@ -604,7 +604,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                                 type="button"
                                 onClick={() => setNewCatMode(null)}
                                 disabled={newCatMode!.saving}
-                                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                                className="touch-target p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
                               >
                                 <X className="w-3.5 h-3.5" />
                               </button>
@@ -670,7 +670,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                           <button
                             type="button"
                             onClick={() => removeRow(i)}
-                            className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            className="touch-target p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -693,7 +693,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   <Plus className="w-3.5 h-3.5" /> Add row
                 </button>
 
-                <p className="text-[11px] text-gray-400">
+                <p className="text-xs text-gray-500">
                   <span className="font-medium">Count</span>: tick if this amount is new and should be added to the category balance. Untick if it already exists in the category's transaction records.
                 </p>
               </div>

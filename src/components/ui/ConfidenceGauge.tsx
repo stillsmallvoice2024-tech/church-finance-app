@@ -31,7 +31,7 @@ function Arc({ score }: { score: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className={`text-3xl font-bold tabular-nums ${text}`}>{Math.round(animated)}</span>
-        <span className="text-[10px] text-gray-400 font-medium">out of 100</span>
+        <span className="text-xs text-gray-500 font-medium">out of 100</span>
       </div>
     </div>
   )
@@ -47,7 +47,7 @@ export function ConfidenceGauge() {
   return (
     <Card className="flex flex-col">
       <h2 className="text-sm font-semibold text-gray-700 mb-1">Record Confidence</h2>
-      <p className="text-xs text-gray-400 mb-2">How complete and verified your records are</p>
+      <p className="text-xs text-gray-500 mb-2">How complete and verified your records are</p>
 
       <div className="flex-1 flex flex-col items-center justify-center gap-2 py-2">
         {loading ? (
@@ -82,7 +82,7 @@ export function ConfidenceGauge() {
             <span className="font-semibold text-gray-700 tabular-nums">{bankCompleteness}%</span>
           </div>
           {suggestion && (
-            <p className="text-xs text-gray-400 leading-relaxed">{suggestion}</p>
+            <p className="text-xs text-gray-500 leading-relaxed">{suggestion}</p>
           )}
         </div>
       )}

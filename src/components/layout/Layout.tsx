@@ -26,6 +26,12 @@ export function Layout() {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
+  // Move focus to the page content on SPA navigation so screen-reader and
+  // keyboard users land on the new page instead of the old nav link.
+  useEffect(() => {
+    document.getElementById('main-content')?.focus({ preventScroll: true })
+  }, [location.pathname])
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Skip to main content — visible on keyboard focus only */}
@@ -46,7 +52,7 @@ export function Layout() {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex flex-col flex-1 min-w-0 lg:ml-72">
           <TopBar onMenuClick={() => setSidebarOpen(true)} />
-          <main id="main-content" className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 dark:bg-gray-900">
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 dark:bg-gray-900 outline-none">
             {/* keyed by pathname so each route gets a subtle entrance fade */}
             <div key={location.pathname} className="page-enter">
               <Outlet />

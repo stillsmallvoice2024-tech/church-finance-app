@@ -185,7 +185,19 @@ interface ParsedSheet {
 function StepDots({ step }: { step: number }) {
   const STEPS = ['Upload', 'Select Sheet', 'Map Columns', 'Configure Rows', 'Import']
   return (
-    <div className="flex items-center gap-0 mb-5">
+    <div className="mb-5">
+      {/* Compact progress — phones (full dot row overflows narrow screens) */}
+      <div className="sm:hidden">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold text-primary">{STEPS[step - 1]}</p>
+          <p className="text-xs text-gray-500 whitespace-nowrap">Step {step} of {STEPS.length}</p>
+        </div>
+        <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden" role="progressbar" aria-valuemin={1} aria-valuemax={STEPS.length} aria-valuenow={step} aria-label={`Step ${step} of ${STEPS.length}: ${STEPS[step - 1]}`}>
+          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${(step / STEPS.length) * 100}%` }} />
+        </div>
+      </div>
+      {/* Full dot row — sm+ */}
+      <div className="hidden sm:flex items-center gap-0">
       {STEPS.map((label, i) => {
         const n   = i + 1
         const done = n < step
@@ -200,7 +212,7 @@ function StepDots({ step }: { step: number }) {
               }`}>
                 {done ? <CheckCircle2 className="w-4 h-4" /> : n}
               </div>
-              <span className={`text-[10px] mt-1 whitespace-nowrap ${cur ? 'text-primary font-semibold' : 'text-gray-400'}`}>
+              <span className={`text-xs mt-1 whitespace-nowrap ${cur ? 'text-primary font-semibold' : 'text-gray-500'}`}>
                 {label}
               </span>
             </div>
@@ -210,6 +222,7 @@ function StepDots({ step }: { step: number }) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -1477,7 +1490,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           type="button"
           onClick={() => isDirty ? setConfirmingReset(true) : reset()}
           disabled={isProcessing}
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <RefreshCw className="w-3 h-3" /> Reset
         </button>
@@ -1515,7 +1528,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     : <>Drop your file here, or <span className="text-primary underline">browse</span></>
                   }
                 </p>
-                <p className="text-xs text-gray-400 mt-1">Accepts .xlsx, .xls, and .pdf — max 20 MB</p>
+                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .pdf — max 20 MB</p>
               </div>
             </div>
             <input
@@ -1577,7 +1590,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 {isForeignCurrencyBank ? (
                   <div className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
                     {TABLE_CONFIG.fx_transactions.label}
-                    <span className="ml-2 text-[10px] font-semibold text-amber-600">(FX Bank — locked)</span>
+                    <span className="ml-2 text-xs font-semibold text-amber-600">(FX Bank — locked)</span>
                   </div>
                 ) : (
                   <select
@@ -1856,9 +1869,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               {internalBank ? (
                 <span className="flex-1 text-xs font-semibold text-primary">{internalBank.name}</span>
               ) : (
-                <span className="flex-1 text-xs text-gray-400">—</span>
+                <span className="flex-1 text-xs text-gray-500">—</span>
               )}
-              <span className="text-[10px] text-gray-400 shrink-0">locked after duplicate check</span>
+              <span className="text-xs text-gray-500 shrink-0">locked after duplicate check</span>
             </div>
 
             {/* ── Foreign Currency Bank notice ─────────────────────────── */}
@@ -1999,12 +2012,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         onChange={e => setInflowFilter(p => ({ ...p, desc: e.target.value }))}
                         className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                       />
-                      <span className="text-xs text-gray-400">Amount</span>
-                      <input type="number" placeholder="from" value={f.amtFrom}
+                      <span className="text-xs text-gray-500">Amount</span>
+                      <input type="text" inputMode="decimal" placeholder="from" value={f.amtFrom}
                         onChange={e => setInflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
                         className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                       />
-                      <input type="number" placeholder="to" value={f.amtTo}
+                      <input type="text" inputMode="decimal" placeholder="to" value={f.amtTo}
                         onChange={e => setInflowFilter(p => ({ ...p, amtTo: e.target.value }))}
                         className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                       />
@@ -2012,7 +2025,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                         className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
                         Clear
                       </button>
-                      <span className="text-xs text-gray-400 ml-auto">
+                      <span className="text-xs text-gray-500 ml-auto">
                         {filtered.length} / {creditRows.length} rows
                         {selectedInflowRis.size > 0 && (
                           <> · <span className="text-primary font-medium">{selectedInflowRis.size} selected</span></>
@@ -2166,7 +2179,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       </div>
                       <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                         {filtered.length === 0
-                          ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
+                          ? <div className="py-8 text-center text-xs text-gray-500">No credit rows match the filter</div>
                           : filtered.map(({ ri, raw, credit }) => {
                               const { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId } = buildInflowRowData(ri, raw)
                               const isInflowSelected = selectedInflowRis.has(ri)
@@ -2203,7 +2216,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     </div>
                                     <span className="text-gray-700 font-medium">{baseCurrencySymbol}{credit.toLocaleString()}</span>
                                     {txnType ? (
-                                      <span className="text-xs text-gray-400 italic">N/A</span>
+                                      <span className="text-xs text-gray-500 italic">N/A</span>
                                     ) : (
                                       <select value={displaySelId}
                                         onChange={e => {
@@ -2264,7 +2277,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                   </div>
                                   {(txnType === 'refund' || txnType === 'reversal') && (
                                     <div className="px-3 pb-2 flex items-center gap-2">
-                                      <span className="text-[10px] text-gray-400 w-28 shrink-0">Original Txn ID:</span>
+                                      <span className="text-xs text-gray-500 w-28 shrink-0">Original Txn ID:</span>
                                       <input type="text" value={origId}
                                         onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
                                         placeholder="ID of original transaction"
@@ -2308,7 +2321,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       )}
                       <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
                       {filtered.length === 0
-                        ? <div className="py-8 text-center text-xs text-gray-400">No credit rows match the filter</div>
+                        ? <div className="py-8 text-center text-xs text-gray-500">No credit rows match the filter</div>
                         : filtered.map(({ ri, raw, credit }) => {
                             const { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId } = buildInflowRowData(ri, raw)
                             const isInflowSelected = selectedInflowRis.has(ri)
@@ -2339,8 +2352,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                         }}
                                         className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shrink-0"
                                       />
-                                      <span className="text-[10px] font-mono text-gray-400 shrink-0">#{ri + 1}</span>
-                                      {date && <span className="text-[11px] font-semibold text-gray-400 truncate">{date}</span>}
+                                      <span className="text-xs font-mono text-gray-400 shrink-0">#{ri + 1}</span>
+                                      {date && <span className="text-xs font-semibold text-gray-400 truncate">{date}</span>}
                                     </div>
                                     <span className="text-sm font-mono font-bold text-success tabular-nums shrink-0 ml-2">
                                       {baseCurrencySymbol}{credit.toLocaleString()}
@@ -2369,9 +2382,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <div className="px-4 py-3 bg-gray-50/40 space-y-3">
                                       {/* Allocation Config */}
                                       <div>
-                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Allocation Config</label>
+                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Allocation Config</label>
                                         {txnType ? (
-                                          <span className="text-xs text-gray-400 italic">N/A for {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label}</span>
+                                          <span className="text-xs text-gray-500 italic">N/A for {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label}</span>
                                         ) : (
                                           <select value={displaySelId}
                                             onChange={e => {
@@ -2396,7 +2409,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       {/* Income Type */}
                                       {!txnType && (
                                         <div>
-                                          <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Income Type</label>
+                                          <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Income Type</label>
                                           <div className="relative">
                                             <SearchableSelect
                                               value={effIncomeTypeId}
@@ -2426,7 +2439,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       )}
                                       {/* Transaction Type */}
                                       <div>
-                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
+                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
                                         <select value={txnType}
                                           onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
                                           disabled={isForeignCurrencyBank}
@@ -2437,7 +2450,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       {/* Original Txn ID */}
                                       {(txnType === 'refund' || txnType === 'reversal') && (
                                         <div>
-                                          <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Original Txn ID</label>
+                                          <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Original Txn ID</label>
                                           <input type="text" value={origId}
                                             onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
                                             placeholder="ID of original transaction"
@@ -2448,7 +2461,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       <button
                                         type="button"
                                         onClick={() => setExpandedInflowCardRis(prev => { const s = new Set(prev); s.delete(ri); return s })}
-                                        className="w-full flex items-center justify-center gap-1 text-xs text-gray-400 hover:text-gray-600 pt-1"
+                                        className="w-full flex items-center justify-center gap-1 text-xs text-gray-500 hover:text-gray-600 pt-1"
                                       >
                                         <ChevronDown className="w-3.5 h-3.5 rotate-180" />
                                         Less
@@ -2490,12 +2503,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       onChange={e => setOutflowFilter(p => ({ ...p, desc: e.target.value }))}
                       className="flex-1 min-w-[160px] text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                     />
-                    <span className="text-xs text-gray-400">Amount</span>
-                    <input type="number" placeholder="from" value={f.amtFrom}
+                    <span className="text-xs text-gray-500">Amount</span>
+                    <input type="text" inputMode="decimal" placeholder="from" value={f.amtFrom}
                       onChange={e => setOutflowFilter(p => ({ ...p, amtFrom: e.target.value }))}
                       className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                     />
-                    <input type="number" placeholder="to" value={f.amtTo}
+                    <input type="text" inputMode="decimal" placeholder="to" value={f.amtTo}
                       onChange={e => setOutflowFilter(p => ({ ...p, amtTo: e.target.value }))}
                       className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                     />
@@ -2503,7 +2516,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                       className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
                       Clear
                     </button>
-                    <span className="text-xs text-gray-400 ml-auto">
+                    <span className="text-xs text-gray-500 ml-auto">
                       {filtered.length} / {debitRows.length} rows
                       {selectedOutflowRis.size > 0 && (
                         <> · <span className="text-primary font-medium">{selectedOutflowRis.size} selected</span></>
@@ -2678,7 +2691,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     </div>
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                       {filtered.length === 0
-                        ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
+                        ? <div className="py-8 text-center text-xs text-gray-500">No debit rows match the filter</div>
                         : filtered.map(({ ri, raw, debit }) => {
                             const { date, desc, sc, txnType, origId } = buildOutflowRowData(ri, raw)
                             const isOutflowSelected = selectedOutflowRis.has(ri)
@@ -2761,7 +2774,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 </div>
                                 {outflowTypeOptions.length > 0 && (
                                   <div className="px-3 pb-2 flex items-center gap-2">
-                                    <span className="text-[10px] text-gray-400 w-28 shrink-0">Outflow Type:</span>
+                                    <span className="text-xs text-gray-500 w-28 shrink-0">Outflow Type:</span>
                                     <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
                                       onChange={v => setRowOutflowTypes(prev => ({ ...prev, [ri]: v }))}
                                       options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
@@ -2772,7 +2785,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                 )}
                                 {(txnType === 'refund' || txnType === 'reversal') && (
                                   <div className="px-3 pb-2 flex items-center gap-2">
-                                    <span className="text-[10px] text-gray-400 w-28 shrink-0">Original Txn ID:</span>
+                                    <span className="text-xs text-gray-500 w-28 shrink-0">Original Txn ID:</span>
                                     <input type="text" value={origId}
                                       onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
                                       placeholder="ID of original transaction"
@@ -2816,7 +2829,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     )}
                     <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
                     {filtered.length === 0
-                      ? <div className="py-8 text-center text-xs text-gray-400">No debit rows match the filter</div>
+                      ? <div className="py-8 text-center text-xs text-gray-500">No debit rows match the filter</div>
                       : filtered.map(({ ri, raw, debit }) => {
                           const { date, desc, sc, txnType, origId } = buildOutflowRowData(ri, raw)
                           const isOutflowSelected = selectedOutflowRis.has(ri)
@@ -2846,10 +2859,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                       }}
                                       className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shrink-0"
                                     />
-                                    <span className="text-[10px] font-mono text-gray-400 shrink-0">#{ri + 1}</span>
-                                    {date && <span className="text-[11px] font-semibold text-gray-400 truncate">{date}</span>}
+                                    <span className="text-xs font-mono text-gray-400 shrink-0">#{ri + 1}</span>
+                                    {date && <span className="text-xs font-semibold text-gray-400 truncate">{date}</span>}
                                     {isPending && (
-                                      <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold">Pending</span>
+                                      <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">Pending</span>
                                     )}
                                   </div>
                                   <span className="text-sm font-mono font-bold text-danger tabular-nums shrink-0 ml-2">
@@ -2880,7 +2893,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                   <div className="px-4 py-3 bg-gray-50/40 space-y-3">
                                     {/* Stage Code 1 */}
                                     <div>
-                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Category</label>
+                                      <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Category</label>
                                       <select value={sc.s1}
                                         onChange={e => {
                                           const s1 = e.target.value
@@ -2903,7 +2916,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     </div>
                                     {/* Stage Code 2 */}
                                     <div>
-                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Fund Type</label>
+                                      <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Fund Type</label>
                                       <select value={sc.s2}
                                         onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
@@ -2916,7 +2929,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     {/* Outflow Type */}
                                     {outflowTypeOptions.length > 0 && (
                                       <div>
-                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Outflow Type</label>
+                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Outflow Type</label>
                                         <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
                                           onChange={v => setRowOutflowTypes(prev => ({ ...prev, [ri]: v }))}
                                           options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
@@ -2940,7 +2953,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     </label>
                                     {/* Transaction Type */}
                                     <div>
-                                      <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
+                                      <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
                                       <select value={txnType}
                                         onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
                                         disabled={isForeignCurrencyBank}
@@ -2951,7 +2964,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     {/* Original Txn ID */}
                                     {(txnType === 'refund' || txnType === 'reversal') && (
                                       <div>
-                                        <label className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Original Txn ID</label>
+                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Original Txn ID</label>
                                         <input type="text" value={origId}
                                           onChange={e => setRowOrigTxnIds(prev => ({ ...prev, [ri]: e.target.value }))}
                                           placeholder="ID of original transaction"
@@ -2962,7 +2975,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     <button
                                       type="button"
                                       onClick={() => setExpandedOutflowCardRis(prev => { const s = new Set(prev); s.delete(ri); return s })}
-                                      className="w-full flex items-center justify-center gap-1 text-xs text-gray-400 hover:text-gray-600 pt-1"
+                                      className="w-full flex items-center justify-center gap-1 text-xs text-gray-500 hover:text-gray-600 pt-1"
                                     >
                                       <ChevronDown className="w-3.5 h-3.5 rotate-180" />
                                       Less
@@ -3187,10 +3200,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 ) : (
                   /* Balance column not mapped — manual fallback */
                   <>
-                    <p className="text-xs text-gray-400">Balance column not mapped — enter manually if needed:</p>
+                    <p className="text-xs text-gray-500">Balance column not mapped — enter manually if needed:</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
-                        type="number"
+                        type="text" inputMode="decimal"
                         value={stmtBalance}
                         onChange={e => setStmtBalance(e.target.value)}
                         placeholder="Closing balance"

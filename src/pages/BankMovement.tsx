@@ -53,6 +53,7 @@ interface DepositRow {
   offset_role:         string | null
   root_transaction_id: string | null
   deposit_group_id:    string | null
+  import_seq?:         number
   inflowData?:         InflowTransaction
   outflowData?:        OutflowTransaction
 }
@@ -71,6 +72,7 @@ interface TransferRow {
   source:              'intrabank_transfers' | 'inflow' | 'outflow'
   offset_role:         string | null
   root_transaction_id: string | null
+  import_seq?:         number
   inflowData?:         InflowTransaction
   outflowData?:        OutflowTransaction
 }
@@ -174,9 +176,10 @@ function DepositsPanel() {
     const [depRes, inflowRes, outflowRes] = await Promise.all([
       supabase
         .from('bank_deposits')
-        .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks')
+        .select('id, date, bank_id, bank_name, amount, description, transaction_ref, remarks, import_seq')
         .eq('org_id', orgId)
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .order('import_seq', { ascending: false }),
       supabase.from('inflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
       supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'bank_deposit').order('date', { ascending: false }),
     ])
@@ -185,6 +188,7 @@ function DepositsPanel() {
     const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as Omit<DepositRow, 'source' | 'offset_role' | 'root_transaction_id' | 'deposit_group_id'>),
       source: 'bank_deposits' as const, offset_role: null, root_transaction_id: null, deposit_group_id: null,
+      import_seq: r.import_seq as number | undefined,
     }))
     const inflowRows: DepositRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string, date: r.date as string, bank_id: null,
@@ -193,6 +197,7 @@ function DepositsPanel() {
       remarks: r.remark as string | null, source: 'inflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
       deposit_group_id: r.deposit_group_id as string | null ?? null,
+      import_seq: r.import_seq as number | undefined,
       inflowData: r as unknown as InflowTransaction,
     }))
     const outflowRows: DepositRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -202,10 +207,11 @@ function DepositsPanel() {
       remarks: r.remarks as string | null, source: 'outflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
       deposit_group_id: r.deposit_group_id as string | null ?? null,
+      import_seq: r.import_seq as number | undefined,
       outflowData: r as unknown as OutflowTransaction,
     }))
 
-    setRows([...depositRows, ...inflowRows, ...outflowRows].sort((a, b) => b.date.localeCompare(a.date)))
+    setRows([...depositRows, ...inflowRows, ...outflowRows].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)))
     setLoading(false)
   }, [orgId])
 
@@ -406,7 +412,7 @@ function DepositsPanel() {
             ].map(({ label, sub, value, accent }) => (
               <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
                 <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
-                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {sub && <p className="text-xs text-gray-500 mb-1 leading-tight">{sub}</p>}
                 {loading ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
                   : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
               </div>
@@ -468,16 +474,16 @@ function DepositsPanel() {
               <div key={`${row.source}-${row.id}`} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                 <div className="px-4 pt-3.5 pb-3">
                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <p className="text-[11px] font-semibold text-gray-400">{formatDate(row.date)}</p>
+                    <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
                     <SourceBadge source={row.source} />
                   </div>
-                  {row.bank_name && <p className="text-[11px] text-gray-400 mb-1.5">{row.bank_name}</p>}
+                  {row.bank_name && <p className="text-xs text-gray-500 mb-1.5">{row.bank_name}</p>}
                   {row.description && (
                     <div className="text-sm mb-1">
                       <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-800" />
                     </div>
                   )}
-                  {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono">Ref: {row.transaction_ref}</p>}
+                  {row.transaction_ref && <p className="text-xs text-gray-500 font-mono">Ref: {row.transaction_ref}</p>}
                   {row.remarks && (
                     <div className="text-xs mt-1.5">
                       <DescriptionCell id={`card-rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-400" />
@@ -486,16 +492,16 @@ function DepositsPanel() {
                 </div>
                 <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Amount</p>
+                    <p className="text-xs uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Amount</p>
                     <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                     {admin && row.source === 'bank_deposits' && (
-                      <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     )}
                     {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                       <>
-                        <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                         {row.deposit_group_id && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 flex items-center gap-0.5" title="Part of a deposit group">
                             <Layers className="w-2.5 h-2.5" />G
@@ -505,7 +511,7 @@ function DepositsPanel() {
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>
                         )}
                         {!row.deposit_group_id && row.root_transaction_id === null && row.offset_role !== 'root' && (
-                          <button onClick={() => setLinkGroupTarget(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Add to deposit group"><Link2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setLinkGroupTarget(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Add to deposit group" aria-label="Add to deposit group"><Link2 className="w-3.5 h-3.5" /></button>
                         )}
                       </>
                     )}
@@ -515,7 +521,7 @@ function DepositsPanel() {
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -539,7 +545,7 @@ function DepositsPanel() {
                     <tr key={`${row.source}-${row.id}`} className="hover:bg-gray-50 transition-colors">
                       <td className="w-8 px-1 py-3">
                         <button onClick={() => setExpandedId(isExpanded ? null : `${row.source}-${row.id}`)}
-                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                          className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                           {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                         </button>
                       </td>
@@ -556,11 +562,11 @@ function DepositsPanel() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {admin && row.source === 'bank_deposits' && (
-                            <button onClick={() => setDeleteTarget(row)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setDeleteTarget(row)} className="touch-target p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-danger transition-colors" title="Delete" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                           )}
                           {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                             <>
-                              <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                               {row.deposit_group_id && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 flex items-center gap-0.5" title="Part of a deposit group">
                                   <Layers className="w-2.5 h-2.5" />G
@@ -570,7 +576,7 @@ function DepositsPanel() {
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>
                               )}
                               {!row.deposit_group_id && row.root_transaction_id === null && row.offset_role !== 'root' && (
-                                <button onClick={() => setLinkGroupTarget(row)} className="p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Add to deposit group"><Link2 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => setLinkGroupTarget(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Add to deposit group" aria-label="Add to deposit group"><Link2 className="w-3.5 h-3.5" /></button>
                               )}
                             </>
                           )}
@@ -652,7 +658,7 @@ function TransfersPanel() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     const [transferRes, inflowRes, outflowRes] = await Promise.all([
-      supabase.from('intrabank_transfers').select('*').order('date', { ascending: false }),
+      supabase.from('intrabank_transfers').select('*').order('date', { ascending: false }).order('import_seq', { ascending: false }),
       ...(orgId ? [
         supabase.from('inflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
         supabase.from('outflow_transactions').select('*').eq('org_id', orgId).eq('transaction_type', 'intrabank_transfer').order('date', { ascending: false }),
@@ -662,6 +668,7 @@ function TransfersPanel() {
 
     const transferRows: TransferRow[] = (transferRes.data ?? []).map((r: Record<string, unknown>) => ({
       ...(r as unknown as TransferRow), source: 'intrabank_transfers' as const, offset_role: null, root_transaction_id: null,
+      import_seq: r.import_seq as number | undefined,
     }))
     const inRows: TransferRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string, date: r.date as string, from_bank_id: null, from_bank_name: r.bank_name as string | null,
@@ -669,6 +676,7 @@ function TransfersPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_ref as string | null,
       remarks: r.remark as string | null, source: 'inflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: r.import_seq as number | undefined,
       inflowData: r as unknown as InflowTransaction,
     }))
     const outRows: TransferRow[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -677,9 +685,10 @@ function TransfersPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_id as string | null,
       remarks: r.remarks as string | null, source: 'outflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: r.import_seq as number | undefined,
       outflowData: r as unknown as OutflowTransaction,
     }))
-    setRows([...transferRows, ...inRows, ...outRows].sort((a, b) => b.date.localeCompare(a.date)))
+    setRows([...transferRows, ...inRows, ...outRows].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)))
     setLoading(false)
   }, [orgId])
 
@@ -731,12 +740,12 @@ function TransfersPanel() {
           disabled={filtered.length === 0}
         />
         <div className="flex items-center gap-0.5 p-1 bg-gray-100 rounded-lg">
-          <button onClick={() => setDisplayMode('table')} title="Table view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+          <button onClick={() => setDisplayMode('table')} title="Table view" aria-label="Table view"
+            className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'table' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
             <LayoutList className="w-4 h-4" />
           </button>
-          <button onClick={() => setDisplayMode('cards')} title="Card view"
-            className={`p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
+          <button onClick={() => setDisplayMode('cards')} title="Card view" aria-label="Card view"
+            className={`touch-target p-1.5 rounded-md transition-colors ${displayMode === 'cards' ? 'bg-white shadow-sm text-primary' : 'text-gray-400 hover:text-gray-600'}`}>
             <LayoutGrid className="w-4 h-4" />
           </button>
         </div>
@@ -784,7 +793,7 @@ function TransfersPanel() {
             ].map(({ label, sub, value, accent }) => (
               <div key={label} className={`bg-white rounded-xl border shadow-sm px-4 py-3 ${accent.split(' ')[0]}`}>
                 <p className="text-xs font-semibold text-gray-700 mb-0.5">{label}</p>
-                {sub && <p className="text-[10px] text-gray-400 mb-1 leading-tight">{sub}</p>}
+                {sub && <p className="text-xs text-gray-500 mb-1 leading-tight">{sub}</p>}
                 {loading ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4 mt-1" />
                   : <p className={`text-base font-bold tabular-nums ${accent.split(' ')[1]}`}>{value}</p>}
               </div>
@@ -807,7 +816,7 @@ function TransfersPanel() {
             ) : filtered.map(row => (
               <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
                 <div className="px-4 pt-3.5 pb-3">
-                  <p className="text-[11px] font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
+                  <p className="text-xs font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
                   <div className="flex items-center gap-2 text-sm text-gray-700 mb-1">
                     <span className="font-medium truncate">{row.from_bank_name ?? '—'}</span>
                     <ArrowRightLeft className="w-3 h-3 text-gray-400 shrink-0" />
@@ -818,23 +827,23 @@ function TransfersPanel() {
                       <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
                     </div>
                   )}
-                  {row.transaction_ref && <p className="text-[11px] text-gray-400 font-mono mt-1">{row.transaction_ref}</p>}
+                  {row.transaction_ref && <p className="text-xs text-gray-500 font-mono mt-1">{row.transaction_ref}</p>}
                 </div>
                 <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
+                    <p className="text-xs uppercase tracking-wide font-semibold mb-0.5 text-gray-500">Transfer</p>
                     <p className="text-sm font-mono font-bold tabular-nums text-primary">{formatCurrency(row.amount, baseCurrencyCode)}</p>
                   </div>
                   <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                     {row.source === 'intrabank_transfers' && canWrite() && (
-                      <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     )}
                     {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
                       <>
-                        <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                        {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
+                        <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                         {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                          <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
                         )}
                       </>
                     )}
@@ -844,7 +853,7 @@ function TransfersPanel() {
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -865,7 +874,7 @@ function TransfersPanel() {
                     <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                       <td className="w-8 px-1 py-3">
                         <button onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                          className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                           {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                         </button>
                       </td>
@@ -883,14 +892,14 @@ function TransfersPanel() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {row.source === 'intrabank_transfers' && canDelete() && (
-                            <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50" title="Delete" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
                           )}
                           {(row.source === 'inflow' || row.source === 'outflow') && canWrite() && (
                             <>
-                              <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit"><Pencil className="w-4 h-4" /></button>
-                              {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
+                              <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-4 h-4" /></button>
+                              {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
                               {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                                <button onClick={() => handleLinkRoot(row)} className="p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root"><Link2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded-lg text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-4 h-4" /></button>
                               )}
                             </>
                           )}
@@ -920,7 +929,7 @@ const SOURCE_LABEL: Record<DepositRow['source'], string> = { bank_deposits: 'Dep
 const SOURCE_CLS:   Record<DepositRow['source'], string> = { bank_deposits: 'bg-primary/10 text-primary', inflow: 'bg-green-100 text-green-700', outflow: 'bg-red-100 text-red-700' }
 
 function SourceBadge({ source }: { source: DepositRow['source'] }) {
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${SOURCE_CLS[source]}`}>{SOURCE_LABEL[source]}</span>
+  return <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${SOURCE_CLS[source]}`}>{SOURCE_LABEL[source]}</span>
 }
 
 function ReconRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {

@@ -188,7 +188,7 @@ export default function PercentageAllocations() {
                 </span>
                 <span>Effective {formatDate(config.start_date)}</span>
               </div>
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-sticky-col">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                     <th className="px-5 py-3 text-left font-medium">#</th>
@@ -200,7 +200,7 @@ export default function PercentageAllocations() {
                 <tbody className="divide-y divide-gray-50">
                   {pcaPage.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 text-gray-400 text-xs">{pcaState.page * pcaState.pageSize + i + 1}</td>
+                      <td className="px-5 py-3 text-gray-500 text-xs">{pcaState.page * pcaState.pageSize + i + 1}</td>
                       <td className="px-5 py-3 font-medium text-gray-800">{row.category_name}</td>
                       <td className="px-5 py-3 text-right">
                         <span className="font-mono font-semibold text-primary">

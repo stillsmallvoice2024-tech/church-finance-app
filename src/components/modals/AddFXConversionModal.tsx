@@ -161,7 +161,7 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
               FX Amount ({currency}) *
             </label>
             <input
-              type="number"
+              type="text" inputMode="decimal"
               min="0.0001"
               step="0.0001"
               value={fxAmount}
@@ -170,14 +170,14 @@ export function AddFXConversionModal({ open, onClose, onSuccess, summaries, defa
               className={iCls}
             />
             {isPartial && (
-              <p className="text-[10px] text-amber-600">Partial conversion — {meta.symbol}{fmtFX(balance - fxAmt, getCurrencyLocale(currency))} remains</p>
+              <p className="text-xs text-amber-600">Partial conversion — {meta.symbol}{fmtFX(balance - fxAmt, getCurrencyLocale(currency))} remains</p>
             )}
           </div>
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Rate ({baseCurrencySymbol} per {currency}) *</label>
             <input
-              type="number"
+              type="text" inputMode="decimal"
               min="0"
               step="0.01"
               value={rate}

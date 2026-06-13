@@ -324,7 +324,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Total Amount ({baseCurrencySymbol}) *</label>
             <input
-              type="number"
+              type="text" inputMode="decimal"
               min="0"
               step="0.01"
               value={totalAmount}
@@ -374,7 +374,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     <option value="Savings">Savings</option>
                   </select>
                   <input
-                    type="number"
+                    type="text" inputMode="decimal"
                     min="0"
                     step={allocType === 'percentage' ? '0.01' : '1'}
                     value={row.value}
@@ -385,7 +385,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                   <button
                     type="button"
                     onClick={() => removeRow(i)}
-                    className="p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -420,7 +420,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
               <Link2 className="w-3.5 h-3.5 text-gray-400" />
               <p className="text-xs font-semibold text-gray-500">Linked Income Type</p>
             </div>
-            <p className="text-[11px] text-gray-400">
+            <p className="text-xs text-gray-500">
               When a transaction matches this income type, this config will be auto-applied.
             </p>
             {selectedIncomeTypeId ? (
@@ -557,7 +557,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
               </div>
               {isMigration && (
                 <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-                  <pre className="px-3 py-3 text-[11px] text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
+                  <pre className="px-3 py-3 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
                 </div>
               )}
             </div>

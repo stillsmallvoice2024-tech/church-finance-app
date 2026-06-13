@@ -132,7 +132,7 @@ export function EditFXInflowModal({ open, onClose, onSuccess, record }: Props) {
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-gray-600">Description</label>
             <button type="button" onClick={loadFXNarration} disabled={loadingNarr}
-              className="flex items-center gap-1 text-[10px] text-primary hover:underline disabled:opacity-50">
+              className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50">
               <Download className="w-3 h-3" />
               {loadingNarr ? 'Loading…' : 'Load FX narration'}
             </button>

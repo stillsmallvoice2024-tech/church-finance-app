@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal, type ModalHandle } from '../ui/Modal'
+import { focusFirstInvalid } from '../ui/FormField'
 import { useAddReportTemplate, useUpdateReportTemplate } from '../../hooks/useReportTemplates'
 import { useToastStore } from '../../store/toastStore'
 import type { ReportLayout, ReportTemplate } from '../../types'
@@ -64,13 +65,13 @@ export function SaveReportTemplateModal({ open, onClose, onSaved, layout, editTe
   }
 
   const inputCls = (err: boolean) =>
-    `w-full rounded-lg border px-3 py-2 text-sm outline-none transition
+    `w-full rounded-lg border px-3 py-2 min-h-[44px] text-base sm:text-sm outline-none transition
      ${err ? 'border-red-400 bg-red-50 focus:ring-red-300' : 'border-gray-300 bg-white focus:border-primary focus:ring-2 focus:ring-primary/20'}
      dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100`
 
   return (
     <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Update Template' : 'Save as Template'} size="max-w-md" isDirty={isDirty} disableClose={loading}>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-4">
 
         <div>
           <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">

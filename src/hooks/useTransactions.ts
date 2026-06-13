@@ -34,6 +34,7 @@ export interface InflowTransaction {
   created_by: string | null
   created_at: string
   updated_at: string
+  import_seq: number | null
 }
 
 export interface OutflowTransaction {
@@ -70,6 +71,7 @@ export interface OutflowTransaction {
   created_by: string | null
   created_at: string
   updated_at: string
+  import_seq: number | null
 }
 
 export interface IntraFlowRow {
@@ -91,6 +93,7 @@ export interface IntraFlowRow {
   reversal_of_id: string | null
   created_by: string | null
   created_at: string
+  import_seq: number | null
 }
 
 // ── Filter interfaces ──────────────────────────────────────────────────────────
@@ -138,7 +141,7 @@ export interface PaginatedResult<T> {
 
 // ── useInflowTransactions ──────────────────────────────────────────────────────
 
-const INFLOW_SORT_COLS = new Set(['date', 'amount', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1'])
+const INFLOW_SORT_COLS = new Set(['date', 'amount', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1', 'import_seq'])
 const INFLOW_SEARCH_COLS = new Set(['description', 'bank_name', 'transaction_ref', 'transaction_type', 'stage_code_1'])
 
 export function useInflowTransactions(
@@ -171,8 +174,9 @@ export function useInflowTransactions(
     } else if (sortColumn && INFLOW_SORT_COLS.has(sortColumn)) {
       query = query.order(sortColumn, { ascending: sortAscending ?? false })
       if (sortColumn !== 'recorded_at') query = query.order('recorded_at', { ascending: false })
+      if (sortColumn !== 'import_seq')  query = query.order('import_seq',  { ascending: true })
     } else {
-      query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+      query = query.order('recorded_at', { ascending: false }).order('import_seq', { ascending: true })
     }
 
     if (fetchAll) {
@@ -213,7 +217,7 @@ export function useInflowTransactions(
 
 // ── useOutflowTransactions ─────────────────────────────────────────────────────
 
-const OUTFLOW_SORT_COLS = new Set(['date', 'amount_disbursed', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1'])
+const OUTFLOW_SORT_COLS = new Set(['date', 'amount_disbursed', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1', 'import_seq'])
 const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_name', 'transaction_id', 'stage_code_1', 'transaction_type'])
 
 export function useOutflowTransactions(
@@ -246,8 +250,9 @@ export function useOutflowTransactions(
     } else if (sortColumn && OUTFLOW_SORT_COLS.has(sortColumn)) {
       query = query.order(sortColumn, { ascending: sortAscending ?? false })
       if (sortColumn !== 'recorded_at') query = query.order('recorded_at', { ascending: false })
+      if (sortColumn !== 'import_seq')  query = query.order('import_seq',  { ascending: true })
     } else {
-      query = query.order('recorded_at', { ascending: false }).order('date', { ascending: false })
+      query = query.order('recorded_at', { ascending: false }).order('import_seq', { ascending: true })
     }
 
     if (fetchAll) {
@@ -307,7 +312,7 @@ export function useOutflowTransactions(
 
 // ── useIntraFlows ──────────────────────────────────────────────────────────────
 
-const INTRAFLOW_SORT_COLS = new Set(['date', 'total_amount', 'account_from', 'account_to', 'description'])
+const INTRAFLOW_SORT_COLS = new Set(['date', 'total_amount', 'account_from', 'account_to', 'description', 'import_seq'])
 const INTRAFLOW_SEARCH_COLS = new Set(['description', 'account_from', 'account_to'])
 
 export function useIntraFlows(
@@ -342,8 +347,9 @@ export function useIntraFlows(
       }
     } else if (sortColumn && INTRAFLOW_SORT_COLS.has(sortColumn)) {
       query = query.order(sortColumn, { ascending: sortAscending ?? false })
+      if (sortColumn !== 'import_seq') query = query.order('import_seq', { ascending: false })
     } else {
-      query = query.order('date', { ascending: false })
+      query = query.order('date', { ascending: false }).order('import_seq', { ascending: false })
     }
 
     query = query.range(from, to)

@@ -39,7 +39,7 @@ export function TypeColorPicker({ value, onChange, disabled }: TypeColorPickerPr
             onClick={() => !disabled && onChange(c)}
             disabled={disabled}
             title={c}
-            className={`w-7 h-7 rounded-full border-2 transition-transform disabled:opacity-50 ${
+            className={`w-7 h-7 touch-target rounded-full border-2 transition-transform disabled:opacity-50 ${
               value.toLowerCase() === c.toLowerCase()
                 ? 'border-gray-800 scale-110'
                 : 'border-transparent hover:scale-110'

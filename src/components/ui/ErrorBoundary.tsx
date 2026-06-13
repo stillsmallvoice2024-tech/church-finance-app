@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div>
               <button
                 onClick={() => this.setState(s => ({ showDetails: !s.showDetails }))}
-                className="flex items-center gap-1 mx-auto text-xs text-gray-400 hover:text-gray-600"
+                className="flex items-center gap-1 mx-auto text-xs text-gray-500 hover:text-gray-600"
               >
                 {showDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 {showDetails ? 'Hide' : 'Show'} error details

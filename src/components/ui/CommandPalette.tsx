@@ -195,7 +195,7 @@ export function CommandPalette({ open, onClose }: Props) {
                     {entry.label}
                   </p>
                   {entry.sub && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{entry.sub}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 truncate">{entry.sub}</p>
                   )}
                 </div>
               </li>
@@ -203,7 +203,7 @@ export function CommandPalette({ open, onClose }: Props) {
           })}
         </ul>
 
-        <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3 text-[11px] text-gray-400">
+        <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3 text-xs text-gray-500">
           <span><kbd className="font-mono">↑↓</kbd> navigate</span>
           <span><kbd className="font-mono">Enter</kbd> go</span>
           <span><kbd className="font-mono">Esc</kbd> close</span>

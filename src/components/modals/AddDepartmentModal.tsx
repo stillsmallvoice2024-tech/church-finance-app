@@ -135,7 +135,7 @@ export function AddDepartmentModal({ open, onClose, onSaved, editRecord }: Props
             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30"
           />
           <span className="text-sm font-medium text-gray-700">Active</span>
-          <span className="text-xs text-gray-400">(inactive departments are hidden from transaction forms)</span>
+          <span className="text-xs text-gray-500">(inactive departments are hidden from transaction forms)</span>
         </label>
       </form>
     </Modal>

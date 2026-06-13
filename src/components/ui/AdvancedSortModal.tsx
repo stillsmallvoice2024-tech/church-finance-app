@@ -47,7 +47,7 @@ export function AdvancedSortModal({ open, onClose, sortFields, levels, onApply }
       <button
         type="button"
         onClick={() => { onApply([]); onClose() }}
-        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+        className="text-xs text-gray-500 hover:text-gray-600 transition-colors"
       >
         Clear all
       </button>
@@ -71,7 +71,7 @@ export function AdvancedSortModal({ open, onClose, sortFields, levels, onApply }
 
         {local.map((level, i) => (
           <div key={i} className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-gray-400 w-4 shrink-0 text-center">{i + 1}</span>
+            <span className="text-xs font-bold text-gray-400 w-4 shrink-0 text-center">{i + 1}</span>
 
             <select
               value={level.key}

@@ -114,13 +114,13 @@ export function BottomTabBar() {
 
       {/* More drawer */}
       {moreOpen && (
-        <div className="fixed bottom-16 left-0 right-0 z-50 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-100 dark:border-gray-700 max-h-[75vh] flex flex-col lg:hidden">
+        <div className="fixed bottom-[var(--tab-bar-height)] left-0 right-0 z-50 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-100 dark:border-gray-700 max-h-[calc(100dvh-var(--tab-bar-height)-1rem)] flex flex-col lg:hidden">
           {/* Drawer header */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">More</span>
             <button
               onClick={() => setMoreOpen(false)}
-              className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="touch-target p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
               aria-label="Close menu"
             >
               <X className="w-4 h-4" />
@@ -138,7 +138,7 @@ export function BottomTabBar() {
 
               return (
                 <div key={section.label}>
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 px-1">
+                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 px-1">
                     {section.label}
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -167,9 +167,9 @@ export function BottomTabBar() {
         </div>
       )}
 
-      {/* Bottom tab bar — height locked to h-12 (3rem = 48px); matches --tab-bar-height in index.css */}
+      {/* Bottom tab bar — h-12 content + safe-area inset; matches --tab-bar-height in index.css */}
       <nav
-        className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 h-12 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex lg:hidden"
+        className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 h-[var(--tab-bar-height)] pb-[var(--safe-bottom)] bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex lg:hidden"
         aria-label="Primary navigation"
       >
         {primaryTabs.map(({ label, path, icon: Icon, end }) => (
@@ -186,7 +186,7 @@ export function BottomTabBar() {
             {({ isActive }) => (
               <>
                 <Icon className="w-5 h-5" />
-                <span className={`text-[10px] font-medium ${isActive ? 'font-semibold' : ''}`}>
+                <span className={`text-xs leading-tight font-medium ${isActive ? 'font-semibold' : ''}`}>
                   {label}
                 </span>
               </>
@@ -204,7 +204,7 @@ export function BottomTabBar() {
           }`}
         >
           <MoreHorizontal className="w-5 h-5" />
-          <span className="text-[10px] font-medium">More</span>
+          <span className="text-xs leading-tight font-medium">More</span>
         </button>
       </nav>
     </>

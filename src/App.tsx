@@ -41,6 +41,7 @@ import ChangeLog            from './pages/ChangeLog'
 import ReconciliationCenter from './pages/ReconciliationCenter'
 import ResetPassword        from './pages/ResetPassword'
 import AcceptInvite         from './pages/AcceptInvite'
+import Tutorial             from './pages/Tutorial'
 
 // ── Route-level role guards ────────────────────────────────────────────────────
 // These run inside AuthGuard (loading=false, user set) so canWrite/isAdmin resolve correctly.
@@ -161,6 +162,8 @@ export default function App() {
             <Route path="refunds"              element={<ErrorBoundary><RefundTransactions /></ErrorBoundary>} />
             <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
             <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
+            <Route path="tutorial"             element={<ErrorBoundary><Tutorial /></ErrorBoundary>} />
+            <Route path="tutorial/:chapterId"  element={<ErrorBoundary><Tutorial /></ErrorBoundary>} />
           </Route>
           </Route> {/* OrgLockedGuard */}
           </Route> {/* OnboardingGuard */}

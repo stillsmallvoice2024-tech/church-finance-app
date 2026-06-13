@@ -165,7 +165,7 @@ export function AddOutflowTypeModal({ open, onClose, onSaved, editRecord }: Prop
               ))}
             </div>
             {linkedCatIds.length > 0 && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 {linkedCatIds.length} categor{linkedCatIds.length === 1 ? 'y' : 'ies'} linked
               </p>
             )}

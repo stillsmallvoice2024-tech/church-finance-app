@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal, type ModalHandle } from '../ui/Modal'
+import { focusFirstInvalid } from '../ui/FormField'
 import { useAddFXTransaction, useUpdateFXTransaction, type AddFXTransactionInput, type UpdateFXTransactionInput } from '../../hooks/useMutations'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import type { FXTransaction } from '../../hooks/useFX'
@@ -133,7 +134,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
 
   return (
     <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Edit FX Transaction' : 'Add FX Transaction'} isDirty={isDirty} disableClose={loading}>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-4">
         {error    && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
         {dupError && <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">{dupError}</div>}
 
@@ -141,7 +142,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={iCls(!!errors.date)} />
           </Field>
-          <Field label="Currency" error={errors.currency?.message}>
+          <Field label="Currency *" error={errors.currency?.message}>
             <select {...register('currency')} className={`${iCls(!!errors.currency)} bg-white`}>
               {foreignCurrencies.map(c => (
                 <option key={c.code} value={c.code}>{c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}</option>
@@ -161,7 +162,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           )}
         </Field>
 
-        <Field label="Transaction Type" error={errors.type?.message}>
+        <Field label="Transaction Type *" error={errors.type?.message}>
           <div className="flex gap-3">
             {(['deposit','withdrawal'] as const).map(t => (
               <label key={t} className="flex items-center gap-2 cursor-pointer">
@@ -214,7 +215,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
 }
 
 function iCls(e: boolean) {
-  return `w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${e ? 'border-red-400' : 'border-gray-300 focus:border-primary'}`
+  return `w-full px-3 py-2 min-h-[44px] text-base sm:text-sm border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${e ? 'border-red-400' : 'border-gray-300 focus:border-primary'}`
 }
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return <div className="flex flex-col gap-1"><label className="text-xs font-medium text-gray-600">{label}</label>{children}{error && <p className="text-xs text-red-500">{error}</p>}</div>

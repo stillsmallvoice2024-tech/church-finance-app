@@ -167,7 +167,7 @@ export function InlineCategorySelect({
             type="button"
             onClick={handleSave}
             disabled={saving || !newName.trim()}
-            className="p-1.5 rounded-lg bg-primary text-white hover:bg-primary-light disabled:opacity-50 transition-colors"
+            className="touch-target p-1.5 rounded-lg bg-primary text-white hover:bg-primary-light disabled:opacity-50 transition-colors"
             title="Save category"
           >
             {saving
@@ -177,8 +177,8 @@ export function InlineCategorySelect({
           <button
             type="button"
             onClick={handleCancel}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-            title="Cancel"
+            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            title="Cancel" aria-label="Cancel"
           >
             <X className="w-4 h-4" />
           </button>
@@ -229,7 +229,7 @@ export function InlineCategorySelect({
           id={listId}
           role="listbox"
           aria-label="Categories"
-          className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+          className="absolute z-50 left-0 right-0 mt-1 max-h-60 sm:max-h-60 max-sm:max-h-[40dvh] overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
           {filtered.length === 0 && (
             <li className="px-3 py-2 text-sm text-gray-400 italic" role="presentation">

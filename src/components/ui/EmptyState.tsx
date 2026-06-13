@@ -23,12 +23,12 @@ export function EmptyState({
       </div>
       <p className={`font-medium text-gray-500 ${compact ? 'text-sm' : 'text-base'}`}>{title}</p>
       {message && (
-        <p className="text-xs text-gray-400 mt-1 max-w-xs">{message}</p>
+        <p className="text-xs text-gray-500 mt-1 max-w-xs">{message}</p>
       )}
       {action && (
         <button
           onClick={action.onClick}
-          className="mt-3 text-xs font-medium text-primary underline hover:no-underline"
+          className="mt-4 px-4 min-h-[44px] inline-flex items-center justify-center text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition-colors"
         >
           {action.label}
         </button>

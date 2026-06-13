@@ -36,16 +36,20 @@ export function SortableHeader({
   const label = children ?? field.label
 
   return (
-    <th className={`px-4 py-3 font-medium ${className}`}>
+    <th
+      className={`px-4 py-3 font-medium ${className}`}
+      aria-sort={isActive ? (activeSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
       <button
         type="button"
         onClick={handleClick}
-        className={`inline-flex items-center gap-1 transition-colors group whitespace-nowrap ${
+        className={`inline-flex items-center gap-1 min-h-[32px] transition-colors group whitespace-nowrap ${
           rightAlign ? 'ml-auto flex-row-reverse' : ''
         } ${isActive ? 'text-primary' : inactiveCls}`}
       >
         {label}
-        <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}>
+        {/* Chevron stays visible on touch devices (no hover) via opacity-40 fallback */}
+        <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-40'}`}>
           {isActive
             ? (activeSortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)
             : <ChevronDown className="w-3 h-3" />

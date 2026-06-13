@@ -86,7 +86,7 @@ export default function DynamicReports() {
             <FileText className="w-6 h-6 text-gray-400" />
           </div>
           <p className="text-sm font-medium text-gray-600">No reports yet</p>
-          <p className="text-xs text-gray-400 mt-1 max-w-xs">
+          <p className="text-xs text-gray-500 mt-1 max-w-xs">
             Create a report to embed live financial metrics and tables directly in your documents.
           </p>
           <button
@@ -114,7 +114,7 @@ export default function DynamicReports() {
                     onClick={() => navigate(`/dynamic-reports/${report.id}`)}
                   >
                     <p className="text-sm font-medium text-gray-900 truncate">{report.title}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-gray-500 mt-0.5">
                       Updated {formatRelativeDate(report.updated_at)}
                     </p>
                   </button>
@@ -122,7 +122,7 @@ export default function DynamicReports() {
                     <button
                       onClick={() => setDeleteTarget(report)}
                       disabled={deleting}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
                       title="Delete report"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
