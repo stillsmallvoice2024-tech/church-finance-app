@@ -246,7 +246,7 @@ export function DataControlsBar({
           </button>
 
           {sortOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
 
               {/* Clear sort (when active) */}
               {isSortActive && (

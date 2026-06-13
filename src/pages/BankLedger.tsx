@@ -110,13 +110,16 @@ export default function BankLedger() {
         .from('inflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
-        .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)
+        // exclude B/F sentinel + types already captured by dedicated table fetches below
+        .or(`transaction_type.is.null,and(transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE},transaction_type.neq.bank_deposit,transaction_type.neq.intrabank_transfer)`)
         .order('date', { ascending: true })
         .order('import_seq', { ascending: true }),
       supabase
         .from('outflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
+        // exclude types already captured by dedicated table fetches below
+        .or('transaction_type.is.null,and(transaction_type.neq.bank_deposit,transaction_type.neq.intrabank_transfer)')
         .order('date', { ascending: true })
         .order('import_seq', { ascending: true }),
       // Bank deposit slip records for this bank
