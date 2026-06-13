@@ -208,10 +208,14 @@ export async function autoCreateLinkedOutflowType(
   categoryName: string
 ): Promise<string | null> {
   try {
-    // Check if an outflow type with this exact name already exists
+    const { orgId: innerOrgId } = useOrgStore.getState()
+    if (!innerOrgId) throw new Error('No active organisation.')
+
+    // Check if an outflow type with this exact name already exists in this org
     const { data: existing } = await supabase
       .from('outflow_types')
       .select('id')
+      .eq('org_id', innerOrgId)
       .ilike('name', categoryName)
       .limit(1)
 
@@ -220,8 +224,6 @@ export async function autoCreateLinkedOutflowType(
     if (existing && existing.length > 0) {
       outflowTypeId = (existing[0] as { id: string }).id
     } else {
-      const { orgId: innerOrgId } = useOrgStore.getState()
-      if (!innerOrgId) throw new Error('No active organisation.')
       const { data, error } = await supabase
         .from('outflow_types')
         .insert({ name: categoryName, color: '#64748b', auto_created: true, org_id: innerOrgId })
