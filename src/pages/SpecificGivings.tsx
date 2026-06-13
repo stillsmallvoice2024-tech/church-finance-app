@@ -16,6 +16,7 @@ import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
 import { allocatePercent } from '../utils/financeMath'
 
 interface SpecificRow {
@@ -70,6 +71,7 @@ function groupRows(rows: SpecificRow[]): GroupedCategory[] {
 export default function SpecificGivings() {
   usePageTitle('Designated Gifts')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
 
   const year = useAccountingYearStore(s => s.year)
 
@@ -81,6 +83,7 @@ export default function SpecificGivings() {
   const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
 
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
@@ -91,6 +94,7 @@ export default function SpecificGivings() {
       supabase
         .from('inflow_transactions')
         .select('id, date, stage_code_1, specific_seed_description, description, amount')
+        .eq('org_id', orgId)
         .eq('stage_code_2', 'Specific Seed')
         .gte('date', start)
         .lte('date', end)
@@ -98,6 +102,7 @@ export default function SpecificGivings() {
       supabase
         .from('inflow_transactions')
         .select('id, date, amount, description, allocation_config_id')
+        .eq('org_id', orgId)
         .not('allocation_config_id', 'is', null)
         .is('stage_code_2', null)
         .is('transaction_type', null)
@@ -106,10 +111,12 @@ export default function SpecificGivings() {
       supabase
         .from('category_opening_balances')
         .select('amount, category_id, categories(name, id)')
+        .eq('org_id', orgId)
         .eq('budget_portion', 'Specific Seed'),
       supabase
         .from('intra_flows')
         .select('id, date, account_from, account_from_stage2, account_to, account_to_stage2, total_amount, description')
+        .eq('org_id', orgId)
         .eq('status', 'active')
         .gte('date', start)
         .lte('date', end),
@@ -151,6 +158,7 @@ export default function SpecificGivings() {
       const configsRes = await supabase
         .from('allocation_configs')
         .select('id, rows')
+        .eq('org_id', orgId)
         .in('id', configIds)
 
       type ConfigRowShape = { category_name: string; budget_portion?: string; percentage?: number }
@@ -212,7 +220,7 @@ export default function SpecificGivings() {
 
     setRows([...cobOpeningRows, ...txRows, ...configSpecificRows, ...intraflowSpecificRows])
     setLoading(false)
-  }, [year])
+  }, [year, orgId])
 
   useEffect(() => { load() }, [load, intraflowVersion])
 
