@@ -24,16 +24,15 @@ export function useReceipts(entityType: ReceiptEntityType, entityId: string) {
   const [error,    setError]    = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
-    if (!entityId) return
+    if (!entityId || !orgId) { setLoading(false); return }
     setLoading(true); setError(null)
-    let q = supabase
+    const { data, error: err } = await supabase
       .from('receipts')
       .select('*')
       .eq('entity_type', entityType)
       .eq('entity_id', entityId)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
-    if (orgId) q = q.eq('org_id', orgId)
-    const { data, error: err } = await q
     if (err) setError(err.message)
     else setReceipts((data ?? []) as Receipt[])
     setLoading(false)

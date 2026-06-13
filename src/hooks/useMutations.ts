@@ -281,10 +281,12 @@ export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {
       let toId   = input.to_category_id   ?? null
 
       if (!fromId || !toId) {
+        const { orgId: resolveOrgId } = useOrgStore.getState()
         const namesToResolve = [...new Set([input.account_from, input.account_to])]
         const { data: catRows } = await supabase
           .from('categories')
           .select('id, name')
+          .eq('org_id', resolveOrgId ?? '')
           .in('name', namesToResolve)
         const catMap = new Map((catRows ?? []).map(c => [c.name as string, c.id as string]))
         if (!fromId) fromId = catMap.get(input.account_from) ?? null
