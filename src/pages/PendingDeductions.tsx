@@ -88,6 +88,16 @@ export default function PendingDeductions() {
   const sorted = useMemo(() => {
     const adv = pdState.advancedSort
     if (adv.length > 0) return multiSortRows(data, getPdValue, adv, PD_SORT_FIELDS)
+    if (pdState.sortKey === 'date') {
+      const dir = pdState.sortDir
+      return [...data].sort((a, b) => {
+        const dateCmp = a.date.localeCompare(b.date)
+        if (dateCmp !== 0) return dir === 'desc' ? -dateCmp : dateCmp
+        const seqA = (a.import_seq as number | null) ?? 0
+        const seqB = (b.import_seq as number | null) ?? 0
+        return dir === 'desc' ? seqB - seqA : seqA - seqB
+      })
+    }
     return sortRows(data, getPdValue, pdState.sortKey, pdState.sortDir, PD_SORT_FIELDS)
   }, [data, pdState.sortKey, pdState.sortDir, pdState.advancedSort])
 

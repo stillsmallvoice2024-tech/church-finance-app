@@ -90,6 +90,16 @@ export default function ForeignCurrency() {
   const fxSorted = useMemo(() => {
     const adv = fxState.advancedSort
     if (adv.length > 0) return multiSortRows(fxSearchFiltered, getFxValue, adv, FX_SORT_FIELDS)
+    if (fxState.sortKey === 'date') {
+      const dir = fxState.sortDir
+      return [...fxSearchFiltered].sort((a, b) => {
+        const dateCmp = a.date.localeCompare(b.date)
+        if (dateCmp !== 0) return dir === 'desc' ? -dateCmp : dateCmp
+        const seqA = a.import_seq ?? 0
+        const seqB = b.import_seq ?? 0
+        return dir === 'desc' ? seqB - seqA : seqA - seqB
+      })
+    }
     return sortRows(fxSearchFiltered, getFxValue, fxState.sortKey, fxState.sortDir, FX_SORT_FIELDS)
   }, [fxSearchFiltered, fxState.sortKey, fxState.sortDir, fxState.advancedSort])
 

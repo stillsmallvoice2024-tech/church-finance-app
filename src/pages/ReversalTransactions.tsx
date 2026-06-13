@@ -30,6 +30,7 @@ interface TxnRow {
   remarks:                 string | null
   offset_role:             string | null
   root_transaction_id:     string | null
+  import_seq?:             number
   inflowData?:             InflowTransaction
   outflowData?:            OutflowTransaction
 }
@@ -61,12 +62,12 @@ function groupRows(rows: TxnRow[]): { groups: TxnGroup[]; unmatched: TxnRow[] } 
   const groups = roots
     .map(root => ({
       root,
-      offsets: (byRoot.get(root.id) ?? []).sort((a, b) => b.date.localeCompare(a.date)),
+      offsets: (byRoot.get(root.id) ?? []).sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)),
     }))
-    .sort((a, b) => b.root.date.localeCompare(a.root.date))
+    .sort((a, b) => b.root.date.localeCompare(a.root.date) || (b.root.import_seq ?? 0) - (a.root.import_seq ?? 0))
   return {
     groups,
-    unmatched: [...unmatchedRows, ...orphans].sort((a, b) => b.date.localeCompare(a.date)),
+    unmatched: [...unmatchedRows, ...orphans].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)),
   }
 }
 
@@ -135,6 +136,7 @@ export default function ReversalTransactions() {
         remarks: r.remark as string | null,
         offset_role: r.offset_role as string | null,
         root_transaction_id: r.root_transaction_id as string | null,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -146,9 +148,10 @@ export default function ReversalTransactions() {
         remarks: r.remarks as string | null,
         offset_role: r.offset_role as string | null,
         root_transaction_id: r.root_transaction_id as string | null,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         outflowData: r as unknown as OutflowTransaction,
       })),
-    ].sort((a, b) => b.date.localeCompare(a.date))
+    ].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0))
 
     setRows(merged); setLoading(false)
   }

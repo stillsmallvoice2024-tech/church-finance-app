@@ -30,6 +30,7 @@ interface TxnRow {
   remarks:                 string | null
   offset_role:             string | null
   root_transaction_id:     string | null
+  import_seq?:             number
   inflowData?:             InflowTransaction
   outflowData?:            OutflowTransaction
 }
@@ -136,6 +137,7 @@ export default function RefundTransactions() {
         remarks: r.remark as string | null,
         offset_role: r.offset_role as string | null,
         root_transaction_id: r.root_transaction_id as string | null,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -147,9 +149,10 @@ export default function RefundTransactions() {
         remarks: r.remarks as string | null,
         offset_role: r.offset_role as string | null,
         root_transaction_id: r.root_transaction_id as string | null,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         outflowData: r as unknown as OutflowTransaction,
       })),
-    ].sort((a, b) => b.date.localeCompare(a.date))
+    ].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0))
 
     setRows(merged); setLoading(false)
   }
