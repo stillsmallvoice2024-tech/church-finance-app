@@ -460,6 +460,7 @@ create table public.inflow_transactions (
   root_transaction_table    text,
   offset_link_type          text,
   offset_role               text        check (offset_role in ('root', 'offset')),
+  deposit_group_id          uuid,
   allocation_config_id      uuid        references public.allocation_configs(id) on delete set null,
   income_type_id            uuid        references public.income_types(id) on delete set null,
   is_pending_deduction      boolean     not null default false,
@@ -495,6 +496,7 @@ create table public.outflow_transactions (
   root_transaction_table  text,
   offset_link_type        text,
   offset_role             text        check (offset_role in ('root', 'offset')),
+  deposit_group_id        uuid,
   allocation_config_id    uuid        references public.allocation_configs(id) on delete set null,
   outflow_type_id         uuid        references public.outflow_types(id) on delete set null,
   department_id           uuid        references public.departments(id) on delete set null,
@@ -1471,6 +1473,8 @@ create index if not exists idx_inflow_root_txn_id     on public.inflow_transacti
 create index if not exists idx_outflow_root_txn_id    on public.outflow_transactions(root_transaction_id) where root_transaction_id is not null;
 create index if not exists idx_inflow_offset_role     on public.inflow_transactions(offset_role) where offset_role is not null;
 create index if not exists idx_outflow_offset_role    on public.outflow_transactions(offset_role) where offset_role is not null;
+create index if not exists idx_inflow_deposit_group   on public.inflow_transactions(deposit_group_id) where deposit_group_id is not null;
+create index if not exists idx_outflow_deposit_group  on public.outflow_transactions(deposit_group_id) where deposit_group_id is not null;
 create index if not exists idx_categories_group       on public.categories(group_id);
 create index if not exists idx_invitations_token      on public.invitations(token);
 create index if not exists idx_outflow_department_id  on public.outflow_transactions(department_id);

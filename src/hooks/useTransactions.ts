@@ -29,6 +29,7 @@ export interface InflowTransaction {
   root_transaction_table: string | null
   offset_link_type: string | null
   offset_role: string | null
+  deposit_group_id: string | null
   recorded_at: string | null
   created_by: string | null
   created_at: string
@@ -60,6 +61,7 @@ export interface OutflowTransaction {
   root_transaction_table: string | null
   offset_link_type: string | null
   offset_role: string | null
+  deposit_group_id: string | null
   outflow_type_id: string | null
   outflow_type_name: string | null  // joined from outflow_types; null when unset
   department_id: string | null
