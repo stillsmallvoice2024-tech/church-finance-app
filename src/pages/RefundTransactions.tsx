@@ -127,7 +127,7 @@ export default function RefundTransactions() {
     }
     setTruncated((inflowRes.count ?? 0) > REFUND_LIMIT || (outflowRes.count ?? 0) > REFUND_LIMIT)
 
-    const merged: TxnRow[] = [
+    const allRows: TxnRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string, direction: 'in' as const,
         amount: r.amount as number,
@@ -152,7 +152,35 @@ export default function RefundTransactions() {
         import_seq: (r.import_seq as number | null) ?? undefined,
         outflowData: r as unknown as OutflowTransaction,
       })),
-    ].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0))
+    ]
+    const roots: TxnRow[] = []
+    const offsets: TxnRow[] = []
+    const standalone: TxnRow[] = []
+    for (const row of allRows) {
+      if (row.offset_role === 'root')        roots.push(row)
+      else if (row.offset_role === 'offset') offsets.push(row)
+      else                                   standalone.push(row)
+    }
+    const offsetsByRoot = new Map<string, TxnRow[]>()
+    const orphanOffsets: TxnRow[] = []
+    for (const off of offsets) {
+      const key = off.root_transaction_id
+      if (key) {
+        if (!offsetsByRoot.has(key)) offsetsByRoot.set(key, [])
+        offsetsByRoot.get(key)!.push(off)
+      } else {
+        orphanOffsets.push(off)
+      }
+    }
+    const groups = [
+      ...roots.map(root => ({
+        sortDate: root.date, sortSeq: root.import_seq ?? 0,
+        rows: [root, ...(offsetsByRoot.get(root.id) ?? [])] as TxnRow[],
+      })),
+      ...standalone.map(row => ({ sortDate: row.date, sortSeq: row.import_seq ?? 0, rows: [row] as TxnRow[] })),
+    ]
+    groups.sort((a, b) => b.sortDate.localeCompare(a.sortDate) || b.sortSeq - a.sortSeq)
+    const merged: TxnRow[] = [...groups.flatMap(g => g.rows), ...orphanOffsets]
 
     setRows(merged); setLoading(false)
   }
