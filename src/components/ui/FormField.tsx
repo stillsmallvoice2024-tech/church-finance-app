@@ -82,11 +82,23 @@ export function Field({ label, help, error, children }: FieldProps) {
     return child
   })
 
+  // Required marker: a trailing " *" in the label renders as a prominent
+  // danger-coloured asterisk with an SR-only "(required)" announcement, so the
+  // required convention is visually + semantically consistent across every form.
+  const isRequired = typeof label === 'string' && label.trimEnd().endsWith('*')
+  const labelText  = isRequired ? label.replace(/\s*\*\s*$/, '') : label
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1">
         <label className="text-xs font-medium text-gray-600" htmlFor={uid}>
-          {label}
+          {labelText}
+          {isRequired && (
+            <>
+              <span aria-hidden="true" className="text-danger ml-0.5">*</span>
+              <span className="sr-only"> (required)</span>
+            </>
+          )}
         </label>
         {help && <HelpTooltip content={help} placement="right" iconSize="w-3 h-3" />}
       </div>

@@ -142,7 +142,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           <Field label="Date *" error={errors.date?.message}>
             <input type="date" {...register('date')} className={iCls(!!errors.date)} />
           </Field>
-          <Field label="Currency" error={errors.currency?.message}>
+          <Field label="Currency *" error={errors.currency?.message}>
             <select {...register('currency')} className={`${iCls(!!errors.currency)} bg-white`}>
               {foreignCurrencies.map(c => (
                 <option key={c.code} value={c.code}>{c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}</option>
@@ -162,7 +162,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           )}
         </Field>
 
-        <Field label="Transaction Type" error={errors.type?.message}>
+        <Field label="Transaction Type *" error={errors.type?.message}>
           <div className="flex gap-3">
             {(['deposit','withdrawal'] as const).map(t => (
               <label key={t} className="flex items-center gap-2 cursor-pointer">
