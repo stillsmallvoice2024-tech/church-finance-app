@@ -22,6 +22,7 @@ import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
@@ -101,6 +102,7 @@ const PORTION_LABELS: Record<Portion, string> = {
 export default function CategoryLedger() {
   usePageTitle('Category Accounts')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
 
   const { categories }                           = useCategories()
   const { groups }                               = useCategoryGroups()
@@ -169,14 +171,15 @@ export default function CategoryLedger() {
     setError(null)
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
-      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Specific Seed')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('stage_code_2', 'Specific Seed')),
-      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('stage_code_2', 'Savings')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('stage_code_2', 'Savings')),
-      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type, offset_role')),
-      supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)'),
-      fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('status', 'active')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('org_id', orgId!).eq('stage_code_2', 'Specific Seed')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId!).eq('stage_code_2', 'Specific Seed')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('org_id', orgId!).eq('stage_code_2', 'Savings')),
+      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId!).eq('stage_code_2', 'Savings')),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type, offset_role').eq('org_id', orgId!)),
+      supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)').eq('org_id', orgId!),
+      fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('org_id', orgId!).eq('status', 'active')),
       fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role')
+        .eq('org_id', orgId!)
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')),
     ])
@@ -319,7 +322,7 @@ export default function CategoryLedger() {
 
     setRows(result)
     setLoading(false)
-  }, [categories, configs])
+  }, [categories, configs, orgId])
 
   useEffect(() => { loadSummary() }, [loadSummary, inflowVersion, outflowVersion, intraflowVersion])
 
@@ -338,9 +341,11 @@ export default function CategoryLedger() {
         const [inflowRes, outflowRes] = await Promise.all([
           fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type, offset_role, import_seq')
+            .eq('org_id', orgId!)
             .order('date').order('import_seq', { ascending: true })),
           fetchAllRows(() => supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed, stage_code_2, offset_role, import_seq')
+            .eq('org_id', orgId!)
             .eq('stage_code_1', activeCategory)
             .order('date').order('import_seq', { ascending: true })),
         ])
@@ -409,17 +414,20 @@ export default function CategoryLedger() {
         const [inflowRes, outflowRes, cfgInflowRes] = await Promise.all([
           fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount, import_seq')
+            .eq('org_id', orgId!)
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
             .order('date').order('import_seq', { ascending: true })),
           fetchAllRows(() => supabase.from('outflow_transactions')
             .select('id, date, description, amount_disbursed, offset_role, import_seq')
+            .eq('org_id', orgId!)
             .eq('stage_code_2', sc2)
             .eq('stage_code_1', activeCategory)
             .order('date').order('import_seq', { ascending: true })),
           // Config-split inflows where this category's row has matching budget_portion
           fetchAllRows(() => supabase.from('inflow_transactions')
             .select('id, date, description, amount, allocation_config_id, import_seq')
+            .eq('org_id', orgId!)
             .not('allocation_config_id', 'is', null)
             .is('stage_code_2', null)
             .order('date').order('import_seq', { ascending: true })),
@@ -502,18 +510,21 @@ export default function CategoryLedger() {
         catRecord
           ? supabase.from('category_opening_balances')
               .select('amount')
+              .eq('org_id', orgId!)
               .eq('category_id', catRecord.id)
               .eq('budget_portion', portionStage2)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
         supabase.from('intra_flows')
           .select('id, date, description, total_amount, account_to, account_to_stage2, status, import_seq')
+          .eq('org_id', orgId!)
           .eq('account_from', activeCategory)
           .eq('account_from_stage2', portionStage2)
           .eq('status', 'active')
           .order('date').order('import_seq', { ascending: true }),
         supabase.from('intra_flows')
           .select('id, date, description, total_amount, account_from, account_from_stage2, status, import_seq')
+          .eq('org_id', orgId!)
           .eq('account_to', activeCategory)
           .eq('account_to_stage2', portionStage2)
           .eq('status', 'active')
@@ -589,7 +600,7 @@ export default function CategoryLedger() {
     } finally {
       setLedgerLoading(false)
     }
-  }, [activeCategory, ledgerPortion, configs])
+  }, [activeCategory, ledgerPortion, configs, orgId])
 
   useEffect(() => {
     if (viewMode === 'ledger' && activeCategory) loadLedger()
