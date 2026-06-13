@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Landmark, ArrowRightLeft, Pencil, Trash2,
   ChevronDown, ChevronUp, AlertCircle, RefreshCw,
-  ChevronRight, Link2, X, LayoutGrid, LayoutList,
+  ChevronRight, Link2, X, LayoutGrid, LayoutList, Layers,
 } from 'lucide-react'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { DataControlsBar }  from '../components/ui/DataControlsBar'
@@ -35,6 +35,7 @@ import { useOrgCurrency }  from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { AddInflowModal }  from '../components/modals/AddInflowModal'
 import { AddOutflowModal } from '../components/modals/AddOutflowModal'
+import { LinkDepositGroupModal } from '../components/modals/LinkDepositGroupModal'
 import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ interface DepositRow {
   source:              'bank_deposits' | 'inflow' | 'outflow'
   offset_role:         string | null
   root_transaction_id: string | null
+  deposit_group_id:    string | null
   import_seq?:         number
   inflowData?:         InflowTransaction
   outflowData?:        OutflowTransaction
@@ -156,9 +158,10 @@ function DepositsPanel() {
   const [dateTo,       setDateTo]       = useState('')
   const [datePreset,   setDatePreset]   = useState<DatePreset | null>(null)
   const [bankFilter,   setBankFilter]   = useState('')
-  const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
-  const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<DepositRow | null>(null)
+  const [editInflow,       setEditInflow]       = useState<InflowTransaction | null>(null)
+  const [editOutflow,      setEditOutflow]      = useState<OutflowTransaction | null>(null)
+  const [deleteTarget,     setDeleteTarget]     = useState<DepositRow | null>(null)
+  const [linkGroupTarget,  setLinkGroupTarget]  = useState<DepositRow | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
   const [deleting,     setDeleting]     = useState(false)
   const [showRecon,    setShowRecon]    = useState(false)
@@ -183,8 +186,8 @@ function DepositsPanel() {
     if (depRes.error) { setError(friendlyError(depRes.error, 'load deposits')); setLoading(false); return }
 
     const depositRows: DepositRow[] = (depRes.data ?? []).map((r: Record<string, unknown>) => ({
-      ...(r as Omit<DepositRow, 'source' | 'offset_role' | 'root_transaction_id'>),
-      source: 'bank_deposits' as const, offset_role: null, root_transaction_id: null,
+      ...(r as Omit<DepositRow, 'source' | 'offset_role' | 'root_transaction_id' | 'deposit_group_id'>),
+      source: 'bank_deposits' as const, offset_role: null, root_transaction_id: null, deposit_group_id: null,
       import_seq: r.import_seq as number | undefined,
     }))
     const inflowRows: DepositRow[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -193,6 +196,7 @@ function DepositsPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_ref as string | null,
       remarks: r.remark as string | null, source: 'inflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      deposit_group_id: r.deposit_group_id as string | null ?? null,
       import_seq: r.import_seq as number | undefined,
       inflowData: r as unknown as InflowTransaction,
     }))
@@ -202,6 +206,7 @@ function DepositsPanel() {
       description: r.description as string | null, transaction_ref: r.transaction_id as string | null,
       remarks: r.remarks as string | null, source: 'outflow' as const,
       offset_role: r.offset_role as string | null, root_transaction_id: r.root_transaction_id as string | null,
+      deposit_group_id: r.deposit_group_id as string | null ?? null,
       import_seq: r.import_seq as number | undefined,
       outflowData: r as unknown as OutflowTransaction,
     }))
@@ -290,7 +295,49 @@ function DepositsPanel() {
       value: row.offset_role === 'root' ? 'Root' : row.offset_role === 'offset' ? 'Offset' : null,
       badge: row.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700',
     },
+    { label: 'Group ID', value: row.deposit_group_id, mono: true, breakAll: true },
   ]
+
+  const depositGroupFooter = (row: DepositRow): React.ReactNode => {
+    if (!row.deposit_group_id) return undefined
+    const members = rows.filter(
+      r => r.deposit_group_id === row.deposit_group_id &&
+        !(r.source === row.source && r.id === row.id),
+    )
+    if (members.length === 0) return undefined
+    const rootTotal   = members.filter(m => m.offset_role === 'root').reduce((s, m) => s + m.amount, 0)
+      + (row.offset_role === 'root' ? row.amount : 0)
+    const offsetTotal = members.filter(m => m.offset_role === 'offset').reduce((s, m) => s + m.amount, 0)
+      + (row.offset_role === 'offset' ? row.amount : 0)
+    const balanced = Math.abs(rootTotal - offsetTotal) < 0.01
+    return (
+      <div className="col-span-full mt-3 pt-3 border-t border-gray-200">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400">
+            Linked Group Members ({members.length})
+          </p>
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${balanced ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+            {balanced ? 'Balanced' : 'Mismatch'}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {members.map(m => (
+            <div key={`${m.source}-${m.id}`} className="flex items-center gap-2 text-xs">
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                m.offset_role === 'root' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+              }`}>
+                {m.offset_role === 'root' ? 'Root' : 'Offset'}
+              </span>
+              <span className="text-gray-500 shrink-0">{formatDate(m.date)}</span>
+              <span className="text-gray-700 shrink-0">{m.bank_name ?? '—'}</span>
+              <span className="font-mono font-semibold text-gray-900 shrink-0">{formatCurrency(m.amount, baseCurrencyCode)}</span>
+              {m.description && <span className="text-gray-400 truncate">{m.description}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   const BD_CSV_HEADERS = ['Date', 'Bank', 'Description', `Amount (${baseCurrencySymbol})`, 'Ref', 'Remarks', 'Source']
   const BD_SRC: Record<string, string> = { bank_deposits: 'Deposit', inflow: 'Inflow', outflow: 'Outflow' }
@@ -455,9 +502,16 @@ function DepositsPanel() {
                     {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                       <>
                         <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                        {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
-                        {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                          <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                        {row.deposit_group_id && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 flex items-center gap-0.5" title="Part of a deposit group">
+                            <Layers className="w-2.5 h-2.5" />G
+                          </span>
+                        )}
+                        {!row.deposit_group_id && row.offset_role === 'root' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>
+                        )}
+                        {!row.deposit_group_id && row.root_transaction_id === null && row.offset_role !== 'root' && (
+                          <button onClick={() => setLinkGroupTarget(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Add to deposit group" aria-label="Add to deposit group"><Link2 className="w-3.5 h-3.5" /></button>
                         )}
                       </>
                     )}
@@ -513,16 +567,23 @@ function DepositsPanel() {
                           {canWrite() && (row.source === 'inflow' || row.source === 'outflow') && (
                             <>
                               <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="Edit" aria-label="Edit"><Pencil className="w-3.5 h-3.5" /></button>
-                              {row.offset_role === 'root' && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700" title="Root transaction">R</span>}
-                              {row.offset_role !== 'root' && row.root_transaction_id === null && (
-                                <button onClick={() => handleLinkRoot(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Link to root" aria-label="Link to root"><Link2 className="w-3.5 h-3.5" /></button>
+                              {row.deposit_group_id && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-700 flex items-center gap-0.5" title="Part of a deposit group">
+                                  <Layers className="w-2.5 h-2.5" />G
+                                </span>
+                              )}
+                              {!row.deposit_group_id && row.offset_role === 'root' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700" title="Root transaction">R</span>
+                              )}
+                              {!row.deposit_group_id && row.root_transaction_id === null && row.offset_role !== 'root' && (
+                                <button onClick={() => setLinkGroupTarget(row)} className="touch-target p-1.5 rounded text-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Add to deposit group" aria-label="Add to deposit group"><Link2 className="w-3.5 h-3.5" /></button>
                               )}
                             </>
                           )}
                         </div>
                       </td>
                     </tr>,
-                    isExpanded && <RowDetailPanel key={`${row.source}-${row.id}-detail`} items={depositDetailItems(row)} colSpan={colCount} />,
+                    isExpanded && <RowDetailPanel key={`${row.source}-${row.id}-detail`} items={depositDetailItems(row)} colSpan={colCount} footer={depositGroupFooter(row)} />,
                   ]
                 }).filter(Boolean)}
               </tbody>
@@ -539,6 +600,19 @@ function DepositsPanel() {
         label={deleteTarget ? `deposit of ${formatCurrency(deleteTarget.amount, baseCurrencyCode)} on ${formatDate(deleteTarget.date)}` : 'this record'}
         loading={deleting} onConfirm={handleDelete} onClose={() => setDeleteTarget(null)}
       />
+      {linkGroupTarget && (
+        <LinkDepositGroupModal
+          open={!!linkGroupTarget}
+          onClose={() => setLinkGroupTarget(null)}
+          onSuccess={() => { setLinkGroupTarget(null); load() }}
+          targetRow={linkGroupTarget as unknown as import('../components/modals/LinkDepositGroupModal').GroupableRow}
+          allRows={
+            rows.filter((r): r is DepositRow & { source: 'inflow' | 'outflow' } =>
+              r.source === 'inflow' || r.source === 'outflow',
+            )
+          }
+        />
+      )}
       <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )

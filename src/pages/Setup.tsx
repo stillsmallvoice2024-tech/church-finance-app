@@ -2234,6 +2234,26 @@ CREATE TRIGGER trg_prevent_outflow_offset_chaining
 
 NOTIFY pgrst, 'reload schema';
 
+-- ── Deposit Group ID ─────────────────────────────────────────────────────────
+-- Groups multiple root transactions with a single offset (bank deposit) entry.
+-- Replaces the 1-to-1 root_transaction_id link for multi-root scenarios.
+
+ALTER TABLE public.inflow_transactions
+  ADD COLUMN IF NOT EXISTS deposit_group_id uuid;
+
+ALTER TABLE public.outflow_transactions
+  ADD COLUMN IF NOT EXISTS deposit_group_id uuid;
+
+CREATE INDEX IF NOT EXISTS idx_inflow_deposit_group
+  ON public.inflow_transactions(deposit_group_id)
+  WHERE deposit_group_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_outflow_deposit_group
+  ON public.outflow_transactions(deposit_group_id)
+  WHERE deposit_group_id IS NOT NULL;
+
+NOTIFY pgrst, 'reload schema';
+
 -- ── Reconciliation Center tables ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.reconciliation_runs (
   id             uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
