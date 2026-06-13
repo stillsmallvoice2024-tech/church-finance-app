@@ -270,6 +270,16 @@ export default function BankLedger() {
   const sortedRows = useMemo(() => {
     const adv = blState.advancedSort
     if (adv.length > 0) return multiSortRows(searchFiltered, getBlValue, adv, BL_SORT_FIELDS)
+    if (blState.sortKey === 'date') {
+      const dir = blState.sortDir
+      return [...searchFiltered].sort((a, b) => {
+        const dateCmp = a.date.localeCompare(b.date)
+        if (dateCmp !== 0) return dir === 'desc' ? -dateCmp : dateCmp
+        const seqA = a.import_seq ?? 0
+        const seqB = b.import_seq ?? 0
+        return dir === 'desc' ? seqB - seqA : seqA - seqB
+      })
+    }
     return sortRows(searchFiltered, getBlValue, blState.sortKey, blState.sortDir, BL_SORT_FIELDS)
   }, [searchFiltered, blState.sortKey, blState.sortDir, blState.advancedSort])
 
