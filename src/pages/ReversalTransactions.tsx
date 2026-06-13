@@ -30,6 +30,7 @@ interface TxnRow {
   remarks:                 string | null
   offset_role:             string | null
   root_transaction_id:     string | null
+  import_seq?:             number
   inflowData?:             InflowTransaction
   outflowData?:            OutflowTransaction
 }
@@ -61,12 +62,12 @@ function groupRows(rows: TxnRow[]): { groups: TxnGroup[]; unmatched: TxnRow[] } 
   const groups = roots
     .map(root => ({
       root,
-      offsets: (byRoot.get(root.id) ?? []).sort((a, b) => b.date.localeCompare(a.date)),
+      offsets: (byRoot.get(root.id) ?? []).sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)),
     }))
-    .sort((a, b) => b.root.date.localeCompare(a.root.date))
+    .sort((a, b) => b.root.date.localeCompare(a.root.date) || (b.root.import_seq ?? 0) - (a.root.import_seq ?? 0))
   return {
     groups,
-    unmatched: [...unmatchedRows, ...orphans].sort((a, b) => b.date.localeCompare(a.date)),
+    unmatched: [...unmatchedRows, ...orphans].sort((a, b) => b.date.localeCompare(a.date) || (b.import_seq ?? 0) - (a.import_seq ?? 0)),
   }
 }
 
@@ -125,7 +126,7 @@ export default function ReversalTransactions() {
     }
     setTruncated((inflowRes.count ?? 0) > REVERSAL_LIMIT || (outflowRes.count ?? 0) > REVERSAL_LIMIT)
 
-    const merged: TxnRow[] = [
+    const allRows: TxnRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string, direction: 'in' as const,
         amount: r.amount as number,
@@ -135,6 +136,7 @@ export default function ReversalTransactions() {
         remarks: r.remark as string | null,
         offset_role: r.offset_role as string | null,
         root_transaction_id: r.root_transaction_id as string | null,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         inflowData: r as unknown as InflowTransaction,
       })),
       ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -146,9 +148,38 @@ export default function ReversalTransactions() {
         remarks: r.remarks as string | null,
         offset_role: r.offset_role as string | null,
         root_transaction_id: r.root_transaction_id as string | null,
+        import_seq: (r.import_seq as number | null) ?? undefined,
         outflowData: r as unknown as OutflowTransaction,
       })),
-    ].sort((a, b) => b.date.localeCompare(a.date))
+    ]
+    const roots: TxnRow[] = []
+    const offsets: TxnRow[] = []
+    const standalone: TxnRow[] = []
+    for (const row of allRows) {
+      if (row.offset_role === 'root')        roots.push(row)
+      else if (row.offset_role === 'offset') offsets.push(row)
+      else                                   standalone.push(row)
+    }
+    const offsetsByRoot = new Map<string, TxnRow[]>()
+    const orphanOffsets: TxnRow[] = []
+    for (const off of offsets) {
+      const key = off.root_transaction_id
+      if (key) {
+        if (!offsetsByRoot.has(key)) offsetsByRoot.set(key, [])
+        offsetsByRoot.get(key)!.push(off)
+      } else {
+        orphanOffsets.push(off)
+      }
+    }
+    const groups = [
+      ...roots.map(root => ({
+        sortDate: root.date, sortSeq: root.import_seq ?? 0,
+        rows: [root, ...(offsetsByRoot.get(root.id) ?? [])] as TxnRow[],
+      })),
+      ...standalone.map(row => ({ sortDate: row.date, sortSeq: row.import_seq ?? 0, rows: [row] as TxnRow[] })),
+    ]
+    groups.sort((a, b) => b.sortDate.localeCompare(a.sortDate) || b.sortSeq - a.sortSeq)
+    const merged: TxnRow[] = [...groups.flatMap(g => g.rows), ...orphanOffsets]
 
     setRows(merged); setLoading(false)
   }
