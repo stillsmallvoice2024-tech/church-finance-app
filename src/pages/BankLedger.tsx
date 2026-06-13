@@ -57,8 +57,6 @@ interface LedgerRow {
   transaction_type:    string | null
   entity_type:         'inflow' | 'outflow'
   import_seq?:         number
-  // source distinguishes rows from dedicated tables vs inflow/outflow_transactions
-  source?:             'bank_deposits' | 'intrabank_transfers'
   inflowData?:         InflowTransaction
   outflowData?:        OutflowTransaction
 }
@@ -105,35 +103,18 @@ export default function BankLedger() {
     setLoading(true)
     setError(null)
 
-    const [inflowRes, outflowRes, depositsRes, transfersRes] = await Promise.all([
+    const [inflowRes, outflowRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
-        // exclude B/F sentinel + types already captured by dedicated table fetches below
-        .or(`transaction_type.is.null,and(transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE},transaction_type.neq.bank_deposit,transaction_type.neq.intrabank_transfer)`)
+        .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)
         .order('date', { ascending: true })
         .order('import_seq', { ascending: true }),
       supabase
         .from('outflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
-        // exclude types already captured by dedicated table fetches below
-        .or('transaction_type.is.null,and(transaction_type.neq.bank_deposit,transaction_type.neq.intrabank_transfer)')
-        .order('date', { ascending: true })
-        .order('import_seq', { ascending: true }),
-      // Bank deposit slip records for this bank
-      supabase
-        .from('bank_deposits')
-        .select('id, date, bank_name, amount, description, import_seq')
-        .eq('bank_name', bankName)
-        .order('date', { ascending: true })
-        .order('import_seq', { ascending: true }),
-      // Intrabank transfers: this bank as source (outflow) or destination (inflow)
-      supabase
-        .from('intrabank_transfers')
-        .select('id, date, from_bank_name, to_bank_name, amount, description, import_seq')
-        .or(`from_bank_name.eq.${bankName},to_bank_name.eq.${bankName}`)
         .order('date', { ascending: true })
         .order('import_seq', { ascending: true }),
     ])
@@ -144,8 +125,8 @@ export default function BankLedger() {
       return
     }
 
-    // Merge & sort chronologically (B/F DB rows excluded above)
-    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; import_seq?: number; source?: 'bank_deposits' | 'intrabank_transfers'; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
+    // Merge & sort chronologically
+    type RawRow = { id: string; date: string; description: string | null; inflow: number; outflow: number; transaction_type: string | null; entity_type: 'inflow' | 'outflow'; import_seq?: number; inflowData?: InflowTransaction; outflowData?: OutflowTransaction }
     const merged: RawRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
         id: r.id as string, date: r.date as string,
@@ -165,43 +146,6 @@ export default function BankLedger() {
         import_seq: (r.import_seq as number | null) ?? undefined,
         outflowData: r as unknown as OutflowTransaction,
       })),
-      // Bank deposit slip entries — show as inflow with Bank Deposit tag
-      ...(!depositsRes.error ? (depositsRes.data ?? []).map((r: Record<string, unknown>) => ({
-        id: `bd-${r.id as string}`, date: r.date as string,
-        description: r.description as string | null,
-        inflow: r.amount as number, outflow: 0,
-        transaction_type: 'bank_deposit',
-        entity_type: 'inflow' as const,
-        import_seq: (r.import_seq as number | null) ?? undefined,
-        source: 'bank_deposits' as const,
-      })) : []),
-      // Intrabank transfer entries — outflow for source bank, inflow for destination
-      ...(!transfersRes.error ? (transfersRes.data ?? []).flatMap((r: Record<string, unknown>) => {
-        const rows: RawRow[] = []
-        if (r.from_bank_name === bankName) {
-          rows.push({
-            id: `it-out-${r.id as string}`, date: r.date as string,
-            description: r.description as string | null,
-            inflow: 0, outflow: r.amount as number,
-            transaction_type: 'intrabank_transfer',
-            entity_type: 'outflow' as const,
-            import_seq: (r.import_seq as number | null) ?? undefined,
-            source: 'intrabank_transfers' as const,
-          })
-        }
-        if (r.to_bank_name === bankName) {
-          rows.push({
-            id: `it-in-${r.id as string}`, date: r.date as string,
-            description: r.description as string | null,
-            inflow: r.amount as number, outflow: 0,
-            transaction_type: 'intrabank_transfer',
-            entity_type: 'inflow' as const,
-            import_seq: (r.import_seq as number | null) ?? undefined,
-            source: 'intrabank_transfers' as const,
-          })
-        }
-        return rows
-      }) : []),
     ].sort((a, b) => a.date.localeCompare(b.date) || (a.import_seq ?? 0) - (b.import_seq ?? 0))
 
     // Running balance starts from opening balance so all subsequent rows are correct
@@ -483,7 +427,7 @@ export default function BankLedger() {
                 <EmptyState icon={BookOpen} title="No transactions" message={`No transactions found for ${selectedBankName}.`} compact />
               ) : pagedRows.map(row => {
                 const isBF     = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
-                const isTableRow = !!row.source
+                const isTableRow = false
                 return (
                 <div key={row.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white ${isBF ? 'border-blue-200' : 'border-gray-200'}`}>
                   {/* Card header */}
@@ -568,7 +512,7 @@ export default function BankLedger() {
                     </td></tr>
                   ) : pagedRows.flatMap(row => {
                     const isBF     = row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE
-                    const isTableRow = !!row.source  // bank_deposits / intrabank_transfers direct entries
+                    const isTableRow = false
                     const isExpanded = expandedId === row.id
                     const detailItems = !isBF && !isTableRow
                       ? (row.inflowData  ? inflowDetailItems(row.inflowData, baseCurrencyCode)
