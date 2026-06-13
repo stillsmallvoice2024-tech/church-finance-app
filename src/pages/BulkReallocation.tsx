@@ -68,6 +68,7 @@ async function executeBulkReallocation(params: {
   const { data: catData } = await supabase
     .from('categories')
     .select('id, name')
+    .eq('org_id', orgId ?? '')
     .in('name', names)
 
   const catMap = new Map((catData ?? []).map(c => [c.name as string, c.id as string]))
