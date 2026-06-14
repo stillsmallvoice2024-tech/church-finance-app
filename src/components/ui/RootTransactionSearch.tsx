@@ -37,7 +37,8 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
   const { baseCurrencyCode } = useOrgCurrency()
 
   const [query,    setQuery]    = useState('')
-  const [results,  setResults]  = useState<SearchResult[]>([])
+  const [inflows,  setInflows]  = useState<SearchResult[]>([])
+  const [outflows, setOutflows] = useState<SearchResult[]>([])
   const [loading,  setLoading]  = useState(false)
   const [open,     setOpen]     = useState(false)
   const [allBanks, setAllBanks] = useState(!bankName)
@@ -45,11 +46,8 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
   const containerRef   = useRef<HTMLDivElement>(null)
   const searchTimeout  = useRef<ReturnType<typeof setTimeout>>()
 
-  // When bankName changes (e.g. user selects a different bank in the parent form),
-  // reset the all-banks toggle to default (scoped) only if there is a bank to scope to.
   useEffect(() => { setAllBanks(!bankName) }, [bankName])
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
@@ -58,15 +56,14 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Debounced search — fires 300 ms after the user stops typing
   useEffect(() => {
     clearTimeout(searchTimeout.current)
-    if (!query.trim() || !orgId) { setResults([]); setOpen(false); return }
+    if (!query.trim() || !orgId) { setInflows([]); setOutflows([]); setOpen(false); return }
 
     searchTimeout.current = setTimeout(async () => {
       setLoading(true)
-      const likeQ      = `%${query.trim()}%`
-      const scopeBank  = !allBanks && !!bankName
+      const likeQ     = `%${query.trim()}%`
+      const scopeBank = !allBanks && !!bankName
 
       const [inflowRes, outflowRes] = await Promise.all([
         (() => {
@@ -74,7 +71,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
             .from('inflow_transactions')
             .select('id, date, amount, description, bank_name, transaction_ref, offset_role')
             .eq('org_id', orgId)
-            .ilike('description', likeQ)
+            .or(`description.ilike.${likeQ},transaction_ref.ilike.${likeQ}`)
             .order('date', { ascending: false })
             .limit(8)
           if (scopeBank) q = q.eq('bank_name', bankName!)
@@ -86,7 +83,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
             .from('outflow_transactions')
             .select('id, date, amount_disbursed, description, bank_description, bank_name, transaction_id, offset_role')
             .eq('org_id', orgId)
-            .ilike('description', likeQ)
+            .or(`description.ilike.${likeQ},bank_description.ilike.${likeQ},transaction_id.ilike.${likeQ}`)
             .order('date', { ascending: false })
             .limit(8)
           if (scopeBank) q = q.eq('bank_name', bankName!)
@@ -95,33 +92,31 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
         })(),
       ])
 
-      const merged: SearchResult[] = [
-        ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-          id:          r.id as string,
-          date:        r.date as string,
-          amount:      r.amount as number,
-          description: r.description as string | null,
-          bank_name:   r.bank_name as string | null,
-          direction:   'in' as const,
-          txnRef:      r.transaction_ref as string | null,
-          offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
-        })),
-        ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-          id:          r.id as string,
-          date:        r.date as string,
-          amount:      (r.amount_disbursed ?? 0) as number,
-          description: (r.description ?? r.bank_description) as string | null,
-          bank_name:   r.bank_name as string | null,
-          direction:   'out' as const,
-          txnRef:      r.transaction_id as string | null,
-          offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
-        })),
-      ]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 12)
+      const mappedInflows: SearchResult[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+        id:          r.id as string,
+        date:        r.date as string,
+        amount:      r.amount as number,
+        description: r.description as string | null,
+        bank_name:   r.bank_name as string | null,
+        direction:   'in' as const,
+        txnRef:      r.transaction_ref as string | null,
+        offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
+      }))
 
-      setResults(merged)
-      setOpen(merged.length > 0)
+      const mappedOutflows: SearchResult[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+        id:          r.id as string,
+        date:        r.date as string,
+        amount:      (r.amount_disbursed ?? 0) as number,
+        description: (r.description ?? r.bank_description) as string | null,
+        bank_name:   r.bank_name as string | null,
+        direction:   'out' as const,
+        txnRef:      r.transaction_id as string | null,
+        offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
+      }))
+
+      setInflows(mappedInflows)
+      setOutflows(mappedOutflows)
+      setOpen(mappedInflows.length > 0 || mappedOutflows.length > 0)
       setLoading(false)
     }, 300)
 
@@ -141,6 +136,46 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
     setQuery('')
     setOpen(false)
   }
+
+  // ── Result row ─────────────────────────────────────────────────────────────
+  const renderRow = (r: SearchResult) => (
+    <li
+      key={`${r.direction}-${r.id}`}
+      onMouseDown={e => { e.preventDefault(); select(r) }}
+      className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-primary/5 transition-colors"
+    >
+      <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${
+        r.direction === 'in'
+          ? 'bg-green-100 text-green-700'
+          : 'bg-red-100 text-red-700'
+      }`}>
+        {r.direction === 'in' ? 'IN' : 'OUT'}
+      </span>
+      {r.offsetRole && (
+        <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${
+          r.offsetRole === 'root'
+            ? 'bg-green-50 text-green-600 border border-green-200'
+            : 'bg-amber-50 text-amber-600 border border-amber-200'
+        }`} title={r.offsetRole === 'root' ? 'This transaction is a root (has an offset linked to it)' : 'This transaction is already tagged as an offset'}>
+          {r.offsetRole === 'root' ? 'R' : 'O'}
+        </span>
+      )}
+      <span className="text-xs text-gray-500 whitespace-nowrap">
+        {formatDate(r.date)}
+      </span>
+      <span className="text-xs font-semibold text-gray-800 whitespace-nowrap">
+        {formatCurrency(r.amount, baseCurrencyCode)}
+      </span>
+      <span className="text-xs text-gray-600 truncate min-w-0">
+        {r.description ?? '—'}
+      </span>
+      {r.bank_name && r.bank_name !== bankName && (
+        <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+          {r.bank_name}
+        </span>
+      )}
+    </li>
+  )
 
   // ── Selected pill ──────────────────────────────────────────────────────────
   if (value) {
@@ -174,7 +209,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
           type="text"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search by description…"
+          placeholder="Search by description or transaction ref…"
           className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
         />
         {loading && (
@@ -196,47 +231,25 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
         </label>
       )}
 
-      {/* Results dropdown */}
-      {open && results.length > 0 && (
-        <ul className="absolute z-50 left-0 right-0 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-          {results.map(r => (
-            <li
-              key={`${r.direction}-${r.id}`}
-              onMouseDown={e => { e.preventDefault(); select(r) }}
-              className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-primary/5 transition-colors"
-            >
-              <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${
-                r.direction === 'in'
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-red-100 text-red-700'
-              }`}>
-                {r.direction === 'in' ? 'IN' : 'OUT'}
-              </span>
-              {r.offsetRole && (
-                <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${
-                  r.offsetRole === 'root'
-                    ? 'bg-green-50 text-green-600 border border-green-200'
-                    : 'bg-amber-50 text-amber-600 border border-amber-200'
-                }`} title={r.offsetRole === 'root' ? 'This transaction is a root (has an offset linked to it)' : 'This transaction is already tagged as an offset'}>
-                  {r.offsetRole === 'root' ? 'R' : 'O'}
-                </span>
-              )}
-              <span className="text-xs text-gray-500 whitespace-nowrap">
-                {formatDate(r.date)}
-              </span>
-              <span className="text-xs font-semibold text-gray-800 whitespace-nowrap">
-                {formatCurrency(r.amount, baseCurrencyCode)}
-              </span>
-              <span className="text-xs text-gray-600 truncate min-w-0">
-                {r.description ?? '—'}
-              </span>
-              {r.bank_name && r.bank_name !== bankName && (
-                <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                  {r.bank_name}
-                </span>
-              )}
-            </li>
-          ))}
+      {/* Results dropdown — inflows and outflows in separate sections */}
+      {open && (inflows.length > 0 || outflows.length > 0) && (
+        <ul className="absolute z-50 left-0 right-0 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+          {inflows.length > 0 && (
+            <>
+              <li className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-50 border-b border-green-100 sticky top-0">
+                Inflows ({inflows.length})
+              </li>
+              {inflows.map(renderRow)}
+            </>
+          )}
+          {outflows.length > 0 && (
+            <>
+              <li className={`px-3 py-1 text-xs font-semibold text-red-700 bg-red-50 border-b border-red-100 sticky top-0 ${inflows.length > 0 ? 'border-t border-gray-100 mt-1' : ''}`}>
+                Outflows ({outflows.length})
+              </li>
+              {outflows.map(renderRow)}
+            </>
+          )}
         </ul>
       )}
     </div>
