@@ -149,6 +149,22 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     }
   }, [open, editRecord, resetForm, resetAdd, resetUpdate])
 
+  // Propagate category + fund type from outflow root to this offset (new records only)
+  useEffect(() => {
+    if (!rootTxnLink || rootTxnLink.table !== 'outflow_transactions' || editRecord) return
+    let cancelled = false
+    supabase.from('outflow_transactions')
+      .select('stage_code_1, stage_code_2')
+      .eq('id', rootTxnLink.id)
+      .single()
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        if (data.stage_code_1) setValue('stage_code_1', data.stage_code_1 as string)
+        if (data.stage_code_2) setValue('stage_code_2', data.stage_code_2 as string)
+      })
+    return () => { cancelled = true }
+  }, [rootTxnLink, editRecord, setValue]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Clear stage_code_1 when bank changes and the current value is not in the filtered list
   const stage1Value = useWatch({ control, name: 'stage_code_1' })
   useEffect(() => {

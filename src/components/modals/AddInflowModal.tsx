@@ -184,6 +184,22 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setSelectedConfigId(cfg?.id ?? '')
   }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Propagate category + fund type from outflow root to this offset (new records only)
+  useEffect(() => {
+    if (!rootTxnLink || rootTxnLink.table !== 'outflow_transactions' || editRecord) return
+    let cancelled = false
+    supabase.from('outflow_transactions')
+      .select('stage_code_1, stage_code_2')
+      .eq('id', rootTxnLink.id)
+      .single()
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        if (data.stage_code_1) setValue('stage_code_1', data.stage_code_1 as string)
+        if (data.stage_code_2) setValue('stage_code_2', data.stage_code_2 as string)
+      })
+    return () => { cancelled = true }
+  }, [rootTxnLink, editRecord, setValue]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Populate / clear form when modal opens
   useEffect(() => {
     if (!open) return
