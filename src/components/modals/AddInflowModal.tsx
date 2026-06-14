@@ -184,9 +184,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setSelectedConfigId(cfg?.id ?? '')
   }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Propagate category + fund type from root to this offset (new records only)
+  // Propagate category + fund type from root to this offset
+  // In edit mode, only skip if the record already has values (don't overwrite intentional data)
   useEffect(() => {
-    if (!rootTxnLink || editRecord) return
+    if (!rootTxnLink) return
+    if (editRecord && (editRecord.stage_code_1 || editRecord.stage_code_2)) return
     let cancelled = false
     supabase.from(rootTxnLink.table)
       .select('stage_code_1, stage_code_2')
