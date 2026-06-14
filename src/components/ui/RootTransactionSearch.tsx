@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, X, Link2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useOrgStore } from '../../store/orgStore'
@@ -36,26 +37,61 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
   const orgId = useOrgStore((s) => s.orgId)
   const { baseCurrencyCode } = useOrgCurrency()
 
-  const [query,    setQuery]    = useState('')
-  const [inflows,  setInflows]  = useState<SearchResult[]>([])
-  const [outflows, setOutflows] = useState<SearchResult[]>([])
-  const [loading,  setLoading]  = useState(false)
-  const [open,     setOpen]     = useState(false)
-  const [allBanks, setAllBanks] = useState(!bankName)
+  const [query,         setQuery]         = useState('')
+  const [inflows,       setInflows]       = useState<SearchResult[]>([])
+  const [outflows,      setOutflows]      = useState<SearchResult[]>([])
+  const [loading,       setLoading]       = useState(false)
+  const [open,          setOpen]          = useState(false)
+  const [allBanks,      setAllBanks]      = useState(!bankName)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
 
-  const containerRef   = useRef<HTMLDivElement>(null)
-  const searchTimeout  = useRef<ReturnType<typeof setTimeout>>()
+  const containerRef  = useRef<HTMLDivElement>(null)
+  const dropdownRef   = useRef<HTMLUListElement>(null)
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => { setAllBanks(!bankName) }, [bankName])
 
+  // Compute fixed position from the container's bounding rect
+  const updatePos = useCallback(() => {
+    if (!containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    setDropdownStyle({
+      position: 'fixed',
+      top:   rect.bottom + 4,
+      left:  rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    })
+  }, [])
+
+  // Reposition on scroll/resize while open
+  useEffect(() => {
+    if (!open) return
+    updatePos()
+    window.addEventListener('scroll', updatePos, true)
+    window.addEventListener('resize', updatePos)
+    return () => {
+      window.removeEventListener('scroll', updatePos, true)
+      window.removeEventListener('resize', updatePos)
+    }
+  }, [open, updatePos])
+
+  // Close on outside click (must check both the container and the portal dropdown)
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (
+        !containerRef.current?.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  // Debounced search
   useEffect(() => {
     clearTimeout(searchTimeout.current)
     if (!query.trim() || !orgId) { setInflows([]); setOutflows([]); setOpen(false); return }
@@ -201,6 +237,34 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
   }
 
   // ── Search input + dropdown ────────────────────────────────────────────────
+  const dropdown = open && (inflows.length > 0 || outflows.length > 0)
+    ? createPortal(
+        <ul
+          ref={dropdownRef}
+          style={dropdownStyle}
+          className="max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+        >
+          {inflows.length > 0 && (
+            <>
+              <li className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-50 border-b border-green-100 sticky top-0">
+                Inflows ({inflows.length})
+              </li>
+              {inflows.map(renderRow)}
+            </>
+          )}
+          {outflows.length > 0 && (
+            <>
+              <li className={`px-3 py-1 text-xs font-semibold text-red-700 bg-red-50 border-b border-red-100 sticky top-0 ${inflows.length > 0 ? 'border-t border-gray-100 mt-1' : ''}`}>
+                Outflows ({outflows.length})
+              </li>
+              {outflows.map(renderRow)}
+            </>
+          )}
+        </ul>,
+        document.body
+      )
+    : null
+
   return (
     <div ref={containerRef} className="relative space-y-1.5">
       <div className="relative">
@@ -231,27 +295,7 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
         </label>
       )}
 
-      {/* Results dropdown — inflows and outflows in separate sections */}
-      {open && (inflows.length > 0 || outflows.length > 0) && (
-        <ul className="absolute z-50 left-0 right-0 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-          {inflows.length > 0 && (
-            <>
-              <li className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-50 border-b border-green-100 sticky top-0">
-                Inflows ({inflows.length})
-              </li>
-              {inflows.map(renderRow)}
-            </>
-          )}
-          {outflows.length > 0 && (
-            <>
-              <li className={`px-3 py-1 text-xs font-semibold text-red-700 bg-red-50 border-b border-red-100 sticky top-0 ${inflows.length > 0 ? 'border-t border-gray-100 mt-1' : ''}`}>
-                Outflows ({outflows.length})
-              </li>
-              {outflows.map(renderRow)}
-            </>
-          )}
-        </ul>
-      )}
+      {dropdown}
     </div>
   )
 }
