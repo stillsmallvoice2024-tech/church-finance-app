@@ -184,11 +184,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setSelectedConfigId(cfg?.id ?? '')
   }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Propagate category + fund type from outflow root to this offset (new records only)
+  // Propagate category + fund type from root to this offset (new records only)
   useEffect(() => {
-    if (!rootTxnLink || rootTxnLink.table !== 'outflow_transactions' || editRecord) return
+    if (!rootTxnLink || editRecord) return
     let cancelled = false
-    supabase.from('outflow_transactions')
+    supabase.from(rootTxnLink.table)
       .select('stage_code_1, stage_code_2')
       .eq('id', rootTxnLink.id)
       .single()
