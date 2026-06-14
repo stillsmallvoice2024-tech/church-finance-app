@@ -16,6 +16,7 @@ import type { TableColumnDef } from '../utils/tableColumns'
 import { allocatePercent } from '../utils/financeMath'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
 
 interface PctRow {
   category:  string
@@ -37,6 +38,7 @@ type ConfigRowShape = { category_name: string; budget_portion?: string; percenta
 export default function PercentageAllocation() {
   usePageTitle('Regular Funds')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
 
   const [rows,    setRows]    = useState<PctRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,6 +48,7 @@ export default function PercentageAllocation() {
   const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
 
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
@@ -53,24 +56,29 @@ export default function PercentageAllocation() {
       supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
+        .eq('org_id', orgId)
         .eq('stage_code_2', 'Percentage Allocation'),
       supabase
         .from('outflow_transactions')
         .select('stage_code_1, amount_disbursed, offset_role')
+        .eq('org_id', orgId)
         .eq('stage_code_2', 'Percentage Allocation'),
       supabase
         .from('category_opening_balances')
         .select('amount, categories(name)')
+        .eq('org_id', orgId)
         .eq('budget_portion', 'Percentage Allocation'),
       supabase
         .from('inflow_transactions')
         .select('amount, allocation_config_id')
+        .eq('org_id', orgId)
         .not('allocation_config_id', 'is', null)
         .is('stage_code_2', null)
         .is('transaction_type', null),
       supabase
         .from('intra_flows')
         .select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
+        .eq('org_id', orgId)
         .eq('status', 'active'),
     ])
 
@@ -114,6 +122,7 @@ export default function PercentageAllocation() {
       const configsRes = await supabase
         .from('allocation_configs')
         .select('id, rows')
+        .eq('org_id', orgId)
         .in('id', configIds)
 
       const configMap = new Map<string, ConfigRowShape[]>(
@@ -156,7 +165,7 @@ export default function PercentageAllocation() {
 
     setRows(result)
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { load() }, [load, intraflowVersion])
 

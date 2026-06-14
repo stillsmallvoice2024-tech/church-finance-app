@@ -72,10 +72,12 @@ const CAT_SORT_FIELDS = deriveSortFields(CAT_COLUMNS)
 // ── Deletion check ─────────────────────────────────────────────────────────────
 
 async function categoryHasLinkedData(cat: Category): Promise<boolean> {
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) return false
   const [inf, out, cob] = await Promise.all([
-    supabase.from('inflow_transactions').select('id', { count: 'exact', head: true }).eq('stage_code_1', cat.name),
-    supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('stage_code_1', cat.name),
-    supabase.from('category_opening_balances').select('id', { count: 'exact', head: true }).eq('category_id', cat.id),
+    supabase.from('inflow_transactions').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('stage_code_1', cat.name),
+    supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('stage_code_1', cat.name),
+    supabase.from('category_opening_balances').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('category_id', cat.id),
   ])
   return (inf.count ?? 0) > 0 || (out.count ?? 0) > 0 || (cob.count ?? 0) > 0
 }
