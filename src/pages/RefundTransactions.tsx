@@ -31,6 +31,7 @@ interface TxnRow {
   offset_role:             string | null
   root_transaction_id:     string | null
   import_seq?:             number
+  isPartialRoot?:          boolean
   inflowData?:             InflowTransaction
   outflowData?:            OutflowTransaction
 }
@@ -127,32 +128,63 @@ export default function RefundTransactions() {
     }
     setTruncated((inflowRes.count ?? 0) > REFUND_LIMIT || (outflowRes.count ?? 0) > REFUND_LIMIT)
 
+    const mapInflow = (r: Record<string, unknown>): TxnRow => ({
+      id: r.id as string, date: r.date as string, direction: 'in' as const,
+      amount: r.amount as number,
+      description: r.description as string | null,
+      original_transaction_id: r.original_transaction_id as string | null,
+      bank_name: r.bank_name as string | null,
+      remarks: r.remark as string | null,
+      offset_role: r.offset_role as string | null,
+      root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: (r.import_seq as number | null) ?? undefined,
+      inflowData: r as unknown as InflowTransaction,
+    })
+    const mapOutflow = (r: Record<string, unknown>): TxnRow => ({
+      id: r.id as string, date: r.date as string, direction: 'out' as const,
+      amount: r.amount_disbursed as number,
+      description: r.description as string | null,
+      original_transaction_id: r.original_transaction_id as string | null,
+      bank_name: r.bank_name as string | null,
+      remarks: r.remarks as string | null,
+      offset_role: r.offset_role as string | null,
+      root_transaction_id: r.root_transaction_id as string | null,
+      import_seq: (r.import_seq as number | null) ?? undefined,
+      outflowData: r as unknown as OutflowTransaction,
+    })
+
     const allRows: TxnRow[] = [
-      ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-        id: r.id as string, date: r.date as string, direction: 'in' as const,
-        amount: r.amount as number,
-        description: r.description as string | null,
-        original_transaction_id: r.original_transaction_id as string | null,
-        bank_name: r.bank_name as string | null,
-        remarks: r.remark as string | null,
-        offset_role: r.offset_role as string | null,
-        root_transaction_id: r.root_transaction_id as string | null,
-        import_seq: (r.import_seq as number | null) ?? undefined,
-        inflowData: r as unknown as InflowTransaction,
-      })),
-      ...(outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-        id: r.id as string, date: r.date as string, direction: 'out' as const,
-        amount: r.amount_disbursed as number,
-        description: r.description as string | null,
-        original_transaction_id: r.original_transaction_id as string | null,
-        bank_name: r.bank_name as string | null,
-        remarks: r.remarks as string | null,
-        offset_role: r.offset_role as string | null,
-        root_transaction_id: r.root_transaction_id as string | null,
-        import_seq: (r.import_seq as number | null) ?? undefined,
-        outflowData: r as unknown as OutflowTransaction,
-      })),
+      ...(inflowRes.data ?? []).map(mapInflow),
+      ...(outflowRes.data ?? []).map(mapOutflow),
     ]
+
+    // Collect root IDs already present in the refund dataset
+    const refundRootIds = new Set(allRows.filter(r => r.offset_role === 'root').map(r => r.id))
+
+    // Find offset rows whose root is NOT in the refund dataset (partial refund roots)
+    const orphanRootIds = [...new Set(
+      allRows
+        .filter(r => r.root_transaction_id !== null && !refundRootIds.has(r.root_transaction_id!))
+        .map(r => r.root_transaction_id!)
+    )]
+
+    // Second pass: fetch the normal root transactions by ID
+    if (orphanRootIds.length > 0) {
+      const [partialInflowRes, partialOutflowRes] = await Promise.all([
+        supabase.from('inflow_transactions').select('*').eq('org_id', orgId).in('id', orphanRootIds),
+        supabase.from('outflow_transactions').select('*').eq('org_id', orgId).in('id', orphanRootIds),
+      ])
+      const partialRoots: TxnRow[] = [
+        ...(partialInflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+          ...mapInflow(r), offset_role: 'root', isPartialRoot: true,
+        })),
+        ...(partialOutflowRes.data ?? []).map((r: Record<string, unknown>) => ({
+          ...mapOutflow(r), offset_role: 'root', isPartialRoot: true,
+        })),
+      ]
+      allRows.push(...partialRoots)
+    }
+
     const roots: TxnRow[] = []
     const offsets: TxnRow[] = []
     const standalone: TxnRow[] = []
@@ -212,14 +244,18 @@ export default function RefundTransactions() {
   // ── Table row renderer ──────────────────────────────────────────────────────
   const renderTableRow = (
     row:     TxnRow,
-    rowKind: 'root' | 'offset' | 'unmatched',
-    opts?:   { hasOffsets?: boolean; isLastOffset?: boolean },
+    rowKind: 'root' | 'partial-root' | 'offset' | 'unmatched',
+    opts?:   { hasOffsets?: boolean; isLastOffset?: boolean; connectorColor?: string },
   ) => {
     const isExpanded = expandedId === row.id
+
+    const connectorColor = opts?.connectorColor ?? (rowKind === 'partial-root' ? '#fcd34d' : '#6ee7b7')
 
     const rowCls =
       rowKind === 'root'
         ? 'border-b border-gray-100/80 hover:bg-emerald-50/40 transition-colors'
+        : rowKind === 'partial-root'
+        ? 'border-b border-gray-100/80 hover:bg-amber-50/40 transition-colors'
         : rowKind === 'offset'
         ? 'border-b border-gray-100/80 bg-slate-50/50 hover:bg-slate-100/50 transition-colors'
         : 'border-b border-gray-100/80 hover:bg-gray-50/60 transition-colors'
@@ -228,26 +264,30 @@ export default function RefundTransactions() {
     const connectorTd = (() => {
       const base: React.CSSProperties = { position: 'relative', width: 24, minWidth: 24, padding: 0 }
 
-      if (rowKind === 'root') return (
-        <td style={base}>
-          {opts?.hasOffsets && (
-            <div style={{ position: 'absolute', left: 11, top: '50%', bottom: 0, width: 2, background: '#6ee7b7' }} />
-          )}
-          <div style={{
-            position: 'absolute', left: 7, top: '50%', transform: 'translateY(-50%)',
-            width: 9, height: 9, borderRadius: '50%',
-            background: '#34d399',
-            boxShadow: '0 0 0 2px #fff, 0 0 0 3px #a7f3d0',
-          }} />
-        </td>
-      )
+      if (rowKind === 'root' || rowKind === 'partial-root') {
+        const dotColor  = rowKind === 'partial-root' ? '#f59e0b' : '#34d399'
+        const ringColor = rowKind === 'partial-root' ? '#fde68a' : '#a7f3d0'
+        return (
+          <td style={base}>
+            {opts?.hasOffsets && (
+              <div style={{ position: 'absolute', left: 11, top: '50%', bottom: 0, width: 2, background: connectorColor }} />
+            )}
+            <div style={{
+              position: 'absolute', left: 7, top: '50%', transform: 'translateY(-50%)',
+              width: 9, height: 9, borderRadius: '50%',
+              background: dotColor,
+              boxShadow: `0 0 0 2px #fff, 0 0 0 3px ${ringColor}`,
+            }} />
+          </td>
+        )
+      }
 
       if (rowKind === 'offset') return (
         <td style={base}>
-          <div style={{ position: 'absolute', left: 11, top: 0, bottom: '50%', width: 2, background: '#6ee7b7' }} />
-          <div style={{ position: 'absolute', left: 11, right: 0, top: '50%', height: 2, transform: 'translateY(-50%)', background: '#6ee7b7' }} />
+          <div style={{ position: 'absolute', left: 11, top: 0, bottom: '50%', width: 2, background: connectorColor }} />
+          <div style={{ position: 'absolute', left: 11, right: 0, top: '50%', height: 2, transform: 'translateY(-50%)', background: connectorColor }} />
           {!opts?.isLastOffset && (
-            <div style={{ position: 'absolute', left: 11, top: '50%', bottom: 0, width: 2, background: '#6ee7b7' }} />
+            <div style={{ position: 'absolute', left: 11, top: '50%', bottom: 0, width: 2, background: connectorColor }} />
           )}
           <div style={{
             position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
@@ -282,6 +322,11 @@ export default function RefundTransactions() {
               {rowKind === 'root' && (
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide leading-none">
                   Original
+                </span>
+              )}
+              {rowKind === 'partial-root' && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide leading-none">
+                  Original · Partial
                 </span>
               )}
               {rowKind === 'offset' && (
@@ -330,18 +375,20 @@ export default function RefundTransactions() {
   // ── Card renderer ───────────────────────────────────────────────────────────
   const renderCard = (
     row:     TxnRow,
-    rowKind: 'root' | 'offset' | 'unmatched',
+    rowKind: 'root' | 'partial-root' | 'offset' | 'unmatched',
     config?: { inCluster?: boolean; bgOverride?: string },
   ) => {
     const inCluster = config?.inCluster ?? false
     const bg        = config?.bgOverride ?? 'bg-white'
     const leftBorder = inCluster ? '' :
-      rowKind === 'root'    ? 'border-l-2 border-emerald-300' :
-      rowKind === 'offset'  ? 'border-l-2 border-slate-300'   :
-                              'border-l-2 border-rose-200'
+      rowKind === 'root'         ? 'border-l-2 border-emerald-300' :
+      rowKind === 'partial-root' ? 'border-l-2 border-amber-300'   :
+      rowKind === 'offset'       ? 'border-l-2 border-slate-300'   :
+                                   'border-l-2 border-rose-200'
     const roleLabel =
-      rowKind === 'root'   ? 'Original' :
-      rowKind === 'offset' ? 'Refund'   : '—'
+      rowKind === 'root'         ? 'Original'         :
+      rowKind === 'partial-root' ? 'Original (Partial)' :
+      rowKind === 'offset'       ? 'Refund'           : '—'
 
     return (
       <div className={`${bg} ${leftBorder}`}>
@@ -352,6 +399,11 @@ export default function RefundTransactions() {
               {rowKind === 'root' && (
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide leading-none">
                   Original
+                </span>
+              )}
+              {rowKind === 'partial-root' && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide leading-none">
+                  Original · Partial
                 </span>
               )}
               {rowKind === 'offset' && (
@@ -381,7 +433,7 @@ export default function RefundTransactions() {
         </div>
         <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3 flex items-center justify-between">
           <div>
-            <p className={`text-xs uppercase tracking-wide font-semibold mb-0.5 ${row.direction === 'in' ? 'text-emerald-600/70' : 'text-red-500/70'}`}>
+            <p className={`text-xs uppercase tracking-wide font-semibold mb-0.5 ${rowKind === 'partial-root' ? 'text-amber-600/70' : row.direction === 'in' ? 'text-emerald-600/70' : 'text-red-500/70'}`}>
               {roleLabel}
             </p>
             <p className={`text-sm font-mono font-bold tabular-nums ${row.direction === 'in' ? 'text-success' : 'text-danger'}`}>
@@ -483,9 +535,11 @@ export default function RefundTransactions() {
 
       {/* Summary strip */}
       {(() => {
+        // Partial-root rows are normal transactions fetched for context — exclude from refund row count
+        const refundRows = filtered.filter(r => !r.isPartialRoot)
         const summaryCards = [
           { label: 'Total rows', sub: null,
-            value: filtered.length.toLocaleString(),
+            value: refundRows.length.toLocaleString(),
             accent: 'border-gray-100 text-gray-900' },
           { label: 'Originals', sub: 'the entry that got refunded',
             value: `${groups.length.toLocaleString()} · ${formatCurrency(groups.reduce((s, g) => s + g.root.amount, 0), baseCurrencyCode)}`,
@@ -538,29 +592,42 @@ export default function RefundTransactions() {
             ) : (
               <>
                 {/* Matched clusters */}
-                {groups.map(({ root, offsets }) => (
-                  <div key={root.id} className="rounded-2xl border border-emerald-200/70 shadow-md overflow-hidden">
+                {groups.map(({ root, offsets }) => {
+                  const isPartial = root.isPartialRoot
+                  const clusterBorder   = isPartial ? 'border-amber-200/70'  : 'border-emerald-200/70'
+                  const headerBg        = isPartial ? 'bg-amber-50 border-b border-amber-100'  : 'bg-emerald-50 border-b border-emerald-100'
+                  const linkIconColor   = isPartial ? 'text-amber-500'  : 'text-emerald-500'
+                  const headerTextColor = isPartial ? 'text-amber-700'  : 'text-emerald-700'
+                  const gutterBg        = isPartial ? 'bg-amber-50/40'  : 'bg-emerald-50/40'
+                  const connLine        = isPartial ? '#fcd34d'          : '#6ee7b7'
+                  const offsetBorder    = isPartial ? 'border-amber-100/80' : 'border-emerald-100/80'
+                  const rootKind        = isPartial ? 'partial-root' as const : 'root' as const
+
+                  return (
+                  <div key={root.id} className={`rounded-2xl border ${clusterBorder} shadow-md overflow-hidden`}>
                     {/* Cluster header strip */}
-                    <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-b border-emerald-100">
-                      <Link2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                      <span className="text-xs font-semibold text-emerald-700">
-                        Matched pair · 1 original + {offsets.length} {offsets.length === 1 ? 'refund' : 'refunds'}
+                    <div className={`flex items-center gap-2 px-4 py-2 ${headerBg}`}>
+                      <Link2 className={`w-3 h-3 ${linkIconColor} shrink-0`} />
+                      <span className={`text-xs font-semibold ${headerTextColor}`}>
+                        {isPartial
+                          ? `Partial refund · original txn + ${offsets.length} ${offsets.length === 1 ? 'refund' : 'refunds'}`
+                          : `Matched pair · 1 original + ${offsets.length} ${offsets.length === 1 ? 'refund' : 'refunds'}`}
                       </span>
                     </div>
 
                     {/* Root card */}
-                    {renderCard(root, 'root', { inCluster: true, bgOverride: 'bg-white' })}
+                    {renderCard(root, rootKind, { inCluster: true, bgOverride: 'bg-white' })}
 
                     {/* Offset cards with left gutter connector */}
                     {offsets.map((off, offIdx) => (
-                      <div key={off.id} className="flex border-t border-emerald-100/80">
+                      <div key={off.id} className={`flex border-t ${offsetBorder}`}>
                         {/* Gutter */}
-                        <div className="relative flex-shrink-0 w-5 bg-emerald-50/40">
-                          <div style={{ position: 'absolute', left: 9, top: 0, bottom: '50%', width: 2, background: '#6ee7b7' }} />
+                        <div className={`relative flex-shrink-0 w-5 ${gutterBg}`}>
+                          <div style={{ position: 'absolute', left: 9, top: 0, bottom: '50%', width: 2, background: connLine }} />
                           {offIdx < offsets.length - 1 && (
-                            <div style={{ position: 'absolute', left: 9, top: '50%', bottom: 0, width: 2, background: '#6ee7b7' }} />
+                            <div style={{ position: 'absolute', left: 9, top: '50%', bottom: 0, width: 2, background: connLine }} />
                           )}
-                          <div style={{ position: 'absolute', left: 9, right: 0, top: '50%', height: 2, transform: 'translateY(-50%)', background: '#6ee7b7' }} />
+                          <div style={{ position: 'absolute', left: 9, right: 0, top: '50%', height: 2, transform: 'translateY(-50%)', background: connLine }} />
                         </div>
                         {/* Card */}
                         <div className="flex-1 min-w-0">
@@ -569,7 +636,8 @@ export default function RefundTransactions() {
                       </div>
                     ))}
                   </div>
-                ))}
+                  )
+                })}
 
                 {/* Unmatched section */}
                 {unmatched.length > 0 && (
@@ -641,9 +709,12 @@ export default function RefundTransactions() {
                           <td colSpan={totalCols} className="p-0 bg-gray-50/60" style={{ height: 10 }} />
                         </tr>
                       )}
-                      {renderTableRow(root, 'root', { hasOffsets: offsets.length > 0 })}
+                      {renderTableRow(root, root.isPartialRoot ? 'partial-root' : 'root', { hasOffsets: offsets.length > 0 })}
                       {offsets.map((off, i) =>
-                        renderTableRow(off, 'offset', { isLastOffset: i === offsets.length - 1 })
+                        renderTableRow(off, 'offset', {
+                          isLastOffset: i === offsets.length - 1,
+                          connectorColor: root.isPartialRoot ? '#fcd34d' : '#6ee7b7',
+                        })
                       )}
                     </tbody>
                   ))}
