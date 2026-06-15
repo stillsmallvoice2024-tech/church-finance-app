@@ -36,7 +36,7 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
 import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
+const TABS = ['General', 'Banks', 'Distribution Rules', 'Special Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 // ── Compact shared search + sort bar for Setup tabs ──────────────────────────────
@@ -455,7 +455,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
           onClick={onNew}
           className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
         >
-          <Plus className="w-4 h-4" /> New Configuration
+          <Plus className="w-4 h-4" /> New Distribution Rule
         </button>
       </div>
 
@@ -478,17 +478,17 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
           <Layers className="w-10 h-10 text-gray-300" />
           <div>
-            <p className="text-sm font-medium text-gray-600">No allocation configurations yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a configuration to define how income is split across categories.</p>
+            <p className="text-sm font-medium text-gray-600">No distribution rules yet</p>
+            <p className="text-xs text-gray-500 mt-1">Create a distribution rule to define how income is split across categories.</p>
           </div>
         </div>
       )}
 
       {!loading && !error && configs.length > 0 && (
         <>
-          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={ALLOC_SORT_OPTS} placeholder="Search configurations…" />
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={ALLOC_SORT_OPTS} placeholder="Search distribution rules…" />
           {visible.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">No configurations match your search.</p>
+            <p className="py-8 text-center text-sm text-gray-400">No distribution rules match your search.</p>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
@@ -559,8 +559,8 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
           )}
           <p className="text-xs text-gray-500">
             {visible.length !== configs.length
-              ? `${visible.length} of ${configs.length} configurations`
-              : `${configs.length} configuration${configs.length !== 1 ? 's' : ''}`}
+              ? `${visible.length} of ${configs.length} distribution rules`
+              : `${configs.length} distribution rule${configs.length !== 1 ? 's' : ''}`}
           </p>
         </>
       )}
@@ -568,7 +568,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
   )
 }
 
-// ── Special Configs tab ────────────────────────────────────────────────────────────
+// ── Special Rules tab ─────────────────────────────────────────────────────────────
 
 function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
   onNew:        () => void
@@ -643,8 +643,8 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
           <Layers className="w-10 h-10 text-gray-300" />
           <div>
-            <p className="text-sm font-medium text-gray-600">No special config groups yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a group to manage versioned special allocation configs.</p>
+            <p className="text-sm font-medium text-gray-600">No special rule groups yet</p>
+            <p className="text-xs text-gray-500 mt-1">Create a group to manage versioned special rules.</p>
           </div>
         </div>
       ) : (
@@ -3055,8 +3055,8 @@ export default function SetupPage() {
         <div>
           {activeTab === 'General'        && <GeneralTab />}
           {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Allocation'     && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
-          {activeTab === 'Special Configs' && (
+          {activeTab === 'Distribution Rules' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
+          {activeTab === 'Special Rules' && (
             <SpecialConfigsTab
               key={specialRefetch}
               onNew={handleNewGroup}
@@ -3129,7 +3129,7 @@ export default function SetupPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Lock <span className="font-semibold">"{lockTarget?.name}"</span>? Locked configurations are read-only and cannot be edited directly.
+            Lock <span className="font-semibold">"{lockTarget?.name}"</span>? Locked distribution rules are read-only and cannot be edited directly.
           </p>
           <div className="flex justify-end gap-3">
             <button
@@ -3200,7 +3200,7 @@ export default function SetupPage() {
         open={!!deleteAllocTarget}
         onClose={() => setDeleteAllocTarget(null)}
         onConfirm={confirmDeleteAlloc}
-        label={deleteAllocTarget ? `"${deleteAllocTarget.name}"` : 'this configuration'}
+        label={deleteAllocTarget ? `"${deleteAllocTarget.name}"` : 'this distribution rule'}
       />
 
       <AddBankModal

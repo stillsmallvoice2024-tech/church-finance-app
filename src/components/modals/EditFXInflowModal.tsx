@@ -159,7 +159,7 @@ export function EditFXInflowModal({ open, onClose, onSuccess, record }: Props) {
         <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
           <p className="text-xs font-semibold text-gray-500">Allocation</p>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">Allocation Config</label>
+            <label className="text-xs font-medium text-gray-600">Distribution Rule</label>
             <select value={configId} onChange={e => setConfigId(e.target.value)} className={iCls}>
               <option value="">— Auto-detect by date —</option>
               {configs.filter(c => c.status === 'locked').map(c => (
@@ -176,7 +176,7 @@ export function EditFXInflowModal({ open, onClose, onSuccess, record }: Props) {
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">Fund Type</label>
               <input type="text" value={stageCode2} onChange={e => setStageCode2(e.target.value)}
-                placeholder="e.g. Percentage Allocation" className={iCls} />
+                placeholder="e.g. Regular Funds" className={iCls} />
             </div>
           </div>
         </div>

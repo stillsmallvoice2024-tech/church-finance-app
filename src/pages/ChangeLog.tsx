@@ -26,7 +26,7 @@ const TABLE_LABELS: Record<string, string> = {
   intra_flows:          'IntraBank Transfers',
   categories:           'Categories',
   banks:                'Banks',
-  allocation_configs:   'Allocation Configs',
+  allocation_configs:   'Distribution Rules',
   fx_transactions:      'FX Transactions',
   project_entries:      'Project Entries',
 }

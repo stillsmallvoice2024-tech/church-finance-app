@@ -22,6 +22,11 @@ import { allocatePercent } from '../../utils/financeMath'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
+const BUDGET_PORTION_LABELS: Record<string, string> = {
+  'Percentage Allocation': 'Regular Funds',
+  'Specific Seed':         'Designated Gift',
+  Savings:                 'Savings Funds',
+}
 const NEW_SENTINEL = '__new__'
 const MAX_CACHE_RETRIES = 3
 
@@ -636,7 +641,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                           >
                             <option value="">— Portion —</option>
                             {BUDGET_PORTIONS.map(p => (
-                              <option key={p} value={p}>{p}</option>
+                              <option key={p} value={p}>{BUDGET_PORTION_LABELS[p] ?? p}</option>
                             ))}
                           </select>
 
