@@ -1774,7 +1774,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             </p>
 
             <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <div className="grid grid-cols-2 bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase border-b border-gray-200">
+              <div className="grid grid-cols-2 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-2.5 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                 <span>Spreadsheet Column</span>
                 <span>App Field</span>
               </div>
@@ -2053,10 +2053,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                             else setApplyInflowConfig(e.target.value)
                           }}
                           className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[120px]">
-                          <option value="">— Allocation Config —</option>
+                          <option value="">— Distribution Rule —</option>
                           <option value="__general__">General (date-based)</option>
                           {applyBarSpecialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          <option value="__create__">＋ Create New Config…</option>
+                          <option value="__create__">＋ Create New Rule…</option>
                         </select>
                         {incomeTypes.length > 0 && (
                           <SearchableSelect value={applyIncomeType} onChange={setApplyIncomeType}
@@ -2160,7 +2160,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
                       return importRowView === 'table' ? (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                      <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                         <input
                           type="checkbox"
                           checked={allInflowFilteredSelected}
@@ -2175,7 +2175,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                           }}
                           className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                         />
-                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Allocation Config</span><span>Income Type</span><span>Txn Type</span>
+                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Distribution Rule</span><span>Income Type</span><span>Txn Type</span>
                       </div>
                       <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                         {filtered.length === 0
@@ -2234,7 +2234,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                           const extra = allocConfigs.find(c => c.id === displaySelId)
                                           return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
                                         })()}
-                                        <option value="__create__">＋ Create New Config…</option>
+                                        <option value="__create__">＋ Create New Rule…</option>
                                       </select>
                                     )}
                                     {txnType ? (
@@ -2380,9 +2380,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     </button>
                                   ) : (
                                     <div className="px-4 py-3 bg-gray-50/40 space-y-3">
-                                      {/* Allocation Config */}
+                                      {/* Distribution Rule */}
                                       <div>
-                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Allocation Config</label>
+                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Distribution Rule</label>
                                         {txnType ? (
                                           <span className="text-xs text-gray-500 italic">N/A for {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label}</span>
                                         ) : (
@@ -2402,7 +2402,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                               const extra = allocConfigs.find(c => c.id === displaySelId)
                                               return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
                                             })()}
-                                            <option value="__create__">＋ Create New Config…</option>
+                                            <option value="__create__">＋ Create New Rule…</option>
                                           </select>
                                         )}
                                       </div>
@@ -2672,7 +2672,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
                     return importRowView === 'table' ? (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                       <input
                         type="checkbox"
                         checked={allOutflowFilteredSelected}
@@ -2748,9 +2748,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                                     onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                     <option value="">— None —</option>
-                                    <option value="Percentage Allocation">Percentage Allocation</option>
-                                    <option value="Specific Seed">Specific Seed</option>
-                                    <option value="Savings">Savings</option>
+                                    <option value="Percentage Allocation">Regular Funds</option>
+                                    <option value="Specific Seed">Designated Gift</option>
+                                    <option value="Savings">Savings Funds</option>
                                   </select>
                                   <div className="flex justify-center">
                                     <input

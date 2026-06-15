@@ -21,7 +21,7 @@ export function SortableHeader({
   onSort,
   className = '',
   rightAlign = false,
-  inactiveCls = 'text-gray-500 hover:text-gray-700',
+  inactiveCls = 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300',
   children,
 }: SortableHeaderProps) {
   const isActive = field.key === activeSortKey
@@ -37,7 +37,7 @@ export function SortableHeader({
 
   return (
     <th
-      className={`px-4 py-3 font-medium ${className}`}
+      className={`px-4 py-3 text-[11px] font-bold uppercase tracking-widest ${className}`}
       aria-sort={isActive ? (activeSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <button
@@ -45,7 +45,7 @@ export function SortableHeader({
         onClick={handleClick}
         className={`inline-flex items-center gap-1 min-h-[32px] transition-colors group whitespace-nowrap ${
           rightAlign ? 'ml-auto flex-row-reverse' : ''
-        } ${isActive ? 'text-primary' : inactiveCls}`}
+        } ${isActive ? 'text-primary dark:text-primary-dm' : inactiveCls}`}
       >
         {label}
         {/* Chevron stays visible on touch devices (no hover) via opacity-40 fallback */}

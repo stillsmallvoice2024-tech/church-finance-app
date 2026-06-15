@@ -41,7 +41,7 @@ interface DrawerSection {
 
 const DRAWER_SECTIONS: DrawerSection[] = [
   {
-    label: 'Daily Finance',
+    label: 'Finance',
     items: [
       { label: 'Import',            path: '/import',           icon: FileUp,         canWriteOnly: true },
       { label: 'Category Fund Transfers', path: '/intra-flow',      icon: Repeat2        },
@@ -114,13 +114,13 @@ export function BottomTabBar() {
 
       {/* More drawer */}
       {moreOpen && (
-        <div className="fixed bottom-[var(--tab-bar-height)] left-0 right-0 z-50 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl border-t border-gray-100 dark:border-gray-700 max-h-[calc(100dvh-var(--tab-bar-height)-1rem)] flex flex-col lg:hidden">
+        <div className="fixed bottom-[var(--tab-bar-height)] left-0 right-0 z-50 bg-white dark:bg-[#1c1c1e] rounded-t-2xl shadow-2xl border-t border-black/[0.07] dark:border-white/[0.08] max-h-[calc(100dvh-var(--tab-bar-height)-1rem)] flex flex-col lg:hidden">
           {/* Drawer header */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-black/[0.06] dark:border-white/[0.07] shrink-0">
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">More</span>
             <button
               onClick={() => setMoreOpen(false)}
-              className="touch-target p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="touch-target p-1.5 rounded-lg text-gray-400 hover:bg-black/[0.05] dark:hover:bg-white/[0.07]"
               aria-label="Close menu"
             >
               <X className="w-4 h-4" />
@@ -138,7 +138,7 @@ export function BottomTabBar() {
 
               return (
                 <div key={section.label}>
-                  <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 px-1">
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-[0.12em] mb-2 px-1">
                     {section.label}
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -150,8 +150,8 @@ export function BottomTabBar() {
                         className={({ isActive }) =>
                           `flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm font-medium transition-colors border-l-2 min-h-[48px] ${
                             isActive
-                              ? 'bg-primary/8 text-primary border-primary dark:bg-primary/15'
-                              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-transparent'
+                              ? 'bg-primary/[0.08] text-primary border-primary dark:bg-primary/20'
+                              : 'text-gray-600 dark:text-gray-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] border-transparent'
                           }`
                         }
                       >
@@ -169,7 +169,7 @@ export function BottomTabBar() {
 
       {/* Bottom tab bar — h-12 content + safe-area inset; matches --tab-bar-height in index.css */}
       <nav
-        className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 h-[var(--tab-bar-height)] pb-[var(--safe-bottom)] bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex lg:hidden"
+        className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-40 h-[var(--tab-bar-height)] pb-[var(--safe-bottom)] bg-white dark:bg-[#101012] border-t border-black/[0.07] dark:border-white/[0.06] flex lg:hidden"
         aria-label="Primary navigation"
       >
         {primaryTabs.map(({ label, path, icon: Icon, end }) => (

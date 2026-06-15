@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Sparkles, ExternalLink } from 'lucide-react'
+import { Sparkles, ExternalLink, Info } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { Modal, type ModalHandle } from '../ui/Modal'
@@ -88,7 +88,8 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const [selectedConfigId,  setSelectedConfigId]  = useState('')
   const [configManuallySet, setConfigManuallySet] = useState(false)
   const [dupError, setDupError] = useState<string | null>(null)
-  const [rootTxnLink, setRootTxnLink] = useState<RootTxnLink | null>(null)
+  const [rootTxnLink,     setRootTxnLink]     = useState<RootTxnLink | null>(null)
+  const [rootPropagated,  setRootPropagated]  = useState(false)
 
   // Custom income type (user-defined, separate from the legacy inflowType)
   const [incomeTypeId,        setIncomeTypeId]        = useState<string>('')
@@ -196,8 +197,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       .single()
       .then(({ data }) => {
         if (cancelled || !data) return
-        if (data.stage_code_1) setValue('stage_code_1', data.stage_code_1 as string)
-        if (data.stage_code_2) setValue('stage_code_2', data.stage_code_2 as string)
+        let filled = false
+        if (data.stage_code_1) { setValue('stage_code_1', data.stage_code_1 as string); filled = true }
+        if (data.stage_code_2) { setValue('stage_code_2', data.stage_code_2 as string); filled = true }
+        if (filled) setRootPropagated(true)
       })
     return () => { cancelled = true }
   }, [rootTxnLink, editRecord, setValue]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -209,6 +212,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     resetUpdate()
     setConfigManuallySet(false)
     setIncomeTypeAutoSet(false)
+    setRootPropagated(false)
     setDupError(null)
     setRootTxnLink(null)
     if (editRecord) {
@@ -501,16 +505,16 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         )}
 
-        {/* Allocation Config */}
-        <Field label="Allocation Config"
-          help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the config active on the transaction date. Choose a specific config to override.">
+        {/* Distribution Rule */}
+        <Field label="Distribution Rule"
+          help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the rule active on the transaction date. Choose a specific rule to override.">
           {transactionType ? (
             <p className="text-xs text-gray-500 italic">Not applicable for non-Normal transactions</p>
           ) : selectedIncomeType?.special_config_id && !configManuallySet ? (
             <div className="space-y-1">
               <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
                 <span className="text-xs text-primary font-medium">
-                  Auto-applying: {selectedIncomeType.special_config_name ?? 'Special Config'}
+                  Auto-applying: {selectedIncomeType.special_config_name ?? 'Special Rule'}
                 </span>
                 <button
                   type="button"
@@ -543,6 +547,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </Field>
 
         {/* Stage Code 1 + 2 (display labels: Category / Fund Type) */}
+        {rootPropagated && (
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800">
+            <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+            <span>Category and fund type were auto-filled from the linked root transaction. <strong>Save to apply these to ledgers.</strong></span>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Category" error={errors.stage_code_1?.message}
             help="The category assigned to this inflow. Used in reports to group income by type (e.g. Tithes, Offerings, Donations). Drives budget allocation.">
@@ -558,7 +568,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
               <option value="">— Select —</option>
               <option value="Percentage Allocation">Regular Funds (percentage split)</option>
               <option value="Specific Seed">Designated Gift (earmarked)</option>
-              <option value="Savings">Savings</option>
+              <option value="Savings">Savings Funds</option>
             </select>
           </Field>
         </div>

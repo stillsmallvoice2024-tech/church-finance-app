@@ -17,6 +17,12 @@ import { useCategories } from '../../hooks/useCategories'
 const BUDGET_PORTIONS = ['Percentage', 'Specific Seed', 'Savings'] as const
 type BudgetPortion = typeof BUDGET_PORTIONS[number]
 
+const PORTION_LABELS: Record<BudgetPortion, string> = {
+  Percentage:      'Regular Funds',
+  'Specific Seed': 'Designated Gift',
+  Savings:         'Savings Funds',
+}
+
 const rowSchema = z.object({
   category_name:  z.string().min(1, 'Required'),
   budget_portion: z.enum(BUDGET_PORTIONS, { errorMap: () => ({ message: 'Required' }) }),
@@ -232,7 +238,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                 >
                   <option value="">— Portion —</option>
                   {BUDGET_PORTIONS.map(p => (
-                    <option key={p} value={p}>{p}</option>
+                    <option key={p} value={p}>{PORTION_LABELS[p]}</option>
                   ))}
                 </select>
                 {errors.rows?.[idx]?.budget_portion && (

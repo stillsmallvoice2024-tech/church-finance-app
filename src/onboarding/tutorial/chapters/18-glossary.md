@@ -4,8 +4,8 @@ Look up any word you meet in the app or in this tutorial.
 
 | Word | Simple meaning |
 |---|---|
-| Inflow | Money coming IN to the church |
-| Outflow | Money going OUT of the church |
+| Inflow | Money coming IN to the organisation |
+| Outflow | Money going OUT of the organisation |
 | Transaction | One single money event — one gift, one payment |
 | Import | Loading a whole bank statement file into the app |
 | Bank statement | The list of transactions your bank gives you |
@@ -21,7 +21,7 @@ Look up any word you meet in the app or in this tutorial.
 | Draft | Saved but not yet in use |
 | Income type | A name tag for money in, like "Tithes" or "Offerings" |
 | Outflow type | A name tag for money out, like "Salaries" or "Utilities" |
-| Department | A team or unit in the church, like "Welfare" or "Music" |
+| Department | A team or unit in the organisation, like "Welfare" or "Music" |
 | Ledger | A running list of transactions with the balance after each one |
 | Balance Brought Forward (B/F) | The money already there before the list starts |
 | Running balance | The balance recalculated after every row |

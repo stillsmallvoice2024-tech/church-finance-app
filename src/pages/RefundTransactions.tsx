@@ -473,7 +473,7 @@ export default function RefundTransactions() {
   return (
     <div className="space-y-5">
       <PageHelpBanner storageKey="help-dismissed-refunds" title="Refunds vs Reversals — what's the difference?">
-        A <strong>refund</strong> is a real cash movement: money is returned to a donor or reimbursed to the church.
+        A <strong>refund</strong> is a real cash movement: money is returned to a donor or reimbursed to the organisation.
         It is recorded as a new transaction that offsets the original. A <strong>reversal</strong> (see the Reversals page) is an accounting
         correction for an entry that was made in error — no actual cash changes hands; the original record is cancelled out.
       </PageHelpBanner>
@@ -488,7 +488,7 @@ export default function RefundTransactions() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Refund Transactions</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Refund Transactions</h1>
           <p className="text-sm text-gray-500 mt-0.5">Inflow and outflow rows tagged as refunds</p>
         </div>
         <div className="flex items-center gap-2">

@@ -282,7 +282,7 @@ export default function Inflows() {
         {/* Header */}
         <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Inflow Transactions</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Inflow Transactions</h1>
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export default function Inflows() {
             <Link
               to="/import"
               data-tour="import-link"
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
             >
               Import
             </Link>
@@ -465,23 +465,23 @@ export default function Inflows() {
           <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
+                <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                   <th className="w-10 pl-4 pr-2 py-3">
                     <input type="checkbox" className="w-4 h-4 rounded border-gray-300"
                       checked={allSelected}
                       onChange={e => e.target.checked ? selectAllRows() : clearAll()} />
                   </th>
                   <th className="w-8" />
-                  <SortableHeader field={infSF('date')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <SortableHeader field={infSF('recorded_at')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Bank</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Type</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Description</th>
-                  <SortableHeader field={infSF('amount')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-success/80 hover:text-success" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Actions</th>
+                  <SortableHeader field={infSF('date')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3" />
+                  <SortableHeader field={infSF('recorded_at')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} className="px-4 py-3" />
+                  <th className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-left whitespace-nowrap">Bank</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-left whitespace-nowrap">Type</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-left whitespace-nowrap">Description</th>
+                  <SortableHeader field={infSF('amount')} activeSortKey={infState.sortKey} activeSortDir={infState.sortDir} onSort={infState.setSort} rightAlign className="px-4 py-3" inactiveCls="text-success/80 hover:text-success" />
+                  <th className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-left whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-black/[0.05]">
                 {loading && displayed.length === 0 ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
@@ -507,7 +507,7 @@ export default function Inflows() {
                     const rows = [
                       <tr
                         key={row.id}
-                        className={`hover:bg-gray-50 transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
+                        className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
                       >
                         <td className="pl-4 pr-2 py-3 w-10">
                           <input

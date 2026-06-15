@@ -686,7 +686,7 @@ export default function UserManagement() {
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div data-tour="page-header" className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">User Management</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">User Management</h1>
           <p className="text-sm text-gray-500 mt-0.5">Control who can access the finance system</p>
         </div>
         <div className="flex items-center gap-2">
@@ -755,7 +755,7 @@ export default function UserManagement() {
                 <span className="text-xs text-gray-500">{label}</span>
                 {tip && <HelpTooltip content={tip} placement="top" iconSize="w-3 h-3" />}
               </div>
-              <div className="text-2xl font-bold text-gray-900">{value}</div>
+              <div className="text-2xl font-extrabold tracking-tight text-gray-900">{value}</div>
             </div>
           </div>
         ))}
@@ -964,7 +964,7 @@ export default function UserManagement() {
             Irreversible actions. Proceed with extreme caution.
           </p>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-gray-900 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-[#0c0c0e] p-4">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Delete this organisation</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -973,7 +973,7 @@ export default function UserManagement() {
             </div>
             <button
               onClick={() => setDeleteOrgOpen(true)}
-              className="shrink-0 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+              className="shrink-0 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-[#0c0c0e] px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
             >
               Delete Organisation…
             </button>

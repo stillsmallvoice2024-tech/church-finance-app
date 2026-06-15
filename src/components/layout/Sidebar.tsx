@@ -126,9 +126,11 @@ function useGroupOpenState() {
 
 function AppIcon() {
   return (
-    <svg viewBox="0 0 32 32" className="w-7 h-7" fill="currentColor" aria-hidden="true">
-      <rect x="13" y="2" width="6" height="28" rx="2" />
-      <rect x="4" y="9" width="24" height="6" rx="2" />
+    <svg viewBox="0 0 64 64" className="w-7 h-7" fill="none" aria-hidden="true">
+      <path d="M 43 51 A 22 22 0 1 0 21 51"
+            stroke="currentColor" strokeWidth="5.5" strokeLinecap="round"/>
+      <path d="M 44 58 C 42 50 37 38 32 32 C 27 38 22 50 20 58 Z"
+            fill="currentColor" opacity="0.75"/>
     </svg>
   )
 }
@@ -147,7 +149,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const orgName = useOrgStore(s => s.orgName)
   const orgRole = useOrgStore(s => s.orgRole)
 
-  const displayName    = orgName ?? 'Finance'
+  const displayName    = orgName ?? 'Clariva'
   const roleLabel      = orgRole ? ROLE_LABELS[orgRole] : null
   const openHelpCenter = useOnboardingStore(s => s.openHelpCenter)
   const unread         = useUnreadAnnouncements()
@@ -167,14 +169,15 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={`
           sidebar-panel
-          fixed inset-y-0 left-0 z-30 w-72 flex flex-col bg-nav
+          fixed inset-y-0 left-0 z-30 w-72 flex flex-col bg-nav dark:bg-nav-dark
+          border-r border-black/5 dark:border-white/[0.04]
           transform transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
         {/* Logo / org header */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
+        <div className="flex items-center justify-between px-5 py-5 border-b border-white/[0.07]">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0">
               <AppIcon />
@@ -185,7 +188,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               </p>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <p className="text-accent text-xs font-semibold tracking-widest uppercase">
-                  Finance {activeYear}
+                  Clariva {activeYear}
                 </p>
                 {roleLabel && (
                   <span className="text-xs text-white/50 font-medium">
@@ -221,7 +224,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 <button
                   onClick={() => toggle(group.id)}
                   aria-expanded={isOpen}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-white/40 uppercase tracking-widest hover:text-white/60 transition-colors rounded-lg group"
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold text-white/25 uppercase tracking-[0.12em] hover:text-white/45 transition-colors rounded-lg group"
                 >
                   <span>{group.label}</span>
                   <ChevronDown
@@ -242,10 +245,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                         end={path === '/'}
                         onClick={onClose}
                         className={({ isActive }) =>
-                          `flex items-center gap-3 pl-[10px] pr-3 py-2.5 rounded-lg text-sm font-medium transition-colors border-l-2 ${
+                          `flex items-center gap-3 pl-[10px] pr-3 py-3 rounded-lg text-sm font-medium transition-colors border-l-2 ${
                             isActive
-                              ? 'bg-white/15 text-white border-accent'
-                              : 'text-white/70 hover:bg-white/10 hover:text-white border-transparent'
+                              ? 'bg-white/10 text-white border-primary/80'
+                              : 'text-white/60 hover:bg-white/[0.07] hover:text-white/90 border-transparent'
                           }`
                         }
                       >
@@ -261,11 +264,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="px-3 py-3 border-t border-white/10 space-y-2">
+        <div className="px-3 py-3 border-t border-white/[0.07] space-y-2">
           <button
             type="button"
             onClick={openHelpCenter}
-            className="w-full flex items-center gap-3 pl-[10px] pr-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+            className="w-full flex items-center gap-3 pl-[10px] pr-3 py-3 rounded-lg text-sm font-medium text-white/60 hover:bg-white/[0.07] hover:text-white/90 transition-colors"
           >
             <div className="relative shrink-0">
               <HelpCircle className="w-4 h-4" />

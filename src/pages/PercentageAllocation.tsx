@@ -204,7 +204,7 @@ export default function PercentageAllocation() {
   return (
     <div className="space-y-5">
 
-      <PageHelpBanner storageKey="help-dismissed-pct-alloc" title="What is Percentage Allocation?">
+      <PageHelpBanner storageKey="help-dismissed-pct-alloc" title="What are Regular Funds?">
         This page shows how incoming funds have been distributed across departments or budget lines using your preset percentage rules.
         Each row represents a category that receives a fixed share of qualifying inflows — for example, 60% to General Fund.
         Balances accumulate over time and update automatically when new inflows are recorded.
@@ -213,7 +213,7 @@ export default function PercentageAllocation() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Regular Funds</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Regular Funds</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Accumulated regular fund balances per category — all time
           </p>
@@ -222,7 +222,7 @@ export default function PercentageAllocation() {
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={sortedRows.length === 0} />
           <button
             onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -249,9 +249,9 @@ export default function PercentageAllocation() {
             <PieChart className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No percentage allocations recorded yet</p>
+            <p className="font-semibold text-gray-800">No regular funds recorded yet</p>
             <p className="text-sm text-gray-500 mt-1">
-              Tag transactions with Stage Code 2 = "Percentage Allocation" or use allocation configs to track them here.
+              Tag transactions with Fund Type = "Regular Funds" or use distribution rules to track them here.
             </p>
           </div>
         </div>
@@ -317,7 +317,7 @@ export default function PercentageAllocation() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {paPage.map(row => (
-                    <tr key={row.category} className="hover:bg-gray-50 transition-colors">
+                    <tr key={row.category} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
                       <td className="px-5 py-3 text-right text-success font-mono">
                         {formatCurrency(row.deposited, baseCurrencyCode)}

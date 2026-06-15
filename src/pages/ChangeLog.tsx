@@ -26,7 +26,7 @@ const TABLE_LABELS: Record<string, string> = {
   intra_flows:          'IntraBank Transfers',
   categories:           'Categories',
   banks:                'Banks',
-  allocation_configs:   'Allocation Configs',
+  allocation_configs:   'Distribution Rules',
   fx_transactions:      'FX Transactions',
   project_entries:      'Project Entries',
 }
@@ -154,7 +154,7 @@ export default function ChangeLog() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900 flex items-center gap-2">
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 flex items-center gap-2">
             <ClipboardList className="w-6 h-6 text-primary" /> Activity History
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Per-field record of every edit made</p>
@@ -270,7 +270,7 @@ export default function ChangeLog() {
         <div className="overflow-x-auto scroll-x-fade">
           <table className="min-w-full table-sticky-col">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
+              <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                 <SortableHeader
                   field={{ key: 'changed_at', label: 'Timestamp', type: 'date' } satisfies SortField}
                   activeSortKey={clState.sortKey}
@@ -278,7 +278,7 @@ export default function ChangeLog() {
                   onSort={clState.setSort}
                   className="text-left text-xs font-semibold whitespace-nowrap"
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                   User
                 </th>
                 <SortableHeader
@@ -288,7 +288,7 @@ export default function ChangeLog() {
                   onSort={clState.setSort}
                   className="text-left text-xs font-semibold whitespace-nowrap"
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                   Record ID
                 </th>
                 <SortableHeader
@@ -298,15 +298,15 @@ export default function ChangeLog() {
                   onSort={clState.setSort}
                   className="text-left text-xs font-semibold whitespace-nowrap"
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                   Old Value
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                   New Value
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-black/[0.05]">
               {loading && displayed.length === 0 ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
@@ -325,7 +325,7 @@ export default function ChangeLog() {
                 </tr>
               ) : (
                 displayed.map(e => (
-                  <tr key={e.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={e.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.changed_at, formatLocale)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                       {e.profiles?.full_name ?? e.profiles?.email ?? <span className="text-gray-400">—</span>}

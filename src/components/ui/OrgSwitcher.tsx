@@ -35,11 +35,11 @@ export function OrgSwitcher() {
             className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-primary dark:text-gray-200 dark:hover:text-accent transition-colors rounded-lg px-1.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <Building2 className="w-4 h-4 shrink-0 text-gray-400" />
-            <span className="max-w-[180px] truncate">{orgName ?? 'Finance'}</span>
+            <span className="max-w-[180px] truncate">{orgName ?? 'Clariva'}</span>
             <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
           </button>
           {open && (
-            <div className="absolute left-0 top-full mt-1 z-50 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700">
+            <div className="absolute left-0 top-full mt-1 z-50 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-[#141416] dark:border-white/[0.07]">
               <button
                 onClick={() => { setOpen(false); setCreateOrgOpen(true) }}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-primary hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -75,14 +75,14 @@ export function OrgSwitcher() {
           ? <Loader2 className="w-4 h-4 shrink-0 animate-spin text-gray-400" />
           : <Building2 className="w-4 h-4 shrink-0 text-gray-400" />
         }
-        <span className="max-w-[160px] truncate">{orgName ?? 'Finance'}</span>
+        <span className="max-w-[160px] truncate">{orgName ?? 'Clariva'}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 top-full mt-1 z-50 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-gray-800 dark:border-gray-700"
+          className="absolute left-0 top-full mt-1 z-50 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white shadow-lg py-1 dark:bg-[#141416] dark:border-white/[0.07]"
         >
           <p className="px-3 py-2 text-xs font-bold uppercase tracking-widest text-gray-400">
             Switch organisation
@@ -106,7 +106,7 @@ export function OrgSwitcher() {
               )}
             </button>
           ))}
-          <div className="border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">
+          <div className="border-t border-gray-100 dark:border-white/[0.07] mt-1 pt-1">
             <button
               onClick={() => { setOpen(false); setCreateOrgOpen(true) }}
               className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-primary hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

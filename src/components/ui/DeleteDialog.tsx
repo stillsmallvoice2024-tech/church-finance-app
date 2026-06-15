@@ -52,7 +52,7 @@ export function DeleteDialog({
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="flex-1 px-4 py-2 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors disabled:opacity-50"
           >
             Cancel
           </button>

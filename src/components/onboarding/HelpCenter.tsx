@@ -34,7 +34,7 @@ function ArticleCard({ article, onClick }: { article: HelpArticle; onClick: () =
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/40 hover:shadow-sm transition-all group"
+      className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] hover:border-primary/40 hover:shadow-sm transition-all group"
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 group-hover:text-primary transition-colors">
@@ -45,7 +45,7 @@ function ArticleCard({ article, onClick }: { article: HelpArticle; onClick: () =
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{article.summary}</p>
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         {article.tags.slice(0, 3).map(tag => (
-          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400">
+          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-[#1c1c1e] text-xs text-gray-500 dark:text-gray-400">
             <Tag className="w-2.5 h-2.5" />
             {tag}
           </span>
@@ -80,7 +80,7 @@ function ChapterCard({ chapter, onClick }: { chapter: TutorialChapter; onClick: 
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/40 hover:shadow-sm transition-all group"
+      className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] hover:border-primary/40 hover:shadow-sm transition-all group"
     >
       <div className="flex items-start gap-3">
         <span className="shrink-0 w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center mt-0.5">
@@ -138,12 +138,12 @@ function ChapterDetail({
       <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Updated {chapter.updatedAt}</p>
       <div className="overflow-y-auto flex-1 pr-1">
         {renderMarkdown(chapter.content)}
-        <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-gray-200 dark:border-white/[0.07]">
           {prev ? (
             <button
               type="button"
               onClick={() => onNavigate(prev)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary/40 hover:text-primary transition-colors text-left"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.07] text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary/40 hover:text-primary transition-colors text-left"
             >
               <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
               <span className="line-clamp-1">{prev.title}</span>
@@ -153,7 +153,7 @@ function ChapterDetail({
             <button
               type="button"
               onClick={() => onNavigate(next)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary/40 hover:text-primary transition-colors text-right ml-auto"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/[0.07] text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary/40 hover:text-primary transition-colors text-right ml-auto"
             >
               <span className="line-clamp-1">{next.title}</span>
               <ChevronRight className="w-3.5 h-3.5 shrink-0" />
@@ -167,18 +167,18 @@ function ChapterDetail({
 
 function FAQItem({ faq, isOpen, onToggle }: { faq: FAQEntry; isOpen: boolean; onToggle: () => void }) {
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+    <div className="border border-gray-200 dark:border-white/[0.07] rounded-xl overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-left"
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-[#141416] hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors text-left"
         aria-expanded={isOpen}
       >
         <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{faq.question}</span>
         <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="px-4 pb-4 pt-1 bg-gray-50 dark:bg-gray-800/60 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        <div className="px-4 pb-4 pt-1 bg-gray-50 dark:bg-[#141416]/60 border-t border-gray-100 dark:border-white/[0.07] text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
           <InlineMarkdown text={faq.answer} />
         </div>
       )}
@@ -271,10 +271,10 @@ export function HelpCenter() {
       className="absolute inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) closeCenter() }}
     >
-      <div className="w-full max-w-2xl max-h-full lg:max-h-[85vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-2xl max-h-full lg:max-h-[85vh] bg-white dark:bg-[#141416] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/[0.07] shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
               <HelpCircle className="w-4 h-4 text-primary" />
@@ -292,7 +292,7 @@ export function HelpCenter() {
         </div>
 
         {/* Search */}
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-white/[0.07] shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
@@ -301,13 +301,13 @@ export function HelpCenter() {
               value={query}
               onChange={e => { setQuery(e.target.value); setSelectedArticle(null); setSelectedChapter(null) }}
               placeholder="Search the tutorial, articles, FAQs, and tours…"
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-white/[0.07] rounded-lg bg-gray-50 dark:bg-[#141416] text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
             />
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-gray-700 shrink-0 px-5">
+        <div className="flex border-b border-gray-200 dark:border-white/[0.07] shrink-0 px-5">
           {TABS.map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -433,7 +433,7 @@ export function HelpCenter() {
                 filteredTours.map(t => (
                   <div
                     key={t.id}
-                    className="flex items-start justify-between gap-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                    className="flex items-start justify-between gap-4 p-4 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416]"
                   >
                     <div className="flex items-start gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -465,8 +465,8 @@ export function HelpCenter() {
           {tab === 'whats-new' && (
             <div className="space-y-4">
               {RELEASE_NOTES.map(note => (
-                <div key={note.version} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-gray-100 dark:border-gray-700">
+                <div key={note.version} className="rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-gray-100 dark:border-white/[0.07]">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <Sparkles className="w-4 h-4 text-primary" />
                     </div>
@@ -487,7 +487,7 @@ export function HelpCenter() {
                       ))}
                     </ul>
                     {note.details && (
-                      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/[0.07]">
                         {renderMarkdown(note.details)}
                       </div>
                     )}

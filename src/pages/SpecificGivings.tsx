@@ -258,16 +258,16 @@ export default function SpecificGivings() {
   return (
     <div className="space-y-5">
 
-      <PageHelpBanner storageKey="help-dismissed-specific-givings" title="What are Specific Givings?">
+      <PageHelpBanner storageKey="help-dismissed-specific-givings" title="What are Designated Gifts?">
         These are donations earmarked for a particular purpose — for example, a gift specifically for the Building Fund or a mission project.
-        Unlike general offerings, specific givings are restricted: the money should only be used for the stated purpose.
+        Unlike general offerings, designated gifts are restricted: the money should only be used for the stated purpose.
         This page shows the running balance and transaction history for each designated fund.
       </PageHelpBanner>
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Designated Gifts</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Designated Gifts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Designated and earmarked inflows for {year}
           </p>
@@ -276,7 +276,7 @@ export default function SpecificGivings() {
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={grouped.length === 0} />
           <button
             onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -303,9 +303,9 @@ export default function SpecificGivings() {
             <Gift className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No specific givings in {year}</p>
+            <p className="font-semibold text-gray-800">No designated gifts in {year}</p>
             <p className="text-sm text-gray-500 mt-1">
-              Transactions tagged as "Specific Seed" type or Stage Code 2 = "Specific Seed" will appear here.
+              Transactions tagged with Fund Type = "Designated Gift" will appear here.
             </p>
           </div>
         </div>
@@ -333,7 +333,7 @@ export default function SpecificGivings() {
 
           {/* Grand total strip */}
           <div className="bg-primary/5 border border-primary/20 rounded-xl px-5 py-3 flex items-center justify-between">
-            <span className="text-sm font-semibold text-primary">Total Specific Givings ({year})</span>
+            <span className="text-sm font-semibold text-primary">Total Designated Gifts ({year})</span>
             <span className="font-mono font-bold text-primary text-base">{formatCurrency(grandTotal, baseCurrencyCode)}</span>
           </div>
 
@@ -358,7 +358,7 @@ export default function SpecificGivings() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {group.targets.sort((a, b) => b.total - a.total).map(t => (
-                    <tr key={t.target} className="hover:bg-gray-50 transition-colors">
+                    <tr key={t.target} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="px-5 py-3 text-gray-700">{t.target}</td>
                       <td className="px-5 py-3 text-center text-gray-500 text-xs hidden sm:table-cell">
                         {t.count}

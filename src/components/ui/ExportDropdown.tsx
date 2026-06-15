@@ -33,7 +33,7 @@ export function ExportDropdown({ onExportView, onExportAll, disabled }: ExportDr
       <button
         onClick={() => { setOpen(false); onExportView() }}
         disabled={disabled || loadingAll}
-        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-l-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-l-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors disabled:opacity-40"
       >
         {loadingAll ? <ButtonSpinner /> : <Download className="w-4 h-4" />}
         Export CSV
@@ -41,7 +41,7 @@ export function ExportDropdown({ onExportView, onExportAll, disabled }: ExportDr
       <button
         onClick={() => setOpen(o => !o)}
         disabled={disabled || loadingAll}
-        className="flex items-center px-2 py-2 text-sm text-gray-700 bg-white border border-gray-300 border-l-0 rounded-r-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+        className="flex items-center px-2 py-2 text-sm text-gray-700 bg-white border border-gray-300 border-l-0 rounded-r-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors disabled:opacity-40"
         aria-label="Export options"
       >
         <ChevronDown className="w-3.5 h-3.5" />

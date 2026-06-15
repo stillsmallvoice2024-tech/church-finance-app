@@ -22,6 +22,11 @@ import { allocatePercent } from '../../utils/financeMath'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
+const BUDGET_PORTION_LABELS: Record<string, string> = {
+  'Percentage Allocation': 'Regular Funds',
+  'Specific Seed':         'Designated Gift',
+  Savings:                 'Savings Funds',
+}
 const NEW_SENTINEL = '__new__'
 const MAX_CACHE_RETRIES = 3
 
@@ -563,7 +568,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 </div>
 
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                     <span>Category</span>
                     <span>Portion</span>
                     <span>{allocType === 'percentage' ? '%' : selectedCurrencySymbol}</span>
@@ -636,7 +641,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                           >
                             <option value="">— Portion —</option>
                             {BUDGET_PORTIONS.map(p => (
-                              <option key={p} value={p}>{p}</option>
+                              <option key={p} value={p}>{BUDGET_PORTION_LABELS[p] ?? p}</option>
                             ))}
                           </select>
 

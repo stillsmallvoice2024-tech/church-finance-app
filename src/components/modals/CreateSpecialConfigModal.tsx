@@ -258,7 +258,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
   }
 
   const title = mode === 'new_group'
-    ? 'Create Special Config'
+    ? 'Create Special Rule'
     : `New Version — ${group?.name ?? ''}`
 
   return (
@@ -347,7 +347,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           </div>
 
           <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
               <span>Category</span>
               <span>Budget Portion</span>
               <span>{allocType === 'percentage' ? '%' : `${baseCurrencySymbol} Amount`}</span>
@@ -369,9 +369,9 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                   >
                     <option value="">— Portion —</option>
-                    <option value="Percentage">Percentage Allocation</option>
-                    <option value="Specific Seed">Specific Seed</option>
-                    <option value="Savings">Savings</option>
+                    <option value="Percentage">Regular Funds</option>
+                    <option value="Specific Seed">Designated Gift</option>
+                    <option value="Savings">Savings Funds</option>
                   </select>
                   <input
                     type="text" inputMode="decimal"

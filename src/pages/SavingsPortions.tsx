@@ -206,16 +206,16 @@ export default function SavingsPortions() {
   return (
     <div className="space-y-5">
 
-      <PageHelpBanner storageKey="help-dismissed-savings-portions" title="What are Savings Portions?">
-        Savings portions are amounts set aside from income as a reserve or contingency fund, separate from the operating budget.
-        Each category here represents a savings allocation rule — a percentage of qualifying inflows is automatically reserved.
+      <PageHelpBanner storageKey="help-dismissed-savings-portions" title="What are Savings Funds?">
+        Savings funds are amounts set aside from income as a reserve or contingency fund, separate from the operating budget.
+        Each category here represents a savings fund rule — a percentage of qualifying inflows is automatically reserved.
         The balance grows with each new inflow and is only reduced when a formal withdrawal is recorded.
       </PageHelpBanner>
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Savings Funds</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Savings Funds</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Accumulated savings fund balances per category — all time
           </p>
@@ -224,7 +224,7 @@ export default function SavingsPortions() {
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={sortedRows.length === 0} />
           <button
             onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -319,7 +319,7 @@ export default function SavingsPortions() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {svpPage.map(row => (
-                  <tr key={row.category} className="hover:bg-gray-50 transition-colors">
+                  <tr key={row.category} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                     <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
                     <td className="px-5 py-3 text-right text-success font-mono">
                       {formatCurrency(row.deposited, baseCurrencyCode)}

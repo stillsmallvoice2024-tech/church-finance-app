@@ -18,17 +18,17 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className={`flex flex-col items-center justify-center text-center ${compact ? 'py-8' : 'py-16'}`}>
-      <div className={`rounded-full bg-gray-100 flex items-center justify-center mb-3 ${compact ? 'w-10 h-10' : 'w-14 h-14'}`}>
-        <Icon className={`text-gray-300 ${compact ? 'w-5 h-5' : 'w-7 h-7'}`} />
+      <div className={`rounded-full bg-primary/8 dark:bg-primary/12 flex items-center justify-center mb-4 ${compact ? 'w-10 h-10' : 'w-14 h-14'}`}>
+        <Icon className={`text-primary/50 dark:text-primary-dm/60 ${compact ? 'w-5 h-5' : 'w-7 h-7'}`} />
       </div>
-      <p className={`font-medium text-gray-500 ${compact ? 'text-sm' : 'text-base'}`}>{title}</p>
+      <p className={`font-semibold text-gray-600 ${compact ? 'text-sm' : 'text-base'}`}>{title}</p>
       {message && (
-        <p className="text-xs text-gray-500 mt-1 max-w-xs">{message}</p>
+        <p className="text-sm text-gray-400 mt-1.5 max-w-xs leading-relaxed">{message}</p>
       )}
       {action && (
         <button
           onClick={action.onClick}
-          className="mt-4 px-4 min-h-[44px] inline-flex items-center justify-center text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition-colors"
+          className="mt-5 px-5 min-h-[40px] inline-flex items-center justify-center text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary-dark transition-colors shadow-sm"
         >
           {action.label}
         </button>
@@ -40,7 +40,7 @@ export function EmptyState({
 // ── Chart variant ──────────────────────────────────────────────────────────────
 export function ChartEmpty({ message = 'No data yet for this period' }: { message?: string }) {
   return (
-    <div className="flex items-center justify-center h-full min-h-[120px] text-sm text-gray-400">
+    <div className="flex items-center justify-center h-full min-h-[120px] text-sm font-medium text-gray-400">
       {message}
     </div>
   )

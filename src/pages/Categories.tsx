@@ -45,6 +45,11 @@ import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
+const BUDGET_PORTION_LABELS: Record<string, string> = {
+  'Percentage Allocation': 'Regular Funds',
+  'Specific Seed':         'Designated Gift',
+  Savings:                 'Savings Funds',
+}
 
 const MIGRATION_SQL =
 `-- Run in Supabase SQL Editor:
@@ -282,7 +287,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
               {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
             <button type="button" onClick={() => setShowNewGroup(v => !v)} title="Create new group"
-              className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors">
+              className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
               {showNewGroup ? <X className="w-4 h-4" /> : <FolderPlus className="w-4 h-4" />}
             </button>
           </div>
@@ -356,7 +361,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
                   >
                     <option value="">— Portion —</option>
                     {BUDGET_PORTIONS.map(p => (
-                      <option key={p} value={p} disabled={usedPortions.has(p)}>{p}</option>
+                      <option key={p} value={p} disabled={usedPortions.has(p)}>{BUDGET_PORTION_LABELS[p] ?? p}</option>
                     ))}
                   </select>
                   <CurrencyInput
@@ -591,7 +596,7 @@ export default function Categories() {
       {/* Header */}
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Categories</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Categories</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {activeTab === 'fx' ? 'Foreign-currency categories and their opening balances' : 'Manage income and allocation categories'}
           </p>
@@ -620,7 +625,7 @@ export default function Categories() {
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={visibleSorted.length === 0} />
           {hiddenCt > 0 && (
             <button onClick={() => activeTab === 'fx' ? setShowHiddenFx(v => !v) : setShowHiddenLocal(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
               {showHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               {showHidden ? 'Hide hidden' : `Show hidden (${hiddenCt})`}
             </button>
@@ -678,7 +683,7 @@ export default function Categories() {
           </div>
           <div>
             <p className="font-semibold text-gray-800">No categories yet</p>
-            <p className="text-sm text-gray-500 mt-1">Create your first category to use in allocation configurations.</p>
+            <p className="text-sm text-gray-500 mt-1">Create your first category to use in distribution rules.</p>
           </div>
           <button onClick={openAdd}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
@@ -899,7 +904,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
   const displayBalances = openingBalances.filter(b => b.category_id === cat.id)
 
   return (
-    <tr className={`hover:bg-gray-50 transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
+    <tr className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
       <td className="px-5 py-3 font-medium text-gray-800">
         {cat.name}
         {cat.is_hidden && <span className="ml-2 text-xs text-amber-500 font-semibold uppercase">hidden</span>}

@@ -22,7 +22,7 @@ When an inflow's **Fund Type** is set to **Designated Gift** (also called Specif
 
 Find it at **Budget & Allocation → Savings Funds**.
 
-Savings are the church's rainy-day money. Each time qualifying money comes in, a slice can go to savings (your distribution rule decides the slice).
+Savings are the organisation's rainy-day money. Each time qualifying money comes in, a slice can go to savings (your distribution rule decides the slice).
 
 ### How to read the page
 

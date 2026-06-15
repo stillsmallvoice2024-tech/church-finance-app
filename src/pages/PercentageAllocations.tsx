@@ -77,7 +77,7 @@ export default function PercentageAllocations() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Distribution Rules</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Distribution Rules</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             How inflows are split across fund categories by percentage
           </p>
@@ -113,8 +113,8 @@ export default function PercentageAllocations() {
             <Percent className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No allocation configs yet</p>
-            <p className="text-sm text-gray-500 mt-1">Create one in Setup → Allocation.</p>
+            <p className="font-semibold text-gray-800">No distribution rules yet</p>
+            <p className="text-sm text-gray-500 mt-1">Create one in Setup → Distribution Rules.</p>
           </div>
           <Link
             to="/setup"
@@ -199,7 +199,7 @@ export default function PercentageAllocations() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {pcaPage.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50 transition-colors">
+                    <tr key={i} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="px-5 py-3 text-gray-500 text-xs">{pcaState.page * pcaState.pageSize + i + 1}</td>
                       <td className="px-5 py-3 font-medium text-gray-800">{row.category_name}</td>
                       <td className="px-5 py-3 text-right">

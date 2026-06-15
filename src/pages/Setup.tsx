@@ -36,7 +36,7 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
 import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
-const TABS = ['General', 'Banks', 'Allocation', 'Special Configs', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
+const TABS = ['General', 'Banks', 'Distribution Rules', 'Special Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 // ── Compact shared search + sort bar for Setup tabs ──────────────────────────────
@@ -347,16 +347,16 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Bank Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Account Number</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Type</th>
+                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Bank Name</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Account Number</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Type</th>
                     <th className="px-4 py-3 w-24" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-black/[0.05]">
                   {visible.map(bank => (
-                    <tr key={bank.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={bank.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="px-4 py-3 font-medium text-gray-900">
                         <span className="flex items-center gap-2">
                           {bank.name}
@@ -455,7 +455,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
           onClick={onNew}
           className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
         >
-          <Plus className="w-4 h-4" /> New Configuration
+          <Plus className="w-4 h-4" /> New Distribution Rule
         </button>
       </div>
 
@@ -478,35 +478,35 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
           <Layers className="w-10 h-10 text-gray-300" />
           <div>
-            <p className="text-sm font-medium text-gray-600">No allocation configurations yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a configuration to define how income is split across categories.</p>
+            <p className="text-sm font-medium text-gray-600">No distribution rules yet</p>
+            <p className="text-xs text-gray-500 mt-1">Create a distribution rule to define how income is split across categories.</p>
           </div>
         </div>
       )}
 
       {!loading && !error && configs.length > 0 && (
         <>
-          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={ALLOC_SORT_OPTS} placeholder="Search configurations…" />
+          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={ALLOC_SORT_OPTS} placeholder="Search distribution rules…" />
           {visible.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">No configurations match your search.</p>
+            <p className="py-8 text-center text-sm text-gray-400">No distribution rules match your search.</p>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Effective From</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Total %</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Effective From</th>
+                    <th className="px-4 py-3 text-right text-[11px] font-bold text-gray-400 uppercase tracking-widest">Total %</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
                     <th className="px-4 py-3 w-28" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-black/[0.05]">
                   {visible.map(config => {
                     const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
                     const balanced = Math.abs(total - 100) < 0.01
                     return (
-                      <tr key={config.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={config.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                         <td className="px-4 py-3 font-medium text-gray-900">{config.name}</td>
                         <td className="px-4 py-3 text-gray-500">{formatDate(config.start_date)}</td>
                         <td className={`px-4 py-3 text-right font-mono font-semibold ${balanced ? 'text-success' : 'text-danger'}`}>
@@ -559,8 +559,8 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
           )}
           <p className="text-xs text-gray-500">
             {visible.length !== configs.length
-              ? `${visible.length} of ${configs.length} configurations`
-              : `${configs.length} configuration${configs.length !== 1 ? 's' : ''}`}
+              ? `${visible.length} of ${configs.length} distribution rules`
+              : `${configs.length} distribution rule${configs.length !== 1 ? 's' : ''}`}
           </p>
         </>
       )}
@@ -568,7 +568,7 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
   )
 }
 
-// ── Special Configs tab ────────────────────────────────────────────────────────────
+// ── Special Rules tab ─────────────────────────────────────────────────────────────
 
 function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
   onNew:        () => void
@@ -643,8 +643,8 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
           <Layers className="w-10 h-10 text-gray-300" />
           <div>
-            <p className="text-sm font-medium text-gray-600">No special config groups yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a group to manage versioned special allocation configs.</p>
+            <p className="text-sm font-medium text-gray-600">No special rule groups yet</p>
+            <p className="text-xs text-gray-500 mt-1">Create a group to manage versioned special rules.</p>
           </div>
         </div>
       ) : (
@@ -717,7 +717,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                     ) : (
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="bg-gray-50 border-b border-gray-100">
+                          <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
@@ -732,7 +732,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                             const vAmt = v.allocation_type === 'amount'
                             const vLocked = v.status === 'locked'
                             return (
-                              <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                              <tr key={v.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                                 <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
                                 <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
                                 <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
@@ -929,11 +929,11 @@ function CurrenciesTab() {
         <div className="border border-gray-200 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Code</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Symbol</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Flag</th>
+              <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Code</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Symbol</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Flag</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -3028,8 +3028,8 @@ export default function SetupPage() {
     <>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Setup</h1>
-          <p className="text-sm text-gray-500 mt-1">Configure your church finance settings</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Setup</h1>
+          <p className="text-sm text-gray-500 mt-1">Configure your organisation finance settings</p>
         </div>
 
         {/* Tab bar */}
@@ -3055,8 +3055,8 @@ export default function SetupPage() {
         <div>
           {activeTab === 'General'        && <GeneralTab />}
           {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Allocation'     && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
-          {activeTab === 'Special Configs' && (
+          {activeTab === 'Distribution Rules' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
+          {activeTab === 'Special Rules' && (
             <SpecialConfigsTab
               key={specialRefetch}
               onNew={handleNewGroup}
@@ -3129,7 +3129,7 @@ export default function SetupPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Lock <span className="font-semibold">"{lockTarget?.name}"</span>? Locked configurations are read-only and cannot be edited directly.
+            Lock <span className="font-semibold">"{lockTarget?.name}"</span>? Locked distribution rules are read-only and cannot be edited directly.
           </p>
           <div className="flex justify-end gap-3">
             <button
@@ -3177,7 +3177,7 @@ export default function SetupPage() {
             </button>
             <button
               onClick={handleCreateCopy}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
             >
               <Copy className="w-5 h-5 text-gray-500 shrink-0" />
               <div>
@@ -3200,7 +3200,7 @@ export default function SetupPage() {
         open={!!deleteAllocTarget}
         onClose={() => setDeleteAllocTarget(null)}
         onConfirm={confirmDeleteAlloc}
-        label={deleteAllocTarget ? `"${deleteAllocTarget.name}"` : 'this configuration'}
+        label={deleteAllocTarget ? `"${deleteAllocTarget.name}"` : 'this distribution rule'}
       />
 
       <AddBankModal

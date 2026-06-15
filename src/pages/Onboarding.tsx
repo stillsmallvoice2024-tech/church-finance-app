@@ -31,9 +31,11 @@ const MONTHS = [
 
 function AppIcon() {
   return (
-    <svg viewBox="0 0 32 32" className="h-8 w-8" fill="currentColor" aria-hidden="true">
-      <rect x="13" y="2" width="6" height="28" rx="2" />
-      <rect x="4" y="9" width="24" height="6" rx="2" />
+    <svg viewBox="0 0 64 64" className="h-8 w-8" fill="none" aria-hidden="true">
+      <path d="M 43 51 A 22 22 0 1 0 21 51"
+            stroke="currentColor" strokeWidth="5.5" strokeLinecap="round"/>
+      <path d="M 44 58 C 42 50 37 38 32 32 C 27 38 22 50 20 58 Z"
+            fill="currentColor" opacity="0.75"/>
     </svg>
   )
 }
@@ -169,7 +171,7 @@ export default function Onboarding() {
           <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
             <AppIcon />
           </div>
-          <h1 className="text-3xl font-semibold text-gray-900">
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
             {isNewOrg ? 'New Organisation' : 'Welcome!'}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -230,7 +232,7 @@ export default function Onboarding() {
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Grace Community Church"
+                  placeholder="e.g. Grace Community Organisation"
                   autoFocus
                   className={inputCls}
                 />
@@ -324,7 +326,7 @@ export default function Onboarding() {
                 <p className="mt-1 text-sm text-gray-500">Review your setup before entering the app.</p>
               </div>
 
-              <div className="rounded-xl bg-gray-50 border border-gray-100 divide-y divide-gray-100">
+              <div className="rounded-xl bg-gray-50 border border-gray-100 divide-y divide-black/[0.05]">
                 {[
                   { label: 'Organisation',       value: name },
                   { label: 'Currency',           value: currency },

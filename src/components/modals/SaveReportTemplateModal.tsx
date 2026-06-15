@@ -67,7 +67,7 @@ export function SaveReportTemplateModal({ open, onClose, onSaved, layout, editTe
   const inputCls = (err: boolean) =>
     `w-full rounded-lg border px-3 py-2 min-h-[44px] text-base sm:text-sm outline-none transition
      ${err ? 'border-red-400 bg-red-50 focus:ring-red-300' : 'border-gray-300 bg-white focus:border-primary focus:ring-2 focus:ring-primary/20'}
-     dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100`
+     dark:bg-[#141416] dark:border-white/[0.10] dark:text-gray-100`
 
   return (
     <Modal ref={modalRef} open={open} onClose={onClose} title={isEdit ? 'Update Template' : 'Save as Template'} size="max-w-md" isDirty={isDirty} disableClose={loading}>
@@ -104,7 +104,7 @@ export function SaveReportTemplateModal({ open, onClose, onSaved, layout, editTe
           <button
             type="button"
             onClick={() => modalRef.current?.requestClose()}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-[#1c1c1e] dark:text-gray-200 dark:hover:bg-gray-600 transition"
           >
             Cancel
           </button>
