@@ -117,6 +117,7 @@ export interface ChecklistData {
   hasBankAccounts: boolean
   hasIncomeTypes: boolean
   hasOutflowTypes: boolean
+  hasCategories: boolean
   hasImportedStatement: boolean
   hasInvitedMember: boolean
 }
@@ -163,10 +164,12 @@ export interface AnnouncementDefinition {
 // ── Setup Wizard ──────────────────────────────────────────────────────────────
 export type WizardStepId =
   | 'org-details'
+  | 'org-type'
   | 'departments'
   | 'banks'
   | 'income-types'
   | 'outflow-types'
+  | 'categories'
   | 'team-members'
   | 'import-statement'
   | 'finish'

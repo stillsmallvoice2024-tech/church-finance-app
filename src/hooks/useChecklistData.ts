@@ -4,12 +4,13 @@ import { useOrgStore } from '../store/orgStore'
 import type { ChecklistData } from '../types/onboarding'
 
 const DEFAULT: ChecklistData = {
-  hasDepartments:      false,
-  hasBankAccounts:     false,
-  hasIncomeTypes:      false,
-  hasOutflowTypes:     false,
+  hasDepartments:       false,
+  hasBankAccounts:      false,
+  hasIncomeTypes:       false,
+  hasOutflowTypes:      false,
+  hasCategories:        false,
   hasImportedStatement: false,
-  hasInvitedMember:    false,
+  hasInvitedMember:     false,
 }
 
 export function useChecklistData() {
@@ -21,7 +22,7 @@ export function useChecklistData() {
     if (!orgId) { setLoading(false); return }
     setLoading(true)
 
-    const [depts, banks, incomeTypes, outflowTypes, transactions, members] = await Promise.all([
+    const [depts, banks, incomeTypes, outflowTypes, categories, transactions, members] = await Promise.all([
       supabase.from('departments').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('banks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase
@@ -33,6 +34,11 @@ export function useChecklistData() {
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .eq('is_system', false),
+      supabase
+        .from('categories')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('is_hidden', false),
       supabase
         .from('inflow_transactions')
         .select('id', { count: 'exact', head: true })
@@ -50,6 +56,7 @@ export function useChecklistData() {
       hasBankAccounts:      (banks.count        ?? 0) > 0,
       hasIncomeTypes:       (incomeTypes.count  ?? 0) > 0,
       hasOutflowTypes:      (outflowTypes.count ?? 0) > 0,
+      hasCategories:        (categories.count   ?? 0) > 0,
       hasImportedStatement: (transactions.count ?? 0) > 0,
       hasInvitedMember:     (members.count      ?? 0) > 1,
     })
