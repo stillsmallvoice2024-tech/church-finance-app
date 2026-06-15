@@ -21,6 +21,11 @@ import { allocatePercent } from '../utils/financeMath'
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const PORTIONS: BudgetPortion[] = ['Percentage Allocation', 'Specific Seed', 'Savings']
+const PORTION_LABELS: Record<string, string> = {
+  'Percentage Allocation': 'Regular Funds',
+  'Specific Seed':         'Designated Gift',
+  Savings:                 'Savings Funds',
+}
 
 type Mode = 'full' | 'percentage' | 'fixed'
 type Step = 'configure' | 'preview'
@@ -383,7 +388,7 @@ export default function BulkReallocation() {
               onChange={e => setSrcPortion(e.target.value as BudgetPortion)}
               className={`${filterInputCls} bg-white`}
             >
-              {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}
             </select>
           </div>
 
@@ -396,7 +401,7 @@ export default function BulkReallocation() {
               onChange={e => setDstPortion(e.target.value as BudgetPortion)}
               className={`${filterInputCls} bg-white`}
             >
-              {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}
             </select>
           </div>
 

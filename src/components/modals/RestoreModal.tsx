@@ -348,7 +348,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
                 <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                 <div className="text-sm text-red-700 space-y-1">
                   <p className="font-semibold">Replace mode will delete all existing data</p>
-                  <p>All current transactions, categories, banks, allocation configs, and project entries will be permanently removed before backup data is applied. Audit logs and allocation snapshots are preserved.</p>
+                  <p>All current transactions, categories, banks, distribution rules, and project entries will be permanently removed before backup data is applied. Audit logs and allocation snapshots are preserved.</p>
                 </div>
               </div>
             ) : (

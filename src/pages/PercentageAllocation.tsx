@@ -204,7 +204,7 @@ export default function PercentageAllocation() {
   return (
     <div className="space-y-5">
 
-      <PageHelpBanner storageKey="help-dismissed-pct-alloc" title="What is Percentage Allocation?">
+      <PageHelpBanner storageKey="help-dismissed-pct-alloc" title="What are Regular Funds?">
         This page shows how incoming funds have been distributed across departments or budget lines using your preset percentage rules.
         Each row represents a category that receives a fixed share of qualifying inflows — for example, 60% to General Fund.
         Balances accumulate over time and update automatically when new inflows are recorded.
@@ -249,9 +249,9 @@ export default function PercentageAllocation() {
             <PieChart className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No percentage allocations recorded yet</p>
+            <p className="font-semibold text-gray-800">No regular funds recorded yet</p>
             <p className="text-sm text-gray-500 mt-1">
-              Tag transactions with Stage Code 2 = "Percentage Allocation" or use allocation configs to track them here.
+              Tag transactions with Fund Type = "Regular Funds" or use distribution rules to track them here.
             </p>
           </div>
         </div>

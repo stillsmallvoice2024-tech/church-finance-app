@@ -45,6 +45,11 @@ import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
+const BUDGET_PORTION_LABELS: Record<string, string> = {
+  'Percentage Allocation': 'Regular Funds',
+  'Specific Seed':         'Designated Gift',
+  Savings:                 'Savings Funds',
+}
 
 const MIGRATION_SQL =
 `-- Run in Supabase SQL Editor:
@@ -356,7 +361,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
                   >
                     <option value="">— Portion —</option>
                     {BUDGET_PORTIONS.map(p => (
-                      <option key={p} value={p} disabled={usedPortions.has(p)}>{p}</option>
+                      <option key={p} value={p} disabled={usedPortions.has(p)}>{BUDGET_PORTION_LABELS[p] ?? p}</option>
                     ))}
                   </select>
                   <CurrencyInput
@@ -678,7 +683,7 @@ export default function Categories() {
           </div>
           <div>
             <p className="font-semibold text-gray-800">No categories yet</p>
-            <p className="text-sm text-gray-500 mt-1">Create your first category to use in allocation configurations.</p>
+            <p className="text-sm text-gray-500 mt-1">Create your first category to use in distribution rules.</p>
           </div>
           <button onClick={openAdd}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">

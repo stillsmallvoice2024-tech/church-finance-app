@@ -87,6 +87,12 @@ function today(): string {
 }
 
 const PORTIONS: ReportPortion[] = ['All', 'Percentage', 'Specific Seed', 'Savings']
+const PORTION_LABELS: Record<string, string> = {
+  All:             'All',
+  Percentage:      'Regular Funds',
+  'Specific Seed': 'Designated Gift',
+  Savings:         'Savings Funds',
+}
 
 /** Normalise old layout.groups to multi-table format */
 function ensureMultiTable(layout: ReportLayout): ReportTable[] {
@@ -239,7 +245,7 @@ function SortableItem({
           onChange={e => onChangePortion(item.id, e.target.value as ReportPortion)}
           className="text-xs border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 shrink-0"
         >
-          {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+          {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}
         </select>
       )}
 
@@ -968,7 +974,7 @@ function CategoryPicker({
                 onChange={e => setPortion(e.target.value as ReportPortion)}
                 className="rounded-lg border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-xs bg-white dark:bg-gray-900"
               >
-                {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}
               </select>
             )}
           </div>
