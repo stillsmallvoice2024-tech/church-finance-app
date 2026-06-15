@@ -398,16 +398,25 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
           </div>
         )}
       </td>
-      {/* Difference */}
-      <td className={`px-4 py-3 text-sm font-semibold tabular-nums ${
-        summary.difference !== undefined && summary.difference < 0 ? 'text-red-600' :
-        summary.difference !== undefined && summary.difference > 0 ? 'text-amber-600' :
-        'text-gray-400'
-      }`}>
-        {summary.difference !== undefined
-          ? (summary.difference > 0 ? '+' : '') + formatCurrency(summary.difference, currency)
-          : '—'}
-      </td>
+      {/* Difference — prefer live calculation so a just-imported balance is
+          reflected immediately without needing to re-run reconciliation. */}
+      {(() => {
+        const liveDiff =
+          summary.bookBalance !== undefined && refBalance !== undefined
+            ? summary.bookBalance - refBalance.balance
+            : summary.difference
+        return (
+          <td className={`px-4 py-3 text-sm font-semibold tabular-nums ${
+            liveDiff !== undefined && liveDiff < 0 ? 'text-red-600' :
+            liveDiff !== undefined && liveDiff > 0 ? 'text-amber-600' :
+            'text-gray-400'
+          }`}>
+            {liveDiff !== undefined
+              ? (liveDiff > 0 ? '+' : '') + formatCurrency(liveDiff, currency)
+              : '—'}
+          </td>
+        )
+      })()}
       {/* Issues */}
       <td className="px-4 py-3">
         <span className="text-xs text-red-600 font-medium">{summary.criticalCount > 0 ? `${summary.criticalCount} critical` : ''}</span>

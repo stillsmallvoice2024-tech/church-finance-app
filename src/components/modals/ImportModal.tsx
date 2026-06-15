@@ -1352,7 +1352,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
               { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: lb, statement_date: ld, org_id: orgId, entered_by: uid },
               { onConflict: 'org_id,bank_name' },
             )
-            .then(() => setStmtAutoSaved({ balance: lb, date: ld }))
+            .then(({ error }) => {
+              if (!error) setStmtAutoSaved({ balance: lb, date: ld })
+            })
         }
       }
       if (!balAutoDetected) {

@@ -2613,6 +2613,31 @@ drop function if exists public.request_gdpr_erasure(uuid, text);
 revoke all   on function public.request_gdpr_erasure(uuid, uuid, text) from public;
 grant execute on function public.request_gdpr_erasure(uuid, uuid, text) to authenticated;
 
+-- ── bank_statement_balances ────────────────────────────────────────────────────
+create table if not exists public.bank_statement_balances (
+  id                uuid          default gen_random_uuid() primary key,
+  bank_name         text          not null,
+  bank_id           uuid          references public.banks(id) on delete set null,
+  reference_balance numeric(15,2) not null,
+  statement_date    date          not null,
+  notes             text,
+  entered_by        uuid          references public.profiles(id),
+  org_id            uuid          not null default public.get_current_org_id()
+                    references public.organizations(id) on delete set null,
+  created_at        timestamptz   default now(),
+  unique (org_id, bank_name)
+);
+alter table public.bank_statement_balances enable row level security;
+create policy "bsb_select" on public.bank_statement_balances
+  for select using (org_id = public.get_current_org_id());
+create policy "bsb_insert" on public.bank_statement_balances
+  for insert with check (public.is_finance_user());
+create policy "bsb_update" on public.bank_statement_balances
+  for update using (public.is_finance_user());
+create policy "bsb_delete" on public.bank_statement_balances
+  for delete using (public.is_admin());
+create index if not exists idx_bsb_org_bank on public.bank_statement_balances(org_id, bank_name);
+
 -- ================================================================
 -- 12. SCHEMA RELOAD
 -- ================================================================
