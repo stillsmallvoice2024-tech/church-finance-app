@@ -160,9 +160,9 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           <Field label="From Portion *" error={errors.account_from_stage2?.message}>
             <select {...register('account_from_stage2')} className={inputCls(!!errors.account_from_stage2)}>
               <option value="">— Select —</option>
-              <option value="Percentage Allocation">Percentage Allocation</option>
-              <option value="Specific Seed">Specific Seed</option>
-              <option value="Savings">Savings</option>
+              <option value="Percentage Allocation">Regular Funds</option>
+              <option value="Specific Seed">Designated Gift</option>
+              <option value="Savings">Savings Funds</option>
             </select>
           </Field>
         </div>
@@ -180,9 +180,9 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
           <Field label="To Portion *" error={errors.account_to_stage2?.message}>
             <select {...register('account_to_stage2')} className={inputCls(!!errors.account_to_stage2)}>
               <option value="">— Select —</option>
-              <option value="Percentage Allocation">Percentage Allocation</option>
-              <option value="Specific Seed">Specific Seed</option>
-              <option value="Savings">Savings</option>
+              <option value="Percentage Allocation">Regular Funds</option>
+              <option value="Specific Seed">Designated Gift</option>
+              <option value="Savings">Savings Funds</option>
             </select>
           </Field>
         </div>
