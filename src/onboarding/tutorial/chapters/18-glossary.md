@@ -33,7 +33,7 @@ Look up any word you meet in the app or in this tutorial.
 | Offset | The partner transaction that cancels or adjusts the root |
 | Pending deduction | An approved payment that hasn't left the bank yet |
 | Resolve | Marking a pending deduction as actually paid |
-| Intra-flow / Fund transfer | Moving money between categories or pockets — nothing enters or leaves |
+| Intra-flow / Fund transfer / Category fund transfer | Moving money between categories or pockets — nothing enters or leaves |
 | Bulk reallocation | Many fund transfers done in one go |
 | FX / Foreign currency | Money in another currency, like dollars or pounds |
 | Conversion | Exchanging foreign money into your everyday currency |
