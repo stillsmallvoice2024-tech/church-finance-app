@@ -6,12 +6,13 @@ import { Card } from './Card'
 interface StatCardProps {
   title: string
   value: ReactNode
-  icon: ReactNode
+  icon?: ReactNode
   trend?: { value: number; label: string }
   iconBgClass?: string
   href?: string
   variant?: 'default' | 'brand'
   cardClassName?: string
+  stripeClass?: string
 }
 
 export function StatCard({
@@ -23,11 +24,29 @@ export function StatCard({
   href,
   variant = 'default',
   cardClassName,
+  stripeClass,
 }: StatCardProps) {
   const isBrand    = variant === 'brand'
   const isPositive = (trend?.value ?? 0) >= 0
+  const hasStripe  = !!stripeClass
 
-  const inner = (
+  const inner = hasStripe ? (
+    <div>
+      <div className={`-mx-6 -mt-6 mb-5 h-[5px] rounded-t-xl ${stripeClass}`} />
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">
+        {title}
+      </p>
+      <p className="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white/90 mt-2 tabular-nums leading-none">
+        {value}
+      </p>
+      {trend && (
+        <div className={`flex items-center gap-1 mt-2.5 text-xs font-semibold ${isPositive ? 'text-success dark:text-success-dm' : 'text-danger dark:text-danger-dm'}`}>
+          {isPositive ? <TrendingUp className="w-3.5 h-3.5 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 shrink-0" />}
+          <span>{Math.abs(trend.value)}% {trend.label}</span>
+        </div>
+      )}
+    </div>
+  ) : (
     <div className="flex items-start justify-between gap-4">
       <div className="flex-1 min-w-0">
         <p className={`text-[11px] font-semibold uppercase tracking-widest truncate ${isBrand ? 'text-white/55' : 'text-gray-400'}`}>
@@ -37,21 +56,13 @@ export function StatCard({
           {value}
         </p>
         {trend && (
-          <div
-            className={`flex items-center gap-1 mt-2.5 text-xs font-semibold ${
-              isBrand
-                ? isPositive ? 'text-white/75' : 'text-white/60'
-                : isPositive ? 'text-success dark:text-success-dm' : 'text-danger dark:text-danger-dm'
-            }`}
-          >
-            {isPositive ? (
-              <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-            ) : (
-              <TrendingDown className="w-3.5 h-3.5 shrink-0" />
-            )}
-            <span>
-              {Math.abs(trend.value)}% {trend.label}
-            </span>
+          <div className={`flex items-center gap-1 mt-2.5 text-xs font-semibold ${
+            isBrand
+              ? isPositive ? 'text-white/75' : 'text-white/60'
+              : isPositive ? 'text-success dark:text-success-dm' : 'text-danger dark:text-danger-dm'
+          }`}>
+            {isPositive ? <TrendingUp className="w-3.5 h-3.5 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 shrink-0" />}
+            <span>{Math.abs(trend.value)}% {trend.label}</span>
           </div>
         )}
       </div>

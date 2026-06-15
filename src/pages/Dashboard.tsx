@@ -338,35 +338,27 @@ export default function Dashboard() {
           ) : (
             <>
               <StatCard
-                variant="brand"
-                cardClassName="from-emerald-700 to-emerald-900"
+                stripeClass="bg-success"
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingUp className="w-5 h-5 text-white" />}
                 href="/inflows"
               />
               <StatCard
-                variant="brand"
-                cardClassName="from-rose-600 to-rose-900"
+                stripeClass="bg-danger"
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingDown className="w-5 h-5 text-white" />}
                 href="/outflows"
               />
               <StatCard
-                variant="brand"
-                cardClassName="from-[#0D7377] to-[#1A2C42]"
+                stripeClass="bg-primary"
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<Wallet className="w-5 h-5 text-white" />}
                 href="/bank-ledger"
               />
               <StatCard
-                variant="brand"
-                cardClassName="from-amber-500 to-amber-700"
+                stripeClass="bg-accent"
                 title="Categories"
                 value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
-                icon={<Layers className="w-5 h-5 text-white" />}
                 href="/categories"
               />
             </>
