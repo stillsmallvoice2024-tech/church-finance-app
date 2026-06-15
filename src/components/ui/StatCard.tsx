@@ -71,6 +71,8 @@ export function StatCard({
     </div>
   )
 
+  const inner = isHero ? heroInner : defaultInner
+
   const cardCls = isHero
     ? `bg-gradient-to-br from-white to-gray-50 border border-gray-100 dark:from-[#1c1c1e] dark:to-[#141416] dark:border-white/[0.06] ${cardClassName ?? ''}`
     : `${cardClassName ?? ''}`
