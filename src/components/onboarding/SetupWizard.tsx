@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   X, ChevronRight, ChevronLeft, Check, Clock, Building2, Landmark,
   ArrowDownCircle, ArrowUpCircle, Users, Upload, Sparkles, Loader2,
   Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward, Tag,
-  Heart, Globe, GraduationCap, Briefcase,
+  Heart, Globe, GraduationCap, Briefcase, Wallet,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
@@ -145,12 +145,54 @@ function StarterChips({
 
 // ── Step 1: Org Type ──────────────────────────────────────────────────────────
 
-const ORG_TYPE_OPTIONS: { type: OrgType; label: string; tagline: string; Icon: React.ElementType }[] = [
-  { type: 'church',  label: 'Church / Faith Community',   tagline: 'Worship communities, congregations, and faith-based groups',     Icon: Heart         },
-  { type: 'ngo',    label: 'NGO / Non-Profit',            tagline: 'Humanitarian, advocacy, and development organisations',           Icon: Globe         },
-  { type: 'school', label: 'School / Institution',        tagline: 'Schools, colleges, training centres, and academies',             Icon: GraduationCap },
-  { type: 'project',label: 'Project-Based Organisation',  tagline: 'Construction, consulting, creative, and contract-based work',    Icon: Briefcase     },
+type OrgCard = { type: OrgType; label: string; tagline: string; Icon: React.ElementType }
+
+const ORG_CARDS: OrgCard[] = [
+  { type: 'church',  label: 'Church / Faith Community',  tagline: 'Worship communities, congregations, and faith-based groups',  Icon: Heart         },
+  { type: 'ngo',    label: 'NGO / Non-Profit',           tagline: 'Humanitarian, advocacy, and development organisations',        Icon: Globe         },
+  { type: 'school', label: 'School / Institution',       tagline: 'Schools, colleges, training centres, and academies',          Icon: GraduationCap },
+  { type: 'project',label: 'Project-Based Organisation', tagline: 'Construction, consulting, creative, and contract-based work', Icon: Briefcase     },
 ]
+
+const PERSONAL_CARD: OrgCard = {
+  type: 'personal',
+  label: 'Clariva Personal',
+  tagline: 'Track your own income, expenses, and savings as an individual',
+  Icon: Wallet,
+}
+
+function OrgTypeCard({
+  card, isSelected, isSaving, disabled, onSelect,
+}: {
+  card: OrgCard; isSelected: boolean; isSaving: boolean; disabled: boolean; onSelect: () => void
+}) {
+  const { label, tagline, Icon } = card
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all disabled:opacity-60 ${
+        isSelected
+          ? 'border-primary bg-primary/5 dark:bg-primary/10'
+          : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+      }`}
+    >
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+        isSelected ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+      }`}>
+        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-semibold ${isSelected ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>
+          {label}
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{tagline}</p>
+      </div>
+      {isSelected && <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />}
+    </button>
+  )
+}
 
 function OrgTypeStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const orgId      = useOrgStore(s => s.orgId)
@@ -168,12 +210,8 @@ function OrgTypeStep({ onDataReady }: { onDataReady: (ready: boolean) => void })
     if (type === orgType) { onDataReady(true); return }
     setSaving(type)
     try {
-      // Read current metadata first to preserve any existing keys
       const { data: current } = await supabase
-        .from('organizations')
-        .select('metadata')
-        .eq('id', orgId)
-        .single()
+        .from('organizations').select('metadata').eq('id', orgId).single()
       await supabase
         .from('organizations')
         .update({ metadata: { ...(current?.metadata ?? {}), org_type: type } })
@@ -193,47 +231,35 @@ function OrgTypeStep({ onDataReady }: { onDataReady: (ready: boolean) => void })
         description="This helps us suggest the right labels, fund names, and examples throughout the setup — so you're not starting from scratch."
       />
 
+      {/* Organisation types — 2×2 grid */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {ORG_TYPE_OPTIONS.map(({ type, label, tagline, Icon }) => {
-          const isSelected = orgType === type
-          const isSaving   = saving === type
-          return (
-            <button
-              key={type}
-              type="button"
-              onClick={() => handleSelect(type)}
-              disabled={!!saving}
-              className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all disabled:opacity-60 ${
-                isSelected
-                  ? 'border-primary bg-primary/5 dark:bg-primary/10'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'
-              }`}
-            >
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                isSelected
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-              }`}>
-                {isSaving
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <Icon className="w-4 h-4" />
-                }
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${isSelected ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>
-                  {label}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-                  {tagline}
-                </p>
-              </div>
-              {isSelected && (
-                <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-              )}
-            </button>
-          )
-        })}
+        {ORG_CARDS.map(card => (
+          <OrgTypeCard
+            key={card.type}
+            card={card}
+            isSelected={orgType === card.type}
+            isSaving={saving === card.type}
+            disabled={!!saving}
+            onSelect={() => handleSelect(card.type)}
+          />
+        ))}
       </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+        <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">or, for personal use</span>
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+      </div>
+
+      {/* Clariva Personal — full-width */}
+      <OrgTypeCard
+        card={PERSONAL_CARD}
+        isSelected={orgType === 'personal'}
+        isSaving={saving === 'personal'}
+        disabled={!!saving}
+        onSelect={() => handleSelect('personal')}
+      />
 
       <p className="text-xs text-gray-400 dark:text-gray-500 italic">
         You can change this later in Settings. Skipping will use generic suggestions.
@@ -291,11 +317,19 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
     }
   }
 
+  const isPersonal = orgType === 'personal'
+
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Which teams or units make up your organisation?"
-        description="Add the groups that handle or spend money. You'll be able to assign transactions to each one so you can see exactly where funds go."
+        title={isPersonal
+          ? "Which areas of your life do you want to track?"
+          : "Which teams or units make up your organisation?"
+        }
+        description={isPersonal
+          ? "Think of the different parts of your life — housing, work, family, health. You'll be able to tag every transaction to the right area so nothing gets lost."
+          : "Add the groups that handle or spend money. You'll be able to assign transactions to each one so you can see exactly where funds go."
+        }
       />
 
       <StarterChips
@@ -1116,7 +1150,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 
 // ── Main SetupWizard ──────────────────────────────────────────────────────────
 
-const WIZARD_STEP_IDS: WizardStepId[] = [
+const BASE_WIZARD_STEP_IDS: WizardStepId[] = [
   'org-type',
   'departments',
   'banks',
@@ -1132,20 +1166,28 @@ export function SetupWizard() {
   const { isWizardOpen, closeWizard } = useOnboardingStore()
   const { prefs, updatePrefs }        = useUserPreferences()
   const { canWrite }                  = useRole()
+  const orgType                       = useOrgStore(s => s.orgType)
 
-  const savedStep = Math.min(prefs.wizard_step, WIZARD_STEP_IDS.length - 1)
+  const activeStepIds = useMemo<WizardStepId[]>(
+    () => orgType === 'personal'
+      ? BASE_WIZARD_STEP_IDS.filter(s => s !== 'team-members')
+      : BASE_WIZARD_STEP_IDS,
+    [orgType],
+  )
+
+  const savedStep = Math.min(prefs.wizard_step, activeStepIds.length - 1)
   const [currentIdx, setCurrentIdx] = useState(savedStep)
   const [stepDataReady, setStepDataReady] = useState(false)
 
   useEffect(() => {
     if (isWizardOpen) {
-      setCurrentIdx(Math.min(prefs.wizard_step, WIZARD_STEP_IDS.length - 1))
+      setCurrentIdx(Math.min(prefs.wizard_step, activeStepIds.length - 1))
     }
   }, [isWizardOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const stepId  = WIZARD_STEP_IDS[currentIdx]
+  const stepId  = activeStepIds[currentIdx]
   const stepDef = WIZARD_STEPS.find(s => s.id === stepId)!
-  const isLast  = currentIdx === WIZARD_STEP_IDS.length - 1
+  const isLast  = currentIdx === activeStepIds.length - 1
 
   useEffect(() => { setStepDataReady(false) }, [stepId])
 
@@ -1153,14 +1195,14 @@ export function SetupWizard() {
   const canContinue = UNVALIDATED_STEPS.includes(stepId) || stepDataReady
 
   const goToStep = useCallback((idx: number) => {
-    const clamped = Math.max(0, Math.min(idx, WIZARD_STEP_IDS.length - 1))
+    const clamped = Math.max(0, Math.min(idx, activeStepIds.length - 1))
     setCurrentIdx(clamped)
     updatePrefs({ wizard_step: clamped })
-  }, [updatePrefs])
+  }, [activeStepIds.length, updatePrefs])
 
   const handleNext = () => {
     if (isLast) {
-      updatePrefs({ wizard_completed: true, wizard_step: WIZARD_STEP_IDS.length - 1 })
+      updatePrefs({ wizard_completed: true, wizard_step: activeStepIds.length - 1 })
       closeWizard()
     } else {
       goToStep(currentIdx + 1)
@@ -1174,7 +1216,7 @@ export function SetupWizard() {
   if (!isWizardOpen || !canWrite()) return null
 
   const remainingMinutes = WIZARD_STEPS
-    .filter(s => WIZARD_STEP_IDS.slice(currentIdx).includes(s.id as WizardStepId))
+    .filter(s => activeStepIds.slice(currentIdx).includes(s.id as WizardStepId))
     .reduce((sum, s) => sum + s.estimatedMinutes, 0)
 
   return (
@@ -1214,16 +1256,16 @@ export function SetupWizard() {
 
         {/* Progress */}
         <div className="px-6 py-2">
-          <ProgressBar current={currentIdx} total={WIZARD_STEP_IDS.length} />
+          <ProgressBar current={currentIdx} total={activeStepIds.length} />
           <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-            Step {currentIdx + 1} of {WIZARD_STEP_IDS.length}
+            Step {currentIdx + 1} of {activeStepIds.length}
           </p>
         </div>
 
         {/* Step sidebar + content */}
         <div className="flex flex-1 min-h-0">
           <aside className="hidden sm:flex flex-col w-44 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 py-4 px-3 gap-1 overflow-y-auto">
-            {WIZARD_STEP_IDS.map((id, idx) => {
+            {activeStepIds.map((id, idx) => {
               const def    = WIZARD_STEPS.find(s => s.id === id)
               const Icon   = STEP_ICONS[id]
               const done   = idx < currentIdx

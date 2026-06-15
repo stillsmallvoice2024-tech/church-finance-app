@@ -1,4 +1,4 @@
-export type OrgType = 'church' | 'ngo' | 'school' | 'project'
+export type OrgType = 'church' | 'ngo' | 'school' | 'project' | 'personal'
 
 export interface OrgTypeContent {
   label: string
@@ -61,6 +61,18 @@ export const ORG_TYPE_CONTENT: Record<OrgType, OrgTypeContent> = {
     outflowTypeStarters: ['Labour', 'Materials', 'Equipment', 'Logistics', 'Subcontractors'],
     outflowTypePlaceholder: 'e.g. Labour, Materials, Logistics…',
     categoryStarters: ['Project Fund', 'Operations', 'Contingency', 'Equipment', 'Working Capital', 'Special Projects'],
+  },
+  personal: {
+    label: 'Clariva Personal',
+    tagline: 'Track your own income, expenses, and savings as an individual',
+    teamRoleLabel: '',
+    departmentStarters: ['Housing', 'Work & Career', 'Family', 'Health', 'Personal'],
+    departmentPlaceholder: 'e.g. Housing, Work & Career, Health…',
+    incomeTypeStarters: ['Salary', 'Freelance Income', 'Investment Returns', 'Side Income', 'Gifts & Allowance'],
+    incomeTypePlaceholder: 'e.g. Salary, Freelance, Investments…',
+    outflowTypeStarters: ['Rent / Mortgage', 'Groceries', 'Transport', 'Utilities', 'Entertainment', 'Healthcare'],
+    outflowTypePlaceholder: 'e.g. Rent, Groceries, Transport…',
+    categoryStarters: ['Emergency Fund', 'Savings', 'Living Expenses', 'Investments', 'Goals'],
   },
 }
 
