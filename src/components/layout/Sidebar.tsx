@@ -126,9 +126,10 @@ function useGroupOpenState() {
 
 function AppIcon() {
   return (
-    <svg viewBox="0 0 32 32" className="w-7 h-7" fill="currentColor" aria-hidden="true">
-      <rect x="13" y="2" width="6" height="28" rx="2" />
-      <rect x="4" y="9" width="24" height="6" rx="2" />
+    <svg viewBox="0 0 40 40" className="w-7 h-7" fill="none" aria-hidden="true">
+      <path d="M20 4 A16 16 0 1 0 34 28" stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M20 20 L28 30" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" opacity="0.7" />
+      <circle cx="20" cy="20" r="3.5" fill="currentColor" opacity="0.5" />
     </svg>
   )
 }
@@ -147,7 +148,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const orgName = useOrgStore(s => s.orgName)
   const orgRole = useOrgStore(s => s.orgRole)
 
-  const displayName    = orgName ?? 'Finance'
+  const displayName    = orgName ?? 'Clariva'
   const roleLabel      = orgRole ? ROLE_LABELS[orgRole] : null
   const openHelpCenter = useOnboardingStore(s => s.openHelpCenter)
   const unread         = useUnreadAnnouncements()
@@ -186,7 +187,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               </p>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <p className="text-accent text-xs font-semibold tracking-widest uppercase">
-                  Finance {activeYear}
+                  Clariva {activeYear}
                 </p>
                 {roleLabel && (
                   <span className="text-xs text-white/50 font-medium">
