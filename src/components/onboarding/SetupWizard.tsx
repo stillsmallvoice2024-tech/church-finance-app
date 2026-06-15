@@ -1,23 +1,23 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   X, ChevronRight, ChevronLeft, Check, Clock, Building2, Landmark,
   ArrowDownCircle, ArrowUpCircle, Users, Upload, Sparkles, Loader2,
   Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward, Tag,
   Heart, Globe, GraduationCap, Briefcase, Wallet, SlidersHorizontal, Zap,
+  Trash2, Mail,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
 import { useOrgStore } from '../../store/orgStore'
 import { useAuthStore } from '../../store/authStore'
 import { useRole } from '../../hooks/useRole'
-import { useDepartments, saveDepartment } from '../../hooks/useDepartments'
+import { useDepartments, saveDepartment, deleteDepartment } from '../../hooks/useDepartments'
 import { useBanks } from '../../hooks/useBanks'
-import { useAddBank, useAddAllocationConfig } from '../../hooks/useMutations'
-import { useIncomeTypes, saveIncomeType } from '../../hooks/useIncomeTypes'
-import { useOutflowTypes, saveOutflowType } from '../../hooks/useOutflowTypes'
+import { useAddBank, useAddAllocationConfig, useAddCategory, useDeleteCategory } from '../../hooks/useMutations'
+import { useIncomeTypes, saveIncomeType, deleteIncomeType } from '../../hooks/useIncomeTypes'
+import { useOutflowTypes, saveOutflowType, deleteOutflowType } from '../../hooks/useOutflowTypes'
 import { useCategories } from '../../hooks/useCategories'
-import { useAddCategory } from '../../hooks/useMutations'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
 import { useAllocationStore } from '../../store/allocationStore'
@@ -289,6 +289,15 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
     if (!loading) onDataReady(departments.length > 0)
   }, [departments, loading, onDataReady])
 
+  const handleDeleteDepartment = async (id: string) => {
+    try {
+      await deleteDepartment(id)
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove')
+    }
+  }
+
   const handleAddStarter = async (starter: string) => {
     if (existingNames.has(starter.toLowerCase()) || addingStarter) return
     setAddingStarter(starter); setError(null)
@@ -344,7 +353,7 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
 
       {!loading && departments.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {departments.map(d => <ItemBadge key={d.id} label={d.name} />)}
+          {departments.map(d => <ItemBadge key={d.id} label={d.name} onRemove={() => handleDeleteDepartment(d.id)} />)}
         </div>
       )}
       {loading && (
@@ -521,10 +530,32 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
 
   const userIncomeTypes = incomeTypes.filter(t => !t.name.startsWith('_'))
   const existingNames   = new Set(userIncomeTypes.map(t => t.name.toLowerCase()))
+  const seededRef = useRef(false)
 
   useEffect(() => {
     if (!loading) onDataReady(userIncomeTypes.length > 0)
   }, [userIncomeTypes, loading, onDataReady])
+
+  useEffect(() => {
+    if (loading || seededRef.current || userIncomeTypes.length > 0) return
+    seededRef.current = true
+    const seed = async () => {
+      try {
+        await saveIncomeType({ name: 'General Donation', color: COLOUR_SWATCHES[0], rules: [] })
+        refetch()
+      } catch { seededRef.current = false }
+    }
+    seed()
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDeleteIncomeType = async (id: string) => {
+    try {
+      await deleteIncomeType(id)
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove')
+    }
+  }
 
   const handleAddStarter = async (starter: string) => {
     if (existingNames.has(starter.toLowerCase()) || addingStarter) return
@@ -573,7 +604,7 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
 
       {!loading && userIncomeTypes.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {userIncomeTypes.map(t => <ItemBadge key={t.id} label={t.name} />)}
+          {userIncomeTypes.map(t => <ItemBadge key={t.id} label={t.name} onRemove={() => handleDeleteIncomeType(t.id)} />)}
         </div>
       )}
       {loading && (
@@ -644,6 +675,15 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
     if (!loading) onDataReady(userTypes.length > 0)
   }, [userTypes, loading, onDataReady])
 
+  const handleDeleteOutflowType = async (id: string) => {
+    try {
+      await deleteOutflowType(id)
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove')
+    }
+  }
+
   const handleAddStarter = async (starter: string) => {
     if (existingNames.has(starter.toLowerCase()) || addingStarter) return
     setAddingStarter(starter); setError(null)
@@ -691,7 +731,7 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
 
       {!loading && userTypes.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {userTypes.map(t => <ItemBadge key={t.id} label={t.name} />)}
+          {userTypes.map(t => <ItemBadge key={t.id} label={t.name} onRemove={() => handleDeleteOutflowType(t.id)} />)}
         </div>
       )}
       {loading && (
@@ -748,6 +788,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
   const orgType = useOrgStore(s => s.orgType)
   const content = getOrgTypeContent(orgType)
   const { mutate: addCategory } = useAddCategory()
+  const { mutate: deleteCategory } = useDeleteCategory()
   const { push: toast } = useToastStore()
 
   const [name, setName]                   = useState('')
@@ -757,10 +798,32 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
 
   const visibleCategories = categories.filter(c => !c.is_hidden)
   const existingNames     = new Set(categories.map(c => c.name.toLowerCase()))
+  const catSeededRef = useRef(false)
 
   useEffect(() => {
     if (!loading) onDataReady(visibleCategories.length > 0)
   }, [visibleCategories, loading, onDataReady])
+
+  useEffect(() => {
+    if (loading || catSeededRef.current || visibleCategories.length > 0) return
+    catSeededRef.current = true
+    const seed = async () => {
+      try {
+        await addCategory({ name: 'General Fund' })
+        refetch()
+      } catch { catSeededRef.current = false }
+    }
+    seed()
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDeleteCategory = async (id: string) => {
+    try {
+      await deleteCategory(id)
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove')
+    }
+  }
 
   const handleAddStarter = async (starter: string) => {
     if (existingNames.has(starter.toLowerCase()) || addingStarter) return
@@ -810,7 +873,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
 
       {!loading && visibleCategories.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {visibleCategories.map(c => <ItemBadge key={c.id} label={c.name} />)}
+          {visibleCategories.map(c => <ItemBadge key={c.id} label={c.name} onRemove={() => handleDeleteCategory(c.id)} />)}
         </div>
       )}
       {loading && (
@@ -896,6 +959,10 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
   const { push: toast }        = useToastStore()
   const [creating, setCreating]  = useState<number | null>(null)
   const [error, setError]        = useState<string | null>(null)
+  const [showCustom, setShowCustom]   = useState(false)
+  const [customName, setCustomName]   = useState('')
+  const [customRows, setCustomRows]   = useState<Array<{ category_name: string; percentage: number }>>([{ category_name: '', percentage: 100 }])
+  const [savingCustom, setSavingCustom] = useState(false)
 
   useEffect(() => { if (!loaded) useAllocationStore.getState().fetch() }, [loaded])
   useEffect(() => { onDataReady(true) }, [onDataReady])
@@ -919,11 +986,29 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
     }
   }
 
+  const handleCustomCreate = async () => {
+    if (!customName.trim() || savingCustom) return
+    const total = customRows.reduce((s, r) => s + r.percentage, 0)
+    if (total !== 100 || customRows.some(r => !r.category_name)) return
+    setSavingCustom(true); setError(null)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      await addConfig({ name: customName.trim(), start_date: today, rows: customRows })
+      toast(`"${customName.trim()}" saved as a draft`, 'success')
+      setShowCustom(false); setCustomName(''); setCustomRows([{ category_name: '', percentage: 100 }])
+      useAllocationStore.getState().reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSavingCustom(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <StepHeading
         title="How should income be split across your funds?"
-        description="A distribution rule tells Clariva how to divide incoming money. For example: 70% to General Fund, 20% to Building Fund, 10% to Welfare — applied automatically whenever income comes in."
+        description="A distribution rule tells Clariva how to divide incoming money — for example, 70% to General Fund, 20% to Building Fund, 10% to Welfare. These are your default rules for income that is general and not earmarked for a specific cause."
       />
 
       <div className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
@@ -991,6 +1076,97 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
         </div>
       )}
 
+      <div className="border-t border-gray-100 dark:border-white/[0.07] pt-3 space-y-2">
+        {!showCustom ? (
+          <button
+            type="button"
+            onClick={() => setShowCustom(true)}
+            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Create a custom rule
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Custom distribution rule</p>
+            <input
+              type="text"
+              value={customName}
+              onChange={e => setCustomName(e.target.value)}
+              placeholder="Rule name (e.g. My Custom Split)"
+              className={inputCls}
+            />
+            <div className="space-y-2">
+              {customRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    value={row.category_name}
+                    onChange={e => setCustomRows(rows => rows.map((r, j) => j === i ? { ...r, category_name: e.target.value } : r))}
+                    className={`${inputCls} flex-1`}
+                  >
+                    <option value="">Select fund…</option>
+                    {catNames.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={row.percentage}
+                    onChange={e => setCustomRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
+                    className={`${inputCls} w-20 text-center`}
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">%</span>
+                  {customRows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomRows(rows => rows.filter((_, j) => j !== i))}
+                      className="text-red-400 hover:text-red-500 flex-shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {(() => {
+              const total = customRows.reduce((s, r) => s + r.percentage, 0)
+              return total !== 100 ? (
+                <p className="text-xs text-amber-600 dark:text-amber-400">Total: {total}% — must equal 100%</p>
+              ) : (
+                <p className="text-xs text-green-600 dark:text-green-400">Total: 100% ✓</p>
+              )
+            })()}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setCustomRows(rows => [...rows, { category_name: '', percentage: 0 }])}
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <Plus className="w-3 h-3" /> Add fund
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowCustom(false); setCustomName(''); setCustomRows([{ category_name: '', percentage: 100 }]) }}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!customName.trim() || customRows.some(r => !r.category_name) || customRows.reduce((s, r) => s + r.percentage, 0) !== 100 || savingCustom}
+                  onClick={handleCustomCreate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-dark disabled:opacity-50 transition-colors"
+                >
+                  {savingCustom ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Save rule
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <EditLaterNote where="Budget & Allocation → Distribution Rules" />
     </div>
   )
@@ -1032,6 +1208,11 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
   const { push: toast }                                    = useToastStore()
   const [creating, setCreating]                            = useState<number | null>(null)
   const [error, setError]                                  = useState<string | null>(null)
+  const [showCustomSpecial, setShowCustomSpecial]          = useState(false)
+  const [customSpecialName, setCustomSpecialName]          = useState('')
+  const [customSpecialTypeId, setCustomSpecialTypeId]      = useState('')
+  const [customSpecialRows, setCustomSpecialRows]          = useState<Array<{ category_name: string; percentage: number }>>([{ category_name: '', percentage: 100 }])
+  const [savingCustomSpecial, setSavingCustomSpecial]      = useState(false)
 
   useEffect(() => { onDataReady(true) }, [onDataReady])
 
@@ -1062,11 +1243,37 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
     }
   }
 
+  const handleCustomSpecialCreate = async () => {
+    if (!customSpecialName.trim() || !customSpecialTypeId || savingCustomSpecial) return
+    const total = customSpecialRows.reduce((s, r) => s + r.percentage, 0)
+    if (total !== 100 || customSpecialRows.some(r => !r.category_name)) return
+    setSavingCustomSpecial(true); setError(null)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      await createGroupWithFirstVersion({
+        name:            customSpecialName.trim(),
+        allocation_type: 'percentage',
+        total_amount:    null,
+        rows:            customSpecialRows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage' as const, percentage: r.percentage })),
+        effective_from:  today,
+        status:          'draft',
+        income_type_id:  customSpecialTypeId,
+      })
+      toast(`"${customSpecialName.trim()}" special rule created as a draft`, 'success')
+      setShowCustomSpecial(false); setCustomSpecialName(''); setCustomSpecialTypeId(''); setCustomSpecialRows([{ category_name: '', percentage: 100 }])
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSavingCustomSpecial(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <StepHeading
         title="Do any income types need their own split?"
-        description='A special rule overrides the default distribution for a specific income type. Example: "Building Fund Drive" offering always goes 100% to the Building Fund — not the regular split.'
+        description="A special rule overrides the default distribution for a specific income type — these are rules set for income that is given for a specific cause. Example: a &ldquo;Building Fund Drive&rdquo; offering always goes 100% to the Building Fund, not the regular split."
       />
 
       <div className="flex gap-3 p-3 bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-xl text-xs text-violet-700 dark:text-violet-400">
@@ -1133,6 +1340,111 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
           {error}
         </div>
       )}
+
+      <div className="border-t border-gray-100 dark:border-white/[0.07] pt-3 space-y-2">
+        {!showCustomSpecial ? (
+          <button
+            type="button"
+            onClick={() => setShowCustomSpecial(true)}
+            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Create a custom special rule
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Custom special rule</p>
+            <input
+              type="text"
+              value={customSpecialName}
+              onChange={e => setCustomSpecialName(e.target.value)}
+              placeholder="Rule name (e.g. Building Fund Drive)"
+              className={inputCls}
+            />
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Income type this rule applies to</label>
+              <select
+                value={customSpecialTypeId}
+                onChange={e => setCustomSpecialTypeId(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">Select income type…</option>
+                {userTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400">How to split it</label>
+              <div className="space-y-2">
+                {customSpecialRows.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <select
+                      value={row.category_name}
+                      onChange={e => setCustomSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, category_name: e.target.value } : r))}
+                      className={`${inputCls} flex-1`}
+                    >
+                      <option value="">Select fund…</option>
+                      {catNames.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={row.percentage}
+                      onChange={e => setCustomSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
+                      className={`${inputCls} w-20 text-center`}
+                    />
+                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">%</span>
+                    {customSpecialRows.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomSpecialRows(rows => rows.filter((_, j) => j !== i))}
+                        className="text-red-400 hover:text-red-500 flex-shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {(() => {
+              const total = customSpecialRows.reduce((s, r) => s + r.percentage, 0)
+              return total !== 100 ? (
+                <p className="text-xs text-amber-600 dark:text-amber-400">Total: {total}% — must equal 100%</p>
+              ) : (
+                <p className="text-xs text-green-600 dark:text-green-400">Total: 100% ✓</p>
+              )
+            })()}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setCustomSpecialRows(rows => [...rows, { category_name: '', percentage: 0 }])}
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <Plus className="w-3 h-3" /> Add fund
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowCustomSpecial(false); setCustomSpecialName(''); setCustomSpecialTypeId(''); setCustomSpecialRows([{ category_name: '', percentage: 100 }]) }}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!customSpecialName.trim() || !customSpecialTypeId || customSpecialRows.some(r => !r.category_name) || customSpecialRows.reduce((s, r) => s + r.percentage, 0) !== 100 || savingCustomSpecial}
+                  onClick={handleCustomSpecialCreate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-dark disabled:opacity-50 transition-colors"
+                >
+                  {savingCustomSpecial ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Save rule
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <EditLaterNote where="Budget & Allocation → Special Rules" />
     </div>
@@ -1246,23 +1558,32 @@ function TeamMembersStep() {
             {error}
           </div>
         )}
-        <div className="flex gap-2">
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="colleague@example.com"
-            className={`${inputCls} flex-1`}
-          />
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value as typeof role)}
-            className={`${inputCls} w-32`}
-          >
-            <option value="admin">Admin</option>
-            <option value="accountant">Accountant</option>
-            <option value="viewer">Viewer</option>
-          </select>
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
+              <Mail className="w-3 h-3" />
+              Email address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="colleague@example.com"
+              className={inputCls}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Role</label>
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value as typeof role)}
+              className={inputCls}
+            >
+              <option value="admin">Admin</option>
+              <option value="accountant">Accountant</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
         </div>
         <div className="flex justify-end">
           <button
