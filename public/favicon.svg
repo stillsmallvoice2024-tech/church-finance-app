@@ -1,7 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
-  <!-- Clariva mark: open circle with pathway — Teal Anchor palette -->
-  <rect width="40" height="40" rx="10" fill="#0D7377"/>
-  <path d="M20 7 A13 13 0 1 0 31 27" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none"/>
-  <path d="M20 20 L27 29" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.75"/>
-  <circle cx="20" cy="20" r="3" fill="#ffffff" opacity="0.55"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Rounded square, Teal Mist background -->
+  <rect width="100" height="100" rx="22" fill="#EEF7F5"/>
+  <!-- Open arc ~300°, gap at 4–5 o'clock (30°–60° from right in SVG coords) -->
+  <!-- Centre (50,50) r=33 | Start (67,79)=5 o'clock | End (79,67)=4 o'clock | long CCW arc -->
+  <path d="M 67 79 A 33 33 0 1 0 79 67"
+        stroke="#0D7377" stroke-width="9.5" stroke-linecap="round" fill="none"/>
+  <!-- Road ribbon outer edge: from 4 o'clock gap, winding up toward centre-top -->
+  <path d="M 79 67 C 71 62 63 54 57 46 C 53 40 51 33 50 27"
+        stroke="#0D7377" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.28"/>
+  <!-- Road ribbon inner edge: from 5 o'clock gap, narrower as it recedes -->
+  <path d="M 67 79 C 62 70 58 62 55 55 C 52 49 51 42 51 34"
+        stroke="#0D7377" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.18"/>
 </svg>

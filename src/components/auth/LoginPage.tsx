@@ -9,17 +9,13 @@ import type { UserRole } from '../../types'
 
 function AppIcon() {
   return (
-    <svg viewBox="0 0 40 40" className="h-10 w-10" fill="none" aria-hidden="true">
-      {/* Clariva mark: open circle with pathway */}
-      <path
-        d="M20 4 A16 16 0 1 0 34 28"
-        stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none"
-      />
-      <path
-        d="M20 20 L28 30"
-        stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" opacity="0.7"
-      />
-      <circle cx="20" cy="20" r="3.5" fill="currentColor" opacity="0.5" />
+    <svg viewBox="0 0 100 100" className="h-10 w-10" fill="none" aria-hidden="true">
+      <path d="M 67 79 A 33 33 0 1 0 79 67"
+            stroke="currentColor" strokeWidth="9.5" strokeLinecap="round"/>
+      <path d="M 79 67 C 71 62 63 54 57 46 C 53 40 51 33 50 27"
+            stroke="currentColor" strokeWidth="6" strokeLinecap="round" opacity="0.75"/>
+      <path d="M 67 79 C 62 70 58 62 55 55 C 52 49 51 42 51 34"
+            stroke="currentColor" strokeWidth="4" strokeLinecap="round" opacity="0.55"/>
     </svg>
   )
 }
