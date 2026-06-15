@@ -961,7 +961,7 @@ function ManualEntryForm() {
           {/* Allocation Config */}
           {txnType ? (
             <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
-              <p className="text-xs font-semibold text-gray-500">Allocation Config</p>
+              <p className="text-xs font-semibold text-gray-500">Distribution Rule</p>
               <p className="text-xs text-gray-500 italic mt-1">Not applicable for non-Normal transactions</p>
             </div>
           ) : cfgLoaded && v('date') && (() => {
@@ -981,7 +981,7 @@ function ManualEntryForm() {
               selIncomeType && (selIncomeType.special_config_id || selIncomeType.special_config_group_id)
             return (
               <div className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-500">Allocation Config</p>
+                <p className="text-xs font-semibold text-gray-500">Distribution Rule</p>
                 {effectiveCfg ? (
                   <p className="text-xs text-primary">
                     {isAutoSpecial ? 'Auto-applying: ' : 'Using: '}

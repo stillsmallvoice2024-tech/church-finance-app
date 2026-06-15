@@ -7,6 +7,11 @@ import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
 
 const PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings']
+const PORTION_LABELS: Record<string, string> = {
+  'Percentage Allocation': 'Regular Funds',
+  'Specific Seed':         'Designated Gift',
+  Savings:                 'Savings Funds',
+}
 
 export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess, onResults }: {
   open: boolean
@@ -88,7 +93,7 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess, onResult
           <label className="text-xs font-medium text-gray-500">From Portion</label>
           <select value={accountFromStage2} onChange={e => setAccountFromStage2(e.target.value)} className={`${filterInputCls} bg-white`}>
             <option value="">— Keep existing —</option>
-            {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+            {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}
           </select>
         </div>
 
@@ -103,7 +108,7 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess, onResult
           <label className="text-xs font-medium text-gray-500">To Portion</label>
           <select value={accountToStage2} onChange={e => setAccountToStage2(e.target.value)} className={`${filterInputCls} bg-white`}>
             <option value="">— Keep existing —</option>
-            {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+            {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}
           </select>
         </div>
 

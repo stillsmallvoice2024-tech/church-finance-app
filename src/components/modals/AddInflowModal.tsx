@@ -501,16 +501,16 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           </Field>
         )}
 
-        {/* Allocation Config */}
-        <Field label="Allocation Config"
-          help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the config active on the transaction date. Choose a specific config to override.">
+        {/* Distribution Rule */}
+        <Field label="Distribution Rule"
+          help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the rule active on the transaction date. Choose a specific rule to override.">
           {transactionType ? (
             <p className="text-xs text-gray-500 italic">Not applicable for non-Normal transactions</p>
           ) : selectedIncomeType?.special_config_id && !configManuallySet ? (
             <div className="space-y-1">
               <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
                 <span className="text-xs text-primary font-medium">
-                  Auto-applying: {selectedIncomeType.special_config_name ?? 'Special Config'}
+                  Auto-applying: {selectedIncomeType.special_config_name ?? 'Special Rule'}
                 </span>
                 <button
                   type="button"
@@ -558,7 +558,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
               <option value="">— Select —</option>
               <option value="Percentage Allocation">Regular Funds (percentage split)</option>
               <option value="Specific Seed">Designated Gift (earmarked)</option>
-              <option value="Savings">Savings</option>
+              <option value="Savings">Savings Funds</option>
             </select>
           </Field>
         </div>

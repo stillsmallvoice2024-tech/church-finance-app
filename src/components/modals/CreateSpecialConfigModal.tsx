@@ -258,7 +258,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
   }
 
   const title = mode === 'new_group'
-    ? 'Create Special Config'
+    ? 'Create Special Rule'
     : `New Version — ${group?.name ?? ''}`
 
   return (
@@ -369,9 +369,9 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                   >
                     <option value="">— Portion —</option>
-                    <option value="Percentage">Percentage Allocation</option>
-                    <option value="Specific Seed">Specific Seed</option>
-                    <option value="Savings">Savings</option>
+                    <option value="Percentage">Regular Funds</option>
+                    <option value="Specific Seed">Designated Gift</option>
+                    <option value="Savings">Savings Funds</option>
                   </select>
                   <input
                     type="text" inputMode="decimal"

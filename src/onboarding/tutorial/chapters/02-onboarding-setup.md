@@ -6,7 +6,7 @@ When your organisation is brand new, the app asks a few questions first (the **o
 
 You see this right after creating a new organisation.
 
-1. **Step 1 — Organisation Details.** Type your church's name in **Organisation Name** and click **Next**.
+1. **Step 1 — Organisation Details.** Type your organisation's name in **Organisation Name** and click **Next**.
 2. **Step 2 — Financial Setup.** Pick your **Default Currency** (the money you use every day), the month your **Financial Year Starts In**, and your **Timezone**. Then click **Next**.
 3. **Step 3 — Ready.** Check the summary. If everything looks right, click **Enter Application**. Don't worry — you can change these later in Setup.
 

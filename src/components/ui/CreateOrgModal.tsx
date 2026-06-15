@@ -66,7 +66,7 @@ export function CreateOrgModal({ open, onClose }: Props) {
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="e.g. Grace Community Church"
+            placeholder="e.g. Grace Community Organisation"
             autoFocus
             className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
           />

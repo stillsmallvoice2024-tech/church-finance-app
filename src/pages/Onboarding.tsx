@@ -230,7 +230,7 @@ export default function Onboarding() {
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Grace Community Church"
+                  placeholder="e.g. Grace Community Organisation"
                   autoFocus
                   className={inputCls}
                 />

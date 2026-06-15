@@ -19,7 +19,7 @@ Matched pairs are grouped together with a green header saying **Matched pair**. 
 ## How to record a refund
 
 1. Go to **Import → Manual Entry** (or it may already be in your imported statement).
-2. If money came BACK INTO your bank, record an **Inflow**; if your church PAID money back, record an **Outflow**.
+2. If money came BACK INTO your bank, record an **Inflow**; if your organisation PAID money back, record an **Outflow**.
 3. Set **Transaction Type** to **Refund**.
 4. Set **Offset Role** to **Offset (linked to root)**.
 5. In **Root / Original Transaction**, search for and pick the original transaction this refund belongs to.
