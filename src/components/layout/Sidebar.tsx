@@ -126,13 +126,11 @@ function useGroupOpenState() {
 
 function AppIcon() {
   return (
-    <svg viewBox="0 0 100 100" className="w-7 h-7" fill="none" aria-hidden="true">
-      <path d="M 67 79 A 33 33 0 1 0 79 67"
-            stroke="currentColor" strokeWidth="9.5" strokeLinecap="round"/>
-      <path d="M 79 67 C 71 62 63 54 57 46 C 53 40 51 33 50 27"
-            stroke="currentColor" strokeWidth="6" strokeLinecap="round" opacity="0.75"/>
-      <path d="M 67 79 C 62 70 58 62 55 55 C 52 49 51 42 51 34"
-            stroke="currentColor" strokeWidth="4" strokeLinecap="round" opacity="0.55"/>
+    <svg viewBox="0 0 64 64" className="w-7 h-7" fill="none" aria-hidden="true">
+      <path d="M 43 51 A 22 22 0 1 0 51 43"
+            stroke="currentColor" strokeWidth="5.5" strokeLinecap="round"/>
+      <path d="M 51 43 C 44 38 36 28 31 14 C 33 20 39 34 43 51 Z"
+            fill="currentColor" opacity="0.72"/>
     </svg>
   )
 }

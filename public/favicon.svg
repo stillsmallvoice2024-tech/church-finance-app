@@ -1,14 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <!-- Rounded square, Teal Mist background -->
-  <rect width="100" height="100" rx="22" fill="#EEF7F5"/>
-  <!-- Open arc ~300°, gap at 4–5 o'clock (30°–60° from right in SVG coords) -->
-  <!-- Centre (50,50) r=33 | Start (67,79)=5 o'clock | End (79,67)=4 o'clock | long CCW arc -->
-  <path d="M 67 79 A 33 33 0 1 0 79 67"
-        stroke="#0D7377" stroke-width="9.5" stroke-linecap="round" fill="none"/>
-  <!-- Road ribbon outer edge: from 4 o'clock gap, winding up toward centre-top -->
-  <path d="M 79 67 C 71 62 63 54 57 46 C 53 40 51 33 50 27"
-        stroke="#0D7377" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.28"/>
-  <!-- Road ribbon inner edge: from 5 o'clock gap, narrower as it recedes -->
-  <path d="M 67 79 C 62 70 58 62 55 55 C 52 49 51 42 51 34"
-        stroke="#0D7377" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.18"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Teal Anchor background -->
+  <rect width="64" height="64" rx="14" fill="#0D7377"/>
+  <!-- Open arc ~300°, gap at 4–5 o'clock. Centre (32,32) r=22 -->
+  <!-- P2 at 60° (5 o'clock): (43,51)  P1 at 30° (4 o'clock): (51,43) -->
+  <path d="M 43 51 A 22 22 0 1 0 51 43"
+        stroke="white" stroke-width="5.5" stroke-linecap="round"/>
+  <!-- Road ribbon: tapered leaf from gap, winding to tip at upper-left -->
+  <path d="M 51 43 C 44 38 36 28 31 14 C 33 20 39 34 43 51 Z"
+        fill="white" opacity="0.72"/>
 </svg>

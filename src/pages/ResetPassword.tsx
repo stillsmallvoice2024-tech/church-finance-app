@@ -5,9 +5,11 @@ import { supabase } from '../lib/supabase'
 
 function AppLogo() {
   return (
-    <svg viewBox="0 0 32 32" className="h-10 w-10" fill="currentColor" aria-hidden="true">
-      <rect x="13" y="2" width="6" height="28" rx="2" />
-      <rect x="4" y="9" width="24" height="6" rx="2" />
+    <svg viewBox="0 0 64 64" className="h-10 w-10" fill="none" aria-hidden="true">
+      <path d="M 43 51 A 22 22 0 1 0 51 43"
+            stroke="currentColor" strokeWidth="5.5" strokeLinecap="round"/>
+      <path d="M 51 43 C 44 38 36 28 31 14 C 33 20 39 34 43 51 Z"
+            fill="currentColor" opacity="0.72"/>
     </svg>
   )
 }
