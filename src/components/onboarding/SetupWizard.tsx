@@ -2000,6 +2000,10 @@ export function useWizardAutoShow() {
     if (prefs.wizard_completed)           return
     if (prefs.wizard_auto_show_dismissed) return
     if (orgRole !== 'owner' && orgRole !== 'admin') return
+
+    const sessionKey = `wizard-shown-${orgId}`
+    if (sessionStorage.getItem(sessionKey)) return
+    sessionStorage.setItem(sessionKey, '1')
     openWizard()
   }, [loading, orgId, orgRole, prefs.wizard_completed, prefs.wizard_auto_show_dismissed]) // eslint-disable-line react-hooks/exhaustive-deps
 }
