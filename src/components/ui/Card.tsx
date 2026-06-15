@@ -32,7 +32,7 @@ const VARIANT_CLASSES: Record<CardVariant, string> = {
     'dark:bg-white/[0.03]',
   ].join(' '),
   brand: [
-    'bg-[#1A2C42]',
+    'bg-gradient-to-br from-[#1A2C42] to-[#0D7377]',
     '[box-shadow:inset_0_1px_0_rgba(255,255,255,0.08),0_1px_4px_rgba(0,0,0,0.25)]',
   ].join(' '),
 }
