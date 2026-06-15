@@ -233,7 +233,7 @@ export default function AcceptInvite() {
     setTimeout(() => navigate('/', { replace: true }), 2000)
   }
 
-  const orgDisplay = invitation?.org_name ?? 'Finance Manager'
+  const orgDisplay = invitation?.org_name ?? 'Clariva'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">

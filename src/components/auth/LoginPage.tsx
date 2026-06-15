@@ -9,9 +9,17 @@ import type { UserRole } from '../../types'
 
 function AppIcon() {
   return (
-    <svg viewBox="0 0 32 32" className="h-10 w-10" fill="currentColor" aria-hidden="true">
-      <rect x="13" y="2" width="6" height="28" rx="2" />
-      <rect x="4" y="9" width="24" height="6" rx="2" />
+    <svg viewBox="0 0 40 40" className="h-10 w-10" fill="none" aria-hidden="true">
+      {/* Clariva mark: open circle with pathway */}
+      <path
+        d="M20 4 A16 16 0 1 0 34 28"
+        stroke="currentColor" strokeWidth="4" strokeLinecap="round" fill="none"
+      />
+      <path
+        d="M20 20 L28 30"
+        stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" opacity="0.7"
+      />
+      <circle cx="20" cy="20" r="3.5" fill="currentColor" opacity="0.5" />
     </svg>
   )
 }
@@ -196,10 +204,10 @@ export default function LoginPage() {
             <AppIcon />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Finance Manager
+            Clariva
           </h1>
           <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-accent">
-            Financial Management System
+            Financial Stewardship Platform
           </p>
         </div>
 
