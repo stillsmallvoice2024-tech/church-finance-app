@@ -338,34 +338,34 @@ export default function Dashboard() {
           ) : (
             <>
               <StatCard
-                cardClassName="border-l-[3px] border-l-success"
+                variant="horizontal"
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingUp className="w-5 h-5 text-success dark:text-success-dm" />}
+                icon={<TrendingUp className="w-4 h-4 text-success dark:text-success-dm" />}
                 iconBgClass="bg-success/10 dark:bg-success/15"
                 href="/inflows"
               />
               <StatCard
-                cardClassName="border-l-[3px] border-l-danger"
+                variant="horizontal"
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingDown className="w-5 h-5 text-danger dark:text-danger-dm" />}
+                icon={<TrendingDown className="w-4 h-4 text-danger dark:text-danger-dm" />}
                 iconBgClass="bg-danger/10 dark:bg-danger/15"
                 href="/outflows"
               />
               <StatCard
-                cardClassName="border-l-[3px] border-l-primary"
+                variant="horizontal"
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<Wallet className="w-5 h-5 text-primary dark:text-primary-dm" />}
+                icon={<Wallet className="w-4 h-4 text-primary dark:text-primary-dm" />}
                 iconBgClass="bg-primary/10 dark:bg-primary/20"
                 href="/bank-ledger"
               />
               <StatCard
-                cardClassName="border-l-[3px] border-l-accent"
+                variant="horizontal"
                 title="Categories"
                 value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
-                icon={<Layers className="w-5 h-5 text-accent dark:text-accent-dm" />}
+                icon={<Layers className="w-4 h-4 text-accent dark:text-accent-dm" />}
                 iconBgClass="bg-accent/10 dark:bg-accent/15"
                 href="/categories"
               />
