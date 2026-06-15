@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const BASE = 'Church Finance'
+const BASE = 'Organisation Finance'
 
 export function usePageTitle(title: string): void {
   useEffect(() => {

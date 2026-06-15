@@ -3029,7 +3029,7 @@ export default function SetupPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-semibold text-gray-900">Setup</h1>
-          <p className="text-sm text-gray-500 mt-1">Configure your church finance settings</p>
+          <p className="text-sm text-gray-500 mt-1">Configure your organisation finance settings</p>
         </div>
 
         {/* Tab bar */}

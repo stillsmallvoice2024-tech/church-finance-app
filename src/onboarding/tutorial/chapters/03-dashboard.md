@@ -1,6 +1,6 @@
 ## What is the Dashboard?
 
-The Dashboard is the home page. It shows your church's money at a glance: what came in, what went out, and what's left. You see it every time you sign in. You can always come back by clicking **Dashboard** in the left menu (or **Home** at the bottom on a phone).
+The Dashboard is the home page. It shows your organisation's money at a glance: what came in, what went out, and what's left. You see it every time you sign in. You can always come back by clicking **Dashboard** in the left menu (or **Home** at the bottom on a phone).
 
 ## The pieces of the Dashboard, from top to bottom
 
@@ -17,7 +17,7 @@ The Dashboard is the home page. It shows your church's money at a glance: what c
 1. Look at the months along the bottom (Jan, Feb, Mar…).
 2. The higher the green line, the more money came in that month.
 3. The higher the red line, the more money went out.
-4. If red is above green for many months, the church is spending more than it receives.
+4. If red is above green for many months, the organisation is spending more than it receives.
 
 ## How to use the quick buttons
 
@@ -32,4 +32,4 @@ You will see a blue banner saying **You have view-only access**. You can look at
 ## If something goes wrong
 
 - **The chart says "No transactions recorded for this year yet."** — nothing has been imported for the selected year. Import a statement (Chapter 4) or check the accounting year in Setup → General.
-- **The numbers look wrong** — check that you are looking at the right year (the year shows in the left menu under your church name), then run a check in the Reconciliation Center (Chapter 8).
+- **The numbers look wrong** — check that you are looking at the right year (the year shows in the left menu under your organisation name), then run a check in the Reconciliation Center (Chapter 8).

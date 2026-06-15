@@ -174,14 +174,14 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
         {step === 'select' && (
           <>
             <p className="text-sm text-gray-600">
-              Upload a Church Finance backup file (<code className="text-xs bg-gray-100 px-1 rounded">.json</code>) to restore your account.
+              Upload an Organisation Finance backup file (<code className="text-xs bg-gray-100 px-1 rounded">.json</code>) to restore your account.
             </p>
 
             <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-gray-200 rounded-xl p-8 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors">
               <Upload className="w-8 h-8 text-gray-300" />
               <div className="text-center">
                 <p className="text-sm font-medium text-gray-700">Click to choose backup file</p>
-                <p className="text-xs text-gray-500 mt-0.5">church-finance-backup-*.json</p>
+                <p className="text-xs text-gray-500 mt-0.5">organisation-finance-backup-*.json</p>
               </div>
               <input
                 ref={fileInputRef}

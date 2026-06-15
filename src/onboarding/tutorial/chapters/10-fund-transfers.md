@@ -1,6 +1,6 @@
 ## What is this chapter about?
 
-Sometimes money needs to move between buckets — for example, from the "General Fund" bucket to the "Building Fund" bucket. No money enters or leaves the church; it just changes pockets. That's a **Category Fund Transfer**. When you need to move money for MANY categories at once, use **Bulk Reallocation**.
+Sometimes money needs to move between buckets — for example, from the "General Fund" bucket to the "Building Fund" bucket. No money enters or leaves the organisation; it just changes pockets. That's a **Category Fund Transfer**. When you need to move money for MANY categories at once, use **Bulk Reallocation**.
 
 Find both at **Daily Finance → Category Fund Transfers**. The page has two tabs: **Category Fund Transfers** and **Bulk Reallocation**.
 

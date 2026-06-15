@@ -6,11 +6,11 @@ export interface GlossaryTerm {
 export const GLOSSARY: GlossaryTerm[] = [
   {
     term:       'Inflow',
-    definition: 'Money received by the church — tithes, offerings, donations, grants, or any income. Also called a credit or receipt.',
+    definition: 'Money received by the organisation — tithes, offerings, donations, grants, or any income. Also called a credit or receipt.',
   },
   {
     term:       'Outflow',
-    definition: 'Money paid out by the church — salaries, utilities, maintenance, ministry expenses. Also called a debit or expenditure.',
+    definition: 'Money paid out by the organisation — salaries, utilities, maintenance, ministry expenses. Also called a debit or expenditure.',
   },
   {
     term:       'Bank Ledger',
@@ -54,7 +54,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   },
   {
     term:       'Refund',
-    definition: 'Money returned — either income given back to a donor, or an overpaid expense reimbursed to the church. Tagged on the original transaction.',
+    definition: 'Money returned — either income given back to a donor, or an overpaid expense reimbursed to the organisation. Tagged on the original transaction.',
   },
   {
     term:       'Reversal',
@@ -70,7 +70,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   },
   {
     term:       'Reconciliation',
-    definition: 'Matching the church\'s internal records against the bank statement to confirm they agree. Any differences are investigated and corrected.',
+    definition: 'Matching the organisation\'s internal records against the bank statement to confirm they agree. Any differences are investigated and corrected.',
   },
   {
     term:       'Department',

@@ -3,7 +3,7 @@ import type { HelpArticle } from '../../types/onboarding'
 export const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'getting-started-overview',
-    title: 'Getting Started with Church Finance',
+    title: 'Getting Started with Organisation Finance',
     summary: 'A complete walkthrough for setting up your organisation from scratch.',
     category: 'getting-started',
     tags: ['setup', 'onboarding', 'overview'],
@@ -12,7 +12,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     content: `
 ## Welcome
 
-Church Finance helps your organisation track every naira (or any currency) that flows in and out — with full transparency, role-based access, and powerful reporting.
+Organisation Finance helps your organisation track every naira (or any currency) that flows in and out — with full transparency, role-based access, and powerful reporting.
 
 ## Step 1: Set Up Master Data
 

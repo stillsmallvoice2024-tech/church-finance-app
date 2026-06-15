@@ -264,7 +264,7 @@ export default function IntraFlow() {
       ) : tab === 'transfers' && (
         <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Category Fund Transfer?">
           An internal transfer moves money between two bank accounts within the organisation.
-          It is not income or expenditure — no money enters or leaves the church.
+          It is not income or expenditure — no money enters or leaves the organisation.
           Record a transfer when, for example, cash collected in one account is consolidated into your main operating account.
         </PageHelpBanner>
       )}
