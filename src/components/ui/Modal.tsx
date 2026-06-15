@@ -192,19 +192,19 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
       {/* Panel — full-screen on mobile, centered card on sm+ */}
       <div
         ref={panelRef}
-        className={`relative w-full bg-white flex flex-col h-[100dvh] sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh] [animation:modal-enter_150ms_ease-out]`}
+        className={`relative w-full bg-white dark:bg-[#1c1c1e] dark:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.07),0_25px_50px_rgba(0,0,0,0.7)] flex flex-col h-[100dvh] sm:h-auto sm:rounded-2xl sm:shadow-2xl sm:${size} sm:max-h-[90vh] [animation:modal-enter_150ms_ease-out]`}
         style={dragY > 0 ? { transform: `translateY(${dragY}px)`, transition: 'none' } : undefined}
       >
         {/* Header — safe-area padding clears the notch when full-screen.
             Touch-drag down on the header swipes the modal closed on phones. */}
         <div
-          className="flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-4 border-b border-gray-100 shrink-0 relative"
+          className="flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-4 border-b border-black/[0.06] dark:border-white/[0.07] shrink-0 relative"
           onTouchStart={onHeaderTouchStart}
           onTouchMove={onHeaderTouchMove}
           onTouchEnd={onHeaderTouchEnd}
         >
           {/* Drag handle — visual swipe affordance, phones only */}
-          <span aria-hidden="true" className="sm:hidden absolute left-1/2 top-1.5 -translate-x-1/2 w-9 h-1 rounded-full bg-gray-300" />
+          <span aria-hidden="true" className="sm:hidden absolute left-1/2 top-1.5 -translate-x-1/2 w-9 h-1 rounded-full bg-gray-300 dark:bg-white/20" />
           <h2 id="modal-title" className="text-base font-semibold text-gray-900">
             {title}
           </h2>
@@ -216,7 +216,7 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
               className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-colors ${
                 disableClose
                   ? 'text-gray-200 cursor-not-allowed'
-                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-black/[0.05] dark:hover:text-gray-200 dark:hover:bg-white/[0.07]'
               }`}
               aria-label="Close modal"
             >
@@ -232,14 +232,14 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
 
         {/* Sticky footer for action buttons — stacked full-width on phones */}
         {footer && (
-          <div className="modal-footer-mobile shrink-0 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 border-t border-gray-100 bg-white sm:rounded-b-2xl">
+          <div className="modal-footer-mobile shrink-0 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 border-t border-black/[0.06] dark:border-white/[0.07] bg-white dark:bg-[#1c1c1e] sm:rounded-b-2xl">
             {footer}
           </div>
         )}
 
         {/* Discard-changes confirmation overlay */}
         {confirmingClose && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 backdrop-blur-sm sm:rounded-2xl p-6">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/92 dark:bg-[#1c1c1e]/95 backdrop-blur-sm sm:rounded-2xl p-6">
             <div className="text-center space-y-4 max-w-xs w-full">
               <p className="font-semibold text-gray-900 text-base">
                 {confirmTitle ?? 'Discard changes?'}
@@ -251,7 +251,7 @@ export const Modal = forwardRef<ModalHandle, ModalProps>(function Modal({
                 <button
                   type="button"
                   onClick={() => setConfirmingClose(false)}
-                  className="flex-1 px-4 min-h-[44px] text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 min-h-[44px] text-sm font-medium text-gray-700 border border-black/[0.10] dark:border-white/[0.12] rounded-lg hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-colors"
                 >
                   {confirmKeepLabel ?? 'Continue Editing'}
                 </button>
