@@ -4,7 +4,7 @@ import {
   X, ChevronRight, ChevronLeft, Check, Clock, Building2, Landmark,
   ArrowDownCircle, ArrowUpCircle, Users, Upload, Sparkles, Loader2,
   Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward, Tag,
-  Heart, Globe, GraduationCap, Briefcase, Wallet,
+  Heart, Globe, GraduationCap, Briefcase, Wallet, SlidersHorizontal, Zap,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
@@ -13,13 +13,15 @@ import { useAuthStore } from '../../store/authStore'
 import { useRole } from '../../hooks/useRole'
 import { useDepartments, saveDepartment } from '../../hooks/useDepartments'
 import { useBanks } from '../../hooks/useBanks'
-import { useAddBank } from '../../hooks/useMutations'
+import { useAddBank, useAddAllocationConfig } from '../../hooks/useMutations'
 import { useIncomeTypes, saveIncomeType } from '../../hooks/useIncomeTypes'
 import { useOutflowTypes, saveOutflowType } from '../../hooks/useOutflowTypes'
 import { useCategories } from '../../hooks/useCategories'
 import { useAddCategory } from '../../hooks/useMutations'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
+import { useAllocationStore } from '../../store/allocationStore'
+import { createGroupWithFirstVersion, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import { useToastStore } from '../../store/toastStore'
 import { WIZARD_STEPS } from '../../onboarding/wizard/definitions'
 import { getOrgTypeContent } from '../../onboarding/wizard/orgTypeContent'
@@ -461,18 +463,19 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
             className={`${inputCls} flex-1`}
           />
         </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={acctNum}
-            onChange={e => setAcctNum(e.target.value)}
-            placeholder="Account number (optional)"
-            className={`${inputCls} flex-1`}
-          />
+        <input
+          type="text"
+          value={acctNum}
+          onChange={e => setAcctNum(e.target.value)}
+          placeholder="Account number (optional)"
+          className={inputCls}
+        />
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0 w-16">Currency</span>
           <select
             value={currency}
             onChange={e => setCurrency(e.target.value)}
-            className={`${inputCls} w-28`}
+            className={`${inputCls} flex-1`}
           >
             {currencies.map(c => (
               <option key={c.code} value={c.code}>{c.code}</option>
@@ -853,7 +856,290 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
   )
 }
 
-// ── Step 7: Team Members (optional) ──────────────────────────────────────────
+// ── Step 7: Distribution Rules (optional) ────────────────────────────────────
+
+type DistTemplate = { label: string; description: string; rows: Array<{ category_name: string; percentage: number }> }
+
+function buildDistributionTemplates(catNames: string[]): DistTemplate[] {
+  if (catNames.length < 2) return []
+  const [a, b, c, d] = catNames
+  const templates: DistTemplate[] = []
+  templates.push({
+    label: '50 / 50 Split',
+    description: `${a} and ${b}, equally`,
+    rows: [{ category_name: a, percentage: 50 }, { category_name: b, percentage: 50 }],
+  })
+  if (c) {
+    templates.push({
+      label: '70 / 20 / 10',
+      description: `Priority: ${a} → ${b} → ${c}`,
+      rows: [{ category_name: a, percentage: 70 }, { category_name: b, percentage: 20 }, { category_name: c, percentage: 10 }],
+    })
+  }
+  const top = [a, b, c, d].filter(Boolean) as string[]
+  if (top.length >= 3) {
+    const pct = Math.floor(100 / top.length)
+    templates.push({
+      label: `Equal Spread — ${top.length} funds`,
+      description: top.join(' · '),
+      rows: top.map((name, i) => ({ category_name: name, percentage: i === 0 ? 100 - pct * (top.length - 1) : pct })),
+    })
+  }
+  return templates
+}
+
+function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
+  const { categories }         = useCategories()
+  const configs                = useAllocationStore(s => s.configs)
+  const loaded                 = useAllocationStore(s => s.loaded)
+  const { mutate: addConfig }  = useAddAllocationConfig()
+  const { push: toast }        = useToastStore()
+  const [creating, setCreating]  = useState<number | null>(null)
+  const [error, setError]        = useState<string | null>(null)
+
+  useEffect(() => { if (!loaded) useAllocationStore.getState().fetch() }, [loaded])
+  useEffect(() => { onDataReady(true) }, [onDataReady])
+
+  const catNames       = useMemo(() => categories.filter(c => !c.is_hidden).map(c => c.name), [categories])
+  const templates      = useMemo(() => buildDistributionTemplates(catNames), [catNames])
+  const regularConfigs = useMemo(() => configs.filter(c => !c.is_special), [configs])
+
+  const handleCreate = async (idx: number, t: DistTemplate) => {
+    if (creating !== null) return
+    setCreating(idx); setError(null)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      await addConfig({ name: t.label, start_date: today, rows: t.rows })
+      toast(`"${t.label}" saved as a draft`, 'success')
+      useAllocationStore.getState().reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setCreating(null)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <StepHeading
+        title="How should income be split across your funds?"
+        description="A distribution rule tells Clariva how to divide incoming money. For example: 70% to General Fund, 20% to Building Fund, 10% to Welfare — applied automatically whenever income comes in."
+      />
+
+      <div className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
+        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <p>Rules created here are saved as <strong>drafts</strong>. Approve them in Budget &amp; Allocation → Distribution Rules before they go live.</p>
+      </div>
+
+      {regularConfigs.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Created so far:</p>
+          <div className="flex flex-wrap gap-2">
+            {regularConfigs.map(r => <ItemBadge key={r.id} label={r.name} />)}
+          </div>
+        </div>
+      )}
+
+      {catNames.length < 2 ? (
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          Add at least 2 funds in the previous step before setting up distribution rules.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Quick-start templates — tap any to create as a draft:</p>
+          {templates.map((t, idx) => {
+            const alreadyCreated = regularConfigs.some(r => r.name === t.label)
+            const isCreating     = creating === idx
+            return (
+              <button
+                key={idx}
+                type="button"
+                disabled={alreadyCreated || creating !== null}
+                onClick={() => handleCreate(idx, t)}
+                className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-colors disabled:opacity-50 ${
+                  alreadyCreated
+                    ? 'border-primary/20 bg-primary/5 dark:bg-primary/10'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                  alreadyCreated ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                }`}>
+                  {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : alreadyCreated ? <Check className="w-4 h-4" /> : <SlidersHorizontal className="w-4 h-4" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${alreadyCreated ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>{t.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.description}</p>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {t.rows.map(r => (
+                      <span key={r.category_name} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-400">
+                        {r.category_name} {r.percentage}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <EditLaterNote where="Budget & Allocation → Distribution Rules" />
+    </div>
+  )
+}
+
+// ── Step 8: Special Rules (optional) ─────────────────────────────────────────
+
+type SpecialTemplate = { label: string; description: string; incomeTypeId: string; rows: Array<{ category_name: string; percentage: number }> }
+
+function buildSpecialTemplates(
+  incomeTypes: { id: string; name: string }[],
+  catNames:    string[],
+): SpecialTemplate[] {
+  if (!incomeTypes.length || !catNames.length) return []
+  const [cat0, cat1] = catNames
+  const [it0, it1]   = incomeTypes
+  const templates: SpecialTemplate[] = []
+  templates.push({
+    label:        `${it0.name} → All to ${cat0}`,
+    description:  `100% of "${it0.name}" goes directly into ${cat0}`,
+    incomeTypeId: it0.id,
+    rows:         [{ category_name: cat0, percentage: 100 }],
+  })
+  if (it1 && cat1) {
+    templates.push({
+      label:        `${it1.name}: 60 / 40`,
+      description:  `60% to ${cat0}, 40% to ${cat1}`,
+      incomeTypeId: it1.id,
+      rows:         [{ category_name: cat0, percentage: 60 }, { category_name: cat1, percentage: 40 }],
+    })
+  }
+  return templates
+}
+
+function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
+  const { categories }                                     = useCategories()
+  const { incomeTypes }                                    = useIncomeTypes()
+  const { groups, loading: groupsLoading, refetch }        = useSpecialConfigGroups()
+  const { push: toast }                                    = useToastStore()
+  const [creating, setCreating]                            = useState<number | null>(null)
+  const [error, setError]                                  = useState<string | null>(null)
+
+  useEffect(() => { onDataReady(true) }, [onDataReady])
+
+  const catNames  = useMemo(() => categories.filter(c => !c.is_hidden).map(c => c.name), [categories])
+  const userTypes = useMemo(() => incomeTypes.filter(t => !t.name.startsWith('_')), [incomeTypes])
+  const templates = useMemo(() => buildSpecialTemplates(userTypes, catNames), [userTypes, catNames])
+
+  const handleCreate = async (idx: number, t: SpecialTemplate) => {
+    if (creating !== null) return
+    setCreating(idx); setError(null)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      await createGroupWithFirstVersion({
+        name:            t.label,
+        allocation_type: 'percentage',
+        total_amount:    null,
+        rows:            t.rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage' as const, percentage: r.percentage })),
+        effective_from:  today,
+        status:          'draft',
+        income_type_id:  t.incomeTypeId,
+      })
+      toast(`"${t.label}" special rule created as a draft`, 'success')
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setCreating(null)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <StepHeading
+        title="Do any income types need their own split?"
+        description='A special rule overrides the default distribution for a specific income type. Example: "Building Fund Drive" offering always goes 100% to the Building Fund — not the regular split.'
+      />
+
+      <div className="flex gap-3 p-3 bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-xl text-xs text-violet-700 dark:text-violet-400">
+        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <p>Special rules are linked to a specific income type and kick in whenever that type is selected — overriding the normal distribution rule.</p>
+      </div>
+
+      {!groupsLoading && groups.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Created so far:</p>
+          <div className="flex flex-wrap gap-2">
+            {groups.map(g => <ItemBadge key={g.id} label={g.name} />)}
+          </div>
+        </div>
+      )}
+
+      {templates.length === 0 ? (
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          Add income types and funds first to unlock example special rules here.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Example rules — tap any to create as a draft:</p>
+          {templates.map((t, idx) => {
+            const alreadyCreated = groups.some(g => g.name === t.label)
+            const isCreating     = creating === idx
+            return (
+              <button
+                key={idx}
+                type="button"
+                disabled={alreadyCreated || creating !== null}
+                onClick={() => handleCreate(idx, t)}
+                className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-colors disabled:opacity-50 ${
+                  alreadyCreated
+                    ? 'border-primary/20 bg-primary/5 dark:bg-primary/10'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                  alreadyCreated ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                }`}>
+                  {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : alreadyCreated ? <Check className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${alreadyCreated ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>{t.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.description}</p>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {t.rows.map(r => (
+                      <span key={r.category_name} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-400">
+                        {r.category_name} {r.percentage}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <EditLaterNote where="Budget & Allocation → Special Rules" />
+    </div>
+  )
+}
+
+// ── Step 9: Team Members (optional) ──────────────────────────────────────────
 
 function TeamMembersStep() {
   const orgId    = useOrgStore(s => s.orgId)
@@ -1117,21 +1403,23 @@ function FinishStep({ onClose }: { onClose: () => void }) {
 
 // ── Steps that always allow Continue (no minimum data required) ───────────────
 
-const UNVALIDATED_STEPS: WizardStepId[] = ['org-type', 'team-members', 'import-statement', 'finish']
+const UNVALIDATED_STEPS: WizardStepId[] = ['org-type', 'distribution-rules', 'special-rules', 'team-members', 'import-statement', 'finish']
 
 // ── Step icon map ─────────────────────────────────────────────────────────────
 
 const STEP_ICONS: Record<WizardStepId, React.ElementType> = {
-  'org-details':       Sparkles,
-  'org-type':          Sparkles,
-  'departments':       Building2,
-  'banks':             Landmark,
-  'income-types':      ArrowDownCircle,
-  'outflow-types':     ArrowUpCircle,
-  'categories':        Tag,
-  'team-members':      Users,
-  'import-statement':  Upload,
-  'finish':            Check,
+  'org-details':          Sparkles,
+  'org-type':             Sparkles,
+  'departments':          Building2,
+  'banks':                Landmark,
+  'income-types':         ArrowDownCircle,
+  'outflow-types':        ArrowUpCircle,
+  'categories':           Tag,
+  'distribution-rules':   SlidersHorizontal,
+  'special-rules':        Zap,
+  'team-members':         Users,
+  'import-statement':     Upload,
+  'finish':               Check,
 }
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
@@ -1157,6 +1445,8 @@ const BASE_WIZARD_STEP_IDS: WizardStepId[] = [
   'income-types',
   'outflow-types',
   'categories',
+  'distribution-rules',
+  'special-rules',
   'team-members',
   'import-statement',
   'finish',
@@ -1170,7 +1460,7 @@ export function SetupWizard() {
 
   const activeStepIds = useMemo<WizardStepId[]>(
     () => orgType === 'personal'
-      ? BASE_WIZARD_STEP_IDS.filter(s => s !== 'team-members')
+      ? BASE_WIZARD_STEP_IDS.filter(s => s !== 'team-members' && s !== 'departments')
       : BASE_WIZARD_STEP_IDS,
     [orgType],
   )
@@ -1305,8 +1595,10 @@ export function SetupWizard() {
             {stepId === 'banks'           && <BanksStep onDataReady={notifyDataReady} />}
             {stepId === 'income-types'    && <IncomeTypesStep onDataReady={notifyDataReady} />}
             {stepId === 'outflow-types'   && <OutflowTypesStep onDataReady={notifyDataReady} />}
-            {stepId === 'categories'      && <CategoriesStep onDataReady={notifyDataReady} />}
-            {stepId === 'team-members'    && <TeamMembersStep />}
+            {stepId === 'categories'           && <CategoriesStep onDataReady={notifyDataReady} />}
+            {stepId === 'distribution-rules'   && <DistributionRulesStep onDataReady={notifyDataReady} />}
+            {stepId === 'special-rules'        && <SpecialRulesStep onDataReady={notifyDataReady} />}
+            {stepId === 'team-members'         && <TeamMembersStep />}
             {stepId === 'import-statement'&& <ImportStatementStep onClose={closeWizard} />}
             {stepId === 'finish'          && <FinishStep onClose={closeWizard} />}
           </main>

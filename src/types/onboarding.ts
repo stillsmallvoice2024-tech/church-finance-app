@@ -170,6 +170,8 @@ export type WizardStepId =
   | 'income-types'
   | 'outflow-types'
   | 'categories'
+  | 'distribution-rules'
+  | 'special-rules'
   | 'team-members'
   | 'import-statement'
   | 'finish'
