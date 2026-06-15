@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-function ChurchCross() {
+function AppLogo() {
   return (
     <svg viewBox="0 0 32 32" className="h-10 w-10" fill="currentColor" aria-hidden="true">
       <rect x="13" y="2" width="6" height="28" rx="2" />
@@ -72,7 +72,7 @@ export default function ResetPassword() {
 
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
-            <ChurchCross />
+            <AppLogo />
           </div>
           <h1 className="text-3xl font-semibold text-gray-900">
             The Standing Church International

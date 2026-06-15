@@ -537,7 +537,7 @@ export function downloadBackup(backup: BackupFileV2): void {
   const a    = document.createElement('a')
   const date = backup._meta.createdAt.slice(0, 10)
   a.href     = url
-  a.download = `church-finance-backup-${date}.json`
+  a.download = `organisation-finance-backup-${date}.json`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

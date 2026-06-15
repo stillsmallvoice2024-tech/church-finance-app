@@ -14,7 +14,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       'Improved empty-state guidance throughout the app',
     ],
     details: `
-This release introduces a comprehensive onboarding and help system, making it easier than ever to get started with Church Finance.
+This release introduces a comprehensive onboarding and help system, making it easier than ever to get started with Organisation Finance.
 
 **Setup Wizard** — New organisations are guided through a step-by-step wizard covering organisation details, departments, bank accounts, income types, outflow types, and team members.
 

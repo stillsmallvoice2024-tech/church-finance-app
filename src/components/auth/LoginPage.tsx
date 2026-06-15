@@ -236,7 +236,7 @@ export default function LoginPage() {
                     type="text"
                     value={signupOrgName}
                     onChange={e => setSignupOrgName(e.target.value)}
-                    placeholder="e.g. Grace Community Church"
+                    placeholder="e.g. Grace Community Organisation"
                     required
                     autoFocus
                     className={inputCls}
