@@ -1096,7 +1096,12 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
               placeholder="Rule name (e.g. My Custom Split)"
               className={inputCls}
             />
-            <div className="space-y-2">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 pb-0.5">
+                <span className="flex-1 text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
+                <span className="w-20 text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
+                {customRows.length > 1 && <span className="w-4" />}
+              </div>
               {customRows.map((row, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <select
@@ -1115,7 +1120,6 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
                     onChange={e => setCustomRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
                     className={`${inputCls} w-20 text-center`}
                   />
-                  <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">%</span>
                   {customRows.length > 1 && (
                     <button
                       type="button"
@@ -1374,7 +1378,12 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">How to split it</label>
-              <div className="space-y-2">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 pb-0.5">
+                  <span className="flex-1 text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
+                  <span className="w-20 text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
+                  {customSpecialRows.length > 1 && <span className="w-4" />}
+                </div>
                 {customSpecialRows.map((row, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <select
@@ -1393,7 +1402,6 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
                       onChange={e => setCustomSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
                       className={`${inputCls} w-20 text-center`}
                     />
-                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">%</span>
                     {customSpecialRows.length > 1 && (
                       <button
                         type="button"
