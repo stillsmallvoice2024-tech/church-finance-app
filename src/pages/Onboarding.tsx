@@ -32,9 +32,9 @@ const MONTHS = [
 function AppIcon() {
   return (
     <svg viewBox="0 0 64 64" className="h-8 w-8" fill="none" aria-hidden="true">
-      <path d="M 43 51 A 22 22 0 1 0 51 43"
+      <path d="M 43 51 A 22 22 0 1 0 21 51"
             stroke="currentColor" strokeWidth="5.5" strokeLinecap="round"/>
-      <path d="M 51 43 C 44 38 36 28 31 14 C 33 20 39 34 43 51 Z"
+      <path d="M 43 51 C 40 38 34 23 32 12 C 30 23 24 38 21 51 Z"
             fill="currentColor" opacity="0.72"/>
     </svg>
   )

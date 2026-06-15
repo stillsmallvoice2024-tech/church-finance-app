@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <!-- Teal Anchor background -->
   <rect width="64" height="64" rx="14" fill="#0D7377"/>
-  <!-- Open arc ~300°, gap at 4–5 o'clock. Centre (32,32) r=22 -->
-  <!-- P2 at 60° (5 o'clock): (43,51)  P1 at 30° (4 o'clock): (51,43) -->
-  <path d="M 43 51 A 22 22 0 1 0 51 43"
+  <!-- 300° arc, 60° gap at bottom. Centre (32,32) r=22 -->
+  <!-- Right gap edge at 60°: (43,51) | Left gap edge at 120°: (21,51) -->
+  <!-- sweep=0 (CCW) takes the long way through right→top→left, gap stays at bottom -->
+  <path d="M 43 51 A 22 22 0 1 0 21 51"
         stroke="white" stroke-width="5.5" stroke-linecap="round"/>
-  <!-- Road ribbon: tapered leaf from gap, winding to tip at upper-left -->
-  <path d="M 51 43 C 44 38 36 28 31 14 C 33 20 39 34 43 51 Z"
+  <!-- Road ribbon: tapered from full gap width at bottom, converging to tip near top -->
+  <path d="M 43 51 C 40 38 34 23 32 12 C 30 23 24 38 21 51 Z"
         fill="white" opacity="0.72"/>
 </svg>
