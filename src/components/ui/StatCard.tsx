@@ -71,7 +71,10 @@ export function StatCard({
     </div>
   )
 
-  const inner     = isHero ? heroInner : defaultInner
+  const cardCls = isHero
+    ? `bg-gradient-to-br from-white to-gray-50 border border-gray-100 dark:from-[#1c1c1e] dark:to-[#141416] dark:border-white/[0.06] ${cardClassName ?? ''}`
+    : `${cardClassName ?? ''}`
+
   const cardVariant = isBrand ? 'brand' : 'elevated'
 
   if (href) {
@@ -79,7 +82,7 @@ export function StatCard({
       <Link to={href} className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl">
         <Card
           variant={cardVariant}
-          className={`transition-shadow cursor-pointer group-hover:shadow-card-md group-hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10)] dark:group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.09),0_4px_16px_rgba(0,0,0,0.5)] ${cardClassName ?? ''}`}
+          className={`transition-shadow cursor-pointer group-hover:shadow-card-md group-hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10)] dark:group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.09),0_4px_16px_rgba(0,0,0,0.5)] ${cardCls}`}
         >
           {inner}
         </Card>
@@ -87,5 +90,5 @@ export function StatCard({
     )
   }
 
-  return <Card variant={cardVariant} className={cardClassName}>{inner}</Card>
+  return <Card variant={cardVariant} className={cardCls}>{inner}</Card>
 }
