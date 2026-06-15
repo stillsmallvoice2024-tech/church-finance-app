@@ -686,7 +686,7 @@ export default function UserManagement() {
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div data-tour="page-header" className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">User Management</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">User Management</h1>
           <p className="text-sm text-gray-500 mt-0.5">Control who can access the finance system</p>
         </div>
         <div className="flex items-center gap-2">
@@ -755,7 +755,7 @@ export default function UserManagement() {
                 <span className="text-xs text-gray-500">{label}</span>
                 {tip && <HelpTooltip content={tip} placement="top" iconSize="w-3 h-3" />}
               </div>
-              <div className="text-2xl font-bold text-gray-900">{value}</div>
+              <div className="text-2xl font-extrabold tracking-tight text-gray-900">{value}</div>
             </div>
           </div>
         ))}

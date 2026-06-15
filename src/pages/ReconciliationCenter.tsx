@@ -466,7 +466,7 @@ export default function ReconciliationCenter() {
       {/* Header */}
       <div data-tour="recon-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Reconciliation Center</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Reconciliation Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Verify your app records match your actual bank records</p>
         </div>
         <button

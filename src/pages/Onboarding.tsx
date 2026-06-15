@@ -169,7 +169,7 @@ export default function Onboarding() {
           <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
             <AppIcon />
           </div>
-          <h1 className="text-3xl font-semibold text-gray-900">
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
             {isNewOrg ? 'New Organisation' : 'Welcome!'}
           </h1>
           <p className="mt-1 text-sm text-gray-500">

@@ -110,7 +110,7 @@ export default function BankMovement() {
       </PageHelpBanner>
 
       <div className="pb-4 border-b border-gray-100">
-        <h1 className="text-3xl font-semibold text-gray-900">Bank Deposits &amp; Transfers</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Bank Deposits &amp; Transfers</h1>
         <p className="text-sm text-gray-500 mt-0.5">Deposits into banks and transfers between banks</p>
       </div>
 

@@ -283,7 +283,7 @@ export default function IntraFlow() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Category Fund Transfers</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Category Fund Transfers</h1>
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">

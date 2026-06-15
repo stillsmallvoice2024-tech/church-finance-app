@@ -147,7 +147,7 @@ export default function Settings() {
       {/* Header */}
       <div data-tour="page-header" className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Settings</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Settings</h1>
           <p className="text-sm text-gray-500 mt-0.5">Manage your account and preferences</p>
         </div>
         <HelpButton tourId="settingsTour" size="sm" />

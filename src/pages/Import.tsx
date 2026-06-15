@@ -240,7 +240,7 @@ export default function Import() {
       {/* Header */}
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Import Transactions</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Import Transactions</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Upload a bank statement or enter transactions manually
           </p>

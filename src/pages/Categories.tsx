@@ -591,7 +591,7 @@ export default function Categories() {
       {/* Header */}
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Categories</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Categories</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {activeTab === 'fx' ? 'Foreign-currency categories and their opening balances' : 'Manage income and allocation categories'}
           </p>

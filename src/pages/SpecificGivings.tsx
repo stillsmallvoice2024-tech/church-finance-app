@@ -267,7 +267,7 @@ export default function SpecificGivings() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Designated Gifts</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Designated Gifts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Designated and earmarked inflows for {year}
           </p>

@@ -1164,7 +1164,7 @@ export default function Reports() {
       {/* Header */}
       <div data-tour="page-header" className="flex items-center justify-between print:hidden">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Reports</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Reports</h1>
           <p className="text-sm text-gray-500 mt-0.5">Financial summaries and analytics</p>
         </div>
         <div className="flex items-center gap-2">
@@ -1228,7 +1228,7 @@ export default function Reports() {
 
       {/* Print-only heading */}
       <div className="hidden print:block mb-4">
-        <h1 className="text-3xl font-semibold text-gray-900">Church Finance Report</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Church Finance Report</h1>
         <p className="text-sm text-gray-500">Generated: {new Date().toLocaleDateString()}</p>
       </div>
 

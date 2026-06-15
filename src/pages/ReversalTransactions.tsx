@@ -441,7 +441,7 @@ export default function ReversalTransactions() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Reversal Transactions</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Reversal Transactions</h1>
           <p className="text-sm text-gray-500 mt-0.5">Inflow and outflow rows tagged as reversals</p>
         </div>
         <div className="flex items-center gap-2">

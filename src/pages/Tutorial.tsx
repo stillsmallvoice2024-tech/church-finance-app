@@ -53,7 +53,7 @@ function ChapterListView() {
           <GraduationCap className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">App Tutorial</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">App Tutorial</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Every page explained in simple steps — start at Chapter 1 or jump to any topic.
           </p>
@@ -156,7 +156,7 @@ function ChapterView({ chapterId }: { chapterId: string }) {
           <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">
             Chapter {chapter.number} of {TUTORIAL_CHAPTERS.length}
           </p>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-1">{chapter.title}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50 mb-1">{chapter.title}</h1>
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">Updated {chapter.updatedAt}</p>
           {renderMarkdown(chapter.content)}
         </div>
