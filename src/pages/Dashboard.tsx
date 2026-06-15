@@ -338,31 +338,27 @@ export default function Dashboard() {
           ) : (
             <>
               <StatCard
-                variant="brand"
+                variant="hero"
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingUp className="w-5 h-5 text-white" />}
                 href="/inflows"
               />
               <StatCard
-                variant="brand"
+                variant="hero"
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingDown className="w-5 h-5 text-white" />}
                 href="/outflows"
               />
               <StatCard
-                variant="brand"
+                variant="hero"
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<Wallet className="w-5 h-5 text-white" />}
                 href="/bank-ledger"
               />
               <StatCard
-                variant="brand"
+                variant="hero"
                 title="Categories"
                 value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
-                icon={<Layers className="w-5 h-5 text-white" />}
                 href="/categories"
               />
             </>
