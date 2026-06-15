@@ -104,7 +104,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   }, [userMenuOpen])
 
   return (
-    <header className="topbar sticky top-0 z-10 flex h-16 items-center justify-between border-b border-gray-100 bg-white px-4 shadow-sm lg:px-6 dark:bg-gray-800 dark:border-gray-700">
+    <header className="topbar sticky top-0 z-10 flex h-16 items-center justify-between border-b border-black/[0.06] bg-white px-4 lg:px-6 dark:bg-[#101012] dark:border-white/[0.06]">
 
       {/* Left: hamburger (mobile only) + org switcher */}
       <div className="flex items-center gap-3">
@@ -148,9 +148,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
           {userMenuOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-full mt-1.5 z-50 w-60 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white shadow-lg py-1.5 dark:bg-gray-800 dark:border-gray-700"
+              className="absolute right-0 top-full mt-1.5 z-50 w-60 max-w-[calc(100vw-2rem)] rounded-xl border border-black/[0.07] bg-white shadow-card-md py-1.5 dark:bg-[#1c1c1e] dark:border-white/[0.08]"
             >
-              <div className="px-3.5 py-2.5 border-b border-gray-100 dark:border-gray-700">
+              <div className="px-3.5 py-2.5 border-b border-black/[0.06] dark:border-white/[0.07]">
                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{displayName}</p>
                 {roleLabel && (
                   <span className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${roleBadgeClass}`}>
@@ -161,7 +161,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
               <button
                 role="menuitem"
                 onClick={() => { toggleTheme(); setUserMenuOpen(false) }}
-                className="flex w-full items-center gap-2.5 px-3.5 min-h-[44px] text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                className="flex w-full items-center gap-2.5 px-3.5 min-h-[44px] text-sm text-gray-700 hover:bg-black/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.06]"
               >
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 {theme === 'dark' ? 'Light mode' : 'Dark mode'}
@@ -194,7 +194,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
 
           <button
             onClick={toggleTheme}
-            className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+            className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-black/[0.05] hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-200"
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
           >
