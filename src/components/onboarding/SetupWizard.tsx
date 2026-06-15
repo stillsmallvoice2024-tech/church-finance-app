@@ -95,12 +95,16 @@ function EditLaterNote({ where }: { where: string }) {
 
 // ── Step 2: Departments ───────────────────────────────────────────────────────
 
-function DepartmentsStep() {
+function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { departments, loading, refetch } = useDepartments()
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { push: toast } = useToastStore()
+
+  useEffect(() => {
+    if (!loading) onDataReady(departments.length > 0)
+  }, [departments, loading, onDataReady])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -175,12 +179,16 @@ function DepartmentsStep() {
 
 // ── Step 3: Banks ─────────────────────────────────────────────────────────────
 
-function BanksStep() {
+function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { banks, loading, refetch } = useBanks()
   const { currencies } = useCurrencies()
   const { mutate: addBank } = useAddBank()
   const { push: toast } = useToastStore()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
+
+  useEffect(() => {
+    if (!loading) onDataReady(banks.length > 0)
+  }, [banks, loading, onDataReady])
 
   const [name, setName]         = useState('')
   const [acctNum, setAcctNum]   = useState('')
@@ -285,7 +293,7 @@ function BanksStep() {
 
 // ── Step 4: Income Types ──────────────────────────────────────────────────────
 
-function IncomeTypesStep() {
+function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { incomeTypes, loading, refetch } = useIncomeTypes()
   const { push: toast } = useToastStore()
   const [name, setName]     = useState('')
@@ -294,6 +302,10 @@ function IncomeTypesStep() {
   const [error, setError]   = useState<string | null>(null)
 
   const userIncomeTypes = incomeTypes.filter(t => !t.name.startsWith('_'))
+
+  useEffect(() => {
+    if (!loading) onDataReady(userIncomeTypes.length > 0)
+  }, [userIncomeTypes, loading, onDataReady])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -374,7 +386,7 @@ function IncomeTypesStep() {
 
 // ── Step 5: Outflow Types ─────────────────────────────────────────────────────
 
-function OutflowTypesStep() {
+function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { outflowTypes, loading, refetch } = useOutflowTypes()
   const { push: toast } = useToastStore()
   const [name, setName]     = useState('')
@@ -383,6 +395,10 @@ function OutflowTypesStep() {
   const [error, setError]   = useState<string | null>(null)
 
   const userTypes = outflowTypes.filter(t => !t.is_system)
+
+  useEffect(() => {
+    if (!loading) onDataReady(userTypes.length > 0)
+  }, [userTypes, loading, onDataReady])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -471,7 +487,7 @@ const CATEGORY_STARTERS = [
   'Reserve Fund',
 ]
 
-function CategoriesStep() {
+function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { categories, loading, refetch } = useCategories()
   const { mutate: addCategory } = useAddCategory()
   const { push: toast } = useToastStore()
@@ -482,6 +498,10 @@ function CategoriesStep() {
 
   const visibleCategories = categories.filter(c => !c.is_hidden)
   const existingNames = new Set(categories.map(c => c.name.toLowerCase()))
+
+  useEffect(() => {
+    if (!loading) onDataReady(visibleCategories.length > 0)
+  }, [visibleCategories, loading, onDataReady])
 
   const handleAddTemplate = async (tpl: string) => {
     if (existingNames.has(tpl.toLowerCase()) || addingTemplate) return
@@ -865,24 +885,9 @@ function FinishStep({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ── Step validation ───────────────────────────────────────────────────────────
+// ── Steps that always allow Continue (no minimum data required) ───────────────
 
-function useStepCanContinue(stepId: WizardStepId): boolean {
-  const { departments } = useDepartments()
-  const { banks }       = useBanks()
-  const { incomeTypes } = useIncomeTypes()
-  const { outflowTypes } = useOutflowTypes()
-  const { categories }  = useCategories()
-
-  switch (stepId) {
-    case 'departments':   return departments.length > 0
-    case 'banks':         return banks.length > 0
-    case 'income-types':  return incomeTypes.filter(t => !t.name.startsWith('_')).length > 0
-    case 'outflow-types': return outflowTypes.filter(t => !t.is_system).length > 0
-    case 'categories':    return categories.filter(c => !c.is_hidden).length > 0
-    default:              return true
-  }
-}
+const UNVALIDATED_STEPS: WizardStepId[] = ['team-members', 'import-statement', 'finish']
 
 // ── Step icon map ─────────────────────────────────────────────────────────────
 
@@ -933,6 +938,7 @@ export function SetupWizard() {
 
   const savedStep = Math.min(prefs.wizard_step, WIZARD_STEP_IDS.length - 1)
   const [currentIdx, setCurrentIdx] = useState(savedStep)
+  const [stepDataReady, setStepDataReady] = useState(false)
 
   useEffect(() => {
     if (isWizardOpen) {
@@ -943,7 +949,12 @@ export function SetupWizard() {
   const stepId = WIZARD_STEP_IDS[currentIdx]
   const stepDef = WIZARD_STEPS.find(s => s.id === stepId)!
   const isLast  = currentIdx === WIZARD_STEP_IDS.length - 1
-  const canContinue = useStepCanContinue(stepId)
+
+  // Reset readiness whenever the active step changes
+  useEffect(() => { setStepDataReady(false) }, [stepId])
+
+  const notifyDataReady = useCallback((ready: boolean) => setStepDataReady(ready), [])
+  const canContinue = UNVALIDATED_STEPS.includes(stepId) || stepDataReady
 
   const goToStep = useCallback((idx: number) => {
     const clamped = Math.max(0, Math.min(idx, WIZARD_STEP_IDS.length - 1))
@@ -1057,11 +1068,11 @@ export function SetupWizard() {
 
           {/* Main content */}
           <main className="flex-1 overflow-y-auto p-6">
-            {stepId === 'departments'      && <DepartmentsStep />}
-            {stepId === 'banks'            && <BanksStep />}
-            {stepId === 'income-types'     && <IncomeTypesStep />}
-            {stepId === 'outflow-types'    && <OutflowTypesStep />}
-            {stepId === 'categories'       && <CategoriesStep />}
+            {stepId === 'departments'      && <DepartmentsStep onDataReady={notifyDataReady} />}
+            {stepId === 'banks'            && <BanksStep onDataReady={notifyDataReady} />}
+            {stepId === 'income-types'     && <IncomeTypesStep onDataReady={notifyDataReady} />}
+            {stepId === 'outflow-types'    && <OutflowTypesStep onDataReady={notifyDataReady} />}
+            {stepId === 'categories'       && <CategoriesStep onDataReady={notifyDataReady} />}
             {stepId === 'team-members'     && <TeamMembersStep />}
             {stepId === 'import-statement' && <ImportStatementStep onClose={closeWizard} />}
             {stepId === 'finish'           && <FinishStep onClose={closeWizard} />}
