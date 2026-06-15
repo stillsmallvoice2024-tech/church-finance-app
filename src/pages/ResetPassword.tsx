@@ -8,8 +8,8 @@ function AppLogo() {
     <svg viewBox="0 0 64 64" className="h-10 w-10" fill="none" aria-hidden="true">
       <path d="M 43 51 A 22 22 0 1 0 21 51"
             stroke="currentColor" strokeWidth="5.5" strokeLinecap="round"/>
-      <path d="M 43 51 C 40 38 34 23 32 12 C 30 23 24 38 21 51 Z"
-            fill="currentColor" opacity="0.72"/>
+      <path d="M 44 58 C 42 50 37 38 32 32 C 27 38 22 50 20 58 Z"
+            fill="currentColor" opacity="0.75"/>
     </svg>
   )
 }
