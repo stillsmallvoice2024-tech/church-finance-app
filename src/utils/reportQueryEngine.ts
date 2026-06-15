@@ -355,8 +355,13 @@ export async function getCategoryBalance(
 
 export async function getNetMovement(dateRange?: DateRange, dateField?: string): Promise<QueryResult> {
   const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
-  let inflowQ  = supabase.from('inflow_transactions').select('amount')
-  let outflowQ = supabase.from('outflow_transactions').select('amount_disbursed')
+  let inflowQ  = supabase
+    .from('inflow_transactions')
+    .select('amount, transaction_type, offset_role')
+    .or('transaction_type.is.null,transaction_type.eq.fx_conversion')
+  let outflowQ = supabase
+    .from('outflow_transactions')
+    .select('amount_disbursed, offset_role')
   if (dateRange) {
     const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to
     inflowQ  = inflowQ.gte(col, dateRange.from).lte(col, to)
@@ -365,11 +370,15 @@ export async function getNetMovement(dateRange?: DateRange, dateField?: string):
   const [inflowRes, outflowRes] = await Promise.all([inflowQ, outflowQ])
   if (inflowRes.error)  return { value: 0, error: inflowRes.error.message }
   if (outflowRes.error) return { value: 0, error: outflowRes.error.message }
-  const totalIn  = (inflowRes.data  ?? []).reduce((s, r) => s + Number(r.amount), 0)
-  const totalOut = (outflowRes.data ?? []).reduce(
-    (s, r) => s + Number(r.amount_disbursed || 0),
-    0,
-  )
+  const totalIn = (inflowRes.data ?? []).reduce((s, r) => {
+    if (isNonContributing(r)) return s
+    return s + Number(r.amount)
+  }, 0)
+  const totalOut = (outflowRes.data ?? []).reduce((s, r) => {
+    const amt      = Number(r.amount_disbursed || 0)
+    const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
+    return s + (isOffset ? -amt : amt)
+  }, 0)
   return { value: totalIn - totalOut, error: null }
 }
 
