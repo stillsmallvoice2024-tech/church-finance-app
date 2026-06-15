@@ -315,7 +315,7 @@ export default function Import() {
                   Drop your file here, or{' '}
                   <span className="text-primary underline underline-offset-2">click to browse</span>
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .pdf</p>
+                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .csv</p>
               </div>
             </div>
           ) : (
@@ -480,7 +480,7 @@ export default function Import() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls,.pdf"
+            accept=".xlsx,.xls,.csv"
             className="hidden"
             onChange={handleFileInput}
           />
