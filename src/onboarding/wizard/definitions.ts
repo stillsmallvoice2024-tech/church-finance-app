@@ -52,10 +52,26 @@ export const WIZARD_STEPS: WizardStepDefinition[] = [
   {
     id: 'categories',
     title: 'Funds',
-    description: 'Set up the funds or pots your church manages — General Fund, Building Fund, Welfare, etc.',
+    description: 'Set up the funds or pots your organisation manages — General Fund, Building Fund, Welfare, etc.',
     estimatedMinutes: 2,
     required: true,
     skippable: false,
+  },
+  {
+    id: 'distribution-rules',
+    title: 'Distribution Rules',
+    description: 'Set up how incoming money is automatically split across your funds.',
+    estimatedMinutes: 3,
+    required: false,
+    skippable: true,
+  },
+  {
+    id: 'special-rules',
+    title: 'Special Rules',
+    description: 'Override the default split for specific income types — e.g. a campaign offering that goes 100% to one fund.',
+    estimatedMinutes: 2,
+    required: false,
+    skippable: true,
   },
   {
     id: 'team-members',
