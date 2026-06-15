@@ -347,16 +347,16 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Bank Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Account Number</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Type</th>
+                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Bank Name</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Account Number</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Type</th>
                     <th className="px-4 py-3 w-24" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-black/[0.05]">
                   {visible.map(bank => (
-                    <tr key={bank.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={bank.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="px-4 py-3 font-medium text-gray-900">
                         <span className="flex items-center gap-2">
                           {bank.name}
@@ -493,20 +493,20 @@ function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Effective From</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Total %</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
+                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Effective From</th>
+                    <th className="px-4 py-3 text-right text-[11px] font-bold text-gray-400 uppercase tracking-widest">Total %</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
                     <th className="px-4 py-3 w-28" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-black/[0.05]">
                   {visible.map(config => {
                     const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
                     const balanced = Math.abs(total - 100) < 0.01
                     return (
-                      <tr key={config.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={config.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                         <td className="px-4 py-3 font-medium text-gray-900">{config.name}</td>
                         <td className="px-4 py-3 text-gray-500">{formatDate(config.start_date)}</td>
                         <td className={`px-4 py-3 text-right font-mono font-semibold ${balanced ? 'text-success' : 'text-danger'}`}>
@@ -717,7 +717,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                     ) : (
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="bg-gray-50 border-b border-gray-100">
+                          <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
@@ -732,7 +732,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                             const vAmt = v.allocation_type === 'amount'
                             const vLocked = v.status === 'locked'
                             return (
-                              <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                              <tr key={v.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                                 <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
                                 <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
                                 <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
@@ -929,11 +929,11 @@ function CurrenciesTab() {
         <div className="border border-gray-200 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Code</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Symbol</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Flag</th>
+              <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Code</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Symbol</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Flag</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -3028,7 +3028,7 @@ export default function SetupPage() {
     <>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Setup</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Setup</h1>
           <p className="text-sm text-gray-500 mt-1">Configure your organisation finance settings</p>
         </div>
 
@@ -3177,7 +3177,7 @@ export default function SetupPage() {
             </button>
             <button
               onClick={handleCreateCopy}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
             >
               <Copy className="w-5 h-5 text-gray-500 shrink-0" />
               <div>

@@ -53,7 +53,7 @@ function ColourPicker({ value, onChange }: { value: string; onChange: (c: string
 const inputCls =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none ' +
   'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors bg-white ' +
-  'dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:border-primary'
+  'dark:bg-[#1c1c1e] dark:border-white/[0.10] dark:text-white dark:focus:border-primary'
 
 function StepHeading({ title, description }: { title: string; description: string }) {
   return (
@@ -123,7 +123,7 @@ function DepartmentsStep() {
       )}
       {loading && (
         <div className="flex gap-2">
-          {[1, 2, 3].map(i => <div key={i} className="h-6 w-20 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-6 w-20 bg-gray-100 dark:bg-[#1c1c1e] rounded-lg animate-pulse" />)}
         </div>
       )}
 
@@ -213,7 +213,7 @@ function BanksStep() {
       )}
       {loading && (
         <div className="flex gap-2">
-          {[1, 2].map(i => <div key={i} className="h-6 w-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
+          {[1, 2].map(i => <div key={i} className="h-6 w-24 bg-gray-100 dark:bg-[#1c1c1e] rounded-lg animate-pulse" />)}
         </div>
       )}
 
@@ -317,7 +317,7 @@ function IncomeTypesStep() {
       )}
       {loading && (
         <div className="flex gap-2">
-          {[1, 2, 3].map(i => <div key={i} className="h-6 w-20 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-6 w-20 bg-gray-100 dark:bg-[#1c1c1e] rounded-lg animate-pulse" />)}
         </div>
       )}
 
@@ -402,7 +402,7 @@ function OutflowTypesStep() {
       )}
       {loading && (
         <div className="flex gap-2">
-          {[1, 2].map(i => <div key={i} className="h-6 w-20 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
+          {[1, 2].map(i => <div key={i} className="h-6 w-20 bg-gray-100 dark:bg-[#1c1c1e] rounded-lg animate-pulse" />)}
         </div>
       )}
 
@@ -535,7 +535,7 @@ function TeamMembersStep() {
 
       {/* Existing members */}
       {members.length > 0 && (
-        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+        <div className="bg-gray-50 dark:bg-[#141416] rounded-xl border border-gray-200 dark:border-white/[0.07] divide-y divide-gray-100 dark:divide-white/[0.07]">
           {members.map(m => (
             <div key={m.id} className="flex items-center justify-between px-3 py-2 text-sm">
               <span className="text-gray-700 dark:text-gray-300 truncate">{m.email}</span>
@@ -617,7 +617,7 @@ function ImportStatementStep({ onClose }: { onClose: () => void }) {
         description="Upload a bank statement to bring your transaction history into the app. Excel (.xlsx) and CSV files are supported."
       />
 
-      <div className="space-y-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+      <div className="space-y-3 bg-gray-50 dark:bg-[#141416] rounded-xl border border-gray-200 dark:border-white/[0.07] p-4">
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">How it works:</p>
         <ol className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
           {[
@@ -683,7 +683,7 @@ function FinishStep({ onClose }: { onClose: () => void }) {
             key={href}
             type="button"
             onClick={() => { onClose(); navigate(href) }}
-            className="flex items-start gap-2.5 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-primary/5 transition-colors text-left"
+            className="flex items-start gap-2.5 p-3 bg-gray-50 dark:bg-[#141416] rounded-xl border border-gray-200 dark:border-white/[0.07] hover:border-primary/40 hover:bg-primary/5 transition-colors text-left"
           >
             <Icon className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
             <div>
@@ -741,7 +741,7 @@ const STEP_ICONS: Record<WizardStepId, React.ElementType> = {
 function ProgressBar({ current, total }: { current: number; total: number }) {
   const pct = Math.round((current / (total - 1)) * 100)
   return (
-    <div className="h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+    <div className="h-1 bg-gray-200 dark:bg-[#1c1c1e] rounded-full overflow-hidden">
       <div
         className="h-full bg-primary rounded-full transition-all duration-300"
         style={{ width: `${pct}%` }}
@@ -821,11 +821,11 @@ export function SetupWizard() {
       onClick={handleClose}
     >
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white dark:bg-[#0c0c0e] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100 dark:border-white/[0.07]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
               <Sparkles className="w-4 h-4 text-white" />
@@ -861,7 +861,7 @@ export function SetupWizard() {
         {/* Step sidebar + content: side-by-side on ≥ sm */}
         <div className="flex flex-1 min-h-0">
           {/* Sidebar — hidden on mobile */}
-          <aside className="hidden sm:flex flex-col w-44 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 py-4 px-3 gap-1 overflow-y-auto">
+          <aside className="hidden sm:flex flex-col w-44 flex-shrink-0 border-r border-gray-100 dark:border-white/[0.07] py-4 px-3 gap-1 overflow-y-auto">
             {WIZARD_STEP_IDS.map((id, idx) => {
               const def  = WIZARD_STEPS.find(s => s.id === id)
               const Icon = STEP_ICONS[id]
@@ -882,7 +882,7 @@ export function SetupWizard() {
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    active ? 'bg-white/20' : done ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-800'
+                    active ? 'bg-white/20' : done ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-[#141416]'
                   }`}>
                     {done
                       ? <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
@@ -908,7 +908,7 @@ export function SetupWizard() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-gray-800 gap-3">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-white/[0.07] gap-3">
           <button
             type="button"
             onClick={handleBack}

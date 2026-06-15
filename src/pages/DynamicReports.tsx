@@ -52,7 +52,7 @@ export default function DynamicReports() {
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Custom Reports</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Custom Reports</h1>
           <p className="text-sm text-gray-500 mt-0.5">Create live-updating finance documents</p>
         </div>
         <button
@@ -102,10 +102,10 @@ export default function DynamicReports() {
 
       {!loading && reports.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-black/[0.05]">
             {reports.map(report => (
               <li key={report.id}>
-                <div className="flex items-center gap-3 px-5 py-4 hover:bg-gray-50 transition-colors group">
+                <div className="flex items-center gap-3 px-5 py-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors group">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     <FileText className="w-4 h-4 text-primary" />
                   </div>

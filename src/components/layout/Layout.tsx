@@ -52,7 +52,7 @@ export function Layout() {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex flex-col flex-1 min-w-0 lg:ml-72">
           <TopBar onMenuClick={() => setSidebarOpen(true)} />
-          <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 dark:bg-gray-900 outline-none">
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 dark:bg-[#0c0c0e] outline-none">
             {/* keyed by pathname so each route gets a subtle entrance fade */}
             <div key={location.pathname} className="page-enter">
               <Outlet />

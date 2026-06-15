@@ -53,7 +53,7 @@ export function BulkResultsModal({ results, onClose }: BulkResultsModalProps) {
             <div className="rounded-xl border border-gray-100 overflow-hidden">
               <div className="max-h-64 overflow-y-auto">
                 <table className="min-w-full">
-                  <thead className="sticky top-0 bg-gray-50">
+                  <thead className="sticky top-0">
                     <tr className="border-b border-gray-100">
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Record ID</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Reason</th>
@@ -75,7 +75,7 @@ export function BulkResultsModal({ results, onClose }: BulkResultsModalProps) {
               <button
                 type="button"
                 onClick={handleExport}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 Export failed rows (CSV)

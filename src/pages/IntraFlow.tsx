@@ -283,7 +283,7 @@ export default function IntraFlow() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Category Fund Transfers</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Category Fund Transfers</h1>
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">
@@ -470,28 +470,28 @@ export default function IntraFlow() {
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[2]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[3]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[1]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                       rightAlign
                     />
                     <SortableHeader
@@ -499,10 +499,10 @@ export default function IntraFlow() {
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     {['Remark', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                      <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                         {h}
                       </th>
                     ))}

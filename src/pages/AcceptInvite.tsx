@@ -243,7 +243,7 @@ export default function AcceptInvite() {
           <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
             <AppIcon />
           </div>
-          <h1 className="text-3xl font-semibold text-gray-900">
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
             {orgDisplay}
           </h1>
           <p className="mt-1 text-sm font-semibold uppercase tracking-widest text-accent">

@@ -288,7 +288,7 @@ export function DataControlsBar({
                       <button
                         type="button"
                         onClick={() => setMoreOpen(o => !o)}
-                        className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                        className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
                       >
                         <span>More fields</span>
                         <ChevronDown className={`w-3 h-3 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />

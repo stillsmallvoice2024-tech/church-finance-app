@@ -1774,7 +1774,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             </p>
 
             <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <div className="grid grid-cols-2 bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase border-b border-gray-200">
+              <div className="grid grid-cols-2 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-2.5 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                 <span>Spreadsheet Column</span>
                 <span>App Field</span>
               </div>
@@ -2160,7 +2160,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
                       return importRowView === 'table' ? (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                      <div className="grid grid-cols-[24px_32px_1fr_72px_120px_120px_96px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                         <input
                           type="checkbox"
                           checked={allInflowFilteredSelected}
@@ -2672,7 +2672,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
 
                     return importRowView === 'table' ? (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200">
+                    <div className="grid grid-cols-[24px_36px_1fr_80px_110px_110px_52px_90px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                       <input
                         type="checkbox"
                         checked={allOutflowFilteredSelected}

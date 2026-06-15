@@ -33,7 +33,7 @@ function ChecklistProgress({ done, total }: { done: number; total: number }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
   return (
     <div className="flex items-center gap-3">
-      <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-gray-200 dark:bg-[#1c1c1e] rounded-full overflow-hidden">
         <div
           className="h-full bg-primary rounded-full transition-all duration-500"
           style={{ width: `${pct}%` }}
@@ -103,9 +103,9 @@ export function OnboardingChecklist() {
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+    <div className="rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700">
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-white/[0.07]">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -176,7 +176,7 @@ export function OnboardingChecklist() {
                 {/* Item icon */}
                 <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
                   item.done
-                    ? 'bg-gray-100 dark:bg-gray-700'
+                    ? 'bg-gray-100 dark:bg-[#1c1c1e]'
                     : 'bg-primary/10'
                 }`}>
                   <Icon className={`w-3.5 h-3.5 ${item.done ? 'text-gray-400' : 'text-primary'}`} />

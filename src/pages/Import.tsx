@@ -240,7 +240,7 @@ export default function Import() {
       {/* Header */}
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Import Transactions</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Import Transactions</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Upload a bank statement or enter transactions manually
           </p>
@@ -444,7 +444,7 @@ export default function Import() {
                           </button>
                           <button
                             onClick={() => openWizard(false)}
-                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
                           >
                             Import Anyway
                           </button>
@@ -1239,7 +1239,7 @@ function ManualEntryForm() {
             <div className="flex justify-end gap-3">
               <button
                 onClick={handleCancelDup}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 Cancel
               </button>

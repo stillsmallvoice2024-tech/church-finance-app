@@ -11,8 +11,8 @@ interface Props {
 type Step = 'init' | 'scan' | 'verify' | 'done'
 
 const inputCls =
-  'w-full px-3 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg outline-none ' +
-  'bg-white dark:bg-gray-800 text-gray-900 dark:text-white ' +
+  'w-full px-3 py-2.5 text-sm border border-gray-300 dark:border-white/[0.10] rounded-lg outline-none ' +
+  'bg-white dark:bg-[#141416] text-gray-900 dark:text-white ' +
   'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors'
 
 export function MFAEnrollModal({ open, onClose, onDone }: Props) {
@@ -81,9 +81,9 @@ export function MFAEnrollModal({ open, onClose, onDone }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm">
+      <div className="bg-white dark:bg-[#0c0c0e] rounded-2xl shadow-2xl w-full max-w-sm">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/[0.07]">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" aria-hidden="true" />
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">
@@ -137,13 +137,13 @@ export function MFAEnrollModal({ open, onClose, onDone }: Props) {
                 <img
                   src={qrUri}
                   alt="TOTP QR code — scan with your authenticator app"
-                  className="w-40 h-40 border border-gray-200 dark:border-gray-700 rounded-lg"
+                  className="w-40 h-40 border border-gray-200 dark:border-white/[0.07] rounded-lg"
                 />
               </div>
               {secret && (
                 <div className="space-y-1">
                   <p className="text-xs text-gray-500">Or enter the key manually:</p>
-                  <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#141416] rounded-lg px-3 py-2">
                     <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 break-all">
                       {secret}
                     </code>

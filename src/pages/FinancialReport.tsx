@@ -200,7 +200,7 @@ function SortableItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm ${!item.visible ? 'opacity-50' : ''}`}
+      className={`flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-[#141416] border border-gray-200 dark:border-white/[0.07] text-sm ${!item.visible ? 'opacity-50' : ''}`}
     >
       {editing && (
         <button
@@ -237,7 +237,7 @@ function SortableItem({
         <select
           value={item.portion}
           onChange={e => onChangePortion(item.id, e.target.value as ReportPortion)}
-          className="text-xs border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 shrink-0"
+          className="text-xs border border-gray-300 dark:border-white/[0.10] rounded px-1 py-0.5 bg-white dark:bg-[#1c1c1e] shrink-0"
         >
           {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
@@ -253,7 +253,7 @@ function SortableItem({
             <select
               value={currentSubgroupId ?? ''}
               onChange={e => onAssignSubgroup(e.target.value)}
-              className="text-xs border border-gray-200 dark:border-gray-600 rounded px-1 py-0.5 bg-white dark:bg-gray-700 shrink-0 max-w-[88px]"
+              className="text-xs border border-gray-200 dark:border-white/[0.10] rounded px-1 py-0.5 bg-white dark:bg-[#1c1c1e] shrink-0 max-w-[88px]"
               title="Move to subgroup / group root"
             >
               <option value="">— Root —</option>
@@ -358,7 +358,7 @@ function SortableSubgroup({
     <div
       ref={setNodeRef}
       style={style}
-      className={`ml-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 overflow-hidden ${!sg.visible ? 'opacity-60' : ''}`}
+      className={`ml-3 rounded-lg border border-gray-200 dark:border-white/[0.07] bg-gray-50 dark:bg-[#141416] overflow-hidden ${!sg.visible ? 'opacity-60' : ''}`}
     >
       {/* Subgroup header */}
       <div className="flex items-center gap-2 px-2 py-1.5 bg-primary/5 dark:bg-primary/10">
@@ -442,8 +442,8 @@ function SortableSubgroup({
       </div>
 
       {/* Subgroup subtotal */}
-      <div className="flex items-center justify-between px-3 py-1 bg-gray-100/70 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-600">
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+      <div className="flex items-center justify-between px-3 py-1 bg-gray-100/70 dark:bg-[#1c1c1e]/30 border-t border-gray-200 dark:border-white/[0.10]">
+        <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest uppercase tracking-wide">
           {sg.label} Sub-Total
         </span>
         <span className="font-mono font-bold text-xs">{baseCurrencySymbol}{fmt(sgTotal, formatLocale)}</span>
@@ -517,7 +517,7 @@ function SortableGroup({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden ${!group.visible ? 'opacity-60' : ''}`}
+      className={`rounded-xl border border-gray-200 dark:border-white/[0.07] bg-gray-50 dark:bg-[#0c0c0e] overflow-hidden ${!group.visible ? 'opacity-60' : ''}`}
     >
       {/* Group header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 dark:bg-primary/20">
@@ -657,7 +657,7 @@ function SortableGroup({
       </div>
 
       {/* Group subtotal */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-[#141416] border-t border-gray-200 dark:border-white/[0.07]">
         <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
           {group.label} Sub-Total
         </span>
@@ -748,7 +748,7 @@ function SortableTableBlock({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-2xl border-2 border-primary/20 dark:border-primary/30 bg-white dark:bg-gray-900 overflow-hidden ${!table.visible ? 'opacity-60' : ''}`}
+      className={`rounded-2xl border-2 border-primary/20 dark:border-primary/30 bg-white dark:bg-[#0c0c0e] overflow-hidden ${!table.visible ? 'opacity-60' : ''}`}
     >
       {/* Table title bar */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-primary/5 dark:bg-primary/10 border-b border-primary/10">
@@ -801,7 +801,7 @@ function SortableTableBlock({
               className={`text-xs font-bold px-1.5 py-0.5 rounded border shrink-0 transition-colors ${
                 (table.include_in_combined_total ?? true)
                   ? 'bg-primary/10 text-primary border-primary/30'
-                  : 'text-gray-400 border-gray-300 hover:text-gray-600 dark:border-gray-600'
+                  : 'text-gray-400 border-gray-300 hover:text-gray-600 dark:border-white/[0.10]'
               }`}
               title={(table.include_in_combined_total ?? true) ? 'Included in Combined Total (click to exclude)' : 'Excluded from Combined Total (click to include)'}
             >
@@ -918,7 +918,7 @@ function CategoryPicker({
     .filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+    <div className="rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416]">
       <button
         type="button"
         onClick={() => setExpanded(p => !p)}
@@ -929,15 +929,15 @@ function CategoryPicker({
       </button>
 
       {expanded && (
-        <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-3">
+        <div className="border-t border-gray-200 dark:border-white/[0.07] p-3 space-y-3">
           {/* Row type tabs */}
-          <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
+          <div className="flex gap-1 p-1 bg-gray-100 dark:bg-[#1c1c1e] rounded-lg">
             {(['category', 'inflow_type', 'transaction_type'] as const).map(t => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                className={`flex-1 text-xs font-medium py-1 rounded-md transition-colors ${tab === t ? 'bg-white dark:bg-gray-800 shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex-1 text-xs font-medium py-1 rounded-md transition-colors ${tab === t ? 'bg-white dark:bg-[#141416] shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`}
               >
                 {t === 'category' ? 'Category' : t === 'inflow_type' ? 'Income Type' : 'Txn Type'}
               </button>
@@ -949,14 +949,14 @@ function CategoryPicker({
             placeholder="Search…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-primary"
+            className="w-full rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 text-sm bg-white dark:bg-[#0c0c0e] focus:outline-none focus:border-primary"
           />
 
           <div className="flex gap-2">
             <select
               value={groupId}
               onChange={e => setGroupId(e.target.value)}
-              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-xs bg-white dark:bg-gray-900"
+              className="flex-1 rounded-lg border border-gray-300 dark:border-white/[0.10] px-2 py-1.5 text-xs bg-white dark:bg-[#0c0c0e]"
             >
               {allGroups.map(g => (
                 <option key={g.id} value={g.id}>{g.label}</option>
@@ -966,7 +966,7 @@ function CategoryPicker({
               <select
                 value={portion}
                 onChange={e => setPortion(e.target.value as ReportPortion)}
-                className="rounded-lg border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-xs bg-white dark:bg-gray-900"
+                className="rounded-lg border border-gray-300 dark:border-white/[0.10] px-2 py-1.5 text-xs bg-white dark:bg-[#0c0c0e]"
               >
                 {PORTIONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
@@ -1667,7 +1667,7 @@ export default function FinancialReport() {
         </div>
 
         {tables.filter(t => t.visible).map(table => (
-          <div key={table.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div key={table.id} className="rounded-xl border border-gray-200 dark:border-white/[0.07] overflow-hidden">
             {tables.length > 1 && (
               <div className="bg-primary/10 dark:bg-primary/20 px-6 py-2 border-b border-primary/10">
                 <h3 className="text-sm font-bold text-primary dark:text-blue-300 uppercase tracking-wide">{table.title}</h3>
@@ -1676,7 +1676,7 @@ export default function FinancialReport() {
             <div className="overflow-x-auto scroll-x-fade">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800 text-xs uppercase text-gray-500 dark:text-gray-400">
+                <tr className="bg-gray-50 dark:bg-[#141416] text-xs uppercase text-gray-500 dark:text-gray-400">
                   <th className="px-6 py-2 text-left font-semibold">Account / Description</th>
                   <th className="px-6 py-2 text-right font-semibold">Amount ({baseCurrencySymbol})</th>
                 </tr>
@@ -1698,7 +1698,7 @@ export default function FinancialReport() {
                           if (!item.visible) return null
                           const val = getItemBalance(item, balances, operationalBalances)
                           return (
-                            <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                            <tr key={item.id} className="border-b border-gray-100 dark:border-white/[0.06] hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
                               <td className="px-8 py-2 text-gray-700 dark:text-gray-300">{item.displayLabel}</td>
                               <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{baseCurrencySymbol}{fmt(val, formatLocale)}</td>
                             </tr>
@@ -1709,7 +1709,7 @@ export default function FinancialReport() {
                           const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, operationalBalances), 0)
                           return (
                             <>
-                              <tr key={`sgh-${sg.id}`} className="bg-gray-50/80 dark:bg-gray-800/40">
+                              <tr key={`sgh-${sg.id}`} className="bg-gray-50/80 dark:bg-[#141416]/40">
                                 <td colSpan={2} className="px-8 py-1.5 text-xs font-semibold italic text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                                   {sg.label}
                                 </td>
@@ -1717,14 +1717,14 @@ export default function FinancialReport() {
                               {sg.items.filter(i => i.visible).map(item => {
                                 const val = getItemBalance(item, balances, operationalBalances)
                                 return (
-                                  <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800">
+                                  <tr key={item.id} className="border-b border-gray-100 dark:border-white/[0.07]">
                                     <td className="px-12 py-2 text-gray-600 dark:text-gray-400">{item.displayLabel}</td>
                                     <td className="px-6 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{baseCurrencySymbol}{fmt(val, formatLocale)}</td>
                                   </tr>
                                 )
                               })}
-                              <tr key={`sgs-${sg.id}`} className="bg-gray-100/60 dark:bg-gray-800/30">
-                                <td className="px-8 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{sg.label} Sub-Total</td>
+                              <tr key={`sgs-${sg.id}`} className="bg-gray-100/60 dark:bg-[#141416]/30">
+                                <td className="px-8 py-1 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{sg.label} Sub-Total</td>
                                 <td className="px-6 py-1 text-right font-mono font-bold text-xs">{baseCurrencySymbol}{fmt(sgTotal, formatLocale)}</td>
                               </tr>
                             </>
@@ -1732,7 +1732,7 @@ export default function FinancialReport() {
                         }
                       })}
 
-                      <tr key={`gs-${group.id}`} className="bg-gray-100 dark:bg-gray-800">
+                      <tr key={`gs-${group.id}`} className="bg-gray-100 dark:bg-[#141416]">
                         <td className="px-6 py-2 font-semibold text-xs uppercase tracking-wide text-gray-600 dark:text-gray-400">
                           {group.label} Sub-Total
                         </td>
@@ -1801,7 +1801,7 @@ export default function FinancialReport() {
               onAdd={addItem}
             />
           ) : (
-            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-4 text-center text-sm text-gray-500">
+            <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/[0.10] p-4 text-center text-sm text-gray-500">
               Add a table with a group first.
             </div>
           )}
@@ -1817,7 +1817,7 @@ export default function FinancialReport() {
         {/* Right: layout builder */}
         <div className="lg:col-span-2 space-y-4">
           {tables.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-8 text-center text-gray-400">
+            <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/[0.10] p-8 text-center text-gray-400">
               <p className="text-sm">No tables yet.</p>
               <p className="text-xs mt-1">Click <strong>Add Table</strong> to get started.</p>
             </div>
@@ -1880,7 +1880,7 @@ export default function FinancialReport() {
             const loc = findItem(tables, id)
             if (!loc) return null
             return (
-              <div className="px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-primary shadow-lg text-sm font-medium">
+              <div className="px-3 py-2 rounded-lg bg-white dark:bg-[#141416] border border-primary shadow-lg text-sm font-medium">
                 {loc.item.displayLabel}
               </div>
             )
@@ -1940,7 +1940,7 @@ export default function FinancialReport() {
         <div className="flex flex-wrap items-center gap-2">
 
           {/* Date picker */}
-          <div className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 bg-white dark:bg-gray-800 text-sm">
+          <div className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm">
             <span className="text-gray-500 text-xs">Date:</span>
             <input
               type="date"
@@ -1954,7 +1954,7 @@ export default function FinancialReport() {
           <select
             value={reportBasis}
             onChange={e => setReportBasis(e.target.value as ReportBasis)}
-            className="rounded-lg border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-xs bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+            className="rounded-lg border border-gray-300 dark:border-white/[0.10] px-2 py-1.5 text-xs bg-white dark:bg-[#141416] text-gray-700 dark:text-gray-200"
             title="Report basis"
           >
             <option value="transaction_date">Transaction Date</option>
@@ -1966,7 +1966,7 @@ export default function FinancialReport() {
             type="button"
             onClick={() => refetch()}
             disabled={loading}
-            className="touch-target p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+            className="touch-target p-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] bg-white dark:bg-[#141416] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
             title="Refresh balances" aria-label="Refresh balances"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -1977,7 +1977,7 @@ export default function FinancialReport() {
             <button
               type="button"
               onClick={() => setTplMenuOpen(p => !p)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <Settings2 className="w-3.5 h-3.5" />
               {selectedTpl ? selectedTpl.name : 'Templates'}
@@ -1986,8 +1986,8 @@ export default function FinancialReport() {
             </button>
 
             {tplMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-60 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-20 py-1">
-                <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Saved Templates</div>
+              <div className="absolute right-0 top-full mt-1 w-60 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] shadow-xl z-20 py-1">
+                <div className="px-3 py-1.5 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest uppercase tracking-wide">Saved Templates</div>
                 {templates.length === 0 && (
                   <p className="px-3 py-2 text-xs text-gray-500">No templates yet</p>
                 )}
@@ -2021,7 +2021,7 @@ export default function FinancialReport() {
                     </div>
                   )
                 })}
-                <div className="border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">
+                <div className="border-t border-gray-100 dark:border-white/[0.07] mt-1 pt-1">
                   <button
                     type="button"
                     onClick={() => { setSelectedTplId(null); setTables([]); setTplMenuOpen(false) }}
@@ -2041,7 +2041,7 @@ export default function FinancialReport() {
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
               editMode
                 ? 'bg-primary text-white shadow-sm'
-                : 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50'
+                : 'border border-gray-300 dark:border-white/[0.10] bg-white dark:bg-[#141416] text-gray-700 dark:text-gray-200 hover:bg-gray-50'
             }`}
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -2053,7 +2053,7 @@ export default function FinancialReport() {
             <button
               type="button"
               onClick={() => setSaveModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <Save className="w-3.5 h-3.5" />
               Save Template
@@ -2065,7 +2065,7 @@ export default function FinancialReport() {
             <button
               type="button"
               onClick={() => exportReportPDF(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <Download className="w-3.5 h-3.5" />
               PDF
@@ -2077,7 +2077,7 @@ export default function FinancialReport() {
             <button
               type="button"
               onClick={() => exportReportExcel(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               Excel

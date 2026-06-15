@@ -137,10 +137,10 @@ export function CommandPalette({ open, onClose }: Props) {
       />
 
       {/* Panel */}
-      <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="relative w-full max-w-lg bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl border border-gray-200 dark:border-white/[0.07] overflow-hidden">
 
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/[0.07]">
           <Search className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
           <input
             ref={inputRef}
@@ -203,7 +203,7 @@ export function CommandPalette({ open, onClose }: Props) {
           })}
         </ul>
 
-        <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3 text-xs text-gray-500">
+        <div className="px-4 py-2 border-t border-gray-100 dark:border-white/[0.07] flex items-center gap-3 text-xs text-gray-500">
           <span><kbd className="font-mono">↑↓</kbd> navigate</span>
           <span><kbd className="font-mono">Enter</kbd> go</span>
           <span><kbd className="font-mono">Esc</kbd> close</span>

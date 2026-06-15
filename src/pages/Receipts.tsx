@@ -141,7 +141,7 @@ export default function Receipts() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Receipts</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Receipts</h1>
           <p className="text-sm text-gray-500 mt-0.5">All uploaded receipt files</p>
         </div>
         <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={sortedReceipts.length === 0} />

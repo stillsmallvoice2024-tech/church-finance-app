@@ -43,8 +43,8 @@ export function renderMarkdown(raw: string): JSX.Element {
         const headers = headerLine.split('|').filter(Boolean).map(c => c.trim())
         elements.push(
           <div key={`tbl-${i}`} className="overflow-x-auto my-3">
-            <table className="min-w-full text-xs border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-              <thead className="bg-gray-100 dark:bg-gray-800">
+            <table className="min-w-full text-xs border border-gray-200 dark:border-white/[0.07] rounded-lg overflow-hidden">
+              <thead className="bg-gray-100 dark:bg-[#141416]">
                 <tr>
                   {headers.map((h, hi) => (
                     <th key={hi} className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">
@@ -57,7 +57,7 @@ export function renderMarkdown(raw: string): JSX.Element {
                 {bodyLines.map((row, ri) => {
                   const cells = row.split('|').filter(Boolean).map(c => c.trim())
                   return (
-                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-850'}>
+                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white dark:bg-[#0c0c0e]' : 'bg-gray-50 dark:bg-white/[0.03]'}>
                       {cells.map((cell, ci) => (
                         <td key={ci} className="px-3 py-1.5 text-gray-700 dark:text-gray-300">
                           <InlineMarkdown text={cell} />
@@ -145,7 +145,7 @@ export function InlineMarkdown({ text }: { text: string }) {
     if (m[1] !== undefined) {
       parts.push(<strong key={m.index} className="font-semibold text-gray-900 dark:text-gray-100">{m[1]}</strong>)
     } else {
-      parts.push(<code key={m.index} className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">{m[2]}</code>)
+      parts.push(<code key={m.index} className="font-mono text-xs bg-gray-100 dark:bg-[#141416] px-1 py-0.5 rounded">{m[2]}</code>)
     }
     last = m.index + m[0].length
   }

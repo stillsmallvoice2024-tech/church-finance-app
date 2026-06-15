@@ -38,7 +38,7 @@ export function HelpButton({ tourId, label, size = 'md', className = '' }: HelpB
         text-gray-500 hover:text-primary
         border border-gray-200 hover:border-primary/40
         hover:bg-primary/5 dark:hover:bg-primary/10
-        dark:text-gray-400 dark:border-gray-700 dark:hover:text-primary
+        dark:text-gray-400 dark:border-white/[0.07] dark:hover:text-primary
         transition-colors focus-visible:outline-none focus-visible:ring-2
         focus-visible:ring-primary/50
         ${padding} ${textSize} ${className}

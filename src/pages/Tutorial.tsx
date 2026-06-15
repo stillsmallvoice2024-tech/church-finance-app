@@ -23,7 +23,7 @@ function ChapterNav({ activeId }: { activeId?: string }) {
             className={`shrink-0 w-6 h-6 rounded-md text-xs font-bold flex items-center justify-center ${
               c.id === activeId
                 ? 'bg-primary text-white'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                : 'bg-gray-100 dark:bg-[#141416] text-gray-500 dark:text-gray-400'
             }`}
           >
             {c.number}
@@ -53,7 +53,7 @@ function ChapterListView() {
           <GraduationCap className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">App Tutorial</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">App Tutorial</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Every page explained in simple steps — start at Chapter 1 or jump to any topic.
           </p>
@@ -67,7 +67,7 @@ function ChapterListView() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search the tutorial…"
-          className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+          className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-white/[0.07] rounded-lg bg-white dark:bg-[#141416] text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
         />
       </div>
 
@@ -85,7 +85,7 @@ function ChapterListView() {
             <Link
               key={c.id}
               to={`/tutorial/${c.id}`}
-              className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/40 hover:shadow-sm transition-all group"
+              className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] hover:border-primary/40 hover:shadow-sm transition-all group"
             >
               <span className="shrink-0 w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center mt-0.5">
                 {c.number}
@@ -152,11 +152,11 @@ function ChapterView({ chapterId }: { chapterId: string }) {
           All Chapters
         </Link>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 lg:p-8">
+        <div className="bg-white dark:bg-[#141416] rounded-xl border border-gray-200 dark:border-white/[0.07] p-5 lg:p-8">
           <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">
             Chapter {chapter.number} of {TUTORIAL_CHAPTERS.length}
           </p>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-1">{chapter.title}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50 mb-1">{chapter.title}</h1>
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">Updated {chapter.updatedAt}</p>
           {renderMarkdown(chapter.content)}
         </div>
@@ -166,7 +166,7 @@ function ChapterView({ chapterId }: { chapterId: string }) {
           {prev ? (
             <Link
               to={`/tutorial/${prev.id}`}
-              className="flex-1 flex items-center gap-2 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/40 transition-colors group"
+              className="flex-1 flex items-center gap-2 p-3 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] hover:border-primary/40 transition-colors group"
             >
               <ArrowLeft className="w-4 h-4 text-gray-400 group-hover:text-primary shrink-0" />
               <div className="min-w-0 text-left">
@@ -180,7 +180,7 @@ function ChapterView({ chapterId }: { chapterId: string }) {
           {next ? (
             <Link
               to={`/tutorial/${next.id}`}
-              className="flex-1 flex items-center justify-end gap-2 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/40 transition-colors group"
+              className="flex-1 flex items-center justify-end gap-2 p-3 rounded-xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#141416] hover:border-primary/40 transition-colors group"
             >
               <div className="min-w-0 text-right">
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Next</p>

@@ -169,7 +169,7 @@ export default function Onboarding() {
           <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-lg">
             <AppIcon />
           </div>
-          <h1 className="text-3xl font-semibold text-gray-900">
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
             {isNewOrg ? 'New Organisation' : 'Welcome!'}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -324,7 +324,7 @@ export default function Onboarding() {
                 <p className="mt-1 text-sm text-gray-500">Review your setup before entering the app.</p>
               </div>
 
-              <div className="rounded-xl bg-gray-50 border border-gray-100 divide-y divide-gray-100">
+              <div className="rounded-xl bg-gray-50 border border-gray-100 divide-y divide-black/[0.05]">
                 {[
                   { label: 'Organisation',       value: name },
                   { label: 'Currency',           value: currency },

@@ -17,20 +17,24 @@ export function StatCard({
   value,
   icon,
   trend,
-  iconBgClass = 'bg-primary-100',
+  iconBgClass = 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-dm',
   href,
 }: StatCardProps) {
   const isPositive = (trend?.value ?? 0) >= 0
 
   const inner = (
-    <div className="flex items-start justify-between">
+    <div className="flex items-start justify-between gap-4">
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-500 truncate">{title}</p>
-        <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1.5 tabular-nums">{value}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 truncate">
+          {title}
+        </p>
+        <p className="text-3xl font-extrabold tracking-tight text-gray-900 mt-2 tabular-nums leading-none">
+          {value}
+        </p>
         {trend && (
           <div
-            className={`flex items-center gap-1 mt-2 text-xs font-medium ${
-              isPositive ? 'text-success' : 'text-danger'
+            className={`flex items-center gap-1 mt-2.5 text-xs font-semibold ${
+              isPositive ? 'text-success dark:text-success-dm' : 'text-danger dark:text-danger-dm'
             }`}
           >
             {isPositive ? (
@@ -44,19 +48,22 @@ export function StatCard({
           </div>
         )}
       </div>
-      <div className={`p-2.5 rounded-lg shrink-0 ml-4 ${iconBgClass}`}>{icon}</div>
+      {/* Round icon container — premium over the generic square rounded-lg */}
+      <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${iconBgClass}`}>
+        {icon}
+      </div>
     </div>
   )
 
   if (href) {
     return (
-      <Link to={href} className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-2xl">
-        <Card className="border-l-4 border-l-primary transition-shadow group-hover:shadow-md group-hover:ring-2 group-hover:ring-primary/20 cursor-pointer">
+      <Link to={href} className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl">
+        <Card className="transition-shadow group-hover:shadow-card-md group-hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10)] cursor-pointer dark:group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.09),0_4px_16px_rgba(0,0,0,0.5)]">
           {inner}
         </Card>
       </Link>
     )
   }
 
-  return <Card className="border-l-4 border-l-primary">{inner}</Card>
+  return <Card>{inner}</Card>
 }

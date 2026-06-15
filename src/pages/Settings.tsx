@@ -147,7 +147,7 @@ export default function Settings() {
       {/* Header */}
       <div data-tour="page-header" className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Settings</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Settings</h1>
           <p className="text-sm text-gray-500 mt-0.5">Manage your account and preferences</p>
         </div>
         <HelpButton tourId="settingsTour" size="sm" />
@@ -346,7 +346,7 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={() => setMfaEnrollOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <Shield className="w-4 h-4 text-primary" />
                 Enable 2FA
@@ -426,7 +426,7 @@ export default function Settings() {
 
             <button
               onClick={() => setExportOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
             >
               <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
                 <FileDown className="w-4 h-4 text-gray-500" />
@@ -590,7 +590,7 @@ function ReceiptMigrationPanel() {
         )}
 
         {stats && (
-          <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 text-sm overflow-hidden">
+          <div className="rounded-xl border border-gray-200 divide-y divide-black/[0.05] text-sm overflow-hidden">
             <div className="flex justify-between px-4 py-2.5 bg-gray-50">
               <span className="text-gray-500">Total legacy files found</span>
               <span className="font-medium">{stats.total}</span>

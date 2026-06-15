@@ -956,7 +956,7 @@ function DepartmentBreakdownPanel() {
             <div className="overflow-x-auto rounded-xl border border-gray-100">
               <table className="w-full text-sm table-sticky-col">
                 <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                     <th className="px-4 py-3 text-left font-medium">Date</th>
                     <th className="px-4 py-3 text-left font-medium">Description</th>
                     <th className="px-4 py-3 text-left font-medium">Outflow Type</th>
@@ -1164,7 +1164,7 @@ export default function Reports() {
       {/* Header */}
       <div data-tour="page-header" className="flex items-center justify-between print:hidden">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Reports</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Reports</h1>
           <p className="text-sm text-gray-500 mt-0.5">Financial summaries and analytics</p>
         </div>
         <div className="flex items-center gap-2">
@@ -1228,7 +1228,7 @@ export default function Reports() {
 
       {/* Print-only heading */}
       <div className="hidden print:block mb-4">
-        <h1 className="text-3xl font-semibold text-gray-900">Organisation Finance Report</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Organisation Finance Report</h1>
         <p className="text-sm text-gray-500">Generated: {new Date().toLocaleDateString()}</p>
       </div>
 

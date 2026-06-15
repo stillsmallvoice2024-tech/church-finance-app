@@ -810,7 +810,7 @@ export default function CategoryLedger() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Category Accounts</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Category Accounts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {viewMode === 'summary' ? 'Aggregated view of all fund balances per category' :
              viewMode === 'ledger'  ? 'Transaction-level view per category and fund type' :
@@ -847,7 +847,7 @@ export default function CategoryLedger() {
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={exportDisabled} />
           <button
             onClick={() => viewMode === 'summary' ? loadSummary() : viewMode === 'ledger' ? loadLedger() : refetchFx()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
@@ -971,7 +971,7 @@ export default function CategoryLedger() {
                 <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                      <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                         <SortableHeader
                           field={SUMMARY_SORT_FIELDS[0]}
                           activeSortKey={summaryViewState.sortKey}
@@ -1030,7 +1030,7 @@ export default function CategoryLedger() {
                         const ungroupedRows = summaryPage.filter(r => !nameToGroupId.get(r.name))
 
                         const CategoryDataRow = ({ row }: { row: CategoryRow }) => (
-                          <tr className="hover:bg-gray-50 transition-colors">
+                          <tr className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                             <td className="px-5 py-3 font-medium text-gray-800">{row.name}</td>
                             <td className="px-4 py-3 text-right">
                               {row.percentage !== null
@@ -1273,7 +1273,7 @@ export default function CategoryLedger() {
                     <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                          <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                             <SortableHeader
                               field={LEDGER_SORT_FIELDS[0]}
                               activeSortKey={ledgerViewState.sortKey}
@@ -1590,7 +1590,7 @@ export default function CategoryLedger() {
               <div className="overflow-x-auto scroll-x-fade">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
+                    <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">CCY</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-success uppercase tracking-wide">Deposit</th>

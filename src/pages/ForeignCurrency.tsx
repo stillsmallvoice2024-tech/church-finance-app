@@ -144,7 +144,7 @@ export default function ForeignCurrency() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Foreign Currency</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Foreign Currency</h1>
           <p className="text-sm text-gray-500 mt-0.5">FX holdings in foreign currencies</p>
         </div>
         {canWrite() && (

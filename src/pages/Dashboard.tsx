@@ -41,6 +41,7 @@ import { getOrgTimezone }          from '../utils/timezones'
 import { useHealthStore }          from '../store/healthStore'
 import { useCountUp }              from '../hooks/useCountUp'
 import { ConfidenceGauge }         from '../components/ui/ConfidenceGauge'
+import { useThemeStore }           from '../store/themeStore'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,8 @@ export default function Dashboard() {
   const { user, profile } = useAuth()
   const { foreignCurrencies, baseCurrencyCode } = useOrgCurrency()
   const { role } = useRole()
+  const { theme } = useThemeStore()
+  const isDark = theme === 'dark'
   const year        = useAccountingYearStore(s => s.year)
   const storedTz    = useOrgStore(s => s.timezone)
   const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
@@ -207,9 +210,9 @@ export default function Dashboard() {
         )}
 
         {/* ── Welcome + Quick Actions ──────────────────────────────────────── */}
-        <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-gray-100">
+        <div data-tour="dashboard-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-black/[0.06] dark:border-white/[0.07]">
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900">
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
               {greeting()}, {firstName}
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
@@ -233,14 +236,14 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={() => setShowAddOutflow(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <MinusCircle className="w-4 h-4" />
                 Add Outflow
               </button>
               <button
                 onClick={() => setShowImport(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 Import
@@ -337,29 +340,29 @@ export default function Dashboard() {
               <StatCard
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingUp className="w-5 h-5 text-success" />}
-                iconBgClass="bg-green-50"
+                icon={<TrendingUp className="w-5 h-5 text-success dark:text-success-dm" />}
+                iconBgClass="bg-success/10 dark:bg-success/15"
                 href="/inflows"
               />
               <StatCard
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingDown className="w-5 h-5 text-danger" />}
-                iconBgClass="bg-red-50"
+                icon={<TrendingDown className="w-5 h-5 text-danger dark:text-danger-dm" />}
+                iconBgClass="bg-danger/10 dark:bg-danger/15"
                 href="/outflows"
               />
               <StatCard
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<Wallet className="w-5 h-5 text-primary" />}
-                iconBgClass="bg-primary-100"
+                icon={<Wallet className="w-5 h-5 text-primary dark:text-primary-dm" />}
+                iconBgClass="bg-primary/10 dark:bg-primary/20"
                 href="/bank-ledger"
               />
               <StatCard
                 title="Categories"
                 value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
-                icon={<Layers className="w-5 h-5 text-accent" />}
-                iconBgClass="bg-yellow-50"
+                icon={<Layers className="w-5 h-5 text-accent dark:text-accent-dm" />}
+                iconBgClass="bg-accent/10 dark:bg-accent/15"
                 href="/categories"
               />
             </>
@@ -412,28 +415,35 @@ export default function Dashboard() {
                   <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#065F46" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#065F46" stopOpacity={0} />
+                        <stop offset="5%"  stopColor={isDark ? '#4ade80' : '#16A34A'} stopOpacity={isDark ? 0.20 : 0.15} />
+                        <stop offset="95%" stopColor={isDark ? '#4ade80' : '#16A34A'} stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="outflowGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#991B1B" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#991B1B" stopOpacity={0} />
+                        <stop offset="5%"  stopColor={isDark ? '#f87171' : '#DC2626'} stopOpacity={isDark ? 0.20 : 0.15} />
+                        <stop offset="95%" stopColor={isDark ? '#f87171' : '#DC2626'} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                    <CartesianGrid strokeDasharray="0" stroke={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} horizontal={true} vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: isDark ? 'rgba(255,255,255,0.35)' : '#9CA3AF', fontWeight: 600 }} axisLine={false} tickLine={false} />
                     <YAxis
                       tickFormatter={v => formatCurrencyCompact(v, baseCurrencyCode)}
-                      tick={{ fontSize: 11, fill: '#6B7280' }}
+                      tick={{ fontSize: 10, fill: isDark ? 'rgba(255,255,255,0.35)' : '#9CA3AF', fontWeight: 600 }}
                       axisLine={false} tickLine={false} width={64}
                     />
                     <Tooltip
                       formatter={(v: number) => [formatCurrencyCompact(v, baseCurrencyCode)]}
-                      contentStyle={{ borderRadius: '0.75rem', border: '1px solid #E5E7EB', fontSize: '13px' }}
+                      contentStyle={{
+                        borderRadius: '0.75rem',
+                        border: isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(0,0,0,0.07)',
+                        background: isDark ? '#1c1c1e' : '#fff',
+                        color: isDark ? 'rgba(255,255,255,0.90)' : '#111',
+                        fontSize: '13px', fontWeight: 600,
+                        boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.5)' : '0 4px 12px rgba(0,0,0,0.08)',
+                      }}
                     />
-                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '13px' }} />
-                    <Area type="monotone" dataKey="inflow"  name="Inflows"  stroke="#065F46" strokeWidth={2} fill="url(#inflowGrad)" />
-                    <Area type="monotone" dataKey="outflow" name="Outflows" stroke="#991B1B" strokeWidth={2} fill="url(#outflowGrad)" />
+                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '12px', fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.45)' : '#6B7280' }} />
+                    <Area type="monotone" dataKey="inflow"  name="Inflows"  stroke={isDark ? '#4ade80' : '#16A34A'} strokeWidth={2} fill="url(#inflowGrad)" />
+                    <Area type="monotone" dataKey="outflow" name="Outflows" stroke={isDark ? '#f87171' : '#DC2626'} strokeWidth={2} fill="url(#outflowGrad)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -471,7 +481,7 @@ export default function Dashboard() {
           </div>
 
           {isLoading ? (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-black/[0.05]">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4 px-6 py-3 animate-pulse">
                   <div className="h-4 bg-gray-100 rounded w-20 shrink-0" />
@@ -483,9 +493,9 @@ export default function Dashboard() {
           ) : stats.recentTransactions.length === 0 ? (
             <EmptyState icon={TrendingUp} title="No recent transactions." compact />
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-black/[0.05]">
               {stats.recentTransactions.map(tx => (
-                <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 transition-colors">
+                <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                   <span className="text-xs text-gray-500 whitespace-nowrap w-20 shrink-0">
                     {formatDate(tx.date)}
                   </span>

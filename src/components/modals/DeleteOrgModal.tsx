@@ -196,7 +196,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
                 value={pw}
                 onChange={e => setPw(e.target.value)}
                 autoFocus
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 pr-10 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full rounded-lg border border-gray-300 dark:border-white/[0.10] bg-white dark:bg-[#141416] px-3 py-2 pr-10 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
                 placeholder="Your account password"
               />
               <button
@@ -216,7 +216,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => setPhase('warning')}
-              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="flex-1 rounded-lg border border-gray-300 dark:border-white/[0.10] px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               Back
             </button>
@@ -251,12 +251,12 @@ export function DeleteOrgModal({ open, onClose }: Props) {
               onChange={e => setTyped(e.target.value)}
               autoFocus
               autoComplete="off"
-              className={`w-full rounded-lg border px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 transition-colors ${
+              className={`w-full rounded-lg border px-3 py-2 text-sm bg-white dark:bg-[#141416] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 transition-colors ${
                 typed && !nameMatches
                   ? 'border-red-400 dark:border-red-600 focus:ring-red-400'
                   : nameMatches
                   ? 'border-green-400 dark:border-green-600 focus:ring-green-400'
-                  : 'border-gray-300 dark:border-gray-600 focus:ring-red-500'
+                  : 'border-gray-300 dark:border-white/[0.10] focus:ring-red-500'
               }`}
               placeholder="Organisation name"
             />
@@ -269,7 +269,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => setPhase('reauth')}
-              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="flex-1 rounded-lg border border-gray-300 dark:border-white/[0.10] px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               Back
             </button>
@@ -319,13 +319,13 @@ export function DeleteOrgModal({ open, onClose }: Props) {
               </div>
 
               {/* Backup download */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-2">
+              <div className="rounded-lg border border-gray-200 dark:border-white/[0.07] bg-gray-50 dark:bg-[#141416] p-3 space-y-2">
                 <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
                   Your backup was downloaded automatically.
                 </p>
                 <button
                   onClick={del.downloadBackupNow}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="w-full flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   <Download className="w-4 h-4" />
                   Download again (.json)
@@ -342,7 +342,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
                   <button
                     key={m.org_id}
                     onClick={() => handleSwitchOrg(m)}
-                    className="w-full flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    className="w-full flex items-center gap-3 rounded-lg border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-[#0c0c0e] px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
                     <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
@@ -353,7 +353,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
 
                 <button
                   onClick={handleCreateOrg}
-                  className="w-full flex items-center gap-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  className="w-full flex items-center gap-3 rounded-lg border border-dashed border-gray-300 dark:border-white/[0.10] px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <PlusCircle className="w-4 h-4 text-gray-400 shrink-0" />
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
@@ -364,7 +364,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
                 {activeAlternativeOrgs.length === 0 && (
                   <button
                     onClick={handleViewLocked}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    className="w-full rounded-lg border border-gray-300 dark:border-white/[0.10] px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     View locked organisation
                   </button>
@@ -382,7 +382,7 @@ export function DeleteOrgModal({ open, onClose }: Props) {
               <div className="flex gap-2">
                 <button
                   onClick={() => { del.reset(); setPhase('warning'); setTyped('') }}
-                  className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="flex-1 rounded-lg border border-gray-300 dark:border-white/[0.10] px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Start over
                 </button>

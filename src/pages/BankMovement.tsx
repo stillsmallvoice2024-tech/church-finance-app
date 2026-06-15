@@ -110,7 +110,7 @@ export default function BankMovement() {
       </PageHelpBanner>
 
       <div className="pb-4 border-b border-gray-100">
-        <h1 className="text-3xl font-semibold text-gray-900">Bank Deposits &amp; Transfers</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Bank Deposits &amp; Transfers</h1>
         <p className="text-sm text-gray-500 mt-0.5">Deposits into banks and transfers between banks</p>
       </div>
 
@@ -424,7 +424,7 @@ function DepositsPanel() {
       {/* Reconciliation panel */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <button onClick={toggleRecon}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
           <span className="flex items-center gap-2"><Landmark className="w-4 h-4 text-primary" />Reconciliation — Tagged Inflows vs Tagged Outflows</span>
           {showRecon ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
         </button>
@@ -526,9 +526,9 @@ function DepositsPanel() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="w-8" />
-                  <SortableHeader field={BD_SORT_FIELDS[0]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <SortableHeader field={BD_SORT_FIELDS[2]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <SortableHeader field={BD_SORT_FIELDS[1]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" />
+                  <SortableHeader field={BD_SORT_FIELDS[0]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3" />
+                  <SortableHeader field={BD_SORT_FIELDS[2]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} className="px-4 py-3" />
+                  <SortableHeader field={BD_SORT_FIELDS[1]} activeSortKey={bdState.sortKey} activeSortDir={bdState.sortDir} onSort={bdState.setSort} rightAlign className="px-4 py-3" />
                   {['Description', 'Remarks', 'Source', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
@@ -542,7 +542,7 @@ function DepositsPanel() {
                 ) : pagedRows.flatMap(row => {
                   const isExpanded = expandedId === `${row.source}-${row.id}`
                   return [
-                    <tr key={`${row.source}-${row.id}`} className="hover:bg-gray-50 transition-colors">
+                    <tr key={`${row.source}-${row.id}`} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="w-8 px-1 py-3">
                         <button onClick={() => setExpandedId(isExpanded ? null : `${row.source}-${row.id}`)}
                           className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
@@ -871,7 +871,7 @@ function TransfersPanel() {
                 ) : filtered.flatMap(row => {
                   const isExpanded = expandedId === row.id
                   return [
-                    <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={row.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="w-8 px-1 py-3">
                         <button onClick={() => setExpandedId(isExpanded ? null : row.id)}
                           className="touch-target p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
