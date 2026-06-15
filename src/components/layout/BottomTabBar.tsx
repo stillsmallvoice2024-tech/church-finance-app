@@ -41,7 +41,7 @@ interface DrawerSection {
 
 const DRAWER_SECTIONS: DrawerSection[] = [
   {
-    label: 'Daily Finance',
+    label: 'Finance',
     items: [
       { label: 'Import',            path: '/import',           icon: FileUp,         canWriteOnly: true },
       { label: 'Category Fund Transfers', path: '/intra-flow',      icon: Repeat2        },

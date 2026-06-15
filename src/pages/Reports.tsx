@@ -1228,7 +1228,7 @@ export default function Reports() {
 
       {/* Print-only heading */}
       <div className="hidden print:block mb-4">
-        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Organisation Finance Report</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Clariva Financial Report</h1>
         <p className="text-sm text-gray-500">Generated: {new Date().toLocaleDateString()}</p>
       </div>
 

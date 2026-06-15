@@ -35,7 +35,7 @@ export function OrgSwitcher() {
             className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-primary dark:text-gray-200 dark:hover:text-accent transition-colors rounded-lg px-1.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <Building2 className="w-4 h-4 shrink-0 text-gray-400" />
-            <span className="max-w-[180px] truncate">{orgName ?? 'Finance'}</span>
+            <span className="max-w-[180px] truncate">{orgName ?? 'Clariva'}</span>
             <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
           </button>
           {open && (
@@ -75,7 +75,7 @@ export function OrgSwitcher() {
           ? <Loader2 className="w-4 h-4 shrink-0 animate-spin text-gray-400" />
           : <Building2 className="w-4 h-4 shrink-0 text-gray-400" />
         }
-        <span className="max-w-[160px] truncate">{orgName ?? 'Finance'}</span>
+        <span className="max-w-[160px] truncate">{orgName ?? 'Clariva'}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 

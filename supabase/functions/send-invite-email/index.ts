@@ -10,8 +10,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const RESEND_API_KEY       = Deno.env.get('RESEND_API_KEY')
-const FROM_ADDRESS         = Deno.env.get('INVITE_FROM_ADDRESS') ?? 'Church Finance <noreply@churchfinance.app>'
-const APP_URL              = Deno.env.get('APP_URL') ?? 'https://churchfinance.app'
+const FROM_ADDRESS         = Deno.env.get('INVITE_FROM_ADDRESS') ?? 'Clariva <noreply@clariva.app>'
+const APP_URL              = Deno.env.get('APP_URL') ?? 'https://clariva.app'
 
 // Duplicate suppression window: skip re-send if a successful email was logged within this many ms
 const DEDUP_WINDOW_MS = 60_000
@@ -52,11 +52,11 @@ function buildHtml(params: {
       <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7;">
 
         <!-- Header -->
-        <tr><td style="background:#1d4ed8;padding:28px 40px;">
+        <tr><td style="background:#0D7377;padding:28px 40px;">
           <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">
-            Church Finance
+            Clariva
           </h1>
-          <p style="margin:6px 0 0;color:#bfdbfe;font-size:13px;">Organisation Finance Management</p>
+          <p style="margin:6px 0 0;color:#C8E8E6;font-size:13px;">Financial Stewardship Platform</p>
         </td></tr>
 
         <!-- Body -->
@@ -69,12 +69,12 @@ function buildHtml(params: {
             <strong>${org_name}</strong> as a <strong>${roleLabel}</strong>.
           </p>
           <p style="margin:0 0 28px;color:#6b7280;font-size:14px;line-height:1.6;">
-            Click the button below to accept the invitation, set up your account, and start collaborating.
+            Click the button below to accept the invitation, set up your account, and start collaborating on Clariva.
           </p>
 
           <!-- CTA Button -->
           <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-            <tr><td style="background:#1d4ed8;border-radius:8px;">
+            <tr><td style="background:#0D7377;border-radius:8px;">
               <a href="${invite_url}"
                  style="display:block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;white-space:nowrap;">
                 Accept Invitation →
@@ -85,7 +85,7 @@ function buildHtml(params: {
           <!-- Link fallback -->
           <p style="margin:0 0 8px;color:#6b7280;font-size:12px;">Or copy and paste this link into your browser:</p>
           <p style="margin:0 0 28px;font-size:12px;word-break:break-all;">
-            <a href="${invite_url}" style="color:#1d4ed8;">${invite_url}</a>
+            <a href="${invite_url}" style="color:#0D7377;">${invite_url}</a>
           </p>
 
           <!-- Expiry notice -->
@@ -101,7 +101,7 @@ function buildHtml(params: {
         <tr><td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #e4e4e7;">
           <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">
             If you weren't expecting this invitation, you can safely ignore this email.
-            This message was sent by Church Finance on behalf of ${org_name}.
+            This message was sent by Clariva on behalf of ${org_name}.
           </p>
         </td></tr>
 
