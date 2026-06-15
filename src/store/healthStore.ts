@@ -30,6 +30,8 @@ interface HealthState {
   setHealth:  (status: HealthStatus, runAt: string) => void
   /** Dismiss (grey-out) both the Dashboard strip and TopBar badge. */
   setSkipped: (v: boolean) => void
+  /** Clear all health state and localStorage — call on org switch or sign-out. */
+  clearHealth: () => void
 }
 
 const stored = readHealth()
@@ -63,5 +65,14 @@ export const useHealthStore = create<HealthState>((set, get) => ({
       else   localStorage.removeItem(SKIPPED_KEY)
     } catch { /* storage unavailable */ }
     set({ skipped: v })
+  },
+
+  clearHealth: () => {
+    try {
+      localStorage.removeItem(HEALTH_KEY)
+      localStorage.removeItem(SKIPPED_KEY)
+      localStorage.removeItem(CLEAN_KEY)
+    } catch { /* storage unavailable */ }
+    set({ status: null, runAt: null, skipped: false, cleanSince: null })
   },
 }))

@@ -7,6 +7,7 @@ interface TransactionSyncState {
   bumpIntraflow:    () => void
   inflowVersion:    number
   bumpInflow:       () => void
+  reset:            () => void
 }
 
 export const useTransactionSyncStore = create<TransactionSyncState>((set) => ({
@@ -16,4 +17,5 @@ export const useTransactionSyncStore = create<TransactionSyncState>((set) => ({
   bumpIntraflow:    () => set(s => ({ intraflowVersion: s.intraflowVersion + 1 })),
   inflowVersion:    0,
   bumpInflow:       () => set(s => ({ inflowVersion:    s.inflowVersion    + 1 })),
+  reset:            () => set({ outflowVersion: 0, intraflowVersion: 0, inflowVersion: 0 }),
 }))
