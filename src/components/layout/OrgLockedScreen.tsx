@@ -129,7 +129,7 @@ export function OrgLockedScreen() {
             </button>
           ))}
           <button
-            onClick={() => navigate('/onboarding')}
+            onClick={() => navigate('/onboarding?new=true')}
             className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <PlusCircle className="w-4 h-4 text-gray-400 shrink-0" />

@@ -76,9 +76,9 @@
 | Display / Hero | Plus Jakarta Sans Bold | 48–72px |
 | Heading H1 | Plus Jakarta Sans SemiBold | 32–40px |
 | Heading H2 | Plus Jakarta Sans Medium | 24–28px |
-| Body Text | Inter Regular | 16–18px |
-| Body Emphasis | Inter SemiBold | 16–18px |
-| UI Labels | Inter Medium | 12–14px |
+| Body Text | Nunito sans Regular | 16–18px |
+| Body Emphasis | Nunito sans SemiBold | 16–18px |
+| UI Labels | Nunito sans Medium | 12–14px |
 | Data / Numbers | JetBrains Mono | 14–16px |
 | Print / Reports | Lora Serif | 11–12pt |
 
