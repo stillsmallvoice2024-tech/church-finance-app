@@ -10,6 +10,7 @@ interface StatCardProps {
   trend?: { value: number; label: string }
   iconBgClass?: string
   href?: string
+  variant?: 'default' | 'brand'
 }
 
 export function StatCard({
@@ -19,22 +20,26 @@ export function StatCard({
   trend,
   iconBgClass = 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-dm',
   href,
+  variant = 'default',
 }: StatCardProps) {
+  const isBrand    = variant === 'brand'
   const isPositive = (trend?.value ?? 0) >= 0
 
   const inner = (
     <div className="flex items-start justify-between gap-4">
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 truncate">
+        <p className={`text-[11px] font-semibold uppercase tracking-widest truncate ${isBrand ? 'text-white/55' : 'text-gray-400'}`}>
           {title}
         </p>
-        <p className="text-3xl font-extrabold tracking-tight text-gray-900 mt-2 tabular-nums leading-none">
+        <p className={`text-3xl font-extrabold tracking-tight mt-2 tabular-nums leading-none ${isBrand ? 'text-white' : 'text-gray-900'}`}>
           {value}
         </p>
         {trend && (
           <div
             className={`flex items-center gap-1 mt-2.5 text-xs font-semibold ${
-              isPositive ? 'text-success dark:text-success-dm' : 'text-danger dark:text-danger-dm'
+              isBrand
+                ? isPositive ? 'text-white/75' : 'text-white/60'
+                : isPositive ? 'text-success dark:text-success-dm' : 'text-danger dark:text-danger-dm'
             }`}
           >
             {isPositive ? (
@@ -48,8 +53,7 @@ export function StatCard({
           </div>
         )}
       </div>
-      {/* Round icon container — premium over the generic square rounded-lg */}
-      <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${iconBgClass}`}>
+      <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${isBrand ? 'bg-white/15' : iconBgClass}`}>
         {icon}
       </div>
     </div>
@@ -58,12 +62,19 @@ export function StatCard({
   if (href) {
     return (
       <Link to={href} className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl">
-        <Card className="transition-shadow group-hover:shadow-card-md group-hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10)] cursor-pointer dark:group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.09),0_4px_16px_rgba(0,0,0,0.5)]">
+        <Card
+          variant={isBrand ? 'brand' : 'elevated'}
+          className={`transition-shadow cursor-pointer ${
+            isBrand
+              ? 'group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]'
+              : 'group-hover:shadow-card-md group-hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10)] dark:group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.09),0_4px_16px_rgba(0,0,0,0.5)]'
+          }`}
+        >
           {inner}
         </Card>
       </Link>
     )
   }
 
-  return <Card>{inner}</Card>
+  return <Card variant={isBrand ? 'brand' : 'elevated'}>{inner}</Card>
 }

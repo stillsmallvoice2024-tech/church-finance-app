@@ -1,6 +1,6 @@
 import type { ReactNode, HTMLAttributes } from 'react'
 
-type CardVariant = 'elevated' | 'outlined' | 'ghost'
+type CardVariant = 'elevated' | 'outlined' | 'ghost' | 'brand'
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode
@@ -30,6 +30,10 @@ const VARIANT_CLASSES: Record<CardVariant, string> = {
   ghost: [
     'bg-gray-50/70',
     'dark:bg-white/[0.03]',
+  ].join(' '),
+  brand: [
+    'bg-[#1A2C42]',
+    '[box-shadow:inset_0_1px_0_rgba(255,255,255,0.08),0_1px_4px_rgba(0,0,0,0.25)]',
   ].join(' '),
 }
 

@@ -338,31 +338,31 @@ export default function Dashboard() {
           ) : (
             <>
               <StatCard
+                variant="brand"
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingUp className="w-5 h-5 text-success dark:text-success-dm" />}
-                iconBgClass="bg-success/10 dark:bg-success/15"
+                icon={<TrendingUp className="w-5 h-5 text-white" />}
                 href="/inflows"
               />
               <StatCard
+                variant="brand"
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<TrendingDown className="w-5 h-5 text-danger dark:text-danger-dm" />}
-                iconBgClass="bg-danger/10 dark:bg-danger/15"
+                icon={<TrendingDown className="w-5 h-5 text-white" />}
                 href="/outflows"
               />
               <StatCard
+                variant="brand"
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
-                icon={<Wallet className="w-5 h-5 text-primary dark:text-primary-dm" />}
-                iconBgClass="bg-primary/10 dark:bg-primary/20"
+                icon={<Wallet className="w-5 h-5 text-white" />}
                 href="/bank-ledger"
               />
               <StatCard
+                variant="brand"
                 title="Categories"
                 value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
-                icon={<Layers className="w-5 h-5 text-accent dark:text-accent-dm" />}
-                iconBgClass="bg-accent/10 dark:bg-accent/15"
+                icon={<Layers className="w-5 h-5 text-white" />}
                 href="/categories"
               />
             </>
