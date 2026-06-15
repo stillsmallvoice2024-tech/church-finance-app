@@ -41,6 +41,7 @@ import { getOrgTimezone }          from '../utils/timezones'
 import { useHealthStore }          from '../store/healthStore'
 import { useCountUp }              from '../hooks/useCountUp'
 import { ConfidenceGauge }         from '../components/ui/ConfidenceGauge'
+import { useThemeStore }           from '../store/themeStore'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,8 @@ export default function Dashboard() {
   const { user, profile } = useAuth()
   const { foreignCurrencies, baseCurrencyCode } = useOrgCurrency()
   const { role } = useRole()
+  const { theme } = useThemeStore()
+  const isDark = theme === 'dark'
   const year        = useAccountingYearStore(s => s.year)
   const storedTz    = useOrgStore(s => s.timezone)
   const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
@@ -412,28 +415,35 @@ export default function Dashboard() {
                   <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#065F46" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#065F46" stopOpacity={0} />
+                        <stop offset="5%"  stopColor={isDark ? '#4ade80' : '#16A34A'} stopOpacity={isDark ? 0.20 : 0.15} />
+                        <stop offset="95%" stopColor={isDark ? '#4ade80' : '#16A34A'} stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="outflowGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#991B1B" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#991B1B" stopOpacity={0} />
+                        <stop offset="5%"  stopColor={isDark ? '#f87171' : '#DC2626'} stopOpacity={isDark ? 0.20 : 0.15} />
+                        <stop offset="95%" stopColor={isDark ? '#f87171' : '#DC2626'} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="0" stroke="rgba(0,0,0,0.05)" horizontal={true} vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9CA3AF', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                    <CartesianGrid strokeDasharray="0" stroke={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} horizontal={true} vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: isDark ? 'rgba(255,255,255,0.35)' : '#9CA3AF', fontWeight: 600 }} axisLine={false} tickLine={false} />
                     <YAxis
                       tickFormatter={v => formatCurrencyCompact(v, baseCurrencyCode)}
-                      tick={{ fontSize: 10, fill: '#9CA3AF', fontWeight: 600 }}
+                      tick={{ fontSize: 10, fill: isDark ? 'rgba(255,255,255,0.35)' : '#9CA3AF', fontWeight: 600 }}
                       axisLine={false} tickLine={false} width={64}
                     />
                     <Tooltip
                       formatter={(v: number) => [formatCurrencyCompact(v, baseCurrencyCode)]}
-                      contentStyle={{ borderRadius: '0.75rem', border: '1px solid rgba(0,0,0,0.07)', fontSize: '13px', fontWeight: 600, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                      contentStyle={{
+                        borderRadius: '0.75rem',
+                        border: isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(0,0,0,0.07)',
+                        background: isDark ? '#1c1c1e' : '#fff',
+                        color: isDark ? 'rgba(255,255,255,0.90)' : '#111',
+                        fontSize: '13px', fontWeight: 600,
+                        boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.5)' : '0 4px 12px rgba(0,0,0,0.08)',
+                      }}
                     />
-                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '12px', fontWeight: 600, color: '#6B7280' }} />
-                    <Area type="monotone" dataKey="inflow"  name="Inflows"  stroke="#065F46" strokeWidth={2} fill="url(#inflowGrad)" />
-                    <Area type="monotone" dataKey="outflow" name="Outflows" stroke="#991B1B" strokeWidth={2} fill="url(#outflowGrad)" />
+                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '12px', fontWeight: 600, color: isDark ? 'rgba(255,255,255,0.45)' : '#6B7280' }} />
+                    <Area type="monotone" dataKey="inflow"  name="Inflows"  stroke={isDark ? '#4ade80' : '#16A34A'} strokeWidth={2} fill="url(#inflowGrad)" />
+                    <Area type="monotone" dataKey="outflow" name="Outflows" stroke={isDark ? '#f87171' : '#DC2626'} strokeWidth={2} fill="url(#outflowGrad)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

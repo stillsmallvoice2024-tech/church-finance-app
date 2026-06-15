@@ -112,7 +112,7 @@ function TourCard({ step, stepIndex, totalSteps, pos, onNext, onPrev, onExit }: 
       role="dialog"
       aria-modal="false"
       aria-label={`Tour step ${stepIndex + 1} of ${totalSteps}: ${step.title}`}
-      className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-5 w-80 max-w-[calc(100vw-2rem)]"
+      className="bg-white dark:bg-[#141416] rounded-xl shadow-2xl border border-gray-200 dark:border-white/[0.07] p-5 w-80 max-w-[calc(100vw-2rem)]"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}

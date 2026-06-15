@@ -113,7 +113,7 @@ export function HelpTooltip({
         <div
           ref={tooltipRef}
           role="tooltip"
-          className="fixed z-[9990] bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-xl leading-snug pointer-events-none"
+          className="fixed z-[9990] bg-gray-900 dark:bg-[#1c1c1e] text-white text-xs rounded-lg px-3 py-2 shadow-xl leading-snug pointer-events-none"
           style={{ top: pos.top, left: pos.left, width: TOOLTIP_WIDTH, maxWidth: 'calc(100vw - 16px)' }}
         >
           {content}
