@@ -54,16 +54,20 @@ export default function Onboarding() {
   const navigate      = useNavigate()
   const [searchParams] = useSearchParams()
   const isNewOrg      = searchParams.get('new') === 'true'
-  const storeOrgId   = useOrgStore(s => s.orgId)
-  const storeOrgName = useOrgStore(s => s.orgName)
-  const storeOrgRole = useOrgStore(s => s.orgRole)
+  const storeOrgId     = useOrgStore(s => s.orgId)
+  const storeOrgName   = useOrgStore(s => s.orgName)
+  const storeOrgRole   = useOrgStore(s => s.orgRole)
+  const storeOrgStatus = useOrgStore(s => s.orgStatus)
   const { currencies } = useCurrencies()
 
   // Only inherit an existing org when the user is already its owner/admin (i.e.
   // the org was just created by create_organization()).  A viewer membership
   // means the user was auto-attached to an existing org by the DB trigger —
-  // never adopt that org.
-  const isAdminOfStoredOrg = storeOrgRole === 'owner' || storeOrgRole === 'admin'
+  // never adopt that org.  A pending_deletion org must never be adopted either —
+  // treat it as if no org exists so a fresh one is created.
+  const isAdminOfStoredOrg =
+    (storeOrgRole === 'owner' || storeOrgRole === 'admin') &&
+    storeOrgStatus !== 'pending_deletion'
 
   // Skip Step 1 when the org was already created (signup or CreateOrgModal).
   // Fall back to a pending name stored in localStorage for the email-confirmation path.
