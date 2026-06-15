@@ -751,7 +751,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           return { name, headers, rows: dataRows, rowCount: dataRows.length }
         })
       } else {
-        throw new Error('Only .xlsx, .xls, and .pdf files are supported.')
+        throw new Error('Only .xlsx, .xls, and .csv files are supported.')
       }
 
       setSheets(parsed)
@@ -1530,13 +1530,13 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                     : <>Drop your file here, or <span className="text-primary underline">browse</span></>
                   }
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .pdf — max 20 MB</p>
+                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .csv — max 20 MB</p>
               </div>
             </div>
             <input
               ref={inputRef}
               type="file"
-              accept=".xlsx,.xls,.pdf"
+              accept=".xlsx,.xls,.csv"
               className="hidden"
               onChange={handleFileInput}
             />
