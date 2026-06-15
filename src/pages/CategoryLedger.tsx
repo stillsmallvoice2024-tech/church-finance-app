@@ -94,7 +94,7 @@ const PORTION_LABELS: Record<Portion, string> = {
   'All':           'All',
   'Percentage':    'Regular Funds',
   'Specific Seed': 'Designated Gifts',
-  'Savings':       'Savings',
+  'Savings':       'Savings Funds',
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -777,7 +777,7 @@ export default function CategoryLedger() {
   const activeLedgerField = LEDGER_SORT_FIELDS.find(f => f.key === ledgerViewState.sortKey)
 
   const CL_CSV_FILE = `category-ledger-${new Date().toISOString().slice(0, 10)}.csv`
-  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', `${baseCurrencySymbol} Allocation`, 'Specific Seed', 'Savings Net']
+  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', `${baseCurrencySymbol} Allocation`, 'Designated Gift', 'Savings Net']
   const summaryCsvRow = (r: CategoryRow) => [r.name, r.percentage ?? '', r.percentageAllocated, r.specificSeed, r.savingsIn - r.savingsOut]
   const LEDGER_CSV_HEADERS = ['Date', 'Description', `Inflow (${baseCurrencySymbol})`, `Outflow (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const ledgerCsvRow = (r: LedgerRow) => [r.date, r.description ?? '', r.inflow || '', r.outflow || '', r.balance]

@@ -206,9 +206,9 @@ export default function SavingsPortions() {
   return (
     <div className="space-y-5">
 
-      <PageHelpBanner storageKey="help-dismissed-savings-portions" title="What are Savings Portions?">
-        Savings portions are amounts set aside from income as a reserve or contingency fund, separate from the operating budget.
-        Each category here represents a savings allocation rule — a percentage of qualifying inflows is automatically reserved.
+      <PageHelpBanner storageKey="help-dismissed-savings-portions" title="What are Savings Funds?">
+        Savings funds are amounts set aside from income as a reserve or contingency fund, separate from the operating budget.
+        Each category here represents a savings fund rule — a percentage of qualifying inflows is automatically reserved.
         The balance grows with each new inflow and is only reduced when a formal withdrawal is recorded.
       </PageHelpBanner>
 

@@ -323,7 +323,7 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
             </div>
           </div>
           <p className="text-sm text-gray-600">
-            Structural settings (categories, banks, allocation configs, users) will be preserved.
+            Structural settings (categories, banks, distribution rules, users) will be preserved.
           </p>
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
             <button

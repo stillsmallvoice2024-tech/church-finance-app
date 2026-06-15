@@ -258,9 +258,9 @@ export default function SpecificGivings() {
   return (
     <div className="space-y-5">
 
-      <PageHelpBanner storageKey="help-dismissed-specific-givings" title="What are Specific Givings?">
+      <PageHelpBanner storageKey="help-dismissed-specific-givings" title="What are Designated Gifts?">
         These are donations earmarked for a particular purpose — for example, a gift specifically for the Building Fund or a mission project.
-        Unlike general offerings, specific givings are restricted: the money should only be used for the stated purpose.
+        Unlike general offerings, designated gifts are restricted: the money should only be used for the stated purpose.
         This page shows the running balance and transaction history for each designated fund.
       </PageHelpBanner>
 
@@ -303,9 +303,9 @@ export default function SpecificGivings() {
             <Gift className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No specific givings in {year}</p>
+            <p className="font-semibold text-gray-800">No designated gifts in {year}</p>
             <p className="text-sm text-gray-500 mt-1">
-              Transactions tagged as "Specific Seed" type or Stage Code 2 = "Specific Seed" will appear here.
+              Transactions tagged with Fund Type = "Designated Gift" will appear here.
             </p>
           </div>
         </div>
@@ -333,7 +333,7 @@ export default function SpecificGivings() {
 
           {/* Grand total strip */}
           <div className="bg-primary/5 border border-primary/20 rounded-xl px-5 py-3 flex items-center justify-between">
-            <span className="text-sm font-semibold text-primary">Total Specific Givings ({year})</span>
+            <span className="text-sm font-semibold text-primary">Total Designated Gifts ({year})</span>
             <span className="font-mono font-bold text-primary text-base">{formatCurrency(grandTotal, baseCurrencyCode)}</span>
           </div>
 
