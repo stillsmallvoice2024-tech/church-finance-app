@@ -53,13 +53,13 @@ const FN_LABELS: Record<TokenFn, string> = {
 
 const PORTION_OPTIONS: Array<{ value: BudgetPortion; label: string }> = [
   { value: 'all',        label: 'All Funds'            },
-  { value: 'seed',       label: 'Specific Seed'        },
-  { value: 'savings',    label: 'Savings'              },
-  { value: 'percentage', label: 'Percentage Allocation' },
+  { value: 'seed',       label: 'Designated Gift'  },
+  { value: 'savings',    label: 'Savings Funds'    },
+  { value: 'percentage', label: 'Regular Funds'    },
 ]
 
 const PORTION_SHORT: Record<string, string> = {
-  seed:       ' · Seed',
+  seed:       ' · Gift',
   savings:    ' · Savings',
   percentage: ' · % Alloc',
 }

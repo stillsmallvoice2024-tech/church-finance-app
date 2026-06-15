@@ -113,8 +113,8 @@ export default function PercentageAllocations() {
             <Percent className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No allocation configs yet</p>
-            <p className="text-sm text-gray-500 mt-1">Create one in Setup → Allocation.</p>
+            <p className="font-semibold text-gray-800">No distribution rules yet</p>
+            <p className="text-sm text-gray-500 mt-1">Create one in Setup → Distribution Rules.</p>
           </div>
           <Link
             to="/setup"
