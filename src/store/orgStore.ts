@@ -11,6 +11,7 @@ export interface OrgMembership {
   org_status?:          OrgStatus | null
   org_deleted_at?:      string | null
   org_purge_at?:        string | null
+  org_type?:            string | null
 }
 
 const activeOrgKey = (userId: string) => `org-active-${userId}`
@@ -25,6 +26,7 @@ interface OrgState {
   orgStatus:           OrgStatus | null
   orgDeletedAt:        string | null
   orgPurgeAt:          string | null
+  orgType:             string | null
   memberships:         OrgMembership[]
   switching:           boolean
 
@@ -33,6 +35,7 @@ interface OrgState {
   setOnboardingComplete:(v: boolean | null) => void
   setOrgStatus:         (status: OrgStatus, deletedAt?: string | null, purgeAt?: string | null) => void
   setTimezone:          (tz: string | null) => void
+  setOrgType:           (type: string | null) => void
   setSwitching:         (v: boolean) => void
   clearOrg:             () => void
   persistActive:        (userId: string, orgId: string) => void
@@ -49,6 +52,7 @@ export const useOrgStore = create<OrgState>((set) => ({
   orgStatus:          null,
   orgDeletedAt:       null,
   orgPurgeAt:         null,
+  orgType:            null,
   memberships:        [],
   switching:          false,
 
@@ -62,6 +66,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     orgStatus:          m.org_status ?? 'active',
     orgDeletedAt:       m.org_deleted_at ?? null,
     orgPurgeAt:         m.org_purge_at ?? null,
+    orgType:            m.org_type !== undefined ? (m.org_type ?? null) : null,
   }),
 
   setMemberships: (ms) => set({ memberships: ms }),
@@ -73,13 +78,15 @@ export const useOrgStore = create<OrgState>((set) => ({
 
   setTimezone: (tz) => set({ timezone: tz }),
 
+  setOrgType: (type) => set({ orgType: type }),
+
   setSwitching: (v) => set({ switching: v }),
 
   clearOrg: () => set({
     orgId: null, orgName: null, orgRole: null,
     onboardingComplete: null, defaultCurrency: null, timezone: null,
     orgStatus: null, orgDeletedAt: null, orgPurgeAt: null,
-    memberships: [], switching: false,
+    orgType: null, memberships: [], switching: false,
   }),
 
   persistActive: (userId, orgId) => {

@@ -164,6 +164,7 @@ export interface AnnouncementDefinition {
 // ── Setup Wizard ──────────────────────────────────────────────────────────────
 export type WizardStepId =
   | 'org-details'
+  | 'org-type'
   | 'departments'
   | 'banks'
   | 'income-types'

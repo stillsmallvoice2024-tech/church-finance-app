@@ -4,6 +4,7 @@ import {
   X, ChevronRight, ChevronLeft, Check, Clock, Building2, Landmark,
   ArrowDownCircle, ArrowUpCircle, Users, Upload, Sparkles, Loader2,
   Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward, Tag,
+  Heart, Globe, GraduationCap, Briefcase,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
@@ -21,6 +22,8 @@ import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
 import { useToastStore } from '../../store/toastStore'
 import { WIZARD_STEPS } from '../../onboarding/wizard/definitions'
+import { getOrgTypeContent } from '../../onboarding/wizard/orgTypeContent'
+import type { OrgType } from '../../onboarding/wizard/orgTypeContent'
 import type { WizardStepId } from '../../types/onboarding'
 
 // ── Colour palette for types ──────────────────────────────────────────────────
@@ -93,18 +96,184 @@ function EditLaterNote({ where }: { where: string }) {
   )
 }
 
+function StarterChips({
+  starters,
+  existingNames,
+  addingStarter,
+  onAdd,
+  label,
+}: {
+  starters: string[]
+  existingNames: Set<string>
+  addingStarter: string | null
+  onAdd: (s: string) => void
+  label: string
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {starters.map(s => {
+          const added    = existingNames.has(s.toLowerCase())
+          const isAdding = addingStarter === s
+          return (
+            <button
+              key={s}
+              type="button"
+              disabled={added || !!addingStarter}
+              onClick={() => onAdd(s)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
+                added
+                  ? 'bg-primary/10 border-primary/20 text-primary cursor-default'
+                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary hover:text-primary disabled:opacity-50'
+              }`}
+            >
+              {isAdding
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : added
+                  ? <Check className="w-3 h-3" />
+                  : <Plus className="w-3 h-3" />
+              }
+              {s}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Step 1: Org Type ──────────────────────────────────────────────────────────
+
+const ORG_TYPE_OPTIONS: { type: OrgType; label: string; tagline: string; Icon: React.ElementType }[] = [
+  { type: 'church',  label: 'Church / Faith Community',   tagline: 'Worship communities, congregations, and faith-based groups',     Icon: Heart         },
+  { type: 'ngo',    label: 'NGO / Non-Profit',            tagline: 'Humanitarian, advocacy, and development organisations',           Icon: Globe         },
+  { type: 'school', label: 'School / Institution',        tagline: 'Schools, colleges, training centres, and academies',             Icon: GraduationCap },
+  { type: 'project',label: 'Project-Based Organisation',  tagline: 'Construction, consulting, creative, and contract-based work',    Icon: Briefcase     },
+]
+
+function OrgTypeStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
+  const orgId      = useOrgStore(s => s.orgId)
+  const orgType    = useOrgStore(s => s.orgType)
+  const setOrgType = useOrgStore(s => s.setOrgType)
+  const { push: toast } = useToastStore()
+  const [saving, setSaving] = useState<OrgType | null>(null)
+
+  useEffect(() => {
+    onDataReady(!!orgType)
+  }, [orgType, onDataReady])
+
+  const handleSelect = async (type: OrgType) => {
+    if (!orgId || saving) return
+    if (type === orgType) { onDataReady(true); return }
+    setSaving(type)
+    try {
+      // Read current metadata first to preserve any existing keys
+      const { data: current } = await supabase
+        .from('organizations')
+        .select('metadata')
+        .eq('id', orgId)
+        .single()
+      await supabase
+        .from('organizations')
+        .update({ metadata: { ...(current?.metadata ?? {}), org_type: type } })
+        .eq('id', orgId)
+      setOrgType(type)
+    } catch {
+      toast('Could not save your selection. Please try again.', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <StepHeading
+        title="What kind of organisation are you setting up for?"
+        description="This helps us suggest the right labels, fund names, and examples throughout the setup — so you're not starting from scratch."
+      />
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {ORG_TYPE_OPTIONS.map(({ type, label, tagline, Icon }) => {
+          const isSelected = orgType === type
+          const isSaving   = saving === type
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => handleSelect(type)}
+              disabled={!!saving}
+              className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all disabled:opacity-60 ${
+                isSelected
+                  ? 'border-primary bg-primary/5 dark:bg-primary/10'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                isSelected
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+              }`}>
+                {isSaving
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Icon className="w-4 h-4" />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${isSelected ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>
+                  {label}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                  {tagline}
+                </p>
+              </div>
+              {isSelected && (
+                <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+        You can change this later in Settings. Skipping will use generic suggestions.
+      </p>
+    </div>
+  )
+}
+
 // ── Step 2: Departments ───────────────────────────────────────────────────────
 
 function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { departments, loading, refetch } = useDepartments()
-  const [name, setName] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const orgType = useOrgStore(s => s.orgType)
+  const content = getOrgTypeContent(orgType)
   const { push: toast } = useToastStore()
+
+  const [name, setName]                   = useState('')
+  const [saving, setSaving]               = useState(false)
+  const [addingStarter, setAddingStarter] = useState<string | null>(null)
+  const [error, setError]                 = useState<string | null>(null)
+
+  const existingNames = new Set(departments.map(d => d.name.toLowerCase()))
 
   useEffect(() => {
     if (!loading) onDataReady(departments.length > 0)
   }, [departments, loading, onDataReady])
+
+  const handleAddStarter = async (starter: string) => {
+    if (existingNames.has(starter.toLowerCase()) || addingStarter) return
+    setAddingStarter(starter); setError(null)
+    try {
+      await saveDepartment({ name: starter, active: true })
+      toast(`${starter} added`, 'success')
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setAddingStarter(null)
+    }
+  }
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -126,7 +295,15 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
     <div className="space-y-4">
       <StepHeading
         title="Which teams or units make up your organisation?"
-        description="Think of the groups that handle or spend money — Finance, Operations, Programs, Field Teams, Administration. You'll be able to assign spending to each one so you can see exactly where funds go."
+        description="Add the groups that handle or spend money. You'll be able to assign transactions to each one so you can see exactly where funds go."
+      />
+
+      <StarterChips
+        starters={content.departmentStarters}
+        existingNames={existingNames}
+        addingStarter={addingStarter}
+        onAdd={handleAddStarter}
+        label="Common teams — tap any to add instantly:"
       />
 
       {!loading && departments.length > 0 && (
@@ -152,7 +329,7 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="e.g. Youth Ministry, Administration…"
+            placeholder={content.departmentPlaceholder}
             className={`${inputCls} flex-1`}
           />
           <button
@@ -168,7 +345,7 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
 
       {!loading && departments.length === 0 && (
         <p className="text-xs text-gray-500 dark:text-gray-500 italic">
-          No departments yet. Add at least one to continue.
+          No teams yet. Tap one above or type a name to get started.
         </p>
       )}
 
@@ -186,10 +363,6 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { push: toast } = useToastStore()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
 
-  useEffect(() => {
-    if (!loading) onDataReady(banks.length > 0)
-  }, [banks, loading, onDataReady])
-
   const [name, setName]         = useState('')
   const [acctNum, setAcctNum]   = useState('')
   const [currency, setCurrency] = useState(defaultCurrency ?? 'NGN')
@@ -199,6 +372,10 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   useEffect(() => {
     if (defaultCurrency && !currency) setCurrency(defaultCurrency)
   }, [defaultCurrency]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!loading) onDataReady(banks.length > 0)
+  }, [banks, loading, onDataReady])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -295,17 +472,36 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
 
 function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { incomeTypes, loading, refetch } = useIncomeTypes()
+  const orgType = useOrgStore(s => s.orgType)
+  const content = getOrgTypeContent(orgType)
   const { push: toast } = useToastStore()
-  const [name, setName]     = useState('')
-  const [colour, setColour] = useState(COLOUR_SWATCHES[0])
-  const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState<string | null>(null)
+
+  const [name, setName]                   = useState('')
+  const [colour, setColour]               = useState(COLOUR_SWATCHES[0])
+  const [saving, setSaving]               = useState(false)
+  const [addingStarter, setAddingStarter] = useState<string | null>(null)
+  const [error, setError]                 = useState<string | null>(null)
 
   const userIncomeTypes = incomeTypes.filter(t => !t.name.startsWith('_'))
+  const existingNames   = new Set(userIncomeTypes.map(t => t.name.toLowerCase()))
 
   useEffect(() => {
     if (!loading) onDataReady(userIncomeTypes.length > 0)
   }, [userIncomeTypes, loading, onDataReady])
+
+  const handleAddStarter = async (starter: string) => {
+    if (existingNames.has(starter.toLowerCase()) || addingStarter) return
+    setAddingStarter(starter); setError(null)
+    try {
+      await saveIncomeType({ name: starter, color: COLOUR_SWATCHES[0], rules: [] })
+      toast(`${starter} added`, 'success')
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setAddingStarter(null)
+    }
+  }
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -327,14 +523,20 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
     <div className="space-y-4">
       <StepHeading
         title="How does money come into your organisation?"
-        description="Give each income stream its own label — for example: Donations, Grants, Membership Dues, Fundraising Events, Government Funding. When you import a bank statement, every credit will be tagged with one of these so you know exactly what kind of income it was."
+        description="Give each income stream its own label. When you import a bank statement, every credit will be tagged with one of these so you know exactly what kind of income it was."
+      />
+
+      <StarterChips
+        starters={content.incomeTypeStarters}
+        existingNames={existingNames}
+        addingStarter={addingStarter}
+        onAdd={handleAddStarter}
+        label="Common income types — tap any to add instantly:"
       />
 
       {!loading && userIncomeTypes.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {userIncomeTypes.map(t => (
-            <ItemBadge key={t.id} label={t.name} />
-          ))}
+          {userIncomeTypes.map(t => <ItemBadge key={t.id} label={t.name} />)}
         </div>
       )}
       {loading && (
@@ -355,7 +557,7 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="e.g. Tithes, Offerings, Donations…"
+            placeholder={content.incomeTypePlaceholder}
             className={`${inputCls} flex-1`}
           />
           <button
@@ -375,7 +577,7 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
 
       {!loading && userIncomeTypes.length === 0 && (
         <p className="text-xs text-gray-500 dark:text-gray-500 italic">
-          No income types yet. Add at least one to continue.
+          No income types yet. Tap one above or type a name to get started.
         </p>
       )}
 
@@ -388,17 +590,36 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
 
 function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { outflowTypes, loading, refetch } = useOutflowTypes()
+  const orgType = useOrgStore(s => s.orgType)
+  const content = getOrgTypeContent(orgType)
   const { push: toast } = useToastStore()
-  const [name, setName]     = useState('')
-  const [colour, setColour] = useState(COLOUR_SWATCHES[2])
-  const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState<string | null>(null)
 
-  const userTypes = outflowTypes.filter(t => !t.is_system)
+  const [name, setName]                   = useState('')
+  const [colour, setColour]               = useState(COLOUR_SWATCHES[2])
+  const [saving, setSaving]               = useState(false)
+  const [addingStarter, setAddingStarter] = useState<string | null>(null)
+  const [error, setError]                 = useState<string | null>(null)
+
+  const userTypes     = outflowTypes.filter(t => !t.is_system)
+  const existingNames = new Set(userTypes.map(t => t.name.toLowerCase()))
 
   useEffect(() => {
     if (!loading) onDataReady(userTypes.length > 0)
   }, [userTypes, loading, onDataReady])
+
+  const handleAddStarter = async (starter: string) => {
+    if (existingNames.has(starter.toLowerCase()) || addingStarter) return
+    setAddingStarter(starter); setError(null)
+    try {
+      await saveOutflowType({ name: starter, color: COLOUR_SWATCHES[2] })
+      toast(`${starter} added`, 'success')
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setAddingStarter(null)
+    }
+  }
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -420,7 +641,15 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
     <div className="space-y-4">
       <StepHeading
         title="What does your organisation spend money on?"
-        description="Think of your regular expense categories — staff salaries, utility bills, field operations, programme costs, supplies. Every debit on your bank statement will be tagged with one of these so you can see exactly what the money went to."
+        description="Think of your regular expense categories. Every debit on your bank statement will be tagged with one of these so you can see exactly what the money went to."
+      />
+
+      <StarterChips
+        starters={content.outflowTypeStarters}
+        existingNames={existingNames}
+        addingStarter={addingStarter}
+        onAdd={handleAddStarter}
+        label="Common expense types — tap any to add instantly:"
       />
 
       {!loading && userTypes.length > 0 && (
@@ -446,7 +675,7 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="e.g. Salaries, Utilities, Programmes…"
+            placeholder={content.outflowTypePlaceholder}
             className={`${inputCls} flex-1`}
           />
           <button
@@ -466,7 +695,7 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
 
       {!loading && userTypes.length === 0 && (
         <p className="text-xs text-gray-500 dark:text-gray-500 italic">
-          No outflow types yet. Add at least one to continue.
+          No expense types yet. Tap one above or type a name to get started.
         </p>
       )}
 
@@ -477,43 +706,36 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
 
 // ── Step 6: Categories (Funds) ────────────────────────────────────────────────
 
-const CATEGORY_STARTERS = [
-  'General Fund',
-  'Operations',
-  'Programs',
-  'Welfare & Relief',
-  'Field Work',
-  'Special Projects',
-  'Reserve Fund',
-]
-
 function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { categories, loading, refetch } = useCategories()
+  const orgType = useOrgStore(s => s.orgType)
+  const content = getOrgTypeContent(orgType)
   const { mutate: addCategory } = useAddCategory()
   const { push: toast } = useToastStore()
-  const [name, setName]               = useState('')
-  const [saving, setSaving]           = useState(false)
-  const [addingTemplate, setAddingTemplate] = useState<string | null>(null)
-  const [error, setError]             = useState<string | null>(null)
+
+  const [name, setName]                   = useState('')
+  const [saving, setSaving]               = useState(false)
+  const [addingStarter, setAddingStarter] = useState<string | null>(null)
+  const [error, setError]                 = useState<string | null>(null)
 
   const visibleCategories = categories.filter(c => !c.is_hidden)
-  const existingNames = new Set(categories.map(c => c.name.toLowerCase()))
+  const existingNames     = new Set(categories.map(c => c.name.toLowerCase()))
 
   useEffect(() => {
     if (!loading) onDataReady(visibleCategories.length > 0)
   }, [visibleCategories, loading, onDataReady])
 
-  const handleAddTemplate = async (tpl: string) => {
-    if (existingNames.has(tpl.toLowerCase()) || addingTemplate) return
-    setAddingTemplate(tpl); setError(null)
+  const handleAddStarter = async (starter: string) => {
+    if (existingNames.has(starter.toLowerCase()) || addingStarter) return
+    setAddingStarter(starter); setError(null)
     try {
-      await addCategory({ name: tpl })
-      toast(`${tpl} added`, 'success')
+      await addCategory({ name: starter })
+      toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
-      setAddingTemplate(null)
+      setAddingStarter(null)
     }
   }
 
@@ -538,44 +760,17 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
     <div className="space-y-4">
       <StepHeading
         title="What funds or pots does your organisation manage?"
-        description="A fund is like a dedicated wallet for a purpose — General Fund, Programs, Field Work. When income comes in, it gets split into these pockets based on your distribution rules. You can watch each fund grow over time."
+        description="A fund is like a dedicated wallet for a purpose. When income comes in, it gets split into these pockets based on your distribution rules. You can watch each fund grow over time."
       />
 
-      {/* Quick-start template chips */}
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-          Common funds — tap any to add instantly:
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {CATEGORY_STARTERS.map(tpl => {
-            const added    = existingNames.has(tpl.toLowerCase())
-            const isAdding = addingTemplate === tpl
-            return (
-              <button
-                key={tpl}
-                type="button"
-                disabled={added || !!addingTemplate}
-                onClick={() => handleAddTemplate(tpl)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
-                  added
-                    ? 'bg-primary/10 border-primary/20 text-primary cursor-default'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary hover:text-primary disabled:opacity-50'
-                }`}
-              >
-                {isAdding
-                  ? <Loader2 className="w-3 h-3 animate-spin" />
-                  : added
-                    ? <Check className="w-3 h-3" />
-                    : <Plus className="w-3 h-3" />
-                }
-                {tpl}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <StarterChips
+        starters={content.categoryStarters}
+        existingNames={existingNames}
+        addingStarter={addingStarter}
+        onAdd={handleAddStarter}
+        label="Common funds — tap any to add instantly:"
+      />
 
-      {/* Funds added so far */}
       {!loading && visibleCategories.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {visibleCategories.map(c => <ItemBadge key={c.id} label={c.name} />)}
@@ -587,7 +782,6 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
         </div>
       )}
 
-      {/* Custom fund input */}
       <form onSubmit={handleCustomSubmit} className="space-y-2">
         {error && (
           <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
@@ -629,6 +823,8 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
 
 function TeamMembersStep() {
   const orgId    = useOrgStore(s => s.orgId)
+  const orgType  = useOrgStore(s => s.orgType)
+  const content  = getOrgTypeContent(orgType)
   const user     = useAuthStore(s => s.user)
   const { push: toast } = useToastStore()
   const [members, setMembers] = useState<{ id: string; email: string; role: string }[]>([])
@@ -709,7 +905,7 @@ function TeamMembersStep() {
     <div className="space-y-4">
       <StepHeading
         title="Who else helps manage your organisation's finances?"
-        description="Invite your treasurer, accountant, finance officer, or director. They'll get a link to create their account. Set them as Admin (full access), Accountant (can record transactions), or Viewer (read-only)."
+        description={`Invite your ${content.teamRoleLabel}. They'll get a link to create their account. Set them as Admin (full access), Accountant (can record transactions), or Viewer (read-only).`}
       />
 
       {members.length > 0 && (
@@ -853,10 +1049,10 @@ function FinishStep({ onClose }: { onClose: () => void }) {
 
       <div className="grid grid-cols-2 gap-3 text-left">
         {[
-          { icon: Upload, label: 'Import Statement', desc: 'Upload your first bank statement', href: '/import' },
-          { icon: Landmark, label: 'Bank Ledger', desc: 'View transactions by account', href: '/bank-ledger' },
-          { icon: ArrowDownCircle, label: 'Inflows', desc: 'Browse income records', href: '/inflows' },
-          { icon: Tag, label: 'Categories', desc: 'Manage your funds and pots', href: '/categories' },
+          { icon: Upload,        label: 'Import Statement',  desc: 'Upload your first bank statement',   href: '/import'      },
+          { icon: Landmark,      label: 'Bank Ledger',       desc: 'View transactions by account',       href: '/bank-ledger' },
+          { icon: ArrowDownCircle, label: 'Inflows',         desc: 'Browse income records',              href: '/inflows'     },
+          { icon: Tag,           label: 'Categories',        desc: 'Manage your funds and pots',         href: '/categories'  },
         ].map(({ icon: Icon, label, desc, href }) => (
           <button
             key={href}
@@ -887,12 +1083,13 @@ function FinishStep({ onClose }: { onClose: () => void }) {
 
 // ── Steps that always allow Continue (no minimum data required) ───────────────
 
-const UNVALIDATED_STEPS: WizardStepId[] = ['team-members', 'import-statement', 'finish']
+const UNVALIDATED_STEPS: WizardStepId[] = ['org-type', 'team-members', 'import-statement', 'finish']
 
 // ── Step icon map ─────────────────────────────────────────────────────────────
 
 const STEP_ICONS: Record<WizardStepId, React.ElementType> = {
   'org-details':       Sparkles,
+  'org-type':          Sparkles,
   'departments':       Building2,
   'banks':             Landmark,
   'income-types':      ArrowDownCircle,
@@ -919,8 +1116,8 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 
 // ── Main SetupWizard ──────────────────────────────────────────────────────────
 
-// Displayed step IDs (skip 'org-details' — already covered by Onboarding.tsx)
 const WIZARD_STEP_IDS: WizardStepId[] = [
+  'org-type',
   'departments',
   'banks',
   'income-types',
@@ -946,11 +1143,10 @@ export function SetupWizard() {
     }
   }, [isWizardOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const stepId = WIZARD_STEP_IDS[currentIdx]
+  const stepId  = WIZARD_STEP_IDS[currentIdx]
   const stepDef = WIZARD_STEPS.find(s => s.id === stepId)!
   const isLast  = currentIdx === WIZARD_STEP_IDS.length - 1
 
-  // Reset readiness whenever the active step changes
   useEffect(() => { setStepDataReady(false) }, [stepId])
 
   const notifyDataReady = useCallback((ready: boolean) => setStepDataReady(ready), [])
@@ -971,14 +1167,9 @@ export function SetupWizard() {
     }
   }
 
-  const handleBack = () => { if (currentIdx > 0) goToStep(currentIdx - 1) }
-
-  const handleSkip = () => { goToStep(currentIdx + 1) }
-
-  const handleClose = () => {
-    updatePrefs({ wizard_step: currentIdx })
-    closeWizard()
-  }
+  const handleBack  = () => { if (currentIdx > 0) goToStep(currentIdx - 1) }
+  const handleSkip  = () => { goToStep(currentIdx + 1) }
+  const handleClose = () => { updatePrefs({ wizard_step: currentIdx }); closeWizard() }
 
   if (!isWizardOpen || !canWrite()) return null
 
@@ -1029,14 +1220,13 @@ export function SetupWizard() {
           </p>
         </div>
 
-        {/* Step sidebar + content: side-by-side on ≥ sm */}
+        {/* Step sidebar + content */}
         <div className="flex flex-1 min-h-0">
-          {/* Sidebar — hidden on mobile */}
           <aside className="hidden sm:flex flex-col w-44 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 py-4 px-3 gap-1 overflow-y-auto">
             {WIZARD_STEP_IDS.map((id, idx) => {
-              const def  = WIZARD_STEPS.find(s => s.id === id)
-              const Icon = STEP_ICONS[id]
-              const done = idx < currentIdx
+              const def    = WIZARD_STEPS.find(s => s.id === id)
+              const Icon   = STEP_ICONS[id]
+              const done   = idx < currentIdx
               const active = idx === currentIdx
               return (
                 <button
@@ -1066,16 +1256,16 @@ export function SetupWizard() {
             })}
           </aside>
 
-          {/* Main content */}
           <main className="flex-1 overflow-y-auto p-6">
-            {stepId === 'departments'      && <DepartmentsStep onDataReady={notifyDataReady} />}
-            {stepId === 'banks'            && <BanksStep onDataReady={notifyDataReady} />}
-            {stepId === 'income-types'     && <IncomeTypesStep onDataReady={notifyDataReady} />}
-            {stepId === 'outflow-types'    && <OutflowTypesStep onDataReady={notifyDataReady} />}
-            {stepId === 'categories'       && <CategoriesStep onDataReady={notifyDataReady} />}
-            {stepId === 'team-members'     && <TeamMembersStep />}
-            {stepId === 'import-statement' && <ImportStatementStep onClose={closeWizard} />}
-            {stepId === 'finish'           && <FinishStep onClose={closeWizard} />}
+            {stepId === 'org-type'        && <OrgTypeStep onDataReady={notifyDataReady} />}
+            {stepId === 'departments'     && <DepartmentsStep onDataReady={notifyDataReady} />}
+            {stepId === 'banks'           && <BanksStep onDataReady={notifyDataReady} />}
+            {stepId === 'income-types'    && <IncomeTypesStep onDataReady={notifyDataReady} />}
+            {stepId === 'outflow-types'   && <OutflowTypesStep onDataReady={notifyDataReady} />}
+            {stepId === 'categories'      && <CategoriesStep onDataReady={notifyDataReady} />}
+            {stepId === 'team-members'    && <TeamMembersStep />}
+            {stepId === 'import-statement'&& <ImportStatementStep onClose={closeWizard} />}
+            {stepId === 'finish'          && <FinishStep onClose={closeWizard} />}
           </main>
         </div>
 
@@ -1131,7 +1321,6 @@ export function SetupWizard() {
 }
 
 // ── Auto-show hook ────────────────────────────────────────────────────────────
-// Call from Dashboard to show wizard automatically on first session after org setup.
 
 export function useWizardAutoShow() {
   const { prefs, loading } = useUserPreferences()

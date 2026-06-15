@@ -10,6 +10,14 @@ export const WIZARD_STEPS: WizardStepDefinition[] = [
     skippable: false,
   },
   {
+    id: 'org-type',
+    title: 'Org Type',
+    description: 'Tell us what kind of organisation you are so we can tailor the setup.',
+    estimatedMinutes: 0,
+    required: false,
+    skippable: true,
+  },
+  {
     id: 'departments',
     title: 'Departments & Units',
     description: 'Add the ministry departments or teams in your organisation.',
