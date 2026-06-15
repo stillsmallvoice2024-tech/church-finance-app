@@ -263,9 +263,9 @@ export default function IntraFlow() {
         <BulkReallocation />
       ) : tab === 'transfers' && (
         <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Category Fund Transfer?">
-          An internal transfer moves money between two bank accounts within the organisation.
-          It is not income or expenditure — no money enters or leaves the organisation.
-          Record a transfer when, for example, cash collected in one account is consolidated into your main operating account.
+          A category fund transfer / internal transfer moves money between two category accounts or pockets within the organisation.
+          It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one category bucket to another.
+          Record a transfer when, for example, money record moves from "General Funds" category/bucket to "Project Funds" category/bucket..
         </PageHelpBanner>
       )}
       {error ? (
