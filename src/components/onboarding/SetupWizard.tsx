@@ -121,8 +121,8 @@ function DepartmentsStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Which teams or groups are in your church?"
-        description="Think of the departments or ministries that handle money — Youth, Women's Fellowship, Administration, Choir. You'll be able to assign spending to each one so you can see exactly where funds go."
+        title="Which teams or units make up your organisation?"
+        description="Think of the groups that handle or spend money — Finance, Operations, Programs, Field Teams, Administration. You'll be able to assign spending to each one so you can see exactly where funds go."
       />
 
       {!loading && departments.length > 0 && (
@@ -211,8 +211,8 @@ function BanksStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Which bank accounts does your church use?"
-        description="Add every account the church operates — your main account, a building fund account, a foreign currency account. The name you enter here must match your bank statement exactly when you import transactions."
+        title="Which bank accounts does your organisation use?"
+        description="Add every account your organisation operates — your main account, a project account, a foreign currency account. The name you enter here must match your bank statement exactly when you import transactions."
       />
 
       {!loading && banks.length > 0 && (
@@ -314,8 +314,8 @@ function IncomeTypesStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="How does money come into your church?"
-        description="Give each income stream its own label. For example: Tithes, Sunday Offering, Midweek Offering, Donations, Building Levy. When you import a bank statement, every credit will be tagged with one of these so you know exactly what kind of income it was."
+        title="How does money come into your organisation?"
+        description="Give each income stream its own label — for example: Donations, Grants, Membership Dues, Fundraising Events, Government Funding. When you import a bank statement, every credit will be tagged with one of these so you know exactly what kind of income it was."
       />
 
       {!loading && userIncomeTypes.length > 0 && (
@@ -403,8 +403,8 @@ function OutflowTypesStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="What does your church spend money on?"
-        description="Think of your regular expense categories — paying staff, covering utility bills, running programmes, buying supplies. Every debit on your bank statement will be tagged with one of these so you can see exactly what the money went to."
+        title="What does your organisation spend money on?"
+        description="Think of your regular expense categories — staff salaries, utility bills, field operations, programme costs, supplies. Every debit on your bank statement will be tagged with one of these so you can see exactly what the money went to."
       />
 
       {!loading && userTypes.length > 0 && (
@@ -463,12 +463,12 @@ function OutflowTypesStep() {
 
 const CATEGORY_STARTERS = [
   'General Fund',
-  'Building Fund',
-  'Welfare',
-  'Missions',
-  'Youth Fund',
+  'Operations',
+  'Programs',
+  'Welfare & Relief',
+  'Field Work',
   'Special Projects',
-  'Benevolence',
+  'Reserve Fund',
 ]
 
 function CategoriesStep() {
@@ -517,8 +517,8 @@ function CategoriesStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="What funds or pots does your church manage?"
-        description="A fund is like a dedicated wallet for a purpose — General Fund, Building Fund, Welfare. When income comes in, it gets split into these pockets based on your distribution rules. You can watch each fund grow over time."
+        title="What funds or pots does your organisation manage?"
+        description="A fund is like a dedicated wallet for a purpose — General Fund, Programs, Field Work. When income comes in, it gets split into these pockets based on your distribution rules. You can watch each fund grow over time."
       />
 
       {/* Quick-start template chips */}
@@ -688,8 +688,8 @@ function TeamMembersStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Who else helps manage your church's finances?"
-        description="Invite your treasurer, accountant, or a church leader. They'll get a link to create their account. Set them as Admin (full access), Accountant (can record transactions), or Viewer (read-only)."
+        title="Who else helps manage your organisation's finances?"
+        description="Invite your treasurer, accountant, finance officer, or director. They'll get a link to create their account. Set them as Admin (full access), Accountant (can record transactions), or Viewer (read-only)."
       />
 
       {members.length > 0 && (
@@ -773,7 +773,7 @@ function ImportStatementStep({ onClose }: { onClose: () => void }) {
     <div className="space-y-4">
       <StepHeading
         title="Ready to load your first bank statement?"
-        description="Download a statement from your bank's online portal in Excel or CSV format, then upload it here. The app maps the columns, identifies your transactions, and links each one to the right bank and income or expense type."
+        description="Download a statement from your bank's online portal in Excel or CSV format, then upload it here. The app maps the columns, identifies your transactions, and links each one to the right bank account, income type, and expense category."
       />
 
       <div className="space-y-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
@@ -825,7 +825,7 @@ function FinishStep({ onClose }: { onClose: () => void }) {
         </div>
       </div>
       <div className="space-y-1">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Your church is all set up!</h2>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Your organisation is all set up!</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Everything you've added can be updated anytime from the <strong>Setup</strong> page in the sidebar. Here's where to go next.
         </p>

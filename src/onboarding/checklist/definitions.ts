@@ -9,7 +9,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: 'create-department',
     label: 'Create a department',
-    description: 'Add your first ministry unit or department',
+    description: 'Add your first team, unit, or department',
     iconName: 'Building2',
     required: true,
     completionCheck: (d) => d.hasDepartments,
@@ -27,7 +27,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: 'create-income-type',
     label: 'Create an income type',
-    description: 'Add categories for your inflows (e.g. Tithes, Offerings)',
+    description: 'Add labels for your inflows (e.g. Donations, Grants, Membership Dues)',
     iconName: 'ArrowDownCircle',
     required: true,
     completionCheck: (d) => d.hasIncomeTypes,
@@ -45,7 +45,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: 'create-category',
     label: 'Set up your funds',
-    description: 'Create the fund pots your church manages (e.g. General Fund, Building Fund)',
+    description: 'Create the funds your organisation manages (e.g. General Fund, Programs, Field Work)',
     iconName: 'Tag',
     required: true,
     completionCheck: (d) => d.hasCategories,
