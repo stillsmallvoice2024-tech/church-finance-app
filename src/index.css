@@ -85,8 +85,8 @@ html.dark .scroll-x-fade {
   background: #fff;
   box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
 }
-html.dark .table-sticky-col thead th:first-child { background: #1f2937; }
-html.dark .table-sticky-col tbody td:first-child { background: #111827; }
+html.dark .table-sticky-col thead th:first-child { background: #0c0c0e; }
+html.dark .table-sticky-col tbody td:first-child  { background: #141416; }
 
 /* ── Modal footer — stacked full-width buttons on phones ─────────────────── */
 /* Primary action (last in DOM) renders on top; every button becomes a
@@ -120,48 +120,79 @@ html.dark :focus-visible {
 }
 
 /* ── Dark mode overrides ──────────────────────────────────────────────────── */
+/*
+ * Philosophy:
+ *   Surfaces use 4 explicit depth levels (surface-0 through surface-3).
+ *   Borders use transparent-white overlays — not gray hex values.
+ *   Text uses opacity-based white — not hard hex grays.
+ *   Each level is perceptibly distinct so surfaces don't bleed together.
+ */
 html.dark {
   color-scheme: dark;
 }
 html.dark body {
-  background-color: #111827;
+  background-color: #0c0c0e;  /* surface-0: true near-black */
 }
-html.dark .bg-background { background-color: #111827 !important; }
-html.dark .bg-white       { background-color: #1f2937 !important; }
-html.dark .bg-gray-50     { background-color: #111827 !important; }
-html.dark .bg-gray-100    { background-color: #374151 !important; }
-html.dark .bg-gray-200    { background-color: #4b5563 !important; }
-html.dark .text-gray-900  { color: #f9fafb !important; }
-html.dark .text-gray-800  { color: #f3f4f6 !important; }
-html.dark .text-gray-700  { color: #e5e7eb !important; }
-html.dark .text-gray-600  { color: #d1d5db !important; }
-html.dark .text-gray-500  { color: #9ca3af !important; }
-html.dark .text-gray-400  { color: #9ca3af !important; }  /* lifted from #6b7280 — insufficient contrast on dark bg */
-html.dark .border-gray-50  { border-color: #374151 !important; }
-html.dark .border-gray-100 { border-color: #374151 !important; }
-html.dark .border-gray-200 { border-color: #4b5563 !important; }
-html.dark .border-gray-300 { border-color: #6b7280 !important; }
+
+/* ── Surface levels ── */
+html.dark .bg-background { background-color: #0c0c0e !important; }
+html.dark .bg-white       { background-color: #141416 !important; }  /* surface-1: cards */
+html.dark .bg-gray-50     { background-color: #0c0c0e !important; }  /* recessed = page level */
+html.dark .bg-gray-100    { background-color: #1c1c1e !important; }  /* surface-2: slightly elevated */
+html.dark .bg-gray-200    { background-color: #232325 !important; }  /* surface-3: inputs */
+
+/* ── Text: opacity-based for natural dark rendering ── */
+html.dark .text-gray-900  { color: rgba(255,255,255,0.92) !important; }
+html.dark .text-gray-800  { color: rgba(255,255,255,0.82) !important; }
+html.dark .text-gray-700  { color: rgba(255,255,255,0.70) !important; }
+html.dark .text-gray-600  { color: rgba(255,255,255,0.55) !important; }
+html.dark .text-gray-500  { color: rgba(255,255,255,0.42) !important; }
+html.dark .text-gray-400  { color: rgba(255,255,255,0.32) !important; }
+
+/* ── Borders: transparent-white overlays ── */
+html.dark .border-gray-50,
+html.dark .border-gray-100 { border-color: rgba(255,255,255,0.06) !important; }
+html.dark .border-gray-200  { border-color: rgba(255,255,255,0.09) !important; }
+html.dark .border-gray-300  { border-color: rgba(255,255,255,0.14) !important; }
+
+/* ── Dividers ── */
 html.dark .divide-gray-50 > * + *,
-html.dark .divide-y > * + * { border-color: #374151 !important; }
-html.dark .hover\:bg-gray-50:hover  { background-color: #374151 !important; }
-html.dark .hover\:bg-gray-100:hover { background-color: #4b5563 !important; }
+html.dark .divide-gray-100 > * + *,
+html.dark .divide-y > * + * { border-color: rgba(255,255,255,0.06) !important; }
+
+/* ── Hover states ── */
+html.dark .hover\:bg-gray-50:hover  { background-color: rgba(255,255,255,0.04) !important; }
+html.dark .hover\:bg-gray-100:hover { background-color: rgba(255,255,255,0.07) !important; }
+
+/* ── Form controls ── */
 html.dark input:not([type="checkbox"]):not([type="radio"]),
 html.dark select,
 html.dark textarea {
-  background-color: #374151 !important;
-  border-color:     #4b5563 !important;
-  color:            #f9fafb !important;
+  background-color: #232325 !important;  /* surface-3 */
+  border-color:     rgba(255,255,255,0.10) !important;
+  color:            rgba(255,255,255,0.92) !important;
 }
 html.dark input::placeholder,
-html.dark textarea::placeholder { color: #9ca3af !important; }  /* lifted from #6b7280 for readability */
-html.dark .shadow-sm  { box-shadow: 0 1px 3px 0 rgba(0,0,0,.4) !important; }
-html.dark .shadow-md  { box-shadow: 0 4px 6px -1px rgba(0,0,0,.5) !important; }
-html.dark .shadow-lg  { box-shadow: 0 10px 15px -3px rgba(0,0,0,.5) !important; }
-html.dark .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0,0,0,.7) !important; }
-html.dark .bg-red-50   { background-color: rgba(153,27,27,0.2)  !important; }
-html.dark .bg-green-50 { background-color: rgba(6,95,70,0.2)    !important; }
-html.dark .bg-blue-50  { background-color: rgba(30,58,138,0.2)  !important; }
-html.dark .bg-amber-50 { background-color: rgba(217,119,6,0.2)  !important; }
+html.dark textarea::placeholder { color: rgba(255,255,255,0.28) !important; }
+
+/* ── Shadows: heavier on dark so elevation reads ── */
+html.dark .shadow-sm  { box-shadow: 0 1px 3px 0 rgba(0,0,0,.5) !important; }
+html.dark .shadow-md  { box-shadow: 0 4px 8px -1px rgba(0,0,0,.6) !important; }
+html.dark .shadow-lg  { box-shadow: 0 10px 20px -3px rgba(0,0,0,.65) !important; }
+html.dark .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0,0,0,.8) !important; }
+
+/* ── Semantic tint surfaces ── */
+html.dark .bg-red-50     { background-color: rgba(220,38,38,0.12)   !important; }
+html.dark .bg-green-50   { background-color: rgba(22,163,74,0.12)   !important; }
+html.dark .bg-blue-50    { background-color: rgba(59,111,212,0.12)  !important; }
+html.dark .bg-amber-50   { background-color: rgba(217,119,6,0.12)   !important; }
+html.dark .bg-indigo-50  { background-color: rgba(79,70,229,0.12)   !important; }
+html.dark .bg-slate-50   { background-color: rgba(255,255,255,0.04) !important; }
+html.dark .bg-purple-50  { background-color: rgba(147,51,234,0.12)  !important; }
+
+/* ── Sticky table column ── */
+html.dark .table-sticky-col thead th:first-child { background: #0c0c0e; }
+html.dark .table-sticky-col tbody td:first-child  { background: #141416; }
 
 /* ── Toast slide-up animation ─────────────────────────────────────────────── */
 @keyframes fadeUp {
