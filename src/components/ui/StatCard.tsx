@@ -11,6 +11,7 @@ interface StatCardProps {
   iconBgClass?: string
   href?: string
   variant?: 'default' | 'brand'
+  cardClassName?: string
 }
 
 export function StatCard({
@@ -21,6 +22,7 @@ export function StatCard({
   iconBgClass = 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-dm',
   href,
   variant = 'default',
+  cardClassName,
 }: StatCardProps) {
   const isBrand    = variant === 'brand'
   const isPositive = (trend?.value ?? 0) >= 0
@@ -59,16 +61,29 @@ export function StatCard({
     </div>
   )
 
+  if (isBrand) {
+    const bg = cardClassName ?? ''
+    const shell = (extra = '') => (
+      <div className={`rounded-xl p-6 bg-gradient-to-br ${bg} [box-shadow:inset_0_1px_0_rgba(255,255,255,0.08),0_1px_4px_rgba(0,0,0,0.25)] transition-shadow ${extra}`}>
+        {inner}
+      </div>
+    )
+    if (href) {
+      return (
+        <Link to={href} className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl">
+          {shell('cursor-pointer group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]')}
+        </Link>
+      )
+    }
+    return shell()
+  }
+
   if (href) {
     return (
       <Link to={href} className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl">
         <Card
-          variant={isBrand ? 'brand' : 'elevated'}
-          className={`transition-shadow cursor-pointer ${
-            isBrand
-              ? 'group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.12),0_4px_16px_rgba(0,0,0,0.4)]'
-              : 'group-hover:shadow-card-md group-hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10)] dark:group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.09),0_4px_16px_rgba(0,0,0,0.5)]'
-          }`}
+          variant="elevated"
+          className={`transition-shadow cursor-pointer group-hover:shadow-card-md group-hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10)] dark:group-hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.09),0_4px_16px_rgba(0,0,0,0.5)] ${cardClassName ?? ''}`}
         >
           {inner}
         </Card>
@@ -76,5 +91,5 @@ export function StatCard({
     )
   }
 
-  return <Card variant={isBrand ? 'brand' : 'elevated'}>{inner}</Card>
+  return <Card variant="elevated" className={cardClassName}>{inner}</Card>
 }

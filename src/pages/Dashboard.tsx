@@ -339,6 +339,7 @@ export default function Dashboard() {
             <>
               <StatCard
                 variant="brand"
+                cardClassName="from-emerald-700 to-emerald-900"
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<TrendingUp className="w-5 h-5 text-white" />}
@@ -346,6 +347,7 @@ export default function Dashboard() {
               />
               <StatCard
                 variant="brand"
+                cardClassName="from-rose-600 to-rose-900"
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<TrendingDown className="w-5 h-5 text-white" />}
@@ -353,6 +355,7 @@ export default function Dashboard() {
               />
               <StatCard
                 variant="brand"
+                cardClassName="from-[#0D7377] to-[#1A2C42]"
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 icon={<Wallet className="w-5 h-5 text-white" />}
@@ -360,6 +363,7 @@ export default function Dashboard() {
               />
               <StatCard
                 variant="brand"
+                cardClassName="from-amber-500 to-amber-700"
                 title="Categories"
                 value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
                 icon={<Layers className="w-5 h-5 text-white" />}
