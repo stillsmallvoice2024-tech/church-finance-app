@@ -5,6 +5,10 @@ import { useOrgStore, type OrgMembership } from '../store/orgStore'
 import { useAllocationStore } from '../store/allocationStore'
 import { useAccountCodesStore } from '../store/accountCodesStore'
 import { useReportTemplateStore } from '../store/reportTemplateStore'
+import { useReconciliationStore } from '../store/reconciliationStore'
+import { useHealthStore } from '../store/healthStore'
+import { useFinanceStore } from '../store/financeStore'
+import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import type { OrgStatus, UserProfile, UserRole } from '../types'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
@@ -311,6 +315,10 @@ export function useAuthListener(): void {
           useOrgStore.getState().clearOrg()
           useAllocationStore.getState().reset()
           useAccountCodesStore.getState().reset()
+          useReconciliationStore.getState().clearResults()
+          useHealthStore.getState().clearHealth()
+          useFinanceStore.getState().reset()
+          useTransactionSyncStore.getState().reset()
           if (event === 'SIGNED_OUT') {
             useReportTemplateStore.getState().clearPin()
           }
@@ -351,6 +359,11 @@ export function useAuth() {
     useOrgStore.getState().clearOrg()
     useAllocationStore.getState().reset()
     useAccountCodesStore.getState().reset()
+    useReconciliationStore.getState().clearResults()
+    useHealthStore.getState().clearHealth()
+    useFinanceStore.getState().reset()
+    useTransactionSyncStore.getState().reset()
+    useReportTemplateStore.getState().clearPin()
     await supabase.auth.signOut().catch(() => {})
   }
 
@@ -376,6 +389,11 @@ export function useOrgSwitch() {
     // Reset all org-scoped caches so stale data from the previous org is cleared
     useAllocationStore.getState().reset()
     useAccountCodesStore.getState().reset()
+    useReconciliationStore.getState().clearResults()
+    useHealthStore.getState().clearHealth()
+    useFinanceStore.getState().reset()
+    useTransactionSyncStore.getState().reset()
+    useReportTemplateStore.getState().clearPin()
     // Persist selection so page reloads restore the same org
     if (user?.id) persistActive(user.id, membership.org_id)
     setOrg(membership)
