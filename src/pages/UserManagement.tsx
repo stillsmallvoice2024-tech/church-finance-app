@@ -25,6 +25,7 @@ import { HelpButton }       from '../components/onboarding/HelpButton'
 import { HelpTooltip }      from '../components/ui/HelpTooltip'
 import { PageEmptyState }   from '../components/onboarding/PageEmptyState'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
+import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 
 // Org-member row — flattened from org_members + profiles join.
 // Role and identity are sourced from org_members (not profiles.role).
@@ -701,6 +702,12 @@ export default function UserManagement() {
           </button>
         </div>
       </div>
+
+      <PageHelpBanner storageKey="help-dismissed-users" title="Managing Access">
+        Invite users by email and assign a role: <strong>Admin</strong> (full configuration access),{' '}
+        <strong>Member</strong> (record transactions), or <strong>Viewer</strong> (read-only). Invites
+        expire after 7 days — resend from this page if a user hasn't accepted.
+      </PageHelpBanner>
 
       {/* ── Current user card ─────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">

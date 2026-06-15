@@ -1830,7 +1830,7 @@ export function SetupWizard() {
 
   const handleBack  = () => { if (currentIdx > 0) goToStep(currentIdx - 1) }
   const handleSkip  = () => { goToStep(currentIdx + 1) }
-  const handleClose = () => { updatePrefs({ wizard_step: currentIdx }); closeWizard() }
+  const handleClose = () => { updatePrefs({ wizard_step: currentIdx, wizard_auto_show_dismissed: true }); closeWizard() }
 
   if (!isWizardOpen || !canWrite()) return null
 
@@ -1994,15 +1994,12 @@ export function useWizardAutoShow() {
   const isWizardOpen       = useOnboardingStore(s => s.isWizardOpen)
 
   useEffect(() => {
-    if (loading)        return
-    if (!orgId)         return
-    if (isWizardOpen)   return
-    if (prefs.wizard_completed) return
+    if (loading)                          return
+    if (!orgId)                           return
+    if (isWizardOpen)                     return
+    if (prefs.wizard_completed)           return
+    if (prefs.wizard_auto_show_dismissed) return
     if (orgRole !== 'owner' && orgRole !== 'admin') return
-
-    const sessionKey = `wizard-shown-${orgId}`
-    if (sessionStorage.getItem(sessionKey)) return
-    sessionStorage.setItem(sessionKey, '1')
     openWizard()
-  }, [loading, orgId, orgRole, prefs.wizard_completed]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, orgId, orgRole, prefs.wizard_completed, prefs.wizard_auto_show_dismissed]) // eslint-disable-line react-hooks/exhaustive-deps
 }

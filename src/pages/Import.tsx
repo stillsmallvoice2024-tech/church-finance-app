@@ -8,6 +8,7 @@ import {
 import { Link, Navigate } from 'react-router-dom'
 import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
+import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
@@ -247,6 +248,12 @@ export default function Import() {
         </div>
         <HelpButton tourId="importTour" size="sm" className="self-start" />
       </div>
+
+      <PageHelpBanner storageKey="help-dismissed-import" title="Importing Bank Statements">
+        Upload Excel, CSV, or PDF bank statements and map columns to the required fields. Rows are staged
+        for review before being committed. Duplicate detection runs automatically — transactions with a
+        matching date, amount, and reference are flagged before saving.
+      </PageHelpBanner>
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200">

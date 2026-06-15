@@ -34,6 +34,7 @@ import { BALANCE_BROUGHT_FORWARD_TYPE, BF_DESCRIPTION } from '../utils/bankOpeni
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore }    from '../store/orgStore'
 import { HelpButton }      from '../components/onboarding/HelpButton'
+import { PageHelpBanner }  from '../components/ui/PageHelpBanner'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -272,6 +273,12 @@ export default function BankLedger() {
           />
         </div>
       </div>
+
+      <PageHelpBanner storageKey="help-dismissed-bank-ledger" title="Bank Ledger">
+        Shows every transaction for a selected bank account with a running balance. Choose a bank and date
+        range below to view or export its full history. The opening balance is set when the bank is first
+        configured under <strong>Settings</strong>.
+      </PageHelpBanner>
 
       {/* Bank selector + date filters */}
       <Card>

@@ -13,8 +13,9 @@ import { useOutflowTypes } from '../hooks/useOutflowTypes'
 import { useDepartments } from '../hooks/useDepartments'
 import { ReportDateFilter, useReportDateFilter } from '../components/ui/ReportDateFilter'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
-import { HelpButton }      from '../components/onboarding/HelpButton'
+import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
+import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 
 type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'departments' | 'fx' | 'audit'
 
@@ -1177,6 +1178,13 @@ export default function Reports() {
           </button>
         </div>
       </div>
+
+      <PageHelpBanner storageKey="help-dismissed-reports" title="Financial Reports">
+        Generate income, outflow, and allocation summaries across any date range. Switch between chart
+        and table views, or use <strong>Print</strong> for a formatted copy. Use <strong>Financial
+        Reports</strong> or <strong>Dynamic Reports</strong> (linked above) for more detailed,
+        customisable views.
+      </PageHelpBanner>
 
       {/* Reports hub strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:hidden">
