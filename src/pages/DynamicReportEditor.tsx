@@ -1247,6 +1247,7 @@ function MetricBlockPreview({
     portion !== 'all' ? portion : undefined,
     dateFrom || undefined,
     dateTo   || undefined,
+    cfg.dateField || undefined,
   )
   const result = resolved.get(tokenKey)
 
