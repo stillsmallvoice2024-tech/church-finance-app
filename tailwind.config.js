@@ -9,28 +9,36 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'sans-serif'],
+        body: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
-        // Navigation surface
+        // Navigation surface — Deep Navy
         nav: {
-          DEFAULT: '#1E2433',
-          light: '#2A3144',
-          dark: '#080809',
+          DEFAULT: '#1A2C42',
+          light: '#243552',
+          dark: '#0F1C2E',
         },
-        // Primary action blue — light and dark variants
+        // Primary — Teal Anchor
         primary: {
-          DEFAULT: '#3B6FD4',
-          light: '#5585DD',
-          dark: '#2D5CB8',
-          dm: '#6B9FE4',   // dark-mode primary
-          50: '#F0F5FD',
-          100: '#DCE7F8',
+          DEFAULT: '#0D7377',
+          light: '#14A085',
+          dark: '#0A5C60',
+          dm: '#14A085',   // dark-mode primary
+          50: '#E6F4F1',
+          100: '#C2E8E2',
         },
+        // Accent — Gold Honour
         accent: {
-          DEFAULT: '#D97706',
+          DEFAULT: '#C89B3C',
           light: '#FEF3C7',
-          dm: '#fbbf24',   // dark-mode accent
+          dm: '#D4AF37',   // dark-mode accent
         },
+        // Brand surface
+        tealMist: '#E6F4F1',
+        silverCloud: '#F7F9FA',
+        slate: '#4A5568',
+        deepNavy: '#1A2C42',
         success: {
           DEFAULT: '#16A34A',
           light: '#D1FAE5',
