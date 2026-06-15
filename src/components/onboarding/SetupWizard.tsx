@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   X, ChevronRight, ChevronLeft, Check, Clock, Building2, Landmark,
   ArrowDownCircle, ArrowUpCircle, Users, Upload, Sparkles, Loader2,
-  Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward,
+  Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward, Tag,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
@@ -15,6 +15,8 @@ import { useBanks } from '../../hooks/useBanks'
 import { useAddBank } from '../../hooks/useMutations'
 import { useIncomeTypes, saveIncomeType } from '../../hooks/useIncomeTypes'
 import { useOutflowTypes, saveOutflowType } from '../../hooks/useOutflowTypes'
+import { useCategories } from '../../hooks/useCategories'
+import { useAddCategory } from '../../hooks/useMutations'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
 import { useToastStore } from '../../store/toastStore'
@@ -83,6 +85,14 @@ function ItemBadge({ label, onRemove }: { label: string; onRemove?: () => void }
   )
 }
 
+function EditLaterNote({ where }: { where: string }) {
+  return (
+    <p className="text-xs text-gray-400 dark:text-gray-500 italic mt-1">
+      You can add, rename, or remove these later in {where}.
+    </p>
+  )
+}
+
 // ── Step 2: Departments ───────────────────────────────────────────────────────
 
 function DepartmentsStep() {
@@ -111,11 +121,10 @@ function DepartmentsStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Departments & Units"
-        description="Add the ministry departments or teams in your organisation. Transactions can be assigned to departments for granular reporting."
+        title="Which teams or groups are in your church?"
+        description="Think of the departments or ministries that handle money — Youth, Women's Fellowship, Administration, Choir. You'll be able to assign spending to each one so you can see exactly where funds go."
       />
 
-      {/* Existing departments */}
       {!loading && departments.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {departments.map(d => <ItemBadge key={d.id} label={d.name} />)}
@@ -127,7 +136,6 @@ function DepartmentsStep() {
         </div>
       )}
 
-      {/* Add form */}
       <form onSubmit={handleAdd} className="space-y-2">
         {error && (
           <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
@@ -159,6 +167,8 @@ function DepartmentsStep() {
           No departments yet. Add at least one to continue.
         </p>
       )}
+
+      <EditLaterNote where="Setup → Departments" />
     </div>
   )
 }
@@ -201,11 +211,10 @@ function BanksStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Bank Accounts"
-        description="Register every bank account your organisation uses. The bank name is used when importing statements."
+        title="Which bank accounts does your church use?"
+        description="Add every account the church operates — your main account, a building fund account, a foreign currency account. The name you enter here must match your bank statement exactly when you import transactions."
       />
 
-      {/* Existing banks */}
       {!loading && banks.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {banks.map(b => <ItemBadge key={b.id} label={`${b.name}${b.currency && b.currency !== 'NGN' ? ` (${b.currency})` : ''}`} />)}
@@ -217,7 +226,6 @@ function BanksStep() {
         </div>
       )}
 
-      {/* Add form */}
       <form onSubmit={handleAdd} className="space-y-2">
         {error && (
           <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
@@ -269,6 +277,8 @@ function BanksStep() {
           No banks yet. Add at least one to continue.
         </p>
       )}
+
+      <EditLaterNote where="Setup → Banks" />
     </div>
   )
 }
@@ -304,8 +314,8 @@ function IncomeTypesStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Income Types"
-        description="Create categories for your inflows — how your organisation receives money. Common examples: Tithes, Offerings, Donations, Building Fund."
+        title="How does money come into your church?"
+        description="Give each income stream its own label. For example: Tithes, Sunday Offering, Midweek Offering, Donations, Building Levy. When you import a bank statement, every credit will be tagged with one of these so you know exactly what kind of income it was."
       />
 
       {!loading && userIncomeTypes.length > 0 && (
@@ -356,6 +366,8 @@ function IncomeTypesStep() {
           No income types yet. Add at least one to continue.
         </p>
       )}
+
+      <EditLaterNote where="Setup → Income Types" />
     </div>
   )
 }
@@ -391,8 +403,8 @@ function OutflowTypesStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Outflow Types"
-        description="Create categories for your expenditure — how your organisation spends money. Examples: Salaries, Utilities, Events, Supplies."
+        title="What does your church spend money on?"
+        description="Think of your regular expense categories — paying staff, covering utility bills, running programmes, buying supplies. Every debit on your bank statement will be tagged with one of these so you can see exactly what the money went to."
       />
 
       {!loading && userTypes.length > 0 && (
@@ -418,7 +430,7 @@ function OutflowTypesStep() {
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="e.g. Salaries, Utilities, Events…"
+            placeholder="e.g. Salaries, Utilities, Programmes…"
             className={`${inputCls} flex-1`}
           />
           <button
@@ -441,11 +453,159 @@ function OutflowTypesStep() {
           No outflow types yet. Add at least one to continue.
         </p>
       )}
+
+      <EditLaterNote where="Setup → Outflow Types" />
     </div>
   )
 }
 
-// ── Step 6: Team Members (optional) ──────────────────────────────────────────
+// ── Step 6: Categories (Funds) ────────────────────────────────────────────────
+
+const CATEGORY_STARTERS = [
+  'General Fund',
+  'Building Fund',
+  'Welfare',
+  'Missions',
+  'Youth Fund',
+  'Special Projects',
+  'Benevolence',
+]
+
+function CategoriesStep() {
+  const { categories, loading, refetch } = useCategories()
+  const { mutate: addCategory } = useAddCategory()
+  const { push: toast } = useToastStore()
+  const [name, setName]               = useState('')
+  const [saving, setSaving]           = useState(false)
+  const [addingTemplate, setAddingTemplate] = useState<string | null>(null)
+  const [error, setError]             = useState<string | null>(null)
+
+  const visibleCategories = categories.filter(c => !c.is_hidden)
+  const existingNames = new Set(categories.map(c => c.name.toLowerCase()))
+
+  const handleAddTemplate = async (tpl: string) => {
+    if (existingNames.has(tpl.toLowerCase()) || addingTemplate) return
+    setAddingTemplate(tpl); setError(null)
+    try {
+      await addCategory({ name: tpl })
+      toast(`${tpl} added`, 'success')
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setAddingTemplate(null)
+    }
+  }
+
+  const handleCustomSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSaving(true); setError(null)
+    try {
+      await addCategory({ name: trimmed })
+      toast(`${trimmed} added`, 'success')
+      setName('')
+      refetch()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <StepHeading
+        title="What funds or pots does your church manage?"
+        description="A fund is like a dedicated wallet for a purpose — General Fund, Building Fund, Welfare. When income comes in, it gets split into these pockets based on your distribution rules. You can watch each fund grow over time."
+      />
+
+      {/* Quick-start template chips */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          Common funds — tap any to add instantly:
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORY_STARTERS.map(tpl => {
+            const added    = existingNames.has(tpl.toLowerCase())
+            const isAdding = addingTemplate === tpl
+            return (
+              <button
+                key={tpl}
+                type="button"
+                disabled={added || !!addingTemplate}
+                onClick={() => handleAddTemplate(tpl)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${
+                  added
+                    ? 'bg-primary/10 border-primary/20 text-primary cursor-default'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary hover:text-primary disabled:opacity-50'
+                }`}
+              >
+                {isAdding
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : added
+                    ? <Check className="w-3 h-3" />
+                    : <Plus className="w-3 h-3" />
+                }
+                {tpl}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Funds added so far */}
+      {!loading && visibleCategories.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {visibleCategories.map(c => <ItemBadge key={c.id} label={c.name} />)}
+        </div>
+      )}
+      {loading && (
+        <div className="flex gap-2">
+          {[1, 2, 3].map(i => <div key={i} className="h-6 w-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
+        </div>
+      )}
+
+      {/* Custom fund input */}
+      <form onSubmit={handleCustomSubmit} className="space-y-2">
+        {error && (
+          <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Or type a custom fund name…"
+            className={`${inputCls} flex-1`}
+          />
+          <button
+            type="submit"
+            disabled={!name.trim() || saving}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark disabled:opacity-50 transition-colors flex-shrink-0"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Add
+          </button>
+        </div>
+      </form>
+
+      {!loading && visibleCategories.length === 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+          No funds yet. Tap one above or type a name to get started.
+        </p>
+      )}
+
+      <EditLaterNote where="Budget & Allocation → Categories" />
+    </div>
+  )
+}
+
+// ── Step 7: Team Members (optional) ──────────────────────────────────────────
 
 function TeamMembersStep() {
   const orgId    = useOrgStore(s => s.orgId)
@@ -481,7 +641,6 @@ function TeamMembersStep() {
     if (!email.trim() || !orgId || !user) return
     setSaving(true); setError(null); setInviteUrl(null)
 
-    // Check for existing pending invite (duplicate prevention)
     const { data: existing } = await supabase
       .from('invitations')
       .select('token')
@@ -529,11 +688,10 @@ function TeamMembersStep() {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Team Members"
-        description="Invite your finance team to give them access. You can always do this later from the Team Members page."
+        title="Who else helps manage your church's finances?"
+        description="Invite your treasurer, accountant, or a church leader. They'll get a link to create their account. Set them as Admin (full access), Accountant (can record transactions), or Viewer (read-only)."
       />
 
-      {/* Existing members */}
       {members.length > 0 && (
         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
           {members.map(m => (
@@ -545,7 +703,6 @@ function TeamMembersStep() {
         </div>
       )}
 
-      {/* Invite form */}
       <form onSubmit={handleInvite} className="space-y-2">
         {error && (
           <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
@@ -596,11 +753,13 @@ function TeamMembersStep() {
           </button>
         </div>
       )}
+
+      <EditLaterNote where="Administration → Team Members" />
     </div>
   )
 }
 
-// ── Step 7: Import Statement (optional) ──────────────────────────────────────
+// ── Step 8: Import Statement (optional) ──────────────────────────────────────
 
 function ImportStatementStep({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
@@ -613,8 +772,8 @@ function ImportStatementStep({ onClose }: { onClose: () => void }) {
   return (
     <div className="space-y-4">
       <StepHeading
-        title="Import Your First Statement"
-        description="Upload a bank statement to bring your transaction history into the app. Excel (.xlsx) and CSV files are supported."
+        title="Ready to load your first bank statement?"
+        description="Download a statement from your bank's online portal in Excel or CSV format, then upload it here. The app maps the columns, identifies your transactions, and links each one to the right bank and income or expense type."
       />
 
       <div className="space-y-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
@@ -647,13 +806,13 @@ function ImportStatementStep({ onClose }: { onClose: () => void }) {
       </button>
 
       <p className="text-xs text-center text-gray-400 dark:text-gray-500">
-        You can also import later from the sidebar navigation.
+        You can also import later from the sidebar under Daily Finance → Import.
       </p>
     </div>
   )
 }
 
-// ── Step 8: Finish ────────────────────────────────────────────────────────────
+// ── Step 9: Finish ────────────────────────────────────────────────────────────
 
 function FinishStep({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
@@ -666,9 +825,9 @@ function FinishStep({ onClose }: { onClose: () => void }) {
         </div>
       </div>
       <div className="space-y-1">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">You're all set!</h2>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Your church is all set up!</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Your organisation is ready. Here's what to explore next.
+          Everything you've added can be updated anytime from the <strong>Setup</strong> page in the sidebar. Here's where to go next.
         </p>
       </div>
 
@@ -677,7 +836,7 @@ function FinishStep({ onClose }: { onClose: () => void }) {
           { icon: Upload, label: 'Import Statement', desc: 'Upload your first bank statement', href: '/import' },
           { icon: Landmark, label: 'Bank Ledger', desc: 'View transactions by account', href: '/bank-ledger' },
           { icon: ArrowDownCircle, label: 'Inflows', desc: 'Browse income records', href: '/inflows' },
-          { icon: ArrowUpCircle, label: 'Outflows', desc: 'Browse expenditure records', href: '/outflows' },
+          { icon: Tag, label: 'Categories', desc: 'Manage your funds and pots', href: '/categories' },
         ].map(({ icon: Icon, label, desc, href }) => (
           <button
             key={href}
@@ -713,12 +872,14 @@ function useStepCanContinue(stepId: WizardStepId): boolean {
   const { banks }       = useBanks()
   const { incomeTypes } = useIncomeTypes()
   const { outflowTypes } = useOutflowTypes()
+  const { categories }  = useCategories()
 
   switch (stepId) {
     case 'departments':   return departments.length > 0
     case 'banks':         return banks.length > 0
     case 'income-types':  return incomeTypes.filter(t => !t.name.startsWith('_')).length > 0
     case 'outflow-types': return outflowTypes.filter(t => !t.is_system).length > 0
+    case 'categories':    return categories.filter(c => !c.is_hidden).length > 0
     default:              return true
   }
 }
@@ -731,6 +892,7 @@ const STEP_ICONS: Record<WizardStepId, React.ElementType> = {
   'banks':             Landmark,
   'income-types':      ArrowDownCircle,
   'outflow-types':     ArrowUpCircle,
+  'categories':        Tag,
   'team-members':      Users,
   'import-statement':  Upload,
   'finish':            Check,
@@ -758,6 +920,7 @@ const WIZARD_STEP_IDS: WizardStepId[] = [
   'banks',
   'income-types',
   'outflow-types',
+  'categories',
   'team-members',
   'import-statement',
   'finish',
@@ -768,11 +931,9 @@ export function SetupWizard() {
   const { prefs, updatePrefs }        = useUserPreferences()
   const { canWrite }                  = useRole()
 
-  // Initialise step from saved preferences (clamped to valid range)
   const savedStep = Math.min(prefs.wizard_step, WIZARD_STEP_IDS.length - 1)
   const [currentIdx, setCurrentIdx] = useState(savedStep)
 
-  // Sync step index from preferences when wizard opens
   useEffect(() => {
     if (isWizardOpen) {
       setCurrentIdx(Math.min(prefs.wizard_step, WIZARD_STEP_IDS.length - 1))
@@ -784,7 +945,6 @@ export function SetupWizard() {
   const isLast  = currentIdx === WIZARD_STEP_IDS.length - 1
   const canContinue = useStepCanContinue(stepId)
 
-  // Persist progress after step change
   const goToStep = useCallback((idx: number) => {
     const clamped = Math.max(0, Math.min(idx, WIZARD_STEP_IDS.length - 1))
     setCurrentIdx(clamped)
@@ -831,7 +991,7 @@ export function SetupWizard() {
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Setup Wizard</h1>
+              <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Getting You Set Up</h1>
               {remainingMinutes > 0 && (
                 <p className="text-xs text-gray-500 dark:text-gray-500 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
@@ -901,6 +1061,7 @@ export function SetupWizard() {
             {stepId === 'banks'            && <BanksStep />}
             {stepId === 'income-types'     && <IncomeTypesStep />}
             {stepId === 'outflow-types'    && <OutflowTypesStep />}
+            {stepId === 'categories'       && <CategoriesStep />}
             {stepId === 'team-members'     && <TeamMembersStep />}
             {stepId === 'import-statement' && <ImportStatementStep onClose={closeWizard} />}
             {stepId === 'finish'           && <FinishStep onClose={closeWizard} />}
@@ -973,10 +1134,8 @@ export function useWizardAutoShow() {
     if (!orgId)         return
     if (isWizardOpen)   return
     if (prefs.wizard_completed) return
-    // Only auto-show for owner/admin
     if (orgRole !== 'owner' && orgRole !== 'admin') return
 
-    // Auto-show once per session using sessionStorage flag
     const sessionKey = `wizard-shown-${orgId}`
     if (sessionStorage.getItem(sessionKey)) return
     sessionStorage.setItem(sessionKey, '1')

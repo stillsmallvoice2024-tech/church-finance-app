@@ -43,6 +43,15 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     action: { label: 'Go to Setup', href: '/setup' },
   },
   {
+    id: 'create-category',
+    label: 'Set up your funds',
+    description: 'Create the fund pots your church manages (e.g. General Fund, Building Fund)',
+    iconName: 'Tag',
+    required: true,
+    completionCheck: (d) => d.hasCategories,
+    action: { label: 'Go to Categories', href: '/categories' },
+  },
+  {
     id: 'import-statement',
     label: 'Import your first statement',
     description: 'Upload a bank statement to bring in your transactions',

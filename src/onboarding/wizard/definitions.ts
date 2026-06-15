@@ -42,6 +42,14 @@ export const WIZARD_STEPS: WizardStepDefinition[] = [
     skippable: false,
   },
   {
+    id: 'categories',
+    title: 'Funds',
+    description: 'Set up the funds or pots your church manages — General Fund, Building Fund, Welfare, etc.',
+    estimatedMinutes: 2,
+    required: true,
+    skippable: false,
+  },
+  {
     id: 'team-members',
     title: 'Team Members',
     description: 'Invite your finance team and assign them appropriate roles.',

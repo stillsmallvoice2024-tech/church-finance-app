@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   CheckCircle2, Circle, X, ChevronDown, ChevronUp, Sparkles,
   Building2, Landmark, ArrowDownCircle, ArrowUpCircle,
-  Upload, UserPlus,
+  Upload, UserPlus, Tag,
 } from 'lucide-react'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
 import { useChecklistData } from '../../hooks/useChecklistData'
@@ -19,6 +19,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Landmark,
   ArrowDownCircle,
   ArrowUpCircle,
+  Tag,
   Upload,
   UserPlus,
 }
