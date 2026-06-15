@@ -9,6 +9,8 @@ import { Card } from '../components/ui/Card'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useReconciliation } from '../hooks/useReconciliation'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
+import { HelpButton }        from '../components/onboarding/HelpButton'
+import { PageHelpBanner }    from '../components/ui/PageHelpBanner'
 import { useBanks } from '../hooks/useBanks'
 import { formatCurrency, formatDate, formatWithTimezone } from '../utils/formatters'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -478,16 +480,25 @@ export default function ReconciliationCenter() {
           <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Reconciliation Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Verify your app records match your actual bank records</p>
         </div>
-        <button
-          data-tour="recon-run-button"
-          onClick={handleRun}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors shrink-0"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Running check…' : 'Run Reconciliation'}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <HelpButton tourId="reconciliationTour" size="sm" />
+          <button
+            data-tour="recon-run-button"
+            onClick={handleRun}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Running check…' : 'Run Reconciliation'}
+          </button>
+        </div>
       </div>
+
+      <PageHelpBanner storageKey="help-dismissed-reconciliation" title="About Reconciliation">
+        Checks that your app's running bank balances match your actual bank statements. Run it after
+        importing to catch discrepancies. If a balance doesn't match, look for missing transactions,
+        duplicate imports, or an incorrect opening balance.
+      </PageHelpBanner>
 
       {/* Error */}
       {error && (

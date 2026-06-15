@@ -82,7 +82,7 @@ export function OnboardingChecklist() {
   // Don't render for viewers, or while loading, or when dismissed
   if (!canWrite())                    return null
   if (prefsLoading || dataLoading)    return null
-  if (prefs.checklist_dismissed && !allDone) return null
+  if (prefs.checklist_dismissed) return null
 
   // All-done celebration banner
   if (allDone) {
@@ -96,9 +96,17 @@ export function OnboardingChecklist() {
             Setup complete!
           </p>
           <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
-            Your organisation is fully configured. This checklist will disappear shortly.
+            Your organisation is fully configured.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => updatePrefs({ checklist_dismissed: true })}
+          aria-label="Dismiss"
+          className="p-1.5 rounded-lg text-green-400 hover:text-green-600 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors flex-shrink-0"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
     )
   }

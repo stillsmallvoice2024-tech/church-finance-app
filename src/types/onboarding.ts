@@ -194,6 +194,8 @@ export interface UserPreferences {
   /** Index of the current setup wizard step (0-based) */
   wizard_step: number
   wizard_completed: boolean
+  /** Set when the user manually closes the wizard before completing it; prevents auto-reopen on subsequent sessions. */
+  wizard_auto_show_dismissed: boolean
   checklist_dismissed: boolean
   /** announcement.id values the user has acknowledged */
   announcements_read: string[]
@@ -204,6 +206,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   first_visit_pages: [],
   wizard_step: 0,
   wizard_completed: false,
+  wizard_auto_show_dismissed: false,
   checklist_dismissed: false,
   announcements_read: [],
 }

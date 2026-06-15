@@ -40,6 +40,7 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore }    from '../store/orgStore'
 import { useBanks }       from '../hooks/useBanks'
 import { HelpButton }      from '../components/onboarding/HelpButton'
+import { PageHelpBanner }  from '../components/ui/PageHelpBanner'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -637,6 +638,12 @@ export default function Categories() {
           </button>
         </div>
       </div>
+
+      <PageHelpBanner storageKey="help-dismissed-categories" title="Income & Allocation Categories">
+        Categories define how inflows are split and tracked. <strong>Local</strong> categories hold funds in
+        your base currency; <strong>FX</strong> categories handle foreign-currency holdings. Allocation rules
+        automatically distribute incoming funds across categories when transactions are imported.
+      </PageHelpBanner>
 
       <div data-tour="data-controls">
       <DataControlsBar

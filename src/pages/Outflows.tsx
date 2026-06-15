@@ -44,6 +44,7 @@ import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { HelpButton }       from '../components/onboarding/HelpButton'
+import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { MobileFab } from '../components/ui/MobileFab'
@@ -316,6 +317,12 @@ export default function Outflows() {
             />
           </div>
         </div>
+
+        <PageHelpBanner storageKey="help-dismissed-outflows" title="Outflow Transactions">
+          Disbursements and payments are imported from bank statements — bulk data should come through
+          the <strong>Import</strong> page. Use <strong>Add Outflow</strong> for one-off manual entries only.
+          Filter by date, category, or bank and export the current view at any time.
+        </PageHelpBanner>
 
         {/* Filter bar */}
         <Card data-tour="data-controls">

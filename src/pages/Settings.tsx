@@ -8,8 +8,9 @@ import { useToastStore } from '../store/toastStore'
 import { useThemeStore } from '../store/themeStore'
 import { useDbStatus } from '../hooks/useDbStatus'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { HelpButton }      from '../components/onboarding/HelpButton'
+import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
+import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { ROLE_LABELS } from '../utils/constants'
 import { friendlyError } from '../utils/friendlyError'
 import { BackupModal }     from '../components/modals/BackupModal'
@@ -152,6 +153,12 @@ export default function Settings() {
         </div>
         <HelpButton tourId="settingsTour" size="sm" />
       </div>
+
+      <PageHelpBanner storageKey="help-dismissed-settings" title="Organisation Settings">
+        Configure your profile, currency defaults, and fiscal year. Changes apply to the whole
+        organisation. Some settings — such as org type — can only be changed by the owner. Use{' '}
+        <strong>Backup</strong> to export a full data snapshot at any time.
+      </PageHelpBanner>
 
       {/* ── My Profile ──────────────────────────────────────────────────── */}
       <div data-tour="org-settings">

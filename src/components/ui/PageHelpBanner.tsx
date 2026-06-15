@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, Info } from 'lucide-react'
 
 interface Props {
@@ -12,13 +12,29 @@ export function PageHelpBanner({ storageKey, title, children }: Props) {
     try { return localStorage.getItem(storageKey) === '1' } catch { return false }
   })
 
-  useEffect(() => {
-    if (dismissed) {
-      try { localStorage.setItem(storageKey, '1') } catch {}
-    }
-  }, [dismissed, storageKey])
+  const dismiss = () => {
+    try { localStorage.setItem(storageKey, '1') } catch {}
+    setDismissed(true)
+  }
 
-  if (dismissed) return null
+  const restore = () => {
+    try { localStorage.removeItem(storageKey) } catch {}
+    setDismissed(false)
+  }
+
+  if (dismissed) {
+    return (
+      <button
+        type="button"
+        onClick={restore}
+        className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors print:hidden"
+        aria-label={`Show: ${title}`}
+      >
+        <Info className="w-3 h-3" />
+        {title}
+      </button>
+    )
+  }
 
   return (
     <div
@@ -32,7 +48,7 @@ export function PageHelpBanner({ storageKey, title, children }: Props) {
       </div>
       <button
         type="button"
-        onClick={() => setDismissed(true)}
+        onClick={dismiss}
         className="shrink-0 text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
         aria-label="Dismiss help banner"
       >

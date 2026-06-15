@@ -3,11 +3,11 @@ import { Megaphone, X, Play, ExternalLink } from 'lucide-react'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { ANNOUNCEMENTS } from '../../onboarding/announcements/definitions'
-import type { AnnouncementDefinition } from '../../types/onboarding'
+import type { AnnouncementDefinition, UserPreferences } from '../../types/onboarding'
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
-/** Returns announcements the current user has not yet read. */
+/** Returns announcements the current user has not yet read. Used by Sidebar badge. */
 export function useUnreadAnnouncements() {
   const { prefs, loading } = useUserPreferences()
   if (loading) return []
@@ -16,15 +16,15 @@ export function useUnreadAnnouncements() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-interface AnnouncementBannerProps {
-  /** Single announcement to display. */
+interface AnnouncementBannerItemProps {
   announcement: AnnouncementDefinition
+  prefs: UserPreferences
+  updatePrefs: (partial: Partial<UserPreferences>) => void
 }
 
-function AnnouncementBannerItem({ announcement }: AnnouncementBannerProps) {
-  const { prefs, updatePrefs } = useUserPreferences()
-  const startTour              = useOnboardingStore(s => s.startTour)
-  const openWhatsNew           = useOnboardingStore(s => s.openHelpCenterWhatsNew)
+function AnnouncementBannerItem({ announcement, prefs, updatePrefs }: AnnouncementBannerItemProps) {
+  const startTour    = useOnboardingStore(s => s.startTour)
+  const openWhatsNew = useOnboardingStore(s => s.openHelpCenterWhatsNew)
 
   const dismiss = useCallback(() => {
     updatePrefs({ announcements_read: [...prefs.announcements_read, announcement.id] })
@@ -97,7 +97,9 @@ function AnnouncementBannerItem({ announcement }: AnnouncementBannerProps) {
 // ── Public export — renders the topmost unread announcement ───────────────────
 
 export function AnnouncementBanner() {
-  const unread = useUnreadAnnouncements()
+  const { prefs, loading, updatePrefs } = useUserPreferences()
+  if (loading) return null
+  const unread = ANNOUNCEMENTS.filter(a => !prefs.announcements_read.includes(a.id))
   if (unread.length === 0) return null
-  return <AnnouncementBannerItem announcement={unread[0]} />
+  return <AnnouncementBannerItem announcement={unread[0]} prefs={prefs} updatePrefs={updatePrefs} />
 }

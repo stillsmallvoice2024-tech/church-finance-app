@@ -31,6 +31,7 @@ import { useOrgStore }             from '../store/orgStore'
 import { fetchAllPaginated, EXPORT_MAX } from '../utils/paginatedExport'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { HelpButton }              from '../components/onboarding/HelpButton'
+import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
 import { Link }                    from 'react-router-dom'
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
@@ -310,6 +311,12 @@ export default function Inflows() {
             />
           </div>
         </div>
+
+        <PageHelpBanner storageKey="help-dismissed-inflows" title="Inflow Transactions">
+          Transactions here come from imported bank statements — use the <strong>Import</strong> page for bulk
+          uploads. <strong>Add Inflow</strong> is for one-off manual entries only. Filter by date, bank, or
+          category, and export the current view at any time.
+        </PageHelpBanner>
 
         {/* Filter bar */}
         <Card data-tour="data-controls">
