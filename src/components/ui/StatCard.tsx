@@ -33,7 +33,7 @@ export function StatCard({
       <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">
         {title}
       </p>
-      <p className="text-[2.75rem] font-extrabold tracking-tight text-gray-900 dark:text-white/90 mt-2 tabular-nums leading-none">
+      <p className="text-[2.75rem] font-extrabold tracking-tight text-primary dark:text-primary-dm mt-2 tabular-nums leading-none">
         {value}
       </p>
       {trend && (
