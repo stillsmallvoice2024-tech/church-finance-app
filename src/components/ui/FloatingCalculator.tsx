@@ -501,7 +501,7 @@ function HistoryPanel({ history, onRecall, onClear, onBack }: HistoryPanelProps)
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onRecall(entry.result)}
                 title="Use this result"
-                className="w-full px-4 py-2.5 text-right hover:bg-gray-50 transition-colors block"
+                className="w-full px-4 py-2.5 text-right hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors block"
               >
                 <div className="text-xs text-gray-500 truncate">{entry.expression}</div>
                 <div className="text-sm font-mono font-semibold text-gray-800">{entry.result}</div>

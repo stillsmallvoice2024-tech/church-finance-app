@@ -327,7 +327,7 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
   }
 
   return (
-    <tr className="border-t border-gray-100 hover:bg-gray-50 transition-colors group">
+    <tr className="border-t border-gray-100 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors group">
       {/* Account */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
@@ -578,7 +578,7 @@ export default function ReconciliationCenter() {
               <div className="overflow-x-auto scroll-x-fade">
                 <table className="min-w-full">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
+                    <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                       {['Account', 'Status', 'Book Balance', 'Reference Balance', 'Difference', 'Issues'].map(h => (
                         <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">{h}</th>
                       ))}
@@ -731,7 +731,7 @@ export default function ReconciliationCenter() {
               <div className="overflow-x-auto scroll-x-fade">
                 <table className="min-w-full">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
+                    <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                       {['Run Time', 'Status', 'Critical', 'Warnings', 'Info', 'Total'].map(h => (
                         <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">{h}</th>
                       ))}

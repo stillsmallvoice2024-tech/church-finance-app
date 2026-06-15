@@ -488,18 +488,18 @@ export default function BankLedger() {
             <div className="overflow-x-auto scroll-x-fade">
               <table className="min-w-full">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
+                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                     <th className="w-8" />
-                    <SortableHeader field={BL_SORT_FIELDS[0]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} className="px-4 py-3 text-xs font-semibold" />
+                    <SortableHeader field={BL_SORT_FIELDS[0]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} className="px-4 py-3" />
                     <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">Description</th>
-                    <SortableHeader field={BL_SORT_FIELDS[1]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-success/80 hover:text-success" />
-                    <SortableHeader field={BL_SORT_FIELDS[2]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-danger/80 hover:text-danger" />
-                    <SortableHeader field={BL_SORT_FIELDS[3]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" />
+                    <SortableHeader field={BL_SORT_FIELDS[1]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3" inactiveCls="text-success/80 hover:text-success" />
+                    <SortableHeader field={BL_SORT_FIELDS[2]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3" inactiveCls="text-danger/80 hover:text-danger" />
+                    <SortableHeader field={BL_SORT_FIELDS[3]} activeSortKey={blState.sortKey} activeSortDir={blState.sortDir} onSort={blState.setSort} rightAlign className="px-4 py-3" />
                     <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left">📎</th>
                     {canWrite() && <th className="px-4 py-3 w-10" />}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-black/[0.05]">
                   {loading && sortedRows.length === 0 ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <tr key={i}>{Array.from({ length: 5 }).map((_, j) => (

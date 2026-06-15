@@ -233,14 +233,14 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={() => setShowAddOutflow(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <MinusCircle className="w-4 h-4" />
                 Add Outflow
               </button>
               <button
                 onClick={() => setShowImport(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 Import
@@ -471,7 +471,7 @@ export default function Dashboard() {
           </div>
 
           {isLoading ? (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-black/[0.05]">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4 px-6 py-3 animate-pulse">
                   <div className="h-4 bg-gray-100 rounded w-20 shrink-0" />
@@ -483,9 +483,9 @@ export default function Dashboard() {
           ) : stats.recentTransactions.length === 0 ? (
             <EmptyState icon={TrendingUp} title="No recent transactions." compact />
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-black/[0.05]">
               {stats.recentTransactions.map(tx => (
-                <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 transition-colors">
+                <div key={tx.id} className="flex items-center gap-3 px-6 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                   <span className="text-xs text-gray-500 whitespace-nowrap w-20 shrink-0">
                     {formatDate(tx.date)}
                   </span>

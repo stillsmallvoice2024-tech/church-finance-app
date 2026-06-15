@@ -222,7 +222,7 @@ export default function PercentageAllocation() {
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={sortedRows.length === 0} />
           <button
             onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -317,7 +317,7 @@ export default function PercentageAllocation() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {paPage.map(row => (
-                    <tr key={row.category} className="hover:bg-gray-50 transition-colors">
+                    <tr key={row.category} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="px-5 py-3 font-medium text-gray-800">{row.category}</td>
                       <td className="px-5 py-3 text-right text-success font-mono">
                         {formatCurrency(row.deposited, baseCurrencyCode)}

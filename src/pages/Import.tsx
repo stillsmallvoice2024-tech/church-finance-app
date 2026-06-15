@@ -444,7 +444,7 @@ export default function Import() {
                           </button>
                           <button
                             onClick={() => openWizard(false)}
-                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
                           >
                             Import Anyway
                           </button>
@@ -1239,7 +1239,7 @@ function ManualEntryForm() {
             <div className="flex justify-end gap-3">
               <button
                 onClick={handleCancelDup}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 Cancel
               </button>

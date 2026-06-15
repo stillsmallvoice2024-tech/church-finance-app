@@ -443,7 +443,7 @@ function SortableSubgroup({
 
       {/* Subgroup subtotal */}
       <div className="flex items-center justify-between px-3 py-1 bg-gray-100/70 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-600">
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+        <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest uppercase tracking-wide">
           {sg.label} Sub-Total
         </span>
         <span className="font-mono font-bold text-xs">{baseCurrencySymbol}{fmt(sgTotal, formatLocale)}</span>
@@ -1724,7 +1724,7 @@ export default function FinancialReport() {
                                 )
                               })}
                               <tr key={`sgs-${sg.id}`} className="bg-gray-100/60 dark:bg-gray-800/30">
-                                <td className="px-8 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{sg.label} Sub-Total</td>
+                                <td className="px-8 py-1 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{sg.label} Sub-Total</td>
                                 <td className="px-6 py-1 text-right font-mono font-bold text-xs">{baseCurrencySymbol}{fmt(sgTotal, formatLocale)}</td>
                               </tr>
                             </>
@@ -1987,7 +1987,7 @@ export default function FinancialReport() {
 
             {tplMenuOpen && (
               <div className="absolute right-0 top-full mt-1 w-60 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-20 py-1">
-                <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Saved Templates</div>
+                <div className="px-3 py-1.5 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest uppercase tracking-wide">Saved Templates</div>
                 {templates.length === 0 && (
                   <p className="px-3 py-2 text-xs text-gray-500">No templates yet</p>
                 )}

@@ -199,7 +199,7 @@ export default function PercentageAllocations() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {pcaPage.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50 transition-colors">
+                    <tr key={i} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                       <td className="px-5 py-3 text-gray-500 text-xs">{pcaState.page * pcaState.pageSize + i + 1}</td>
                       <td className="px-5 py-3 font-medium text-gray-800">{row.category_name}</td>
                       <td className="px-5 py-3 text-right">

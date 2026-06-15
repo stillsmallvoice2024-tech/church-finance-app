@@ -37,19 +37,19 @@ export function DataTable<T>({
     <div className="overflow-auto max-h-[70vh]" onScroll={onScroll}>
       <table className="min-w-full">
         <thead className={`sticky top-0 z-10 transition-shadow ${scrolled ? 'shadow-sm' : ''}`}>
-          <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+          <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
             {columns.map((col) => (
               <th
                 key={col.key}
                 scope="col"
-                className={`px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 ${col.rightAlign ? 'text-right' : 'text-left'} ${col.className ?? ''}`}
+                className={`px-4 py-3 text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest ${col.rightAlign ? 'text-right' : 'text-left'} ${col.className ?? ''}`}
               >
                 {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
+        <tbody className="divide-y divide-black/[0.05] dark:divide-white/[0.05]">
           {isLoading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <TableRowSkeleton key={i} cols={columns.length} />
@@ -67,7 +67,7 @@ export function DataTable<T>({
             data.map((row, index) => (
               <tr
                 key={keyExtractor(row)}
-                className="hover:bg-gray-50 transition-colors"
+                className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
                 style={{ animation: `row-fade-in 200ms ease-out ${Math.min(index, 12) * 28}ms both` }}
               >
                 {columns.map((col) => (

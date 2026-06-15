@@ -956,7 +956,7 @@ function DepartmentBreakdownPanel() {
             <div className="overflow-x-auto rounded-xl border border-gray-100">
               <table className="w-full text-sm table-sticky-col">
                 <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-100">
+                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                     <th className="px-4 py-3 text-left font-medium">Date</th>
                     <th className="px-4 py-3 text-left font-medium">Description</th>
                     <th className="px-4 py-3 text-left font-medium">Outflow Type</th>

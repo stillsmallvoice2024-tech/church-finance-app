@@ -324,7 +324,7 @@ export default function Onboarding() {
                 <p className="mt-1 text-sm text-gray-500">Review your setup before entering the app.</p>
               </div>
 
-              <div className="rounded-xl bg-gray-50 border border-gray-100 divide-y divide-gray-100">
+              <div className="rounded-xl bg-gray-50 border border-gray-100 divide-y divide-black/[0.05]">
                 {[
                   { label: 'Organisation',       value: name },
                   { label: 'Currency',           value: currency },

@@ -53,7 +53,7 @@ export function AdvancedSortModal({ open, onClose, sortFields, levels, onApply }
       </button>
       <div className="flex gap-2">
         <button type="button" onClick={onClose}
-          className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
           Cancel
         </button>
         <button type="button" onClick={handleApply}

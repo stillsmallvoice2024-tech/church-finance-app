@@ -470,28 +470,28 @@ export default function IntraFlow() {
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[2]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[3]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     <SortableHeader
                       field={IFL_SORT_FIELDS[1]}
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                       rightAlign
                     />
                     <SortableHeader
@@ -499,10 +499,10 @@ export default function IntraFlow() {
                       activeSortKey={iflState.sortKey}
                       activeSortDir={iflState.sortDir}
                       onSort={iflState.setSort}
-                      className="px-4 py-3 text-xs font-semibold"
+                      className="px-4 py-3"
                     />
                     {['Remark', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                      <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                         {h}
                       </th>
                     ))}

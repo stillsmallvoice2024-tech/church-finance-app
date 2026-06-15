@@ -1331,18 +1331,18 @@ function TableBlockPreview({
       <div className="overflow-x-auto scroll-x-fade">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+            <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+              <th className="px-5 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">
                 Category
               </th>
               {colKeys.map(col => (
-                <th key={col} className="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <th key={col} className="px-5 py-3 text-right text-[11px] font-bold text-gray-400 uppercase tracking-widest">
                   {colLabels[col]}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-black/[0.05]">
             {/* Loading skeleton */}
             {resolving && cats.map(cat => (
               <tr key={cat}>
@@ -1357,7 +1357,7 @@ function TableBlockPreview({
 
             {/* Data rows */}
             {!resolving && (rows ?? []).map(row => (
-              <tr key={row.category} className="hover:bg-gray-50 transition-colors">
+              <tr key={row.category} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
                 <td className="px-5 py-3 text-gray-800 font-medium">{row.category}</td>
                 {colKeys.map(col => {
                   const err = col === 'outflows' ? row.outflowError : (col === 'inflows' ? row.inflowError : (row.inflowError || row.outflowError))
@@ -1862,7 +1862,7 @@ export default function DynamicReportEditor() {
               <button
                 onClick={handleCopyLink}
                 title="Copy shareable link"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 {linkCopied ? <Check className="w-3.5 h-3.5 text-success" /> : <Link2 className="w-3.5 h-3.5" />}
                 {linkCopied ? 'Copied!' : 'Share'}
@@ -1870,7 +1870,7 @@ export default function DynamicReportEditor() {
               <button
                 onClick={() => window.print()}
                 title="Print report"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <Printer className="w-3.5 h-3.5" />Print
               </button>
@@ -1936,19 +1936,19 @@ export default function DynamicReportEditor() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-gray-400 self-center">Add block:</span>
             <button onClick={() => addBlock('text')}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
               <Type className="w-3.5 h-3.5" />Text
             </button>
             <button onClick={() => addBlock('metric')}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
               <BarChart2 className="w-3.5 h-3.5" />Metric
             </button>
             <button onClick={() => addBlock('table')}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
               <Table2 className="w-3.5 h-3.5" />Table
             </button>
             <button onClick={() => addBlock('formula')}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
               <Sigma className="w-3.5 h-3.5" />Formula
             </button>
             {isDirty && <span className="text-xs text-gray-500 ml-auto">Unsaved changes</span>}
@@ -1994,7 +1994,7 @@ export default function DynamicReportEditor() {
               <button
                 onClick={() => resolveAll(blocks)}
                 disabled={resolving}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`w-3 h-3 ${resolving ? 'animate-spin' : ''}`} />
                 Refresh
@@ -2072,7 +2072,7 @@ export default function DynamicReportEditor() {
                 {snapshots.length === 0 ? (
                   <p className="text-xs text-gray-500 text-center py-3">No snapshots yet — save the current live state above.</p>
                 ) : (
-                  <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+                  <div className="rounded-xl border border-gray-200 divide-y divide-black/[0.05] overflow-hidden">
                     {snapshots.map(snap => (
                       <div
                         key={snap.id}

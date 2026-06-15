@@ -515,7 +515,7 @@ export default function Outflows() {
           <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
+                <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
                   <th className="w-10 pl-4 pr-2 py-3">
                     <input
                       type="checkbox"
@@ -525,17 +525,17 @@ export default function Outflows() {
                     />
                   </th>
                   <th className="w-8 px-1 py-3" />
-                  <SortableHeader field={outSF('date')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <SortableHeader field={outSF('recorded_at')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <SortableHeader field={outSF('bank_name')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Description</th>
-                  <SortableHeader field={outSF('outflow_type')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3 text-xs font-semibold" />
-                  <SortableHeader field={outSF('amount_disbursed')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3 text-xs font-semibold" inactiveCls="text-danger/80 hover:text-danger" />
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">📎</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 text-left whitespace-nowrap">Actions</th>
+                  <SortableHeader field={outSF('date')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3" />
+                  <SortableHeader field={outSF('recorded_at')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3" />
+                  <SortableHeader field={outSF('bank_name')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3" />
+                  <th className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-left whitespace-nowrap">Description</th>
+                  <SortableHeader field={outSF('outflow_type')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} className="px-4 py-3" />
+                  <SortableHeader field={outSF('amount_disbursed')} activeSortKey={outState.sortKey} activeSortDir={outState.sortDir} onSort={outState.setSort} rightAlign className="px-4 py-3" inactiveCls="text-danger/80 hover:text-danger" />
+                  <th className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-left whitespace-nowrap">📎</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-left whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-black/[0.05]">
                 {loading && displayed.length === 0 ? (
                   Array.from({ length: 9 }).map((_, i) => (
                     <tr key={i}>
@@ -562,7 +562,7 @@ export default function Outflows() {
                       <>
                         <tr
                           key={row.id}
-                          className={`hover:bg-gray-50 transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
+                          className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors${selectedIds.has(row.id) ? ' bg-primary/5 hover:bg-primary/10' : ''}`}
                         >
                           <td className="pl-4 pr-2 py-3 w-10">
                             <input
