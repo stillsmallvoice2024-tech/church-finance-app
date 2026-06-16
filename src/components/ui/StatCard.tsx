@@ -8,6 +8,7 @@ interface StatCardProps {
   value: ReactNode
   icon?: ReactNode
   trend?: { value: number; label: string }
+  note?: ReactNode
   iconBgClass?: string
   href?: string
   variant?: 'default' | 'brand' | 'hero'
@@ -19,6 +20,7 @@ export function StatCard({
   value,
   icon,
   trend,
+  note,
   iconBgClass = 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-dm',
   href,
   variant = 'default',
@@ -41,6 +43,9 @@ export function StatCard({
           {isPositive ? <TrendingUp className="w-3.5 h-3.5 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 shrink-0" />}
           <span>{Math.abs(trend.value)}% {trend.label}</span>
         </div>
+      )}
+      {note && (
+        <p className="mt-2 text-[11px] text-gray-400 dark:text-white/30 leading-snug">{note}</p>
       )}
     </div>
   )
