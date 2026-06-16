@@ -31,6 +31,7 @@ export interface DashboardStats {
   totalInflow: number
   totalOutflow: number
   netBalance: number
+  openingBalanceTotal: number
   fxBalances: FXBalance[]
   recentTransactions: RecentInflowRow[]
   loading: boolean
@@ -91,13 +92,14 @@ function latestFXBalances(
 export function useDashboardStats(year: number = new Date().getFullYear()): DashboardStats {
   const orgId = useOrgStore((s) => s.orgId)
 
-  const [monthlyTotals, setMonthlyTotals]       = useState<MonthlyTotal[]>([])
-  const [totalInflow,   setTotalInflow]          = useState(0)
-  const [totalOutflow,  setTotalOutflow]          = useState(0)
-  const [fxBalances,    setFxBalances]            = useState<FXBalance[]>([])
-  const [recentTxns,    setRecentTxns]            = useState<RecentInflowRow[]>([])
-  const [loading,       setLoading]               = useState(true)
-  const [error,         setError]                 = useState<string | null>(null)
+  const [monthlyTotals,       setMonthlyTotals]       = useState<MonthlyTotal[]>([])
+  const [totalInflow,         setTotalInflow]          = useState(0)
+  const [totalOutflow,        setTotalOutflow]          = useState(0)
+  const [openingBalanceTotal, setOpeningBalanceTotal]  = useState(0)
+  const [fxBalances,          setFxBalances]            = useState<FXBalance[]>([])
+  const [recentTxns,          setRecentTxns]            = useState<RecentInflowRow[]>([])
+  const [loading,             setLoading]               = useState(true)
+  const [error,               setError]                 = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
     if (!orgId) { setLoading(false); return }
@@ -107,8 +109,8 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     const yearStart = `${year}-01-01`
     const yearEnd   = `${year}-12-31`
 
-    // ── Fire all four queries in parallel ──────────────────────────────────────
-    const [inflowRes, outflowRes, fxRes, recentRes] = await Promise.all([
+    // ── Fire all queries in parallel ───────────────────────────────────────────
+    const [inflowRes, outflowRes, fxRes, recentRes, openingBalRes] = await Promise.all([
       // 1. All inflow amounts for the year (minimal columns for aggregation)
       supabase
         .from('inflow_transactions')
@@ -142,10 +144,17 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
         .eq('org_id', orgId)
         .order('date', { ascending: false })
         .limit(10),
+
+      // 5. Opening balances (date-agnostic — sentinel date 1900-01-01 falls outside year filters)
+      supabase
+        .from('inflow_transactions')
+        .select('amount')
+        .eq('org_id', orgId)
+        .eq('transaction_type', 'balance_brought_forward'),
     ])
 
     // ── Surface first error encountered ───────────────────────────────────────
-    const firstError = [inflowRes.error, outflowRes.error, fxRes.error, recentRes.error]
+    const firstError = [inflowRes.error, outflowRes.error, fxRes.error, recentRes.error, openingBalRes.error]
       .find(Boolean)
 
     if (firstError) {
@@ -182,16 +191,18 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       ...inOffsetFlipped.map(r => ({ date: r.date, amount_disbursed: r.amount })),
     ]
 
-    const totals   = buildMonthlyTotals(inflows, outflows)
-    const totalIn  = inflows.reduce((s, r)  => s + Number(r.amount),          0)
-    const totalOut = outflows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
-    const fxBals   = latestFXBalances(
+    const totals    = buildMonthlyTotals(inflows, outflows)
+    const openingIn = (openingBalRes.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0)
+    const totalIn   = inflows.reduce((s, r)  => s + Number(r.amount),          0) + openingIn
+    const totalOut  = outflows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
+    const fxBals    = latestFXBalances(
       (fxRes.data ?? []) as { currency: string; running_balance: number }[],
     )
 
     setMonthlyTotals(totals)
     setTotalInflow(totalIn)
     setTotalOutflow(totalOut)
+    setOpeningBalanceTotal(openingIn)
     setFxBalances(fxBals)
     setRecentTxns(
       ((recentRes.data ?? []) as Omit<RecentInflowRow, 'display_description'>[]).map(r => ({
@@ -209,6 +220,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     totalInflow,
     totalOutflow,
     netBalance: totalInflow - totalOutflow,
+    openingBalanceTotal,
     fxBalances,
     recentTransactions: recentTxns,
     loading,

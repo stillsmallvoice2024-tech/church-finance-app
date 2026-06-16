@@ -341,6 +341,9 @@ export default function Dashboard() {
                 variant="hero"
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
+                note={stats.openingBalanceTotal > 0
+                  ? `Includes ${formatCurrencyCompact(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
+                  : undefined}
                 href="/inflows"
               />
               <StatCard

@@ -318,7 +318,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
         const propagateErrors: string[] = []
         const skipped: string[] = []
 
-        // On edit: remove stale entries where apply_to_category changed from true → false
+        // On edit: delete entries for rows that were removed, had their category changed,
+        // or had apply_to_category flipped from true → false.
         if (isEdit && editRecord) {
           const prevAllocs = editRecord.starting_balance_allocations ?? []
           for (const prev of prevAllocs) {
@@ -326,7 +327,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             const curr = allocations.find(
               a => a.category_name === prev.category_name && a.budget_portion === prev.budget_portion
             )
-            if (curr && curr.apply_to_category === false) {
+            if (!curr || curr.apply_to_category === false) {
               const cat = categories.find(c => c.name === prev.category_name)
               if (cat) {
                 try {
