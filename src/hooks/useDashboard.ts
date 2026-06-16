@@ -145,12 +145,16 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
         .order('date', { ascending: false })
         .limit(10),
 
-      // 5. Opening balances (date-agnostic — sentinel date 1900-01-01 falls outside year filters)
+      // 5. Opening balances — authoritative source is banks.starting_balance.
+      //    balance_brought_forward records in inflow_transactions are audit-only and
+      //    may not exist for banks created before that feature was added.
+      //    Exclude foreign-currency banks: their starting_balance is in a foreign
+      //    denomination and is not additive with the base-currency totals.
       supabase
-        .from('inflow_transactions')
-        .select('amount')
+        .from('banks')
+        .select('starting_balance')
         .eq('org_id', orgId)
-        .eq('transaction_type', 'balance_brought_forward'),
+        .eq('is_foreign_currency', false),
     ])
 
     // ── Surface first error encountered ───────────────────────────────────────
@@ -192,7 +196,9 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     ]
 
     const totals    = buildMonthlyTotals(inflows, outflows)
-    const openingIn = (openingBalRes.data ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount), 0)
+    const openingIn = (openingBalRes.data ?? []).reduce(
+      (s, r) => s + Number((r as { starting_balance: number | null }).starting_balance ?? 0), 0,
+    )
     const totalIn   = inflows.reduce((s, r)  => s + Number(r.amount),          0) + openingIn
     const totalOut  = outflows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
     const fxBals    = latestFXBalances(
