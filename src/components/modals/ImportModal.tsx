@@ -118,7 +118,10 @@ const ALIAS_MAP: Record<string, string[]> = {
   credit:           ['credit', 'cr', 'deposit', 'deposits', 'inflow', 'in', 'income', 'incoming', 'inward', 'creditamt'],
   debit:            ['debit', 'dr', 'withdrawal', 'withdrawals', 'outflow', 'out', 'payment', 'payments', 'charge', 'charges', 'debitamt'],
   reference:        ['reference', 'ref', 'txnref', 'transref', 'transactionid', 'txnid', 'sessionid'],
-  balance:          ['balance', 'runningbalance', 'closingbalance', 'closingbal', 'runningbal'],
+  balance:          ['balance', 'bal', 'runningbalance', 'closingbalance', 'closingbal', 'runningbal',
+                     'ledgerbalance', 'ledgerbal', 'availablebalance', 'availbal',
+                     'bookbalance', 'acctbalance', 'accountbalance', 'stmtbalance',
+                     'statementbalance', 'openbal', 'closebal', 'closbal'],
   deposit:          ['deposit', 'credit', 'inflow', 'in'],
   withdrawal:       ['withdrawal', 'debit', 'outflow', 'out'],
   running_balance:  ['balance', 'runningbalance', 'closingbalance'],
@@ -1071,14 +1074,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     const userId = useAuthStore.getState().user?.id ?? null
     if (!orgId) return
     setStmtSaving(true)
-    await supabase
+    const { error } = await supabase
       .from('bank_statement_balances')
       .upsert(
         { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: val, statement_date: stmtDate, org_id: orgId, entered_by: userId },
         { onConflict: 'org_id,bank_name' },
       )
     setStmtSaving(false)
-    setStmtSaved(true)
+    if (!error) setStmtSaved(true)
   }
 
   // ── Step 4: Import ────────────────────────────────────────────────────────
@@ -1358,13 +1361,51 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
         }
       }
       if (!balAutoDetected) {
-        // Derive last transaction date to pre-fill the manual entry form
-        let maxDate = ''
+        // Fallback: scan every sheet column by header name against the balance aliases.
+        // Covers the case where the user didn't map the balance column (or auto-mapping
+        // missed the header) but the file still has a recognisable balance column.
+        const balAliases = new Set(ALIAS_MAP['balance'] ?? [])
+        let fallbackColIdx = -1
+        for (let ci = 0; ci < sheet.headers.length; ci++) {
+          const norm = sheet.headers[ci].toLowerCase().replace(/[\s_\-().]+/g, '')
+          if (balAliases.has(norm)) { fallbackColIdx = ci; break }
+        }
+
+        // Single pass: track both the last transaction date (for manual-form pre-fill)
+        // and the last date+balance pair from the fallback column (mirrors the mapped-
+        // column logic above exactly).
+        let maxDate          = ''
+        let fallbackLastDate = ''
+        let fallbackBalance: number | null = null
         for (const raw of mergedRows) {
           const d = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
-          if (d && d > maxDate) maxDate = d
+          if (!d) continue
+          if (d > maxDate) maxDate = d
+          if (fallbackColIdx >= 0 && raw[fallbackColIdx] != null && raw[fallbackColIdx] !== '') {
+            if (d >= fallbackLastDate) {
+              fallbackLastDate = d
+              fallbackBalance  = parseNumber(raw[fallbackColIdx])
+            }
+          }
         }
-        setStmtDate(maxDate || new Date().toISOString().slice(0, 10))
+
+        if (fallbackColIdx >= 0 && fallbackLastDate && fallbackBalance !== null && internalBank) {
+          // Found a balance column outside the mapping — treat identically to the mapped path
+          const lb  = fallbackBalance
+          const ld  = fallbackLastDate
+          const uid = useAuthStore.getState().user?.id ?? null
+          void supabase.from('bank_statement_balances')
+            .upsert(
+              { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: lb, statement_date: ld, org_id: orgId, entered_by: uid },
+              { onConflict: 'org_id,bank_name' },
+            )
+            .then(({ error }) => {
+              if (!error) setStmtAutoSaved({ balance: lb, date: ld })
+              else        setStmtDate(ld)   // DB write failed — fall through to manual form
+            })
+        } else {
+          setStmtDate(maxDate || new Date().toISOString().slice(0, 10))
+        }
       }
     }
 
