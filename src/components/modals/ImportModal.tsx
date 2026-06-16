@@ -300,6 +300,8 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
   const [stmtSaved,     setStmtSaved]     = useState(false)
   /** Set when the balance column was auto-detected and saved; null = not detected (show manual form). */
   const [stmtAutoSaved, setStmtAutoSaved] = useState<{ balance: number; date: string } | null>(null)
+  /** True when auto-detect found a balance but the DB write failed (table may not exist). */
+  const [stmtDbError,   setStmtDbError]   = useState(false)
 
   // Derived
   const sheet   = useMemo(() => sheets.find(s => s.name === selectedSheet) ?? null, [sheets, selectedSheet])
@@ -1350,6 +1352,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const lb  = lastBalance
           const ld  = lastDate
           const uid = useAuthStore.getState().user?.id ?? null
+          // Pre-fill manual form first so the value is visible even if the DB write fails
+          setStmtBalance(String(lb))
+          setStmtDate(ld)
           void supabase.from('bank_statement_balances')
             .upsert(
               { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: lb, statement_date: ld, org_id: orgId, entered_by: uid },
@@ -1357,6 +1362,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             )
             .then(({ error }) => {
               if (!error) setStmtAutoSaved({ balance: lb, date: ld })
+              else        setStmtDbError(true)
             })
         }
       }
@@ -1394,6 +1400,9 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
           const lb  = fallbackBalance
           const ld  = fallbackLastDate
           const uid = useAuthStore.getState().user?.id ?? null
+          // Pre-fill manual form first so the value is visible even if the DB write fails
+          setStmtBalance(String(lb))
+          setStmtDate(ld)
           void supabase.from('bank_statement_balances')
             .upsert(
               { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: lb, statement_date: ld, org_id: orgId, entered_by: uid },
@@ -1401,7 +1410,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
             )
             .then(({ error }) => {
               if (!error) setStmtAutoSaved({ balance: lb, date: ld })
-              else        setStmtDate(ld)   // DB write failed — fall through to manual form
+              else        setStmtDbError(true)
             })
         } else {
           setStmtDate(maxDate || new Date().toISOString().slice(0, 10))
@@ -3243,7 +3252,11 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
                 ) : (
                   /* Balance column not mapped — manual fallback */
                   <>
-                    <p className="text-xs text-gray-500">Balance column not mapped — enter manually if needed:</p>
+                    {stmtDbError ? (
+                      <p className="text-xs text-amber-600">Balance detected but could not save automatically — please save manually below. (If this keeps failing, run the <code>20260615000001_bank_statement_balances.sql</code> migration in your Supabase SQL editor.)</p>
+                    ) : (
+                      <p className="text-xs text-gray-500">Balance column not mapped — enter manually if needed:</p>
+                    )}
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         type="text" inputMode="decimal"
