@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Printer, Download, AlertCircle, FileText, FilePlus, BarChart2, ChevronRight } from 'lucide-react'
+import { Printer, Download, AlertCircle, FileText, FilePlus, BarChart2, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../hooks/useRole'
@@ -13,6 +13,7 @@ import { useOutflowTypes } from '../hooks/useOutflowTypes'
 import { useDepartments } from '../hooks/useDepartments'
 import { ReportDateFilter, useReportDateFilter } from '../components/ui/ReportDateFilter'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
 import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
@@ -91,19 +92,25 @@ interface AnnualRow { year: number; totalInflow: number; totalOutflow: number; n
 function AnnualSummaryPanel() {
   const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
+  const orgId = useOrgStore(s => s.orgId)
   const [rows,    setRows]    = useState<AnnualRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     const y = activeYear.toString()
 
     const [inflowRes, outflowRes] = await Promise.all([
       supabase.from('inflow_transactions').select('date, amount')
+        .eq('org_id', orgId)
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
       supabase.from('outflow_transactions').select('date, amount_disbursed')
+        .eq('org_id', orgId)
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
     ])
 
@@ -129,7 +136,7 @@ function AnnualSummaryPanel() {
 
     setRows(Array.from(byYear.values()).sort((a, b) => b.year - a.year))
     setLoading(false)
-  }, [activeYear])
+  }, [activeYear, orgId])
 
   useEffect(() => { load() }, [load])
 
@@ -182,6 +189,7 @@ interface MonthlyRow { month: number; totalInflow: number; totalOutflow: number;
 function MonthlyBreakdownPanel() {
   const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
+  const orgId = useOrgStore(s => s.orgId)
   const [year,    setYear]    = useState(activeYear)
 
   useEffect(() => { setYear(activeYear) }, [activeYear])
@@ -190,6 +198,7 @@ function MonthlyBreakdownPanel() {
   const [error,   setError]   = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
@@ -198,11 +207,15 @@ function MonthlyBreakdownPanel() {
       supabase
         .from('inflow_transactions')
         .select('date, amount')
+        .eq('org_id', orgId)
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`)
         .lte('date', `${y}-12-31`),
       supabase
         .from('outflow_transactions')
         .select('date, amount_disbursed')
+        .eq('org_id', orgId)
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`)
         .lte('date', `${y}-12-31`),
     ])
@@ -229,7 +242,7 @@ function MonthlyBreakdownPanel() {
 
     setRows(byMonth)
     setLoading(false)
-  }, [year])
+  }, [year, orgId])
 
   useEffect(() => { load() }, [load])
 
@@ -301,6 +314,95 @@ function MonthlyBreakdownPanel() {
   )
 }
 
+// ── Excluded Transactions Callout ─────────────────────────────────────────────
+
+interface ExcludedBucket { count: number; amount: number }
+interface ExcludedSummary {
+  bankDeposits:       ExcludedBucket
+  intrabankTransfers: ExcludedBucket
+  reversals:          ExcludedBucket
+}
+
+function emptyExcluded(): ExcludedSummary {
+  return {
+    bankDeposits:       { count: 0, amount: 0 },
+    intrabankTransfers: { count: 0, amount: 0 },
+    reversals:          { count: 0, amount: 0 },
+  }
+}
+
+function ExcludedCallout({
+  excluded,
+  sym,
+  formatLocale,
+  reversalNote,
+}: {
+  excluded:     ExcludedSummary
+  sym:          string
+  formatLocale: string
+  reversalNote: string
+}) {
+  const [open, setOpen] = useState(false)
+
+  const totalCount  = excluded.bankDeposits.count + excluded.intrabankTransfers.count + excluded.reversals.count
+  const totalAmount = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount + excluded.reversals.amount
+
+  if (totalCount === 0) return null
+
+  const rows = [
+    { label: 'Bank deposits',         note: '',          ...excluded.bankDeposits },
+    { label: 'Intrabank transfers',   note: '',          ...excluded.intrabankTransfers },
+    { label: 'Reversals / offsets',   note: reversalNote, ...excluded.reversals },
+  ].filter(r => r.count > 0)
+
+  return (
+    <div className="border-t border-dashed border-amber-200 bg-amber-50/60 px-5 py-3">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 text-xs font-medium text-amber-700 hover:text-amber-900 transition-colors"
+      >
+        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        {totalCount.toLocaleString()} transaction{totalCount !== 1 ? 's' : ''} excluded from total
+        <span className="font-normal text-amber-600">({sym}{fmtAmt(totalAmount, formatLocale)})</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-amber-700">
+            Internal movements and reversals are excluded to avoid overstating totals.
+          </p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-amber-600 uppercase">
+                <th className="py-1 text-left font-medium">Category</th>
+                <th className="py-1 text-right font-medium">Transactions</th>
+                <th className="py-1 text-right font-medium">Amount ({sym})</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-amber-100">
+              {rows.map(r => (
+                <tr key={r.label}>
+                  <td className="py-1.5 text-gray-700">
+                    {r.label}
+                    {r.note && <span className="ml-1 text-amber-600 italic">— {r.note}</span>}
+                  </td>
+                  <td className="py-1.5 text-right text-gray-500">{r.count.toLocaleString()}</td>
+                  <td className="py-1.5 text-right font-medium text-gray-700">{sym}{fmtAmt(r.amount, formatLocale)}</td>
+                </tr>
+              ))}
+              <tr className="font-semibold border-t border-amber-200">
+                <td className="pt-2 text-amber-800">Total excluded</td>
+                <td className="pt-2 text-right text-amber-700">{totalCount.toLocaleString()}</td>
+                <td className="pt-2 text-right text-amber-800">{sym}{fmtAmt(totalAmount, formatLocale)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Income Type Breakdown ──────────────────────────────────────────────────────
 
 interface IncomeTypeRow {
@@ -314,30 +416,51 @@ interface IncomeTypeRow {
 function IncomeTypeBreakdownPanel() {
   const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
+  const orgId = useOrgStore(s => s.orgId)
   const { incomeTypes } = useIncomeTypes()
 
   const filter  = useReportDateFilter(activeYear)
-  const [rows,    setRows]    = useState<IncomeTypeRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const [rows,     setRows]     = useState<IncomeTypeRow[]>([])
+  const [excluded, setExcluded] = useState<ExcludedSummary>(emptyExcluded())
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true); setError(null)
     const { lo, queryHi, col } = filter.range
 
     const { data, error: err } = await supabase
       .from('inflow_transactions')
-      .select('amount, income_type_id')
+      .select('amount, income_type_id, transaction_type, offset_role, root_transaction_table')
+      .eq('org_id', orgId)
       .gte(col, lo)
       .lte(col, queryHi)
 
     if (err) { setError(err.message); setLoading(false); return }
 
+    const exc = emptyExcluded()
     const agg = new Map<string | null, { amount: number; count: number }>()
+
     for (const r of data ?? []) {
+      const txType     = (r.transaction_type as string | null) ?? null
+      const offsetRole = (r.offset_role as string | null) ?? null
+      const rootTable  = (r.root_transaction_table as string | null) ?? null
+      const amt        = Number(r.amount)
+
+      if (txType === 'bank_deposit') {
+        exc.bankDeposits.count += 1; exc.bankDeposits.amount += amt; continue
+      }
+      if (txType === 'intrabank_transfer') {
+        exc.intrabankTransfers.count += 1; exc.intrabankTransfers.amount += amt; continue
+      }
+      if (offsetRole === 'offset' && rootTable === 'inflow_transactions') {
+        exc.reversals.count += 1; exc.reversals.amount += amt; continue
+      }
+
       const id  = (r.income_type_id as string | null) ?? null
       const cur = agg.get(id) ?? { amount: 0, count: 0 }
-      cur.amount += Number(r.amount)
+      cur.amount += amt
       cur.count  += 1
       agg.set(id, cur)
     }
@@ -354,25 +477,38 @@ function IncomeTypeBreakdownPanel() {
     }
     result.sort((a, b) => b.amount - a.amount)
     setRows(result)
+    setExcluded(exc)
     setLoading(false)
-  }, [filter.range, incomeTypes])
+  }, [filter.range, incomeTypes, orgId])
 
   useEffect(() => { load() }, [load])
 
   const grandTotal  = rows.reduce((s, r) => s + r.amount, 0)
   const periodLabel = filter.periodLabel
 
-  const handleExport = () =>
+  const handleExport = () => {
+    const excTotal = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount + excluded.reversals.amount
+    const excCount = excluded.bankDeposits.count  + excluded.intrabankTransfers.count  + excluded.reversals.count
     exportCSV(
       `income_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
       ['Income Type', `Total (${sym})`, 'Count', '% of Total'],
-      rows.map(r => [
-        r.name,
-        r.amount,
-        r.count,
-        grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
-      ]),
+      [
+        ...rows.map(r => [
+          r.name,
+          r.amount,
+          r.count,
+          grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
+        ]),
+        ['--- INCLUDED TOTAL ---', grandTotal, rows.reduce((s, r) => s + r.count, 0), '100%'],
+        [],
+        ['--- EXCLUDED FROM TOTAL (internal movements & reversals) ---', '', '', ''],
+        ...(excluded.bankDeposits.count > 0       ? [['Bank deposits',       excluded.bankDeposits.amount,       excluded.bankDeposits.count,       '']] : []),
+        ...(excluded.intrabankTransfers.count > 0 ? [['Intrabank transfers', excluded.intrabankTransfers.amount, excluded.intrabankTransfers.count, '']] : []),
+        ...(excluded.reversals.count > 0          ? [['Reversals / offsets', excluded.reversals.amount,          excluded.reversals.count,          '']] : []),
+        ...(excCount > 0 ? [['--- EXCLUDED TOTAL ---', excTotal, excCount, '']] : []),
+      ],
     )
+  }
 
   return (
     <ReportSection
@@ -444,6 +580,14 @@ function IncomeTypeBreakdownPanel() {
           </table>
         </div>
       )}
+      {!loading && (
+        <ExcludedCallout
+          excluded={excluded}
+          sym={sym}
+          formatLocale={formatLocale}
+          reversalNote="reverses a prior inflow"
+        />
+      )}
     </ReportSection>
   )
 }
@@ -461,29 +605,49 @@ interface OutflowTypeRow {
 function OutflowTypeBreakdownPanel() {
   const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
+  const orgId = useOrgStore(s => s.orgId)
   const { outflowTypes } = useOutflowTypes()
 
   const filter  = useReportDateFilter(activeYear)
-  const [rows,    setRows]    = useState<OutflowTypeRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const [rows,     setRows]     = useState<OutflowTypeRow[]>([])
+  const [excluded, setExcluded] = useState<ExcludedSummary>(emptyExcluded())
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true); setError(null)
     const { lo, queryHi, col } = filter.range
 
     const { data, error: err } = await supabase
       .from('outflow_transactions')
-      .select('amount_disbursed, outflow_type_id')
+      .select('amount_disbursed, outflow_type_id, transaction_type, offset_role, root_transaction_table')
+      .eq('org_id', orgId)
       .gte(col, lo)
       .lte(col, queryHi)
 
     if (err) { setError(err.message); setLoading(false); return }
 
+    const exc = emptyExcluded()
     const agg = new Map<string | null, { amount: number; count: number }>()
+
     for (const r of data ?? []) {
+      const txType     = (r.transaction_type as string | null) ?? null
+      const offsetRole = (r.offset_role as string | null) ?? null
+      const rootTable  = (r.root_transaction_table as string | null) ?? null
+      const amt        = Number(r.amount_disbursed || 0)
+
+      if (txType === 'bank_deposit') {
+        exc.bankDeposits.count += 1; exc.bankDeposits.amount += amt; continue
+      }
+      if (txType === 'intrabank_transfer') {
+        exc.intrabankTransfers.count += 1; exc.intrabankTransfers.amount += amt; continue
+      }
+      if (offsetRole === 'offset' && rootTable === 'outflow_transactions') {
+        exc.reversals.count += 1; exc.reversals.amount += amt; continue
+      }
+
       const id  = (r.outflow_type_id as string | null) ?? null
-      const amt = Number(r.amount_disbursed || 0)
       const cur = agg.get(id) ?? { amount: 0, count: 0 }
       cur.amount += amt
       cur.count  += 1
@@ -502,25 +666,38 @@ function OutflowTypeBreakdownPanel() {
     }
     result.sort((a, b) => b.amount - a.amount)
     setRows(result)
+    setExcluded(exc)
     setLoading(false)
-  }, [filter.range, outflowTypes])
+  }, [filter.range, outflowTypes, orgId])
 
   useEffect(() => { load() }, [load])
 
   const grandTotal  = rows.reduce((s, r) => s + r.amount, 0)
   const periodLabel = filter.periodLabel
 
-  const handleExport = () =>
+  const handleExport = () => {
+    const excTotal = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount + excluded.reversals.amount
+    const excCount = excluded.bankDeposits.count  + excluded.intrabankTransfers.count  + excluded.reversals.count
     exportCSV(
       `outflow_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
       ['Outflow Type', `Total (${sym})`, 'Count', '% of Total'],
-      rows.map(r => [
-        r.name,
-        r.amount,
-        r.count,
-        grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
-      ]),
+      [
+        ...rows.map(r => [
+          r.name,
+          r.amount,
+          r.count,
+          grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
+        ]),
+        ['--- INCLUDED TOTAL ---', grandTotal, rows.reduce((s, r) => s + r.count, 0), '100%'],
+        [],
+        ['--- EXCLUDED FROM TOTAL (internal movements & reversals) ---', '', '', ''],
+        ...(excluded.bankDeposits.count > 0       ? [['Bank deposits',                             excluded.bankDeposits.amount,       excluded.bankDeposits.count,       '']] : []),
+        ...(excluded.intrabankTransfers.count > 0 ? [['Intrabank transfers',                       excluded.intrabankTransfers.amount, excluded.intrabankTransfers.count, '']] : []),
+        ...(excluded.reversals.count > 0          ? [['Reversals / offsets (treated as income)',   excluded.reversals.amount,          excluded.reversals.count,          '']] : []),
+        ...(excCount > 0 ? [['--- EXCLUDED TOTAL ---', excTotal, excCount, '']] : []),
+      ],
     )
+  }
 
   return (
     <ReportSection
@@ -591,6 +768,14 @@ function OutflowTypeBreakdownPanel() {
             </tbody>
           </table>
         </div>
+      )}
+      {!loading && (
+        <ExcludedCallout
+          excluded={excluded}
+          sym={sym}
+          formatLocale={formatLocale}
+          reversalNote="treated as income in ledger views"
+        />
       )}
     </ReportSection>
   )
