@@ -2629,13 +2629,13 @@ create table if not exists public.bank_statement_balances (
 );
 alter table public.bank_statement_balances enable row level security;
 create policy "bsb_select" on public.bank_statement_balances
-  for select using (org_id = public.get_current_org_id());
+  for select using (public.is_org_member(org_id));
 create policy "bsb_insert" on public.bank_statement_balances
-  for insert with check (public.is_finance_user());
+  for insert with check (public.is_org_finance_user(org_id));
 create policy "bsb_update" on public.bank_statement_balances
-  for update using (public.is_finance_user());
+  for update using (public.is_org_finance_user(org_id));
 create policy "bsb_delete" on public.bank_statement_balances
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 create index if not exists idx_bsb_org_bank on public.bank_statement_balances(org_id, bank_name);
 
 -- ================================================================
