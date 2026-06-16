@@ -22,22 +22,22 @@ ALTER TABLE public.bank_statement_balances ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   CREATE POLICY "bsb_select" ON public.bank_statement_balances
-    FOR SELECT USING (org_id = public.get_current_org_id());
+    FOR SELECT USING (public.is_org_member(org_id));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
   CREATE POLICY "bsb_insert" ON public.bank_statement_balances
-    FOR INSERT WITH CHECK (public.is_finance_user());
+    FOR INSERT WITH CHECK (public.is_org_finance_user(org_id));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
   CREATE POLICY "bsb_update" ON public.bank_statement_balances
-    FOR UPDATE USING (public.is_finance_user());
+    FOR UPDATE USING (public.is_org_finance_user(org_id));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
   CREATE POLICY "bsb_delete" ON public.bank_statement_balances
-    FOR DELETE USING (public.is_admin());
+    FOR DELETE USING (public.is_org_admin(org_id));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_bsb_org_bank ON public.bank_statement_balances(org_id, bank_name);
