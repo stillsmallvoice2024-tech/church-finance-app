@@ -1372,7 +1372,7 @@ create policy "drb_delete" on public.dynamic_report_blocks
       select 1 from public.dynamic_reports dr
       join   public.org_members m
         on   m.org_id = dr.org_id and m.user_id = auth.uid()
-        and  m.role   in ('owner', 'admin') and m.status = 'active'
+        and  m.role   in ('owner', 'admin', 'accountant') and m.status = 'active'
       where  dr.id = report_id
     )
   );
