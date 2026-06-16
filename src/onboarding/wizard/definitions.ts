@@ -84,7 +84,7 @@ export const WIZARD_STEPS: WizardStepDefinition[] = [
   {
     id: 'import-statement',
     title: 'Import First Statement',
-    description: 'Upload your first bank statement to populate your transaction history.',
+    description: 'Upload your bank statement to populate your transaction history.',
     estimatedMinutes: 5,
     required: false,
     skippable: true,
