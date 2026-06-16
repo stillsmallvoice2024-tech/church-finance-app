@@ -1612,7 +1612,7 @@ export default function DynamicReportEditor() {
 
   const { blocks: savedBlocks, loading: blocksLoading } = useDynamicReportBlocks(id ?? null)
   const { mutate: updateTitle }  = useUpdateDynamicReport()
-  const { mutate: saveBlocks, loading: saving, error: saveError } = useSaveDynamicReportBlocks()
+  const { mutate: saveBlocks, loading: saving } = useSaveDynamicReportBlocks()
   const { snapshots, refetch: refetchSnapshots } = useReportSnapshots(id ?? null)
   const { mutate: saveSnapshot, loading: savingSnapshot } = useSaveSnapshot()
   const { mutate: deleteSnapshot } = useDeleteSnapshot()
@@ -1810,9 +1810,9 @@ export default function DynamicReportEditor() {
       setTimeout(() => setSaved(false), 2000)
       pushToast('Report saved', 'success')
     } else {
-      pushToast(saveError ?? 'Failed to save report', 'error')
+      pushToast('Failed to save report', 'error')
     }
-  }, [id, title, blocks, updateTitle, saveBlocks, saveError, pushToast])
+  }, [id, title, blocks, updateTitle, saveBlocks, pushToast])
 
   const loading = reportsLoading || blocksLoading
 
