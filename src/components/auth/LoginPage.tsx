@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2, MailWarning } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useOrgStore } from '../../store/orgStore'
@@ -45,6 +45,10 @@ export default function LoginPage() {
   const [showSignupConf, setShowSignupConf] = useState(false)
   const [signupPending,  setSignupPending]  = useState(false)
 
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
+  const [resendSent,       setResendSent]       = useState(false)
+  const [resendLoading,    setResendLoading]     = useState(false)
+
   useEffect(() => {
     if (isAuthenticated && !mfaRequired) navigate('/', { replace: true })
   }, [isAuthenticated, mfaRequired, navigate])
@@ -70,13 +74,21 @@ export default function LoginPage() {
     const email = await resolveEmail(identifier)
     if (!email) {
       setLoading(false)
-      if (!error) setError('No account found for that username. Try signing in with your email address instead.')
+      if (!error) setError(
+        'No account found for that username. If you recently signed up and haven\'t confirmed your email yet, ' +
+        'check your inbox for the confirmation link — usernames are only available after email confirmation.'
+      )
       return
     }
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) {
       setLoading(false)
-      setError(err.message)
+      if (err.message.toLowerCase().includes('email not confirmed')) {
+        setUnconfirmedEmail(email)
+        setResendSent(false)
+      } else {
+        setError(err.message)
+      }
       return
     }
     // Check whether a second factor is required
@@ -163,6 +175,14 @@ export default function LoginPage() {
 
     setLoading(false)
     navigate('/onboarding', { replace: true })
+  }
+
+  const handleResendConfirmation = async () => {
+    if (!unconfirmedEmail) return
+    setResendLoading(true)
+    await supabase.auth.resend({ type: 'signup', email: unconfirmedEmail })
+    setResendLoading(false)
+    setResendSent(true)
   }
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -351,13 +371,44 @@ export default function LoginPage() {
                 </div>
               )}
 
+              {unconfirmedEmail && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <div className="flex items-start gap-2.5">
+                    <MailWarning className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                    <div className="space-y-1">
+                      <p className="font-semibold">Email not yet confirmed</p>
+                      <p>
+                        Check your inbox for the confirmation link we sent to{' '}
+                        <span className="font-medium">{unconfirmedEmail}</span>.
+                        Click it to activate your account, then try signing in again.
+                      </p>
+                      {resendSent ? (
+                        <p className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Confirmation email resent — check your inbox.
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleResendConfirmation}
+                          disabled={resendLoading}
+                          className="mt-1 flex items-center gap-1 text-xs font-semibold text-amber-700 underline hover:text-amber-900 disabled:opacity-60"
+                        >
+                          {resendLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                          Resend confirmation email
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-600">Email or Username</label>
                   <input
                     type="text"
                     value={identifier}
-                    onChange={e => setIdentifier(e.target.value)}
+                    onChange={e => { setIdentifier(e.target.value); setUnconfirmedEmail(null); setResendSent(false) }}
                     placeholder="you@example.com or username"
                     required
                     autoComplete="username"
@@ -401,7 +452,7 @@ export default function LoginPage() {
               </form>
 
               <button
-                onClick={() => { setMode('forgot'); setError(null) }}
+                onClick={() => { setMode('forgot'); setError(null); setUnconfirmedEmail(null); setResendSent(false) }}
                 className="mt-4 w-full text-center text-xs text-primary hover:underline"
               >
                 Forgot your password?
