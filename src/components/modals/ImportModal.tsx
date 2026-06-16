@@ -1074,14 +1074,14 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     const userId = useAuthStore.getState().user?.id ?? null
     if (!orgId) return
     setStmtSaving(true)
-    await supabase
+    const { error } = await supabase
       .from('bank_statement_balances')
       .upsert(
         { bank_name: internalBank.name, bank_id: internalBank.id, reference_balance: val, statement_date: stmtDate, org_id: orgId, entered_by: userId },
         { onConflict: 'org_id,bank_name' },
       )
     setStmtSaving(false)
-    setStmtSaved(true)
+    if (!error) setStmtSaved(true)
   }
 
   // ── Step 4: Import ────────────────────────────────────────────────────────

@@ -469,6 +469,27 @@ export default function ReconciliationCenter() {
 
   const diag = diagnostics
 
+  // Merge banks from reconciliation diagnostics with banks that have a saved
+  // reference balance — so manually entered balances are visible even when
+  // no reconciliation has been run or the bank has no issues.
+  const summaryByName = new Map<string, BankHealthSummary>(
+    (diag?.bankSummaries ?? []).map(s => [s.bankName, s]),
+  )
+  for (const bankName of refBalances.keys()) {
+    if (!summaryByName.has(bankName)) {
+      summaryByName.set(bankName, {
+        bankName,
+        issueCount: 0,
+        criticalCount: 0,
+        warningCount: 0,
+        infoCount: 0,
+        status: 'healthy',
+        possibleCauses: [],
+      })
+    }
+  }
+  const mergedBankRows = [...summaryByName.values()]
+
   return (
     <div className="space-y-6">
 
@@ -572,7 +593,7 @@ export default function ReconciliationCenter() {
       )}
 
       {/* ── Section B: Account Status Table ───────────────────────────────── */}
-      {diag && diag.bankSummaries.length > 0 && (
+      {mergedBankRows.length > 0 && (
         <div id="account-status" data-tour="recon-account-status">
           <button
             onClick={() => setShowAccountStatus(v => !v)}
@@ -594,7 +615,7 @@ export default function ReconciliationCenter() {
                     </tr>
                   </thead>
                   <tbody>
-                    {diag.bankSummaries.map(s => (
+                    {mergedBankRows.map(s => (
                       <BankSummaryRow
                         key={s.bankName}
                         summary={s}
