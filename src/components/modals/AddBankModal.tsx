@@ -139,6 +139,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
   useEffect(() => {
     if (!open) return
+    refetchCategories()
     resetAdd()
     resetUpdate()
     setAllocError(null)
@@ -568,18 +569,19 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 </div>
 
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
+                  {/* Header — desktop only */}
+                  <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
                     <span>Category</span>
                     <span>Portion</span>
                     <span>{allocType === 'percentage' ? '%' : selectedCurrencySymbol}</span>
                     <span title="Count in category balance" className="cursor-help">Count</span>
                     <span />
                   </div>
-                  <div className="divide-y divide-gray-100 max-h-52 overflow-y-auto">
+                  <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
                     {rows.map((row, i) => {
                       const inNewMode = newCatMode?.rowIndex === i
                       return (
-                        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] items-center px-3 py-1.5 gap-2">
+                        <div key={i} className="p-3 space-y-2 sm:space-y-0 sm:p-0 sm:px-3 sm:py-1.5 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] sm:items-center sm:gap-2">
 
                           {/* Category cell — select or inline-create */}
                           {inNewMode ? (
@@ -624,7 +626,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                                   setRowField(i, 'category_name', e.target.value)
                                 }
                               }}
-                              className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
+                              className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                             >
                               <option value="">— Category —</option>
                               {categories.map(c => (
@@ -637,7 +639,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                           <select
                             value={row.budget_portion}
                             onChange={e => setRowField(i, 'budget_portion', e.target.value)}
-                            className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0"
+                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                           >
                             <option value="">— Portion —</option>
                             {BUDGET_PORTIONS.map(p => (
@@ -645,40 +647,46 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                             ))}
                           </select>
 
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            min="0"
-                            value={formatCurrency(row.value)}
-                            onChange={e => {
-                              const raw = e.target.value.replace(/[^0-9.]/g, '')
-                              const parts = raw.split('.')
-                              const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw
-                              const [int, dec] = clean.split('.')
-                              const fmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (dec !== undefined ? `.${dec}` : '')
-                              setRowField(i, 'value', parseCurrency(fmt) !== undefined ? String(parseCurrency(fmt)) : '')
-                            }}
-                            placeholder={allocType === 'percentage' ? '0.00' : '0'}
-                            className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
-                          />
+                          {/* Amount + controls: flex row on mobile, individual grid cells on sm+ */}
+                          <div className="flex items-center gap-2 sm:contents">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              min="0"
+                              value={formatCurrency(row.value)}
+                              onChange={e => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, '')
+                                const parts = raw.split('.')
+                                const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw
+                                const [int, dec] = clean.split('.')
+                                const fmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (dec !== undefined ? `.${dec}` : '')
+                                setRowField(i, 'value', parseCurrency(fmt) !== undefined ? String(parseCurrency(fmt)) : '')
+                              }}
+                              placeholder={allocType === 'percentage' ? '0.00' : '0'}
+                              className="flex-1 sm:flex-none text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white sm:w-full"
+                            />
 
-                          <input
-                            type="checkbox"
-                            checked={row.apply_to_category}
-                            onChange={e => setRowField(i, 'apply_to_category', e.target.checked)}
-                            title={row.apply_to_category
-                              ? 'Will be added to category balance'
-                              : 'Already in category records — not counted again'}
-                            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer justify-self-center"
-                          />
+                            <label className="flex items-center gap-1.5 shrink-0 sm:justify-self-center">
+                              <input
+                                type="checkbox"
+                                checked={row.apply_to_category}
+                                onChange={e => setRowField(i, 'apply_to_category', e.target.checked)}
+                                title={row.apply_to_category
+                                  ? 'Will be added to category balance'
+                                  : 'Already in category records — not counted again'}
+                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                              />
+                              <span className="text-xs text-gray-500 sm:hidden">Count</span>
+                            </label>
 
-                          <button
-                            type="button"
-                            onClick={() => removeRow(i)}
-                            className="touch-target p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => removeRow(i)}
+                              className="touch-target p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       )
                     })}
