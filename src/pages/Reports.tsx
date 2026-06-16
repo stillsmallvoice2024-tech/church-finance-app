@@ -89,6 +89,9 @@ function ReportSection({
 
 interface AnnualRow { year: number; totalInflow: number; totalOutflow: number; net: number }
 
+// Internal movement types: excluded from all income/expense totals
+const INTERNAL_MOVEMENT_TYPES = new Set(['bank_deposit', 'intrabank_transfer'])
+
 function AnnualSummaryPanel() {
   const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
@@ -104,13 +107,13 @@ function AnnualSummaryPanel() {
     const y = activeYear.toString()
 
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('date, amount')
+      supabase.from('inflow_transactions')
+        .select('date, amount, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
-        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
-      supabase.from('outflow_transactions').select('date, amount_disbursed')
+      supabase.from('outflow_transactions')
+        .select('date, amount_disbursed, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
-        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
     ])
 
@@ -127,10 +130,24 @@ function AnnualSummaryPanel() {
     }
 
     for (const r of inflowRes.data ?? []) {
-      ensure(parseInt((r.date as string).slice(0, 4))).totalInflow += Number(r.amount)
+      const txType = (r.transaction_type as string | null) ?? null
+      if (INTERNAL_MOVEMENT_TYPES.has(txType ?? '')) continue
+      const yr  = parseInt((r.date as string).slice(0, 4))
+      const amt = Number(r.amount)
+      // Same-table inflow offset reduces inflow total; cross-table (refund of expense) adds to it
+      const net = (r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions')
+        ? -amt : amt
+      ensure(yr).totalInflow += net
     }
     for (const r of outflowRes.data ?? []) {
-      ensure(parseInt((r.date as string).slice(0, 4))).totalOutflow += Number(r.amount_disbursed || 0)
+      const txType = (r.transaction_type as string | null) ?? null
+      if (INTERNAL_MOVEMENT_TYPES.has(txType ?? '')) continue
+      const yr  = parseInt((r.date as string).slice(0, 4))
+      const amt = Number(r.amount_disbursed || 0)
+      // Same-table outflow offset reduces outflow total; cross-table adds to it
+      const net = (r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions')
+        ? -amt : amt
+      ensure(yr).totalOutflow += net
     }
     for (const row of byYear.values()) row.net = row.totalInflow - row.totalOutflow
 
@@ -206,16 +223,14 @@ function MonthlyBreakdownPanel() {
     const [inflowRes, outflowRes] = await Promise.all([
       supabase
         .from('inflow_transactions')
-        .select('date, amount')
+        .select('date, amount, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
-        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`)
         .lte('date', `${y}-12-31`),
       supabase
         .from('outflow_transactions')
-        .select('date, amount_disbursed')
+        .select('date, amount_disbursed, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
-        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
         .gte('date', `${y}-01-01`)
         .lte('date', `${y}-12-31`),
     ])
@@ -231,12 +246,22 @@ function MonthlyBreakdownPanel() {
     }))
 
     for (const r of inflowRes.data ?? []) {
-      const m = parseInt((r.date as string).slice(5, 7)) - 1
-      byMonth[m].totalInflow += Number(r.amount)
+      const txType = (r.transaction_type as string | null) ?? null
+      if (INTERNAL_MOVEMENT_TYPES.has(txType ?? '')) continue
+      const m   = parseInt((r.date as string).slice(5, 7)) - 1
+      const amt = Number(r.amount)
+      const net = (r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions')
+        ? -amt : amt
+      byMonth[m].totalInflow += net
     }
     for (const r of outflowRes.data ?? []) {
-      const m = parseInt((r.date as string).slice(5, 7)) - 1
-      byMonth[m].totalOutflow += Number(r.amount_disbursed || 0)
+      const txType = (r.transaction_type as string | null) ?? null
+      if (INTERNAL_MOVEMENT_TYPES.has(txType ?? '')) continue
+      const m   = parseInt((r.date as string).slice(5, 7)) - 1
+      const amt = Number(r.amount_disbursed || 0)
+      const net = (r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions')
+        ? -amt : amt
+      byMonth[m].totalOutflow += net
     }
     for (const row of byMonth) row.net = row.totalInflow - row.totalOutflow
 
@@ -315,19 +340,20 @@ function MonthlyBreakdownPanel() {
 }
 
 // ── Excluded Transactions Callout ─────────────────────────────────────────────
+// Shows only internal movements (bank deposits, intrabank transfers).
+// Offset/refund/reversal transactions are NOT excluded — they are netted
+// against their root transaction within the type totals above.
 
 interface ExcludedBucket { count: number; amount: number }
 interface ExcludedSummary {
   bankDeposits:       ExcludedBucket
   intrabankTransfers: ExcludedBucket
-  reversals:          ExcludedBucket
 }
 
 function emptyExcluded(): ExcludedSummary {
   return {
     bankDeposits:       { count: 0, amount: 0 },
     intrabankTransfers: { count: 0, amount: 0 },
-    reversals:          { count: 0, amount: 0 },
   }
 }
 
@@ -335,24 +361,21 @@ function ExcludedCallout({
   excluded,
   sym,
   formatLocale,
-  reversalNote,
 }: {
   excluded:     ExcludedSummary
   sym:          string
   formatLocale: string
-  reversalNote: string
 }) {
   const [open, setOpen] = useState(false)
 
-  const totalCount  = excluded.bankDeposits.count + excluded.intrabankTransfers.count + excluded.reversals.count
-  const totalAmount = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount + excluded.reversals.amount
+  const totalCount  = excluded.bankDeposits.count + excluded.intrabankTransfers.count
+  const totalAmount = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount
 
   if (totalCount === 0) return null
 
   const rows = [
-    { label: 'Bank deposits',         note: '',          ...excluded.bankDeposits },
-    { label: 'Intrabank transfers',   note: '',          ...excluded.intrabankTransfers },
-    { label: 'Reversals / offsets',   note: reversalNote, ...excluded.reversals },
+    { label: 'Bank deposits',       ...excluded.bankDeposits },
+    { label: 'Intrabank transfers', ...excluded.intrabankTransfers },
   ].filter(r => r.count > 0)
 
   return (
@@ -363,13 +386,14 @@ function ExcludedCallout({
         className="flex items-center gap-2 text-xs font-medium text-amber-700 hover:text-amber-900 transition-colors"
       >
         {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        {totalCount.toLocaleString()} transaction{totalCount !== 1 ? 's' : ''} excluded from total
+        {totalCount.toLocaleString()} internal movement{totalCount !== 1 ? 's' : ''} excluded from total
         <span className="font-normal text-amber-600">({sym}{fmtAmt(totalAmount, formatLocale)})</span>
       </button>
       {open && (
         <div className="mt-3 space-y-3">
           <p className="text-xs text-amber-700">
-            Internal movements and reversals are excluded to avoid overstating totals.
+            Internal movements are excluded — they represent fund transfers, not income or expense.
+            Refunds and reversals are netted within their respective type totals above.
           </p>
           <table className="w-full text-xs">
             <thead>
@@ -382,10 +406,7 @@ function ExcludedCallout({
             <tbody className="divide-y divide-amber-100">
               {rows.map(r => (
                 <tr key={r.label}>
-                  <td className="py-1.5 text-gray-700">
-                    {r.label}
-                    {r.note && <span className="ml-1 text-amber-600 italic">— {r.note}</span>}
-                  </td>
+                  <td className="py-1.5 text-gray-700">{r.label}</td>
                   <td className="py-1.5 text-right text-gray-500">{r.count.toLocaleString()}</td>
                   <td className="py-1.5 text-right font-medium text-gray-700">{sym}{fmtAmt(r.amount, formatLocale)}</td>
                 </tr>
@@ -432,7 +453,7 @@ function IncomeTypeBreakdownPanel() {
 
     const { data, error: err } = await supabase
       .from('inflow_transactions')
-      .select('amount, income_type_id, transaction_type, offset_role, root_transaction_table')
+      .select('id, amount, income_type_id, transaction_type, offset_role, root_transaction_id, root_transaction_table')
       .eq('org_id', orgId)
       .gte(col, lo)
       .lte(col, queryHi)
@@ -440,12 +461,26 @@ function IncomeTypeBreakdownPanel() {
     if (err) { setError(err.message); setLoading(false); return }
 
     const exc = emptyExcluded()
+
+    // First pass: build id → income_type_id map for looking up root types
+    const typeById = new Map<string, string | null>()
+    for (const r of data ?? []) {
+      typeById.set(r.id as string, (r.income_type_id as string | null) ?? null)
+    }
+
     const agg = new Map<string | null, { amount: number; count: number }>()
+    const addToType = (id: string | null, amt: number, countDelta = 1) => {
+      const cur = agg.get(id) ?? { amount: 0, count: 0 }
+      cur.amount += amt
+      cur.count  += countDelta
+      agg.set(id, cur)
+    }
 
     for (const r of data ?? []) {
       const txType     = (r.transaction_type as string | null) ?? null
       const offsetRole = (r.offset_role as string | null) ?? null
       const rootTable  = (r.root_transaction_table as string | null) ?? null
+      const rootId     = (r.root_transaction_id as string | null) ?? null
       const amt        = Number(r.amount)
 
       if (txType === 'bank_deposit') {
@@ -454,25 +489,27 @@ function IncomeTypeBreakdownPanel() {
       if (txType === 'intrabank_transfer') {
         exc.intrabankTransfers.count += 1; exc.intrabankTransfers.amount += amt; continue
       }
+
       if (offsetRole === 'offset' && rootTable === 'inflow_transactions') {
-        exc.reversals.count += 1; exc.reversals.amount += amt; continue
+        // Same-table inflow offset: subtracts from the root's type bucket (net adjustment, not excluded)
+        const rootType = rootId ? (typeById.get(rootId) ?? null) : null
+        addToType(rootType, -amt, 0)  // count stays on root, only amount adjusts
+        continue
       }
 
-      const id  = (r.income_type_id as string | null) ?? null
-      const cur = agg.get(id) ?? { amount: 0, count: 0 }
-      cur.amount += amt
-      cur.count  += 1
-      agg.set(id, cur)
+      // Regular row OR cross-table offset (refund of outflow expense with income type): add at full amount
+      const id = (r.income_type_id as string | null) ?? null
+      addToType(id, amt, 1)
     }
 
     const result: IncomeTypeRow[] = []
     for (const it of incomeTypes) {
       const agged = agg.get(it.id)
-      if (!agged) continue
+      if (!agged || agged.amount === 0) continue
       result.push({ id: it.id, name: it.name, color: it.color, ...agged })
     }
     const unclassified = agg.get(null)
-    if (unclassified) {
+    if (unclassified && unclassified.amount !== 0) {
       result.push({ id: null, name: 'Unclassified', color: '#94a3b8', ...unclassified })
     }
     result.sort((a, b) => b.amount - a.amount)
@@ -487,8 +524,8 @@ function IncomeTypeBreakdownPanel() {
   const periodLabel = filter.periodLabel
 
   const handleExport = () => {
-    const excTotal = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount + excluded.reversals.amount
-    const excCount = excluded.bankDeposits.count  + excluded.intrabankTransfers.count  + excluded.reversals.count
+    const excTotal = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount
+    const excCount = excluded.bankDeposits.count  + excluded.intrabankTransfers.count
     exportCSV(
       `income_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
       ['Income Type', `Total (${sym})`, 'Count', '% of Total'],
@@ -499,12 +536,11 @@ function IncomeTypeBreakdownPanel() {
           r.count,
           grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
         ]),
-        ['--- INCLUDED TOTAL ---', grandTotal, rows.reduce((s, r) => s + r.count, 0), '100%'],
+        ['--- NET TOTAL (refunds & reversals are netted within types) ---', grandTotal, rows.reduce((s, r) => s + r.count, 0), '100%'],
         [],
-        ['--- EXCLUDED FROM TOTAL (internal movements & reversals) ---', '', '', ''],
+        ['--- EXCLUDED: INTERNAL MOVEMENTS (not income) ---', '', '', ''],
         ...(excluded.bankDeposits.count > 0       ? [['Bank deposits',       excluded.bankDeposits.amount,       excluded.bankDeposits.count,       '']] : []),
         ...(excluded.intrabankTransfers.count > 0 ? [['Intrabank transfers', excluded.intrabankTransfers.amount, excluded.intrabankTransfers.count, '']] : []),
-        ...(excluded.reversals.count > 0          ? [['Reversals / offsets', excluded.reversals.amount,          excluded.reversals.count,          '']] : []),
         ...(excCount > 0 ? [['--- EXCLUDED TOTAL ---', excTotal, excCount, '']] : []),
       ],
     )
@@ -581,12 +617,7 @@ function IncomeTypeBreakdownPanel() {
         </div>
       )}
       {!loading && (
-        <ExcludedCallout
-          excluded={excluded}
-          sym={sym}
-          formatLocale={formatLocale}
-          reversalNote="reverses a prior inflow"
-        />
+        <ExcludedCallout excluded={excluded} sym={sym} formatLocale={formatLocale} />
       )}
     </ReportSection>
   )
@@ -621,7 +652,7 @@ function OutflowTypeBreakdownPanel() {
 
     const { data, error: err } = await supabase
       .from('outflow_transactions')
-      .select('amount_disbursed, outflow_type_id, transaction_type, offset_role, root_transaction_table')
+      .select('id, amount_disbursed, outflow_type_id, transaction_type, offset_role, root_transaction_id, root_transaction_table')
       .eq('org_id', orgId)
       .gte(col, lo)
       .lte(col, queryHi)
@@ -629,12 +660,26 @@ function OutflowTypeBreakdownPanel() {
     if (err) { setError(err.message); setLoading(false); return }
 
     const exc = emptyExcluded()
+
+    // First pass: build id → outflow_type_id map for root type lookups
+    const typeById = new Map<string, string | null>()
+    for (const r of data ?? []) {
+      typeById.set(r.id as string, (r.outflow_type_id as string | null) ?? null)
+    }
+
     const agg = new Map<string | null, { amount: number; count: number }>()
+    const addToType = (id: string | null, amt: number, countDelta = 1) => {
+      const cur = agg.get(id) ?? { amount: 0, count: 0 }
+      cur.amount += amt
+      cur.count  += countDelta
+      agg.set(id, cur)
+    }
 
     for (const r of data ?? []) {
       const txType     = (r.transaction_type as string | null) ?? null
       const offsetRole = (r.offset_role as string | null) ?? null
       const rootTable  = (r.root_transaction_table as string | null) ?? null
+      const rootId     = (r.root_transaction_id as string | null) ?? null
       const amt        = Number(r.amount_disbursed || 0)
 
       if (txType === 'bank_deposit') {
@@ -643,25 +688,27 @@ function OutflowTypeBreakdownPanel() {
       if (txType === 'intrabank_transfer') {
         exc.intrabankTransfers.count += 1; exc.intrabankTransfers.amount += amt; continue
       }
+
       if (offsetRole === 'offset' && rootTable === 'outflow_transactions') {
-        exc.reversals.count += 1; exc.reversals.amount += amt; continue
+        // Same-table outflow offset: subtracts from root's type bucket (net adjustment, not excluded)
+        const rootType = rootId ? (typeById.get(rootId) ?? null) : null
+        addToType(rootType, -amt, 0)  // only amount adjusts; count stays on root
+        continue
       }
 
-      const id  = (r.outflow_type_id as string | null) ?? null
-      const cur = agg.get(id) ?? { amount: 0, count: 0 }
-      cur.amount += amt
-      cur.count  += 1
-      agg.set(id, cur)
+      // Regular row OR cross-table offset (reversal of inflow = outflow expense): add at full amount
+      const id = (r.outflow_type_id as string | null) ?? null
+      addToType(id, amt, 1)
     }
 
     const result: OutflowTypeRow[] = []
     for (const ot of outflowTypes) {
       const agged = agg.get(ot.id)
-      if (!agged) continue
+      if (!agged || agged.amount === 0) continue
       result.push({ id: ot.id, name: ot.name, color: ot.color, ...agged })
     }
     const unclassified = agg.get(null)
-    if (unclassified) {
+    if (unclassified && unclassified.amount !== 0) {
       result.push({ id: null, name: 'Unclassified', color: '#94a3b8', ...unclassified })
     }
     result.sort((a, b) => b.amount - a.amount)
@@ -676,8 +723,8 @@ function OutflowTypeBreakdownPanel() {
   const periodLabel = filter.periodLabel
 
   const handleExport = () => {
-    const excTotal = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount + excluded.reversals.amount
-    const excCount = excluded.bankDeposits.count  + excluded.intrabankTransfers.count  + excluded.reversals.count
+    const excTotal = excluded.bankDeposits.amount + excluded.intrabankTransfers.amount
+    const excCount = excluded.bankDeposits.count  + excluded.intrabankTransfers.count
     exportCSV(
       `outflow_type_breakdown_${periodLabel.replace(/ /g, '_')}`,
       ['Outflow Type', `Total (${sym})`, 'Count', '% of Total'],
@@ -688,12 +735,11 @@ function OutflowTypeBreakdownPanel() {
           r.count,
           grandTotal > 0 ? ((r.amount / grandTotal) * 100).toFixed(1) + '%' : '0%',
         ]),
-        ['--- INCLUDED TOTAL ---', grandTotal, rows.reduce((s, r) => s + r.count, 0), '100%'],
+        ['--- NET TOTAL (offsets & reversals are netted within types) ---', grandTotal, rows.reduce((s, r) => s + r.count, 0), '100%'],
         [],
-        ['--- EXCLUDED FROM TOTAL (internal movements & reversals) ---', '', '', ''],
-        ...(excluded.bankDeposits.count > 0       ? [['Bank deposits',                             excluded.bankDeposits.amount,       excluded.bankDeposits.count,       '']] : []),
-        ...(excluded.intrabankTransfers.count > 0 ? [['Intrabank transfers',                       excluded.intrabankTransfers.amount, excluded.intrabankTransfers.count, '']] : []),
-        ...(excluded.reversals.count > 0          ? [['Reversals / offsets (treated as income)',   excluded.reversals.amount,          excluded.reversals.count,          '']] : []),
+        ['--- EXCLUDED: INTERNAL MOVEMENTS (not expense) ---', '', '', ''],
+        ...(excluded.bankDeposits.count > 0       ? [['Bank deposits',       excluded.bankDeposits.amount,       excluded.bankDeposits.count,       '']] : []),
+        ...(excluded.intrabankTransfers.count > 0 ? [['Intrabank transfers', excluded.intrabankTransfers.amount, excluded.intrabankTransfers.count, '']] : []),
         ...(excCount > 0 ? [['--- EXCLUDED TOTAL ---', excTotal, excCount, '']] : []),
       ],
     )
@@ -770,12 +816,7 @@ function OutflowTypeBreakdownPanel() {
         </div>
       )}
       {!loading && (
-        <ExcludedCallout
-          excluded={excluded}
-          sym={sym}
-          formatLocale={formatLocale}
-          reversalNote="treated as income in ledger views"
-        />
+        <ExcludedCallout excluded={excluded} sym={sym} formatLocale={formatLocale} />
       )}
     </ReportSection>
   )
