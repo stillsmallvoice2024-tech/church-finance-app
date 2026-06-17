@@ -11,6 +11,7 @@ import {
 import { detectHeaderRow } from './ImportModal'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { normalizeId } from '../../utils/normalizeId'
+import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import { Modal } from '../ui/Modal'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
@@ -570,7 +571,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
       return
     }
     if (!incomeTypeId) {
-      setSetupError('Please select an income category before continuing.')
+      setSetupError('Please select an income category (or choose Auto-detect) before continuing.')
       return
     }
 
@@ -658,13 +659,17 @@ export function ImportWizardModal({ open, onClose }: Props) {
       inflowRefMap.set(baseRef, count + 1)
       const transactionRef = count === 0 ? baseRef : `${baseRef}-${count}`
 
+      const rowIncomeTypeId = incomeTypeId === '__auto__'
+        ? (classifyIncomeType(row.description, '', incomeTypes)?.id ?? null)
+        : (incomeTypeId || null)
+
       inflowPayloads.push({
         date: row.date,
         amount: row.credit,
         description: row.description,
         bank_name: bankName,
         transaction_ref: transactionRef,
-        ...(incomeTypeId ? { income_type_id: incomeTypeId } : {}),
+        ...(rowIncomeTypeId ? { income_type_id: rowIncomeTypeId } : {}),
         ...(resolvedConfigId ? { allocation_config_id: resolvedConfigId } : {}),
         org_id: currentOrgId,
         created_by: user.id,
@@ -920,13 +925,13 @@ export function ImportWizardModal({ open, onClose }: Props) {
             Income Category
           </label>
           <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
-            What type of income is in this file?
+            Pick one category for all rows, or let the app detect each row automatically from its description.
           </p>
           <select
             value={incomeTypeId}
             onChange={e => {
               setIncomeTypeId(e.target.value)
-              if (!e.target.value) {
+              if (!e.target.value || e.target.value === '__auto__') {
                 setConfigId('')
                 setConfigAutoSet(false)
               }
@@ -934,16 +939,23 @@ export function ImportWizardModal({ open, onClose }: Props) {
             className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">— Select income category —</option>
+            <option value="__auto__">Auto-detect from description (mixed)</option>
             {incomeTypes.map(t => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
           </select>
+          {incomeTypeId === '__auto__' && (
+            <p className="text-xs text-primary/80 dark:text-primary/70">
+              Each row will be matched to a category based on its description text using your keyword rules.
+              Rows with no match will be imported without a category.
+            </p>
+          )}
         </div>
 
-        {/* Budget plan */}
-        <div className="flex flex-col gap-1.5">
+        {/* Budget plan — hidden in auto-detect mode */}
+        {incomeTypeId !== '__auto__' && <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
             Budget Plan{' '}
             <span className="font-normal text-gray-400">(optional)</span>
@@ -971,7 +983,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
               (auto-set from your income category)
             </p>
           )}
-        </div>
+        </div>}
 
         {/* Error */}
         {setupError && (
@@ -1006,7 +1018,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
   // Render step: review
   // ---------------------------------------------------------------------------
   function renderReview() {
-    const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
+    const selectedIncomeType = incomeTypeId !== '__auto__'
+      ? (incomeTypes.find(t => t.id === incomeTypeId) ?? null)
+      : null
     const selectedConfig = lockedConfigs.find(c => c.id === configId) ?? null
     const previewRows = wizardRows.slice(0, 5)
 
@@ -1025,9 +1039,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
                 ['Bank', selectedBank?.name ?? '—'],
                 [
                   'Income category',
-                  selectedIncomeType?.name ?? '—',
+                  incomeTypeId === '__auto__' ? 'Auto-detect (mixed)' : (selectedIncomeType?.name ?? '—'),
                 ],
-                ['Budget plan', selectedConfig?.name ?? 'None'],
+                ...(incomeTypeId !== '__auto__' ? [['Budget plan', selectedConfig?.name ?? 'None']] : []),
               ] as [string, string][]
             ).map(([label, value]) => (
               <div
