@@ -317,15 +317,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
   // ---- hooks ----
   const { banks } = useBanks()
   const { incomeTypes } = useIncomeTypes()
-  const {
-    configs,
-    loaded,
-    fetch: fetchConfigs,
-  } = useAllocationStore(s => ({
-    configs: s.configs,
-    loaded: s.loaded,
-    fetch: s.fetch,
-  }))
+  const configs     = useAllocationStore(s => s.configs)
+  const loaded      = useAllocationStore(s => s.loaded)
+  const fetchConfigs = useAllocationStore(s => s.fetch)
   const { formatAmount } = useOrgCurrency()
   const toast = useToast()
 
