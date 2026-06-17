@@ -172,7 +172,9 @@ function parseDebit(raw: unknown): number {
 // Helper: cellToDateStr
 // ---------------------------------------------------------------------------
 
-function cellToDateStr(cell: unknown): string {
+type DateFormat = 'dmy' | 'mdy'
+
+function cellToDateStr(cell: unknown, format: DateFormat): string {
   if (cell instanceof Date) {
     const y = cell.getFullYear()
     const m = String(cell.getMonth() + 1).padStart(2, '0')
@@ -196,30 +198,74 @@ function cellToDateStr(cell: unknown): string {
 
   if (typeof cell === 'string') {
     const s = cell.trim()
-    // YYYY-MM-DD
+    // YYYY-MM-DD is unambiguous
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
       return s.slice(0, 10)
     }
-    // DD/MM/YYYY or DD-MM-YYYY (Nigerian format)
-    const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)
-    if (dmy) {
-      const day = dmy[1].padStart(2, '0')
-      const month = dmy[2].padStart(2, '0')
-      const year = dmy[3]
+    // D/M/YYYY or M/D/YYYY — interpret based on user-selected format
+    const parts = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/)
+    if (parts) {
+      const first  = parts[1].padStart(2, '0')
+      const second = parts[2].padStart(2, '0')
+      const year   = parts[3]
+      const [month, day] = format === 'dmy' ? [second, first] : [first, second]
       return `${year}-${month}-${day}`
-    }
-    // Last resort
-    try {
-      const d = new Date(s)
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().slice(0, 10)
-      }
-    } catch {
-      // fall through
     }
   }
 
   return ''
+}
+
+// ---------------------------------------------------------------------------
+// Helper: buildRows — convert raw XLSX data rows into WizardRow[]
+// ---------------------------------------------------------------------------
+
+function buildRows(
+  dataRows: unknown[][],
+  cols: DetectedColumns,
+  format: DateFormat,
+): { rows: WizardRow[]; hasRef: boolean } {
+  const parsed: WizardRow[] = []
+  let hasRef = false
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i]
+    const dateStr = cellToDateStr(row[cols.dateIdx], format)
+    if (!dateStr) continue
+
+    let credit = 0
+    let debit = 0
+
+    if (cols.creditIdx !== -1 && cols.debitIdx !== -1) {
+      credit = parseCredit(row[cols.creditIdx])
+      debit = parseDebit(row[cols.debitIdx])
+    } else if (cols.amountIdx !== -1) {
+      const strAmt = String(row[cols.amountIdx] ?? '').trim()
+      const isNeg = strAmt.startsWith('-') || /^\(.*\)$/.test(strAmt)
+      const absVal = parseDebit(row[cols.amountIdx])
+      if (isNeg) { debit = absVal } else { credit = parseCredit(row[cols.amountIdx]) }
+    } else if (cols.creditIdx !== -1) {
+      credit = parseCredit(row[cols.creditIdx])
+    } else if (cols.debitIdx !== -1) {
+      debit = parseDebit(row[cols.debitIdx])
+    }
+
+    if (credit === 0 && debit === 0) continue
+
+    const description = cols.descIdx !== -1
+      ? normalizeId(String(row[cols.descIdx] ?? '').trim())
+      : ''
+
+    let ref = ''
+    if (cols.refIdx !== -1) {
+      ref = normalizeId(String(row[cols.refIdx] ?? '').trim())
+      if (ref) hasRef = true
+    }
+
+    parsed.push({ idx: i, date: dateStr, description, credit, debit, ref })
+  }
+
+  return { rows: parsed, hasRef }
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +375,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   const [fileName, setFileName] = useState('')
+  const [dateFormat, setDateFormat] = useState<DateFormat>('dmy')
+  const [rawDataRows, setRawDataRows] = useState<unknown[][]>([])
+  const [rawCols, setRawCols] = useState<DetectedColumns | null>(null)
   const [wizardRows, setWizardRows] = useState<WizardRow[]>([])
   const [hasRefCol, setHasRefCol] = useState(false)
   const [bankId, setBankId] = useState('')
@@ -369,6 +418,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setParsing(false)
     setParseError(null)
     setFileName('')
+    setDateFormat('dmy')
+    setRawDataRows([])
+    setRawCols(null)
     setWizardRows([])
     setHasRefCol(false)
     setBankId('')
@@ -381,6 +433,14 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setShowPreview(false)
     setResult(null)
   }, [open])
+
+  // ---- re-parse rows when date format changes ----
+  useEffect(() => {
+    if (!rawCols || rawDataRows.length === 0) return
+    const { rows, hasRef } = buildRows(rawDataRows, rawCols, dateFormat)
+    setWizardRows(rows)
+    setHasRefCol(hasRef)
+  }, [dateFormat, rawDataRows, rawCols])
 
   // ---- fetch configs on open ----
   useEffect(() => {
@@ -418,6 +478,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setParsing(false)
     setParseError(null)
     setFileName('')
+    setDateFormat('dmy')
+    setRawDataRows([])
+    setRawCols(null)
     setWizardRows([])
     setHasRefCol(false)
     setBankId('')
@@ -475,60 +538,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
       }
 
       const dataRows = allRows.slice(headerRowIdx + 1) as unknown[][]
-      const parsed: WizardRow[] = []
-      let rowHasRef = false
-
-      for (let i = 0; i < dataRows.length; i++) {
-        const row = dataRows[i]
-        const dateStr = cellToDateStr(row[cols.dateIdx])
-        if (!dateStr) continue
-
-        let credit = 0
-        let debit = 0
-
-        if (cols.creditIdx !== -1 && cols.debitIdx !== -1) {
-          credit = parseCredit(row[cols.creditIdx])
-          debit = parseDebit(row[cols.debitIdx])
-        } else if (cols.amountIdx !== -1) {
-          // Single amount column: positive = credit, negative = debit
-          const rawAmt = row[cols.amountIdx]
-          const strAmt = String(rawAmt ?? '').trim()
-          const isNeg =
-            strAmt.startsWith('-') || /^\(.*\)$/.test(strAmt)
-          const absVal = parseDebit(rawAmt) // parseDebit handles both notations
-          if (isNeg) {
-            debit = absVal
-          } else {
-            credit = parseCredit(rawAmt)
-          }
-        } else if (cols.creditIdx !== -1) {
-          credit = parseCredit(row[cols.creditIdx])
-        } else if (cols.debitIdx !== -1) {
-          debit = parseDebit(row[cols.debitIdx])
-        }
-
-        if (credit === 0 && debit === 0) continue
-
-        const description =
-          cols.descIdx !== -1
-            ? normalizeId(String(row[cols.descIdx] ?? '').trim())
-            : ''
-
-        let ref = ''
-        if (cols.refIdx !== -1) {
-          ref = normalizeId(String(row[cols.refIdx] ?? '').trim())
-          if (ref) rowHasRef = true
-        }
-
-        parsed.push({
-          idx: i,
-          date: dateStr,
-          description,
-          credit,
-          debit,
-          ref,
-        })
-      }
+      const { rows: parsed, hasRef: rowHasRef } = buildRows(dataRows, cols, dateFormat)
 
       if (parsed.length === 0) {
         setParseError(
@@ -538,6 +548,8 @@ export function ImportWizardModal({ open, onClose }: Props) {
       }
 
       setFileName(file.name)
+      setRawDataRows(dataRows)
+      setRawCols(cols)
       setWizardRows(parsed)
       setHasRefCol(rowHasRef)
       setStep('setup')
@@ -840,6 +852,36 @@ export function ImportWizardModal({ open, onClose }: Props) {
 
     return (
       <div className="flex flex-col gap-5">
+        {/* Date format */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Date Arrangement
+          </label>
+          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
+            How are dates written in your file? Changing this will update all parsed dates.
+          </p>
+          <div className="flex gap-2">
+            {([
+              { value: 'dmy', label: 'DD/MM/YYYY', example: 'e.g. 25/12/2024' },
+              { value: 'mdy', label: 'MM/DD/YYYY', example: 'e.g. 12/25/2024' },
+            ] as const).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDateFormat(opt.value)}
+                className={`flex-1 flex flex-col items-center gap-0.5 py-2 px-3 rounded-lg border text-sm transition-colors ${
+                  dateFormat === opt.value
+                    ? 'border-primary bg-primary/10 text-primary font-semibold'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                <span>{opt.label}</span>
+                <span className="text-xs font-normal text-gray-400 dark:text-gray-500">{opt.example}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Bank */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
