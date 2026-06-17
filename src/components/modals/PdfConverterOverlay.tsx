@@ -90,19 +90,27 @@ interface Props {
 }
 
 export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
-  const [phase,        setPhase]        = useState<Phase>('extracting')
-  const [result,       setResult]       = useState<ExtractionResult | null>(null)
-  const [editedRows,   setEditedRows]   = useState<string[][]>([])
-  const [editingCell,  setEditingCell]  = useState<{ r: number; c: number } | null>(null)
-  const [editValue,    setEditValue]    = useState('')
-  const [ocrProgress,  setOcrProgress]  = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
-  const [extractError, setExtractError] = useState<string | null>(null)
-  const [warningsOpen, setWarningsOpen] = useState(false)
+  const [phase,          setPhase]          = useState<Phase>('extracting')
+  const [result,         setResult]         = useState<ExtractionResult | null>(null)
+  const [editedRows,     setEditedRows]     = useState<string[][]>([])
+  const [isDirty,        setIsDirty]        = useState(false)
+  const [discardConfirm, setDiscardConfirm] = useState(false)
+  const [editingCell,    setEditingCell]    = useState<{ r: number; c: number } | null>(null)
+  const [editValue,      setEditValue]      = useState('')
+  const [ocrProgress,    setOcrProgress]    = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
+  const [extractError,   setExtractError]   = useState<string | null>(null)
+  const [warningsOpen,   setWarningsOpen]   = useState(false)
 
   const applyResult = (res: ExtractionResult) => {
     setResult(res)
     setEditedRows(res.rawRows.map(r => [...r]))
+    setIsDirty(false)
     setPhase('preview')
+  }
+
+  // Guard close/cancel — ask for confirmation when the user has unsaved edits.
+  const handleCancel = () => {
+    if (isDirty) { setDiscardConfirm(true) } else { onCancel() }
   }
 
   const extract = useCallback(async (f: File) => {
@@ -176,7 +184,10 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     const { r, c } = editingCell
     setEditedRows(prev => {
       const next = prev.map(row => [...row])
-      if (next[r]) next[r][c] = editValue
+      if (next[r]) {
+        if (next[r][c] !== editValue) setIsDirty(true)
+        next[r][c] = editValue
+      }
       return next
     })
     setEditingCell(null)
@@ -253,6 +264,30 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-950 overflow-hidden">
 
+      {/* Discard-edits confirmation */}
+      {discardConfirm && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-white/[0.08] p-6 w-80 space-y-4 mx-4">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Discard edits?</p>
+            <p className="text-sm text-gray-500">You have unsaved changes. Closing now will lose all edits made to the extracted data.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDiscardConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-white/[0.12] dark:hover:bg-gray-700 transition-colors"
+              >
+                Keep editing
+              </button>
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Discard and close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/[0.07]">
         <div>
@@ -264,7 +299,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
           </p>
         </div>
         <button
-          onClick={onCancel}
+          onClick={handleCancel}
           className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors"
           aria-label="Cancel conversion"
         >
@@ -456,7 +491,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
       {phase === 'preview' && result && (
         <div className="shrink-0 border-t border-gray-200 dark:border-white/[0.07] px-6 py-4 flex flex-wrap items-center gap-3 bg-white dark:bg-gray-950">
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             className="px-4 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-black/[0.02] transition-colors"
           >
             Cancel

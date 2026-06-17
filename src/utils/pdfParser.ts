@@ -145,10 +145,18 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
     dataStart = 0
   }
 
-  const headerKey = headers.map(h => h.toLowerCase().trim()).join('|')
+  // Normalise header key: collapse internal whitespace so minor spacing
+  // differences between pages don't cause repeated header rows to slip through.
+  const normalise = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+  const headerKey = headers.map(normalise).join('|')
+
   const filteredRowsWithY = trimmedGridWithY.slice(dataStart).filter(({ cells: r }) => {
     if (!r.some(c => c.trim())) return false
-    const rowKey = r.map(c => c.toLowerCase().trim()).join('|')
+    // Drop any row that is an exact (normalised) repeat of the header — bank
+    // statement PDFs print headers at the top of every page; those rows must not
+    // appear as data rows or be merged into a preceding anchor by the continuation
+    // logic, which is what causes duplicate/mangled rows in the import modal.
+    const rowKey = r.map(normalise).join('|')
     return rowKey !== headerKey
   })
 
