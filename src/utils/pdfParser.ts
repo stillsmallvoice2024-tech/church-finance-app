@@ -105,60 +105,126 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
     rowMap.get(y)!.sort((a, b) => a.x - b.x)
   )
 
-  // Keep any row with at least one text item; single-item rows (wrapped description
-  // lines) are intentionally kept here and folded in by the continuation merge below.
-  const dataRows = textRows.filter(r => r.some(i => i.text))
-  if (dataRows.length === 0) return []
+  // Keep rows with at least one text item; preserve Y so continuation direction can
+  // be determined later (leading vs. trailing wraps need to know which anchor is closer).
+  const dataRowsWithY = sortedYKeys
+    .map((y, idx) => ({ y, row: textRows[idx] }))
+    .filter(({ row }) => row.some(i => i.text))
+
+  if (dataRowsWithY.length === 0) return []
 
   // Detect column positions
-  const colPositions = detectColumns(dataRows)
+  const colPositions = detectColumns(dataRowsWithY.map(r => r.row))
 
-  // Build 2D string array
-  const grid: string[][] = dataRows.map(row => assignToColumns(row, colPositions))
+  // Build 2D string array, keeping Y metadata
+  const gridWithY = dataRowsWithY.map(({ y, row }) => ({
+    y,
+    cells: assignToColumns(row, colPositions),
+  }))
 
   // Remove completely empty columns
   const usedCols: number[] = []
   for (let ci = 0; ci < colPositions.length; ci++) {
-    if (grid.some(row => row[ci]?.trim())) usedCols.push(ci)
+    if (gridWithY.some(({ cells }) => cells[ci]?.trim())) usedCols.push(ci)
   }
-  const trimmedGrid = grid.map(row => usedCols.map(ci => row[ci] ?? ''))
+  const trimmedGridWithY = gridWithY.map(({ y, cells }) => ({
+    y,
+    cells: usedCols.map(ci => cells[ci] ?? ''),
+  }))
 
-  if (trimmedGrid.length === 0) return []
+  if (trimmedGridWithY.length === 0) return []
 
   // Determine header row
   let headers: string[]
   let dataStart: number
-  if (looksLikeHeader(trimmedGrid[0])) {
-    headers   = trimmedGrid[0].map((h, i) => h.trim() || `Column ${i + 1}`)
+  if (looksLikeHeader(trimmedGridWithY[0].cells)) {
+    headers   = trimmedGridWithY[0].cells.map((h, i) => h.trim() || `Column ${i + 1}`)
     dataStart = 1
   } else {
-    headers   = trimmedGrid[0].map((_, i) => `Column ${i + 1}`)
+    headers   = trimmedGridWithY[0].cells.map((_, i) => `Column ${i + 1}`)
     dataStart = 0
   }
 
   const headerKey = headers.map(h => h.toLowerCase().trim()).join('|')
-  const filteredRows = trimmedGrid.slice(dataStart).filter(r => {
+  const filteredRowsWithY = trimmedGridWithY.slice(dataStart).filter(({ cells: r }) => {
     if (!r.some(c => c.trim())) return false
     const rowKey = r.map(c => c.toLowerCase().trim()).join('|')
     return rowKey !== headerKey
   })
 
-  // Merge continuation rows into their anchor row. A continuation has an empty
-  // first column (no date/ID anchor) and fewer than half the columns filled —
-  // typical of description text that wraps across multiple lines in the PDF.
+  // Merge continuation rows (sparse rows with empty first column) into their anchor.
+  //
+  // Direction is determined by Y-proximity to the surrounding anchor rows:
+  //   • distToNext <= distToPrev  →  "leading" continuation: description text that
+  //     starts at the TOP of a cell (above the anchor's Y), so belongs to the NEXT
+  //     anchor — prepend in document order.
+  //   • distToNext >  distToPrev  →  "trailing" continuation: text that wraps below
+  //     the anchor's Y, so belongs to the PREVIOUS anchor — append.
+  //
+  // This correctly handles Oracle-style bank statements where a multi-line description
+  // starts rendering before (above) the row's date/amount columns.
   const mergedRows: string[][] = []
-  for (const row of filteredRows) {
-    const firstEmpty = !row[0]?.trim()
-    const nonEmptyCount = row.filter(c => c.trim()).length
-    if (mergedRows.length > 0 && firstEmpty && nonEmptyCount < Math.ceil(row.length / 2)) {
-      const prev = mergedRows[mergedRows.length - 1]
-      row.forEach((cell, ci) => {
+  const pending: Array<{ y: number; cells: string[] }> = []
+  let prevAnchorY: number | null = null
+
+  for (const { y, cells } of filteredRowsWithY) {
+    const firstEmpty = !cells[0]?.trim()
+    const nonEmptyCount = cells.filter(c => c.trim()).length
+    const isContinuation = firstEmpty && nonEmptyCount < Math.ceil(cells.length / 2)
+
+    if (isContinuation) {
+      pending.push({ y, cells: [...cells] })
+    } else {
+      // Classify each pending continuation as leading (→ next anchor) or trailing (→ prev)
+      const leading: string[][] = []
+      const trailing: string[][] = []
+
+      for (const cont of pending) {
+        const distToPrev = prevAnchorY !== null ? Math.abs(cont.y - prevAnchorY) : Infinity
+        const distToNext = Math.abs(cont.y - y)
+        if (distToNext <= distToPrev) {
+          leading.push(cont.cells)
+        } else {
+          trailing.push(cont.cells)
+        }
+      }
+
+      // Append trailing continuations to previous anchor
+      if (trailing.length > 0 && mergedRows.length > 0) {
+        const prev = mergedRows[mergedRows.length - 1]
+        for (const cont of trailing) {
+          cont.forEach((cell, ci) => {
+            if (cell.trim()) {
+              prev[ci] = prev[ci] ? `${prev[ci]} ${cell.trim()}` : cell.trim()
+            }
+          })
+        }
+      }
+
+      // Prepend leading continuations (in Y order) before this anchor's own content
+      const anchorCells = [...cells]
+      for (let ci = 0; ci < anchorCells.length; ci++) {
+        const leadingParts = leading.map(cont => cont[ci]?.trim()).filter(Boolean)
+        if (leadingParts.length > 0) {
+          anchorCells[ci] = [...leadingParts, anchorCells[ci]].filter(Boolean).join(' ')
+        }
+      }
+
+      pending.length = 0
+      prevAnchorY = y
+      mergedRows.push(anchorCells)
+    }
+  }
+
+  // Flush any remaining continuations after the last anchor as trailing
+  if (pending.length > 0 && mergedRows.length > 0) {
+    const prev = mergedRows[mergedRows.length - 1]
+    for (const cont of pending) {
+      cont.cells.forEach((cell, ci) => {
         if (cell.trim()) {
           prev[ci] = prev[ci] ? `${prev[ci]} ${cell.trim()}` : cell.trim()
         }
       })
-    } else {
-      mergedRows.push([...row])
     }
   }
 
