@@ -7,7 +7,7 @@ import {
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
-  ChevronDown, X, HelpCircle, ScanText,
+  ChevronDown, X, HelpCircle,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
@@ -42,7 +42,6 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Inflows',           path: '/inflows',    icon: TrendingUp      },
       { label: 'Outflows',          path: '/outflows',   icon: TrendingDown    },
       { label: 'Import',            path: '/import',         icon: FileUp,     canWriteOnly: true },
-      { label: 'PDF Converter',     path: '/pdf-converter',  icon: ScanText,   canWriteOnly: true },
       { label: 'Category Fund Transfers', path: '/intra-flow', icon: Repeat2 },
       { label: 'Receipts',          path: '/receipts',   icon: Receipt         },
     ],

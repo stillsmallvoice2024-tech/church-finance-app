@@ -5,13 +5,14 @@ import {
   CheckCircle2, AlertTriangle, Loader2, X,
   TrendingUp, TrendingDown, Sparkles,
 } from 'lucide-react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
+import { PdfConverterOverlay } from '../components/modals/PdfConverterOverlay'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useCategories } from '../hooks/useCategories'
@@ -91,14 +92,13 @@ export default function Import() {
   const [dupLoading, setDupLoading]   = useState(false)
   const [duplicates, setDuplicates]   = useState<DupRecord[]>([])
   const [dupChecked, setDupChecked]   = useState(false)
-  const [parseError, setParseError]   = useState<string | null>(null)
+  const [parseError, setParseError]       = useState<string | null>(null)
   const [selectedBankId, setSelectedBankId] = useState('')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFile, setSelectedFile]   = useState<File | null>(null)
+  const [pdfToConvert, setPdfToConvert]   = useState<File | null>(null)
 
-  const location = useLocation()
   const { banks } = useBanks()
-  const fileInputRef    = useRef<HTMLInputElement>(null)
-  const fromConverterRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   usePageTitle('Import')
   useFirstVisitTour('import')
 
@@ -107,23 +107,6 @@ export default function Import() {
     () => banks.find(b => b.id === selectedBankId)?.name ?? null,
     [selectedBankId, banks],
   )
-
-  // Auto-load a file passed via location state from PdfConverter
-  useEffect(() => {
-    const f = (location.state as { file?: File } | null)?.file
-    if (f instanceof File) {
-      fromConverterRef.current = true
-      parseAndCheck(f)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-open the wizard once the parse + dup-check settles
-  useEffect(() => {
-    if (fromConverterRef.current && dupChecked && parseResult && !importOpen) {
-      fromConverterRef.current = false
-      openWizard(false)
-    }
-  }, [dupChecked, parseResult, importOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reset = () => {
     setParseResult(null)
@@ -245,13 +228,17 @@ export default function Import() {
     e.preventDefault()
     setDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file) parseAndCheck(file)
+    if (!file) return
+    if (file.name.match(/\.pdf$/i)) { setPdfToConvert(file); return }
+    parseAndCheck(file)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) parseAndCheck(file)
     e.target.value = ''
+    if (!file) return
+    if (file.name.match(/\.pdf$/i)) { setPdfToConvert(file); return }
+    parseAndCheck(file)
   }
 
   return (
@@ -341,7 +328,7 @@ export default function Import() {
                   Drop your file here, or{' '}
                   <span className="text-primary underline underline-offset-2">click to browse</span>
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .csv</p>
+                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, .csv and .pdf</p>
               </div>
             </div>
           ) : (
@@ -506,7 +493,7 @@ export default function Import() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls,.csv,.pdf"
             className="hidden"
             onChange={handleFileInput}
           />
@@ -541,6 +528,18 @@ export default function Import() {
         bank={selectedBankId ? (banks.find(b => b.id === selectedBankId) ?? null) : null}
         preloadedFile={selectedFile}
       />
+
+      {/* PDF converter overlay — intercepts PDF drops before the import wizard */}
+      {pdfToConvert && (
+        <PdfConverterOverlay
+          file={pdfToConvert}
+          onConfirm={xlsxFile => {
+            setPdfToConvert(null)
+            parseAndCheck(xlsxFile)
+          }}
+          onCancel={() => setPdfToConvert(null)}
+        />
+      )}
     </div>
   )
 }
