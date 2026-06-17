@@ -549,8 +549,10 @@ export default function Import() {
         </div>
       )}
 
-      {/* Guided Import wizard */}
-      <ImportWizardModal open={wizardOpen} onClose={() => setWizardOpen(false)} />
+      {/* Guided Import wizard — lazy-mounted to avoid hook overhead when closed */}
+      {wizardOpen && (
+        <ImportWizardModal open={wizardOpen} onClose={() => setWizardOpen(false)} />
+      )}
 
       {/* Standard Import modal */}
       <ImportModal
