@@ -342,6 +342,18 @@ const balanceMismatchRule: ReconciliationRule = {
             : 'Statement exceeds book — check for missing inflows, unrecorded deposits, or pending deductions.',
           bankName: bank.name,
         })
+      } else {
+        // Balanced — emit a metadata snapshot so the book balance is always
+        // visible in the Account Status table even when there are no issues.
+        issues.push({
+          id: `balance_snapshot-${bank.name}`,
+          ruleId: 'balance_snapshot',
+          severity: 'info',
+          message: '',
+          evidence: { bank: bank.name, bookBalance: book, referenceBalance: ref.balance, difference: diff, statementDate: ref.date },
+          suggestedFix: '',
+          bankName: bank.name,
+        })
       }
     }
     return issues
