@@ -7,7 +7,7 @@ import {
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
-  MoreHorizontal, X,
+  MoreHorizontal, X, ScanText,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
@@ -43,8 +43,9 @@ const DRAWER_SECTIONS: DrawerSection[] = [
   {
     label: 'Finance',
     items: [
-      { label: 'Import',            path: '/import',           icon: FileUp,         canWriteOnly: true },
-      { label: 'Category Fund Transfers', path: '/intra-flow',      icon: Repeat2        },
+      { label: 'Import',            path: '/import',          icon: FileUp,    canWriteOnly: true },
+      { label: 'PDF Converter',     path: '/pdf-converter',   icon: ScanText,  canWriteOnly: true },
+      { label: 'Category Fund Transfers', path: '/intra-flow',     icon: Repeat2       },
       { label: 'Receipts',          path: '/receipts',         icon: Receipt        },
     ],
   },

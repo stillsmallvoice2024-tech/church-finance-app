@@ -25,6 +25,7 @@ import DynamicReportEditor from './pages/DynamicReportEditor'
 import Settings from './pages/Settings'
 import UserManagement from './pages/UserManagement'
 import Import from './pages/Import'
+import PdfConverter from './pages/PdfConverter'
 import PendingDeductions from './pages/PendingDeductions'
 import Setup from './pages/Setup'
 import PercentageAllocations from './pages/PercentageAllocations'
@@ -144,6 +145,7 @@ export default function App() {
             {/* Viewer-blocked routes: admin + accountant only */}
             <Route element={<CanWriteGuard />}>
               <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
+              <Route path="pdf-converter" element={<ErrorBoundary><PdfConverter /></ErrorBoundary>} />
               <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
             </Route>
             {/* Admin-only routes */}

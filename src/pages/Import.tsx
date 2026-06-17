@@ -5,7 +5,7 @@ import {
   CheckCircle2, AlertTriangle, Loader2, X,
   TrendingUp, TrendingDown, Sparkles,
 } from 'lucide-react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
@@ -95,8 +95,10 @@ export default function Import() {
   const [selectedBankId, setSelectedBankId] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
+  const location = useLocation()
   const { banks } = useBanks()
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef    = useRef<HTMLInputElement>(null)
+  const fromConverterRef = useRef(false)
   usePageTitle('Import')
   useFirstVisitTour('import')
 
@@ -105,6 +107,23 @@ export default function Import() {
     () => banks.find(b => b.id === selectedBankId)?.name ?? null,
     [selectedBankId, banks],
   )
+
+  // Auto-load a file passed via location state from PdfConverter
+  useEffect(() => {
+    const f = (location.state as { file?: File } | null)?.file
+    if (f instanceof File) {
+      fromConverterRef.current = true
+      parseAndCheck(f)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-open the wizard once the parse + dup-check settles
+  useEffect(() => {
+    if (fromConverterRef.current && dupChecked && parseResult && !importOpen) {
+      fromConverterRef.current = false
+      openWizard(false)
+    }
+  }, [dupChecked, parseResult, importOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reset = () => {
     setParseResult(null)
