@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   TrendingUp, Pencil, Trash2, PlusCircle,
-  ChevronDown, ChevronRight, AlertCircle, RefreshCw,
+  ChevronDown, ChevronRight, AlertCircle, RefreshCw, AlertTriangle,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
@@ -108,6 +108,37 @@ function SummaryStrip({ total, count, largest, average, loading }: {
   )
 }
 
+function UnmappedStrip({ count, active, onToggle, loading, label }: {
+  count: number; active: boolean; onToggle: () => void; loading: boolean; label: string
+}) {
+  if (!loading && count === 0 && !active) return null
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+      <div className="flex items-center gap-2 min-w-0">
+        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+        {loading ? (
+          <div className="h-4 bg-amber-200/70 rounded animate-pulse w-56" />
+        ) : (
+          <p className="text-sm text-amber-800">
+            <span className="font-semibold">{count.toLocaleString()}</span>{' '}
+            transaction{count !== 1 ? 's' : ''} {label}
+          </p>
+        )}
+      </div>
+      <button
+        onClick={onToggle}
+        className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors whitespace-nowrap ${
+          active
+            ? 'bg-amber-600 text-white hover:bg-amber-700'
+            : 'bg-white border border-amber-300 text-amber-700 hover:bg-amber-100'
+        }`}
+      >
+        {active ? 'Show all' : 'Show only'}
+      </button>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Inflows() {
@@ -122,6 +153,7 @@ export default function Inflows() {
   const [searchInput,     setSearchInput]     = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page,            setPage]            = useState(0)
+  const [showUnmappedOnly, setShowUnmappedOnly] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput), 400)
@@ -131,7 +163,7 @@ export default function Inflows() {
   // Data controls state
   const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
-  const { data, count, loading, error, refetch } = useInflowTransactions({
+  const { data, count, unmappedCount = 0, loading, error, refetch } = useInflowTransactions({
     dateFrom:     dateFrom  || undefined,
     dateTo:       dateTo    || undefined,
     search:       debouncedSearch || undefined,
@@ -141,9 +173,16 @@ export default function Inflows() {
     sortColumn:   infState.advancedSort.length === 0 ? infState.sortKey : undefined,
     sortAscending: infState.advancedSort.length === 0 ? (infState.sortDir === 'asc') : undefined,
     advancedSort: infState.advancedSort.length > 0 ? infState.advancedSort : undefined,
+    unmappedOnly: showUnmappedOnly,
   })
 
   const displayed = data
+
+  const isInflowUnmapped = (row: InflowTransaction) => {
+    if (!row.transaction_type) return !row.allocation_config_id
+    if (row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE) return false
+    return !row.offset_role || (row.offset_role === 'offset' && !row.root_transaction_id)
+  }
 
   // Summary (current page)
   const total   = displayed.reduce((s, r) => s + Number(r.amount), 0)
@@ -176,10 +215,11 @@ export default function Inflows() {
   useFirstVisitTour('inflows')
 
   // Clear selection when filters/page/sort change
-  useEffect(() => { setPage(0); clearAll() }, [dateFrom, dateTo, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0); clearAll(); setShowUnmappedOnly(false) }, [dateFrom, dateTo, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setDateFrom(`${year}-01-01`); setDateTo(`${year}-12-31`); setPage(0); clearAll() }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { clearAll() }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(0); clearAll() }, [infState.sortKey, infState.sortDir, infState.searchCol, infState.advancedSort, infState.pageSize]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0) }, [showUnmappedOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openEdit = (r: InflowTransaction) => {
     if (r.transaction_type === 'fx_conversion') {
@@ -335,7 +375,7 @@ export default function Inflows() {
               </FilterGroup>
               {(dateFrom || dateTo || datePreset) && (
                 <button
-                  onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setSearchInput('') }}
+                  onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setSearchInput(''); setShowUnmappedOnly(false) }}
                   className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   Clear
@@ -367,6 +407,14 @@ export default function Inflows() {
           onAdvancedSort={infState.setAdvancedSort}
           pageSize={infState.pageSize}
           onPageSizeChange={infState.setPageSize}
+        />
+
+        <UnmappedStrip
+          count={unmappedCount}
+          active={showUnmappedOnly}
+          onToggle={() => setShowUnmappedOnly(v => !v)}
+          loading={loading}
+          label="not mapped to a distribution rule"
         />
 
         {/* Compact pagination above content */}
@@ -412,6 +460,11 @@ export default function Inflows() {
                         {row.transaction_type && (
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                             {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
+                          </span>
+                        )}
+                        {isInflowUnmapped(row) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap bg-amber-100 text-amber-700">
+                            Unmapped
                           </span>
                         )}
                       </div>
@@ -556,9 +609,13 @@ export default function Inflows() {
                                 {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                               </span>
                             ) : null}
-                            {!incomeTypes.find(t => t.id === row.income_type_id) && !row.transaction_type && (
+                            {isInflowUnmapped(row) ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap bg-amber-100 text-amber-700">
+                                Unmapped
+                              </span>
+                            ) : !incomeTypes.find(t => t.id === row.income_type_id) && !row.transaction_type ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap bg-gray-100 text-gray-400">—</span>
-                            )}
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 max-w-[240px]" onClick={e => e.stopPropagation()}>
