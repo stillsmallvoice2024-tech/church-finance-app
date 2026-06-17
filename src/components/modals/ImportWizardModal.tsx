@@ -377,6 +377,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
   const [parseError, setParseError] = useState<string | null>(null)
   const [fileName, setFileName] = useState('')
   const [dateFormat, setDateFormat] = useState<DateFormat>('dmy')
+  const [parsedWorkbook, setParsedWorkbook] = useState<XLSX.WorkBook | null>(null)
+  const [sheetNames, setSheetNames] = useState<string[]>([])
+  const [activeSheet, setActiveSheet] = useState('')
   const [rawDataRows, setRawDataRows] = useState<unknown[][]>([])
   const [rawCols, setRawCols] = useState<DetectedColumns | null>(null)
   const [wizardRows, setWizardRows] = useState<WizardRow[]>([])
@@ -420,6 +423,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setParseError(null)
     setFileName('')
     setDateFormat('dmy')
+    setParsedWorkbook(null)
+    setSheetNames([])
+    setActiveSheet('')
     setRawDataRows([])
     setRawCols(null)
     setWizardRows([])
@@ -480,6 +486,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setParseError(null)
     setFileName('')
     setDateFormat('dmy')
+    setParsedWorkbook(null)
+    setSheetNames([])
+    setActiveSheet('')
     setRawDataRows([])
     setRawCols(null)
     setWizardRows([])
@@ -493,6 +502,27 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setDupLoading(false)
     setShowPreview(false)
     setResult(null)
+  }
+
+  // ---- applySheet — parse rows from an already-read workbook ----
+  function applySheet(wb: XLSX.WorkBook, sheetName: string) {
+    const ws = wb.Sheets[sheetName]
+    if (!ws) return
+    const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' })
+    const headerRowIdx = detectHeaderRow(allRows as unknown[][])
+    const headerRow = allRows[headerRowIdx] as unknown[]
+    const headers = headerRow.map(h => String(h ?? ''))
+    const cols = detectColumns(headers)
+    if (cols.dateIdx === -1 || (cols.creditIdx === -1 && cols.debitIdx === -1 && cols.amountIdx === -1)) {
+      // Sheet has no usable columns — stay on whatever we had, let the user pick another
+      return
+    }
+    const dataRows = allRows.slice(headerRowIdx + 1) as unknown[][]
+    const { rows, hasRef } = buildRows(dataRows, cols, dateFormat)
+    setRawDataRows(dataRows)
+    setRawCols(cols)
+    setWizardRows(rows)
+    setHasRefCol(hasRef)
   }
 
   // ---- parseFile ----
@@ -511,17 +541,14 @@ export function ImportWizardModal({ open, onClose }: Props) {
     try {
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array', cellDates: true })
-      const sheetName = wb.SheetNames[0]
-      const ws = wb.Sheets[sheetName]
-      const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, {
-        header: 1,
-        defval: '',
-      })
+      const firstSheet = wb.SheetNames[0]
 
+      // Parse the first (or only) sheet to validate the file
+      const ws = wb.Sheets[firstSheet]
+      const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' })
       const headerRowIdx = detectHeaderRow(allRows as unknown[][])
       const headerRow = allRows[headerRowIdx] as unknown[]
       const headers = headerRow.map(h => String(h ?? ''))
-
       const cols = detectColumns(headers)
 
       if (cols.dateIdx === -1) {
@@ -549,6 +576,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
       }
 
       setFileName(file.name)
+      setParsedWorkbook(wb)
+      setSheetNames(wb.SheetNames)
+      setActiveSheet(firstSheet)
       setRawDataRows(dataRows)
       setRawCols(cols)
       setWizardRows(parsed)
@@ -578,33 +608,45 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setStep('review')
     setDupRefs(new Set())
 
-    // Background dedup check
-    const refs = wizardRows.map(r => r.ref).filter(Boolean)
-    if (selectedBank && refs.length > 0) {
+    // Background dedup check — covers both file refs and generated fallback IDs
+    if (selectedBank) {
       setDupLoading(true)
       try {
-        const { data: existingInflows } = await supabase
-          .from('inflow_transactions')
-          .select('transaction_ref')
-          .eq('bank_name', selectedBank.name)
-          .in('transaction_ref', refs)
+        const bankName = selectedBank.name
+        // Generate the ID each row will actually use (same deterministic logic as runImport)
+        const allIds = await Promise.all(
+          wizardRows.map(async (row) => {
+            if (row.ref) return row.ref
+            const amt = row.credit > 0 ? String(row.credit) : String(row.debit)
+            return generateFallbackTransactionId(row.date, amt, row.description, bankName)
+          })
+        )
+        const uniqueIds = [...new Set(allIds.filter(Boolean))]
 
-        const { data: existingOutflows } = await supabase
-          .from('outflow_transactions')
-          .select('transaction_id')
-          .eq('bank_name', selectedBank.name)
-          .in('transaction_id', refs)
+        if (uniqueIds.length > 0) {
+          const { data: existingInflows } = await supabase
+            .from('inflow_transactions')
+            .select('transaction_ref')
+            .eq('bank_name', bankName)
+            .in('transaction_ref', uniqueIds)
 
-        const found = new Set<string>()
-        for (const row of existingInflows ?? []) {
-          if (row.transaction_ref) found.add(row.transaction_ref)
+          const { data: existingOutflows } = await supabase
+            .from('outflow_transactions')
+            .select('transaction_id')
+            .eq('bank_name', bankName)
+            .in('transaction_id', uniqueIds)
+
+          const found = new Set<string>()
+          for (const row of existingInflows ?? []) {
+            if (row.transaction_ref) found.add(row.transaction_ref)
+          }
+          for (const row of existingOutflows ?? []) {
+            if (row.transaction_id) found.add(row.transaction_id)
+          }
+          setDupRefs(found)
         }
-        for (const row of existingOutflows ?? []) {
-          if (row.transaction_id) found.add(row.transaction_id)
-        }
-        setDupRefs(found)
       } catch {
-        // Non-fatal — just proceed without dedup
+        // Non-fatal — proceed without dedup
       } finally {
         setDupLoading(false)
       }
@@ -643,9 +685,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
 
     for (const row of wizardRows) {
       if (row.credit <= 0) continue
-      if (row.ref && dupRefs.has(row.ref)) continue
-
-      let baseRef =
+      const baseRef =
         row.ref ||
         (await generateFallbackTransactionId(
           row.date,
@@ -653,6 +693,8 @@ export function ImportWizardModal({ open, onClose }: Props) {
           row.description,
           bankName,
         ))
+
+      if (dupRefs.has(baseRef)) continue
 
       // Collision suffix
       const count = inflowRefMap.get(baseRef) ?? 0
@@ -697,9 +739,8 @@ export function ImportWizardModal({ open, onClose }: Props) {
 
     for (const row of wizardRows) {
       if (row.debit <= 0) continue
-      if (row.ref && dupRefs.has(row.ref)) continue
 
-      let baseId =
+      const baseId =
         row.ref ||
         (await generateFallbackTransactionId(
           row.date,
@@ -707,6 +748,8 @@ export function ImportWizardModal({ open, onClose }: Props) {
           row.description,
           bankName,
         ))
+
+      if (dupRefs.has(baseId)) continue
 
       const count = outflowRefMap.get(baseId) ?? 0
       outflowRefMap.set(baseId, count + 1)
@@ -871,6 +914,34 @@ export function ImportWizardModal({ open, onClose }: Props) {
 
     return (
       <div className="flex flex-col gap-5">
+        {/* Sheet selector — only shown for multi-sheet workbooks */}
+        {sheetNames.length > 1 && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+              Sheet
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
+              This file has multiple sheets. Select the one containing your transactions.
+            </p>
+            <select
+              value={activeSheet}
+              onChange={e => {
+                const name = e.target.value
+                setActiveSheet(name)
+                if (parsedWorkbook) applySheet(parsedWorkbook, name)
+              }}
+              className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              {sheetNames.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {wizardRows.length} row{wizardRows.length !== 1 ? 's' : ''} found in this sheet.
+            </p>
+          </div>
+        )}
+
         {/* Date format */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -1050,6 +1121,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
             {(
               [
                 ['File', fileName],
+                ...(sheetNames.length > 1 ? [['Sheet', activeSheet]] : []),
                 ['Bank', selectedBank?.name ?? '—'],
                 [
                   'Income type',
