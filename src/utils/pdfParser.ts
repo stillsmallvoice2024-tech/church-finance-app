@@ -3,6 +3,51 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
+// ── Exported error types ───────────────────────────────────────────────────────
+
+export class PdfPasswordError extends Error {
+  readonly reason: 'required' | 'incorrect'
+  constructor(reason: 'required' | 'incorrect') {
+    super(reason === 'required' ? 'Password required' : 'Incorrect password')
+    this.name   = 'PdfPasswordError'
+    this.reason = reason
+  }
+}
+
+export class PdfDecryptError extends Error {
+  constructor(detail: string) {
+    super(detail)
+    this.name = 'PdfDecryptError'
+  }
+}
+
+/**
+ * Converts a raw pdfjs load error into a typed PdfPasswordError / PdfDecryptError.
+ * Exported so pdfPageRenderer can reuse the same logic without duplicating it.
+ *
+ * Always throws — return type is `never`.
+ */
+export function throwAsPdfError(err: unknown, hadPassword: boolean): never {
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    if (e.name === 'PasswordException') {
+      // pdfjs PasswordResponses: 1 = NEED_PASSWORD, 2 = INCORRECT_PASSWORD
+      throw new PdfPasswordError(e.code === 2 ? 'incorrect' : 'required')
+    }
+  }
+  const msg = err instanceof Error ? err.message : String(err)
+  // Surface a clear "unable to decrypt" for any encryption-related failure, whether or
+  // not a password was already supplied (covers unsupported algorithms, certificate
+  // security, corrupted encryption dictionaries, unknown cipher handlers, etc.).
+  if (hadPassword || /encrypt|decrypt|password|cipher|crypt|security|handler/i.test(msg)) {
+    throw new PdfDecryptError(
+      'Unable to decrypt this PDF. The encryption format may not be supported. ' +
+      'If the password is correct, try opening the file in your PDF reader and re-saving it as an unencrypted copy.',
+    )
+  }
+  throw err instanceof Error ? err : new Error(msg)
+}
+
 export interface ParsedSheet {
   name: string
   headers: string[]
@@ -65,15 +110,20 @@ function looksLikeHeader(row: string[]): boolean {
   return numericCount < nonEmpty.length / 2
 }
 
-export async function parsePDF(file: File): Promise<ParsedSheet[]> {
+export async function parsePDF(file: File, password?: string): Promise<ParsedSheet[]> {
   const buffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+  let pdf: pdfjsLib.PDFDocumentProxy
+  try {
+    pdf = await pdfjsLib.getDocument({ data: buffer, password }).promise
+  } catch (err) {
+    throwAsPdfError(err, !!password)
+  }
 
   const allItems: TextItem[] = []
   let yOffset = 0
 
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p)
+  for (let p = 1; p <= pdf!.numPages; p++) {
+    const page = await pdf!.getPage(p)
     const viewport = page.getViewport({ scale: 1 })
     const content = await page.getTextContent()
 

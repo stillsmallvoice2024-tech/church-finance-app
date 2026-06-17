@@ -1,22 +1,34 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { throwAsPdfError } from './pdfParser'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
-export async function getPdfPageCount(file: File): Promise<number> {
+export async function getPdfPageCount(file: File, password?: string): Promise<number> {
   const buffer = await file.arrayBuffer()
-  const pdf    = await pdfjsLib.getDocument({ data: buffer }).promise
-  return pdf.numPages
+  try {
+    const pdf = await pdfjsLib.getDocument({ data: buffer, password }).promise
+    return pdf.numPages
+  } catch (err) {
+    throwAsPdfError(err, !!password)
+  }
 }
 
 export async function renderPageToBase64(
   file: File,
   pageNumber: number,
   scale = 2.0,
+  password?: string,
 ): Promise<string> {
-  const buffer   = await file.arrayBuffer()
-  const pdf      = await pdfjsLib.getDocument({ data: buffer }).promise
-  const page     = await pdf.getPage(pageNumber)
+  const buffer = await file.arrayBuffer()
+  let pdf: pdfjsLib.PDFDocumentProxy
+  try {
+    pdf = await pdfjsLib.getDocument({ data: buffer, password }).promise
+  } catch (err) {
+    throwAsPdfError(err, !!password)
+  }
+
+  const page     = await pdf!.getPage(pageNumber)
   const viewport = page.getViewport({ scale })
 
   const canvas   = document.createElement('canvas')

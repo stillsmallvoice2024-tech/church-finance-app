@@ -1,16 +1,16 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import {
   FileText, Download, AlertTriangle,
-  Loader2, X, RotateCcw, ChevronDown, ScanText, ArrowRight,
+  Loader2, X, RotateCcw, ChevronDown, ScanText, ArrowRight, Lock,
 } from 'lucide-react'
-import { parsePDF } from '../../utils/pdfParser'
+import { parsePDF, PdfPasswordError, PdfDecryptError } from '../../utils/pdfParser'
 import { getPdfPageCount, renderPageToBase64 } from '../../utils/pdfPageRenderer'
 import { supabase } from '../../lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Phase = 'extracting' | 'preview' | 'error'
+type Phase = 'extracting' | 'password' | 'preview' | 'error'
 
 interface ExtractionResult {
   headers:    string[]
@@ -38,8 +38,9 @@ function cellCls(confidence: number): string {
 async function runOcrPipeline(
   file: File,
   onProgress: (p: OcrProgress) => void,
+  password?: string,
 ): Promise<Pick<ExtractionResult, 'headers' | 'rawRows' | 'confidence' | 'warnings' | 'pageCount'>> {
-  const pageCount = await getPdfPageCount(file)
+  const pageCount = await getPdfPageCount(file, password)
   onProgress({ current: 0, total: pageCount, statusText: 'Scanned PDF detected, starting OCR…' })
 
   const allHeaders:    string[]   = []
@@ -50,7 +51,7 @@ async function runOcrPipeline(
   for (let p = 1; p <= pageCount; p++) {
     onProgress({ current: p, total: pageCount, statusText: `OCR: page ${p} of ${pageCount}…` })
 
-    const base64 = await renderPageToBase64(file, p)
+    const base64 = await renderPageToBase64(file, p, 2.0, password)
     const { data, error } = await supabase.functions.invoke('pdf-ocr', {
       body: { image: base64, mimeType: 'image/png', pageNumber: p },
     })
@@ -100,6 +101,10 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const [ocrProgress,    setOcrProgress]    = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
   const [extractError,   setExtractError]   = useState<string | null>(null)
   const [warningsOpen,   setWarningsOpen]   = useState(false)
+  const [passwordValue,  setPasswordValue]  = useState('')
+  const [passwordError,  setPasswordError]  = useState<string | null>(null)
+  // Retains the password that last unlocked the file so re-extract-with-OCR can reuse it
+  const lastPasswordRef = useRef<string | undefined>(undefined)
 
   const applyResult = (res: ExtractionResult) => {
     setResult(res)
@@ -113,25 +118,27 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     if (isDirty) { setDiscardConfirm(true) } else { onCancel() }
   }
 
-  const extract = useCallback(async (f: File) => {
+  const extract = useCallback(async (f: File, password?: string) => {
     setPhase('extracting')
     setExtractError(null)
+    setPasswordError(null)
     setOcrProgress({ current: 0, total: 0, statusText: 'Analysing PDF…' })
 
     try {
       setOcrProgress(p => ({ ...p, statusText: 'Extracting native text…' }))
-      const sheets = await parsePDF(f)
+      const sheets = await parsePDF(f, password)
       const sheet  = sheets[0]
 
       if (sheet && sheet.rows.length >= 5) {
         const rawRows    = sheet.rows.map(r => r.map(c => String(c ?? '')))
         const confidence = rawRows.map(r => r.map(() => 1.0))
+        lastPasswordRef.current = password
         applyResult({ headers: sheet.headers, rawRows, confidence, warnings: [], method: 'native', pageCount: 1 })
         return
       }
 
       const { headers, rawRows, confidence, warnings, pageCount } =
-        await runOcrPipeline(f, setOcrProgress)
+        await runOcrPipeline(f, setOcrProgress, password)
 
       if (rawRows.length === 0) {
         throw new Error(
@@ -143,8 +150,19 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         ? headers
         : ['Date', 'Description', 'Credit', 'Debit', 'Balance', 'Reference']
 
+      lastPasswordRef.current = password
       applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount })
     } catch (e) {
+      if (e instanceof PdfPasswordError) {
+        setPasswordError(e.reason === 'incorrect' ? 'Incorrect password. Please try again.' : null)
+        setPhase('password')
+        return
+      }
+      if (e instanceof PdfDecryptError) {
+        setExtractError(e.message)
+        setPhase('error')
+        return
+      }
       setExtractError(e instanceof Error ? e.message : 'Extraction failed')
       setPhase('error')
     }
@@ -153,10 +171,11 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const reExtractWithOcr = useCallback(async () => {
     setPhase('extracting')
     setExtractError(null)
+    setPasswordError(null)
 
     try {
       const { headers, rawRows, confidence, warnings, pageCount } =
-        await runOcrPipeline(file, setOcrProgress)
+        await runOcrPipeline(file, setOcrProgress, lastPasswordRef.current)
 
       const finalHeaders = headers.length > 0
         ? headers
@@ -164,6 +183,16 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
 
       applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount })
     } catch (e) {
+      if (e instanceof PdfPasswordError) {
+        setPasswordError(e.reason === 'incorrect' ? 'Incorrect password. Please try again.' : null)
+        setPhase('password')
+        return
+      }
+      if (e instanceof PdfDecryptError) {
+        setExtractError(e.message)
+        setPhase('error')
+        return
+      }
       setExtractError(e instanceof Error ? e.message : 'Re-extraction failed')
       setPhase('error')
     }
@@ -332,6 +361,77 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                 )}
               </div>
               <p className="text-xs text-gray-400 font-mono truncate max-w-xs">{file.name}</p>
+            </div>
+          )}
+
+          {/* ── Password required ────────────────────────────────────────── */}
+          {phase === 'password' && (
+            <div className="flex justify-center py-8">
+              <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white dark:bg-gray-900 dark:border-white/[0.08] p-8 space-y-5 shadow-sm">
+
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+                    <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Password required</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                      This PDF is password-protected. Enter the password your bank provided to unlock it.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <input
+                    type="password"
+                    value={passwordValue}
+                    autoFocus
+                    autoComplete="current-password"
+                    placeholder="PDF password"
+                    onChange={e => setPasswordValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && passwordValue.trim()) {
+                        const pwd = passwordValue
+                        setPasswordValue('')
+                        extract(file, pwd)
+                      }
+                    }}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-colors ${
+                      passwordError
+                        ? 'border-red-400 focus:ring-2 focus:ring-red-200 bg-red-50 dark:bg-red-900/10'
+                        : 'border-gray-300 dark:border-white/[0.12] focus:ring-2 focus:ring-primary/20 focus:border-primary dark:bg-gray-800 dark:text-white'
+                    }`}
+                  />
+                  {passwordError && (
+                    <p className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      {passwordError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={onCancel}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-white/[0.12] rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!passwordValue.trim()}
+                    onClick={() => {
+                      const pwd = passwordValue
+                      setPasswordValue('')
+                      extract(file, pwd)
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Lock className="w-4 h-4" />
+                    Unlock and extract
+                  </button>
+                </div>
+
+              </div>
             </div>
           )}
 
