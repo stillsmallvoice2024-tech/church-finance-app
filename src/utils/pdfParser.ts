@@ -105,8 +105,9 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
     rowMap.get(y)!.sort((a, b) => a.x - b.x)
   )
 
-  // Filter rows that have at least 2 non-empty items (skip title/blank lines)
-  const dataRows = textRows.filter(r => r.filter(i => i.text).length >= 2)
+  // Keep any row with at least one text item; single-item rows (wrapped description
+  // lines) are intentionally kept here and folded in by the continuation merge below.
+  const dataRows = textRows.filter(r => r.some(i => i.text))
   if (dataRows.length === 0) return []
 
   // Detect column positions
@@ -136,16 +137,35 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
   }
 
   const headerKey = headers.map(h => h.toLowerCase().trim()).join('|')
-  const rows = trimmedGrid.slice(dataStart).filter(r => {
+  const filteredRows = trimmedGrid.slice(dataStart).filter(r => {
     if (!r.some(c => c.trim())) return false
     const rowKey = r.map(c => c.toLowerCase().trim()).join('|')
     return rowKey !== headerKey
   })
 
+  // Merge continuation rows into their anchor row. A continuation has an empty
+  // first column (no date/ID anchor) and fewer than half the columns filled —
+  // typical of description text that wraps across multiple lines in the PDF.
+  const mergedRows: string[][] = []
+  for (const row of filteredRows) {
+    const firstEmpty = !row[0]?.trim()
+    const nonEmptyCount = row.filter(c => c.trim()).length
+    if (mergedRows.length > 0 && firstEmpty && nonEmptyCount < Math.ceil(row.length / 2)) {
+      const prev = mergedRows[mergedRows.length - 1]
+      row.forEach((cell, ci) => {
+        if (cell.trim()) {
+          prev[ci] = prev[ci] ? `${prev[ci]} ${cell.trim()}` : cell.trim()
+        }
+      })
+    } else {
+      mergedRows.push([...row])
+    }
+  }
+
   return [{
     name: file.name.replace(/\.pdf$/i, ''),
     headers,
-    rows,
-    rowCount: rows.length,
+    rows: mergedRows,
+    rowCount: mergedRows.length,
   }]
 }
