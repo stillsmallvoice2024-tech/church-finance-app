@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   TrendingDown, Pencil, Trash2, PlusCircle,
-  AlertCircle, RefreshCw, ChevronRight, ChevronDown,
+  AlertCircle, RefreshCw, ChevronRight, ChevronDown, AlertTriangle,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
@@ -110,6 +110,37 @@ function SummaryStrip({ total, effectiveTotal, hasOffsets, count, largest, avera
   )
 }
 
+function UnmappedStrip({ count, active, onToggle, loading, label }: {
+  count: number; active: boolean; onToggle: () => void; loading: boolean; label: string
+}) {
+  if (!loading && count === 0 && !active) return null
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+      <div className="flex items-center gap-2 min-w-0">
+        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+        {loading ? (
+          <div className="h-4 bg-amber-200/70 rounded animate-pulse w-56" />
+        ) : (
+          <p className="text-sm text-amber-800">
+            <span className="font-semibold">{count.toLocaleString()}</span>{' '}
+            transaction{count !== 1 ? 's' : ''} {label}
+          </p>
+        )}
+      </div>
+      <button
+        onClick={onToggle}
+        className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors whitespace-nowrap ${
+          active
+            ? 'bg-amber-600 text-white hover:bg-amber-700'
+            : 'bg-white border border-amber-300 text-amber-700 hover:bg-amber-100'
+        }`}
+      >
+        {active ? 'Show all' : 'Show only'}
+      </button>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Outflows() {
@@ -126,6 +157,7 @@ export default function Outflows() {
   const [searchInput,       setSearchInput]       = useState('')
   const [debouncedSearch,   setDebouncedSearch]   = useState('')
   const [page,              setPage]              = useState(0)
+  const [showUnmappedOnly,  setShowUnmappedOnly]  = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput), 400)
@@ -135,7 +167,7 @@ export default function Outflows() {
   // Data controls state
   const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE, persistSort: false })
 
-  const { data, count, loading, error, refetch } = useOutflowTransactions({
+  const { data, count, unmappedCount = 0, loading, error, refetch } = useOutflowTransactions({
     dateFrom:       dateFrom          || undefined,
     dateTo:         dateTo            || undefined,
     stageCode:      stageCode         || undefined,
@@ -147,9 +179,15 @@ export default function Outflows() {
     sortColumn:     outState.advancedSort.length === 0 ? outState.sortKey : undefined,
     sortAscending:  outState.advancedSort.length === 0 ? (outState.sortDir === 'asc') : undefined,
     advancedSort:   outState.advancedSort.length > 0 ? outState.advancedSort : undefined,
+    unmappedOnly:   showUnmappedOnly,
   })
 
   const displayed = data
+
+  const isOutflowUnmapped = (row: OutflowTransaction) => {
+    if (!row.transaction_type) return !row.stage_code_1 || !row.stage_code_2
+    return !row.offset_role || (row.offset_role === 'offset' && !row.root_transaction_id)
+  }
 
   // Summary (current page, disbursed amounts)
   const total          = displayed.reduce((s, r) => s + Number(r.amount_disbursed), 0)
@@ -185,10 +223,11 @@ export default function Outflows() {
   useFirstVisitTour('outflows')
 
   // Clear selection when filters/page/sort change
-  useEffect(() => { setPage(0); clearAll() }, [dateFrom, dateTo, stageCode, outflowTypeFilter, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0); clearAll(); setShowUnmappedOnly(false) }, [dateFrom, dateTo, stageCode, outflowTypeFilter, debouncedSearch]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setDateFrom(`${year}-01-01`); setDateTo(`${year}-12-31`); setPage(0); clearAll() }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { clearAll() }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(0); clearAll() }, [outState.sortKey, outState.sortDir, outState.searchCol, outState.advancedSort, outState.pageSize]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0) }, [showUnmappedOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openEdit = (r: OutflowTransaction) => { setEditRecord(r); setModalOpen(true) }
 
@@ -353,7 +392,7 @@ export default function Outflows() {
               )}
               {(dateFrom || dateTo || stageCode || outflowTypeFilter || datePreset) && (
                 <button
-                  onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setStageCode(''); setOutflowTypeFilter(''); setSearchInput(''); outState.setSort('recorded_at', 'desc'); outState.setAdvancedSort([]) }}
+                  onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(null); setStageCode(''); setOutflowTypeFilter(''); setSearchInput(''); setShowUnmappedOnly(false); outState.setSort('recorded_at', 'desc'); outState.setAdvancedSort([]) }}
                   className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   Clear
@@ -385,6 +424,14 @@ export default function Outflows() {
           onAdvancedSort={outState.setAdvancedSort}
           pageSize={outState.pageSize}
           onPageSizeChange={outState.setPageSize}
+        />
+
+        <UnmappedStrip
+          count={unmappedCount}
+          active={showUnmappedOnly}
+          onToggle={() => setShowUnmappedOnly(v => !v)}
+          loading={loading}
+          label="missing category or fund type"
         />
 
         {/* Compact pagination above content */}
@@ -438,6 +485,11 @@ export default function Outflows() {
                         )}
                         {row.offset_role === 'offset' && (
                           <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">Offset</span>
+                        )}
+                        {isOutflowUnmapped(row) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap bg-amber-100 text-amber-700">
+                            Unmapped
+                          </span>
                         )}
                       </div>
                     </div>
@@ -613,9 +665,15 @@ export default function Outflows() {
                                   )}
                                   {TXN_TYPE_LABELS[row.transaction_type]}
                                 </span>
-                              ) : !row.outflow_type_name ? (
-                                <span className="text-gray-300">—</span>
                               ) : null}
+                              {isOutflowUnmapped(row) && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap bg-amber-100 text-amber-700">
+                                  Unmapped
+                                </span>
+                              )}
+                              {!row.outflow_type_name && !row.transaction_type && !isOutflowUnmapped(row) && (
+                                <span className="text-gray-300">—</span>
+                              )}
                             </div>
                           </td>
                           <AmountCell value={Number(row.amount_disbursed)} mode="outflow" />

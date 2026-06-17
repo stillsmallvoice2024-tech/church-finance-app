@@ -112,6 +112,7 @@ export interface TransactionFilters {
   sortColumn?: string        // DB column to sort by
   sortAscending?: boolean    // true = asc
   advancedSort?: AdvancedSortLevel[]  // multi-level sort; takes priority over sortColumn
+  unmappedOnly?: boolean
 }
 
 export interface IntraFlowFilters {
@@ -133,6 +134,7 @@ export interface IntraFlowFilters {
 export interface PaginatedResult<T> {
   data: T[]
   count: number          // total matching rows (for pagination UI)
+  unmappedCount?: number
   loading: boolean
   error: string | null
   refetch: () => void
@@ -144,15 +146,27 @@ export interface PaginatedResult<T> {
 const INFLOW_SORT_COLS = new Set(['date', 'amount', 'bank_name', 'description', 'transaction_type', 'recorded_at', 'stage_code_1', 'import_seq'])
 const INFLOW_SEARCH_COLS = new Set(['description', 'bank_name', 'transaction_ref', 'transaction_type', 'stage_code_1'])
 
+const INFLOW_UNMAPPED_OR =
+  'and(transaction_type.is.null,allocation_config_id.is.null),' +
+  'and(transaction_type.not.is.null,transaction_type.neq.balance_brought_forward,offset_role.is.null),' +
+  'and(transaction_type.not.is.null,transaction_type.neq.balance_brought_forward,offset_role.eq.offset,root_transaction_id.is.null)'
+
+const OUTFLOW_UNMAPPED_OR =
+  'and(transaction_type.is.null,stage_code_1.is.null),' +
+  'and(transaction_type.is.null,stage_code_2.is.null),' +
+  'and(transaction_type.not.is.null,offset_role.is.null),' +
+  'and(transaction_type.not.is.null,offset_role.eq.offset,root_transaction_id.is.null)'
+
 export function useInflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<InflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, searchCol, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
+  const { dateFrom, dateTo, stageCode, search, searchCol, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort, unmappedOnly } = filters
 
   const orgId = useOrgStore((s) => s.orgId)
 
   const [data, setData] = useState<InflowTransaction[]>([])
   const [count, setCount] = useState(0)
+  const [unmappedCount, setUnmappedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -199,20 +213,41 @@ export function useInflowTransactions(
       }
     }
 
-    const { data: rows, count: total, error: err } = await query
+    if (unmappedOnly) {
+      query = query.or(INFLOW_UNMAPPED_OR)
+    }
+
+    let cq = supabase
+      .from('inflow_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .or(INFLOW_UNMAPPED_OR)
+    if (dateFrom) cq = cq.gte('date', dateFrom)
+    if (dateTo)   cq = cq.lte('date', dateTo)
+    if (search) {
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
+      if (!searchCol || searchCol === 'all') {
+        cq = cq.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_ref.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
+      } else if (INFLOW_SEARCH_COLS.has(searchCol)) {
+        cq = cq.ilike(searchCol, `%${safeSearch}%`)
+      }
+    }
+
+    const [{ data: rows, count: total, error: err }, { count: unmappedTotal }] = await Promise.all([query, cq])
 
     if (err) {
       setError(err.message)
     } else {
       setData((rows ?? []) as InflowTransaction[])
       setCount(total ?? 0)
+      setUnmappedCount(unmappedTotal ?? 0)
     }
     setLoading(false)
-  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
+  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort, unmappedOnly])
 
   useEffect(() => { fetch() }, [fetch])
 
-  return { data, count, loading, error, refetch: fetch }
+  return { data, count, unmappedCount, loading, error, refetch: fetch }
 }
 
 // ── useOutflowTransactions ─────────────────────────────────────────────────────
@@ -223,12 +258,13 @@ const OUTFLOW_SEARCH_COLS = new Set(['description', 'bank_description', 'bank_na
 export function useOutflowTransactions(
   filters: TransactionFilters = {},
 ): PaginatedResult<OutflowTransaction> {
-  const { dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort } = filters
+  const { dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page = 0, pageSize = 50, fetchAll = false, sortColumn, sortAscending, advancedSort, unmappedOnly } = filters
 
   const orgId = useOrgStore((s) => s.orgId)
 
   const [data, setData] = useState<OutflowTransaction[]>([])
   const [count, setCount] = useState(0)
+  const [unmappedCount, setUnmappedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -279,7 +315,31 @@ export function useOutflowTransactions(
       }
     }
 
-    const { data: rows, count: total, error: err } = await query
+    if (unmappedOnly) {
+      query = query.or(OUTFLOW_UNMAPPED_OR)
+    }
+
+    let cq = supabase
+      .from('outflow_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .or(OUTFLOW_UNMAPPED_OR)
+    if (dateFrom)      cq = cq.gte('date', dateFrom)
+    if (dateTo)        cq = cq.lte('date', dateTo)
+    if (stageCode)     cq = cq.eq('stage_code_1', stageCode)
+    if (outflowTypeId) cq = cq.eq('outflow_type_id', outflowTypeId)
+    if (search) {
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
+      if (!searchCol || searchCol === 'all') {
+        cq = cq.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_id.ilike.%${safeSearch}%,stage_code_1.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
+      } else if (searchCol === 'description') {
+        cq = cq.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%`)
+      } else if (OUTFLOW_SEARCH_COLS.has(searchCol)) {
+        cq = cq.ilike(searchCol, `%${safeSearch}%`)
+      }
+    }
+
+    const [{ data: rows, count: total, error: err }, { count: unmappedTotal }] = await Promise.all([query, cq])
 
     if (err) {
       setError(err.message)
@@ -301,13 +361,14 @@ export function useOutflowTransactions(
         }) as OutflowTransaction[]
       )
       setCount(total ?? 0)
+      setUnmappedCount(unmappedTotal ?? 0)
     }
     setLoading(false)
-  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort])
+  }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort, unmappedOnly])
 
   useEffect(() => { fetch() }, [fetch])
 
-  return { data, count, loading, error, refetch: fetch }
+  return { data, count, unmappedCount, loading, error, refetch: fetch }
 }
 
 // ── useIntraFlows ──────────────────────────────────────────────────────────────

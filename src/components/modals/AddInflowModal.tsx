@@ -185,6 +185,14 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     setSelectedConfigId(cfg?.id ?? '')
   }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Clear category + fund type when transaction type is cleared
+  useEffect(() => {
+    if (!transactionType) {
+      setValue('stage_code_1', '')
+      setValue('stage_code_2', '')
+    }
+  }, [transactionType, setValue])
+
   // Propagate category + fund type from root to this offset
   // In edit mode, only skip if the record already has values (don't overwrite intentional data)
   useEffect(() => {
@@ -547,31 +555,35 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </Field>
 
         {/* Stage Code 1 + 2 (display labels: Category / Fund Type) */}
-        {rootPropagated && (
-          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800">
-            <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-            <span>Category and fund type were auto-filled from the linked root transaction. <strong>Save to apply these to ledgers.</strong></span>
-          </div>
+        {!!transactionType && (
+          <>
+            {rootPropagated && (
+              <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800">
+                <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                <span>Category and fund type were auto-filled from the linked root transaction. <strong>Save to apply these to ledgers.</strong></span>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Category" error={errors.stage_code_1?.message}
+                help="The category assigned to this inflow. Used in reports to group income by type (e.g. Tithes, Offerings, Donations). Drives budget allocation.">
+                <Controller name="stage_code_1" control={control} render={({ field }) => (
+                  <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
+                    options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
+                    placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
+                )} />
+              </Field>
+              <Field label="Fund Type" error={errors.stage_code_2?.message}
+                help="How this inflow is routed: Regular Funds applies the percentage distribution rule, Designated Gift earmarks the full amount for a specific purpose, Savings routes it to a savings fund.">
+                <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
+                  <option value="">— Select —</option>
+                  <option value="Percentage Allocation">Regular Funds (percentage split)</option>
+                  <option value="Specific Seed">Designated Gift (earmarked)</option>
+                  <option value="Savings">Savings Funds</option>
+                </select>
+              </Field>
+            </div>
+          </>
         )}
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Category" error={errors.stage_code_1?.message}
-            help="The category assigned to this inflow. Used in reports to group income by type (e.g. Tithes, Offerings, Donations). Drives budget allocation.">
-            <Controller name="stage_code_1" control={control} render={({ field }) => (
-              <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
-                options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
-                placeholder="— Select —" className={inputCls(!!errors.stage_code_1)} />
-            )} />
-          </Field>
-          <Field label="Fund Type" error={errors.stage_code_2?.message}
-            help="How this inflow is routed: Regular Funds applies the percentage distribution rule, Designated Gift earmarks the full amount for a specific purpose, Savings routes it to a savings fund.">
-            <select {...register('stage_code_2')} className={inputCls(!!errors.stage_code_2)}>
-              <option value="">— Select —</option>
-              <option value="Percentage Allocation">Regular Funds (percentage split)</option>
-              <option value="Specific Seed">Designated Gift (earmarked)</option>
-              <option value="Savings">Savings Funds</option>
-            </select>
-          </Field>
-        </div>
 
         {/* Optional details — collapsed by default to keep the form short */}
         <CollapsibleSection label="More details (dates, refs, remarks)" defaultOpen={isEdit}>
