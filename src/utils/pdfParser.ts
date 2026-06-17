@@ -70,6 +70,7 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
 
   const allItems: TextItem[] = []
+  let yOffset = 0
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p)
@@ -81,9 +82,11 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
       const tx = item.transform
       // tx is [scaleX, skewX, skewY, scaleY, x, y]
       const x = tx[4]
-      const y = viewport.height - tx[5]  // flip Y (PDF coords are bottom-up)
+      const y = yOffset + (viewport.height - tx[5])  // page-offset Y so pages don't collide
       allItems.push({ x, y, text: item.str.trim() })
     }
+
+    yOffset += viewport.height
   }
 
   if (allItems.length === 0) return []
@@ -132,7 +135,12 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
     dataStart = 0
   }
 
-  const rows = trimmedGrid.slice(dataStart).filter(r => r.some(c => c.trim()))
+  const headerKey = headers.map(h => h.toLowerCase().trim()).join('|')
+  const rows = trimmedGrid.slice(dataStart).filter(r => {
+    if (!r.some(c => c.trim())) return false
+    const rowKey = r.map(c => c.toLowerCase().trim()).join('|')
+    return rowKey !== headerKey
+  })
 
   return [{
     name: file.name.replace(/\.pdf$/i, ''),
