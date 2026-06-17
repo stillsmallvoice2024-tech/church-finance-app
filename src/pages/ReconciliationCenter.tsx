@@ -24,6 +24,7 @@ import {
   healthStatusColor,
   healthStatusBg,
   healthStatusDot,
+  healthStatusBadge,
 } from '../utils/reconciliationAggregator'
 
 // ── Plain-language issue explanations ─────────────────────────────────────────
@@ -165,8 +166,9 @@ function EvidenceFacts({ evidence, currency }: { evidence: Record<string, unknow
 
 function HealthIcon({ status, size = 'md' }: { status: HealthStatus; size?: 'sm' | 'md' | 'lg' }) {
   const cls = size === 'lg' ? 'w-10 h-10' : size === 'md' ? 'w-6 h-6' : 'w-4 h-4'
-  if (status === 'critical') return <ShieldX   className={`${cls} text-red-500`} />
-  if (status === 'warning')  return <ShieldAlert className={`${cls} text-amber-500`} />
+  if (status === 'critical')   return <ShieldX     className={`${cls} text-red-500`} />
+  if (status === 'warning')    return <ShieldAlert  className={`${cls} text-amber-500`} />
+  if (status === 'incomplete') return <ShieldAlert  className={`${cls} text-gray-400`} />
   return <ShieldCheck className={`${cls} text-green-500`} />
 }
 
@@ -298,18 +300,29 @@ function IssueCard({ issue, currency }: { issue: ReconciliationIssue; currency: 
 // ── Bank status table row (with inline reference-balance edit) ────────────────
 
 interface BankSummaryRowProps {
-  summary:    BankHealthSummary
-  currency:   string
-  bankId:     string | null
-  refBalance: { balance: number; date: string } | undefined
-  onSave:     (bankId: string | null, bankName: string, balance: number, date: string) => Promise<void>
+  summary:        BankHealthSummary
+  currency:       string
+  bankId:         string | null
+  openingBalance: number | null
+  refBalance:     { balance: number; date: string } | undefined
+  onSave:         (bankId: string | null, bankName: string, balance: number, date: string) => Promise<void>
 }
 
-function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankSummaryRowProps) {
+function BankSummaryRow({ summary, currency, bankId, openingBalance, refBalance, onSave }: BankSummaryRowProps) {
   const [editing,      setEditing]      = useState(false)
   const [inputBalance, setInputBalance] = useState('')
   const [inputDate,    setInputDate]    = useState('')
   const [saving,       setSaving]       = useState(false)
+
+  // An account is only "healthy" if it has an opening balance, a reference
+  // balance, and no critical/warning issues. Everything else is "unverified".
+  const effectiveStatus: HealthStatus = (() => {
+    if (summary.status === 'critical') return 'critical'
+    if (summary.status === 'warning')  return 'warning'
+    if (openingBalance === null || openingBalance === undefined) return 'incomplete'
+    if (!refBalance) return 'incomplete'
+    return 'healthy'
+  })()
 
   const startEdit = () => {
     setInputBalance(refBalance ? String(refBalance.balance) : '')
@@ -333,18 +346,14 @@ function BankSummaryRow({ summary, currency, bankId, refBalance, onSave }: BankS
       {/* Account */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${healthStatusDot(summary.status)}`} />
+          <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${healthStatusDot(effectiveStatus)}`} />
           <span className="text-sm font-medium text-gray-800">{summary.bankName}</span>
         </div>
       </td>
       {/* Status */}
       <td className="px-4 py-3">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-          summary.status === 'critical' ? 'bg-red-100 text-red-700' :
-          summary.status === 'warning'  ? 'bg-amber-100 text-amber-700' :
-          'bg-green-100 text-green-700'
-        }`}>
-          {healthStatusLabel(summary.status)}
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${healthStatusBadge(effectiveStatus)}`}>
+          {healthStatusLabel(effectiveStatus)}
         </span>
       </td>
       {/* Book Balance */}
@@ -626,16 +635,20 @@ export default function ReconciliationCenter() {
                     </tr>
                   </thead>
                   <tbody>
-                    {mergedBankRows.map(s => (
-                      <BankSummaryRow
-                        key={s.bankName}
-                        summary={s}
-                        currency={baseCurrencyCode}
-                        bankId={banks.find(b => b.name === s.bankName)?.id ?? null}
-                        refBalance={refBalances.get(s.bankName)}
-                        onSave={handleSaveRef}
-                      />
-                    ))}
+                    {mergedBankRows.map(s => {
+                      const bankRecord = banks.find(b => b.name === s.bankName)
+                      return (
+                        <BankSummaryRow
+                          key={s.bankName}
+                          summary={s}
+                          currency={baseCurrencyCode}
+                          bankId={bankRecord?.id ?? null}
+                          openingBalance={bankRecord?.starting_balance ?? null}
+                          refBalance={refBalances.get(s.bankName)}
+                          onSave={handleSaveRef}
+                        />
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -74,10 +74,23 @@ export function useReconciliation() {
       useHealthStore.getState().setHealth(diag.healthStatus, res.runAt)
       setResults(res, diag, orgId)
 
+      // Add to local history immediately so it's always visible regardless of
+      // whether the DB persist succeeds.
+      const newRun: ReconciliationRun = {
+        id:             crypto.randomUUID(),
+        run_at:         res.runAt,
+        issue_count:    diag.totalIssues,
+        critical_count: diag.criticalIssues,
+        warning_count:  diag.warningIssues,
+        info_count:     diag.infoIssues,
+        health_status:  diag.healthStatus,
+      }
+      setHistory(prev => [newRun, ...prev.filter(r => r.run_at !== res.runAt)].slice(0, 20))
+
       // Best-effort persist to DB — silent if table doesn't exist yet
       await supabase.from('reconciliation_runs').insert({
         run_at:         res.runAt,
-        issue_count:    res.issues.length,
+        issue_count:    diag.totalIssues,
         critical_count: diag.criticalIssues,
         warning_count:  diag.warningIssues,
         info_count:     diag.infoIssues,
@@ -103,8 +116,18 @@ export function useReconciliation() {
       .order('run_at', { ascending: false })
       .limit(20)
     setHistoryLoading(false)
-    if (!res.error) setHistory((res.data ?? []) as ReconciliationRun[])
+    if (!res.error && res.data && res.data.length > 0) {
+      setHistory(res.data as ReconciliationRun[])
+    }
+    // On error or empty result we keep whatever is already in local history
+    // (e.g. runs from the current session tracked via runCheck).
   }, [orgId])
+
+  // Pre-load history when the org becomes available so the dropdown shows
+  // data immediately without requiring the user to click first.
+  useEffect(() => {
+    if (orgId) fetchHistory()
+  }, [orgId, fetchHistory])
 
   // Reference balance management
   const saveReferenceBalance = useCallback(async (bankName: string, bankId: string | null, referenceBalance: number, statementDate: string) => {
