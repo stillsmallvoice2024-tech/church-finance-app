@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import {
   FileText, Download, AlertTriangle,
-  Loader2, X, RotateCcw, ChevronDown, ScanText, ArrowRight, Lock,
+  Loader2, X, RotateCcw, ChevronDown, ScanText, ArrowRight, Lock, Trash2,
 } from 'lucide-react'
 import { parsePDF, PdfPasswordError, PdfDecryptError } from '../../utils/pdfParser'
 import { getPdfPageCount, renderPageToBase64 } from '../../utils/pdfPageRenderer'
@@ -91,19 +91,21 @@ interface Props {
 }
 
 export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
-  const [phase,          setPhase]          = useState<Phase>('extracting')
-  const [result,         setResult]         = useState<ExtractionResult | null>(null)
-  const [editedRows,     setEditedRows]     = useState<string[][]>([])
-  const [isDirty,        setIsDirty]        = useState(false)
-  const [discardConfirm, setDiscardConfirm] = useState(false)
-  const [editingCell,    setEditingCell]    = useState<{ r: number; c: number } | null>(null)
-  const [editValue,      setEditValue]      = useState('')
-  const [ocrProgress,    setOcrProgress]    = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
-  const [extractError,      setExtractError]      = useState<string | null>(null)
-  const [extractErrorTitle, setExtractErrorTitle] = useState('Extraction failed')
-  const [warningsOpen,   setWarningsOpen]   = useState(false)
-  const [passwordValue,  setPasswordValue]  = useState('')
-  const [passwordError,  setPasswordError]  = useState<string | null>(null)
+  const [phase,              setPhase]              = useState<Phase>('extracting')
+  const [result,             setResult]             = useState<ExtractionResult | null>(null)
+  const [editedRows,         setEditedRows]         = useState<string[][]>([])
+  const [isDirty,            setIsDirty]            = useState(false)
+  const [discardConfirm,     setDiscardConfirm]     = useState(false)
+  const [editingCell,        setEditingCell]        = useState<{ r: number; c: number } | null>(null)
+  const [editValue,          setEditValue]          = useState('')
+  const [ocrProgress,        setOcrProgress]        = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
+  const [extractError,       setExtractError]       = useState<string | null>(null)
+  const [extractErrorTitle,  setExtractErrorTitle]  = useState('Extraction failed')
+  const [warningsOpen,       setWarningsOpen]       = useState(false)
+  const [passwordValue,      setPasswordValue]      = useState('')
+  const [passwordError,      setPasswordError]      = useState<string | null>(null)
+  const [deletedRowIndices,  setDeletedRowIndices]  = useState<Set<number>>(new Set())
+  const [deletedColIndices,  setDeletedColIndices]  = useState<Set<number>>(new Set())
   // Retains the password that last unlocked the file so re-extract-with-OCR can reuse it
   const lastPasswordRef = useRef<string | undefined>(undefined)
 
@@ -111,6 +113,8 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     setResult(res)
     setEditedRows(res.rawRows.map(r => [...r]))
     setIsDirty(false)
+    setDeletedRowIndices(new Set())
+    setDeletedColIndices(new Set())
     setPhase('preview')
   }
 
@@ -225,12 +229,11 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const commitEdit = () => {
     if (!editingCell) return
     const { r, c } = editingCell
+    // Check outside the updater — calling setState inside another setState updater is a side-effect
+    if (editedRows[r]?.[c] !== editValue) setIsDirty(true)
     setEditedRows(prev => {
       const next = prev.map(row => [...row])
-      if (next[r]) {
-        if (next[r][c] !== editValue) setIsDirty(true)
-        next[r][c] = editValue
-      }
+      if (next[r]) next[r][c] = editValue
       return next
     })
     setEditingCell(null)
@@ -245,26 +248,48 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     })
   }
 
+  // ── Row / column deletion ───────────────────────────────────────────────────
+
+  const deleteRow = (ri: number) => {
+    setDeletedRowIndices(prev => new Set([...prev, ri]))
+    setIsDirty(true)
+  }
+
+  const deleteCol = (ci: number) => {
+    setDeletedColIndices(prev => new Set([...prev, ci]))
+    setIsDirty(true)
+  }
+
   // ── Export / confirm ────────────────────────────────────────────────────────
 
   const downloadFullXlsx = () => {
     if (!result) return
     const wb = XLSX.utils.book_new()
 
+    const activeHeaders  = result.headers.filter((_, ci) => !deletedColIndices.has(ci))
+    const activeRawRows  = result.rawRows
+      .filter((_, ri) => !deletedRowIndices.has(ri))
+      .map(row => row.filter((_, ci) => !deletedColIndices.has(ci)))
+    const activeEditRows = editedRows
+      .filter((_, ri) => !deletedRowIndices.has(ri))
+      .map(row => row.filter((_, ci) => !deletedColIndices.has(ci)))
+
     XLSX.utils.book_append_sheet(
       wb,
-      XLSX.utils.aoa_to_sheet([result.headers, ...result.rawRows]),
+      XLSX.utils.aoa_to_sheet([activeHeaders, ...activeRawRows]),
       'Raw Extracted Data',
     )
     XLSX.utils.book_append_sheet(
       wb,
-      XLSX.utils.aoa_to_sheet([result.headers, ...editedRows]),
+      XLSX.utils.aoa_to_sheet([activeHeaders, ...activeEditRows]),
       'Normalized Data',
     )
 
     const warnRows: string[][] = [['Row', 'Column', 'Issue', 'Original Value', 'Confidence']]
     result.confidence.forEach((row, ri) => {
+      if (deletedRowIndices.has(ri)) return
       row.forEach((conf, ci) => {
+        if (deletedColIndices.has(ci)) return
         if (conf < 0.85) {
           warnRows.push([
             String(ri + 1),
@@ -284,7 +309,11 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
 
   const handleConfirm = () => {
     if (!result) return
-    const ws  = XLSX.utils.aoa_to_sheet([result.headers, ...editedRows])
+    const activeHeaders = result.headers.filter((_, ci) => !deletedColIndices.has(ci))
+    const activeRows    = editedRows
+      .filter((_, ri) => !deletedRowIndices.has(ri))
+      .map(row => row.filter((_, ci) => !deletedColIndices.has(ci)))
+    const ws  = XLSX.utils.aoa_to_sheet([activeHeaders, ...activeRows])
     const wb  = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Data')
     const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
@@ -301,6 +330,9 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const lowConfCount = result
     ? result.confidence.flat().filter(c => c < 0.85).length
     : 0
+
+  const activeRowCount = editedRows.length - deletedRowIndices.size
+  const activeColCount = result ? result.headers.length - deletedColIndices.size : 0
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -479,7 +511,9 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                 <FileText className="w-4 h-4 text-red-500 shrink-0" />
                 <span className="text-sm font-medium text-gray-700 truncate">{file.name}</span>
                 <span className="text-xs text-gray-400 shrink-0">
-                  · {editedRows.length.toLocaleString()} rows
+                  · {activeRowCount.toLocaleString()} row{activeRowCount !== 1 ? 's' : ''}
+                  {deletedRowIndices.size > 0 && ` (${deletedRowIndices.size} deleted)`}
+                  {deletedColIndices.size > 0 && ` · ${activeColCount} of ${result.headers.length} columns`}
                 </span>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
                   result.method === 'native'
@@ -528,64 +562,89 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                     <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
                       <tr>
                         <th className="w-8 px-2 py-2.5 text-left font-normal text-gray-400 select-none">#</th>
-                        {result.headers.map((h, ci) => (
-                          <th key={ci} className="px-3 py-2.5 text-left text-gray-600 font-semibold whitespace-nowrap">
-                            {h}
-                          </th>
-                        ))}
+                        {result.headers.map((h, ci) => {
+                          if (deletedColIndices.has(ci)) return null
+                          return (
+                            <th key={ci} className="group/col px-3 py-2.5 text-left text-gray-600 font-semibold whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1.5">
+                                {h}
+                                <button
+                                  onClick={() => deleteCol(ci)}
+                                  className="opacity-0 group-hover/col:opacity-100 transition-opacity text-gray-300 hover:text-red-500"
+                                  title={`Delete column "${h}"`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </span>
+                            </th>
+                          )
+                        })}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {editedRows.map((row, ri) => (
-                        <tr key={ri} className="hover:bg-gray-50/40 group">
-                          <td className="px-2 py-1.5 text-gray-300 select-none text-right">{ri + 1}</td>
-                          {row.map((cell, ci) => {
-                            const conf      = result.confidence[ri]?.[ci] ?? 1.0
-                            const isEditing = editingCell?.r === ri && editingCell?.c === ci
-                            const isEdited  = cell !== (result.rawRows[ri]?.[ci] ?? '')
-
-                            return (
-                              <td
-                                key={ci}
-                                className={`relative px-3 py-1.5 ${cellCls(conf)} ${isEdited ? 'font-semibold' : ''}`}
-                                title={conf < 0.85
-                                  ? `Confidence: ${Math.round(conf * 100)}%  |  Original: ${result.rawRows[ri]?.[ci] ?? ''}`
-                                  : undefined}
+                      {editedRows.map((row, ri) => {
+                        if (deletedRowIndices.has(ri)) return null
+                        return (
+                          <tr key={ri} className="hover:bg-gray-50/40 group">
+                            <td className="relative w-8 px-2 py-1.5 text-gray-300 select-none text-right">
+                              <span className="group-hover:opacity-0 transition-opacity">{ri + 1}</span>
+                              <button
+                                onClick={() => deleteRow(ri)}
+                                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
+                                title="Delete row"
                               >
-                                {isEditing ? (
-                                  <input
-                                    autoFocus
-                                    value={editValue}
-                                    onChange={e => setEditValue(e.target.value)}
-                                    onBlur={commitEdit}
-                                    onKeyDown={e => {
-                                      if (e.key === 'Enter')  commitEdit()
-                                      if (e.key === 'Escape') setEditingCell(null)
-                                    }}
-                                    className="w-full min-w-[80px] px-1 py-0.5 border border-primary rounded text-xs outline-none focus:ring-1 focus:ring-primary/30 bg-white text-gray-900"
-                                  />
-                                ) : (
-                                  <span
-                                    onClick={() => startEdit(ri, ci)}
-                                    className="cursor-text block min-h-[1rem] min-w-[2rem]"
-                                  >
-                                    {cell || <span className="text-gray-300">—</span>}
-                                  </span>
-                                )}
-                                {isEdited && !isEditing && (
-                                  <button
-                                    onClick={e => { e.stopPropagation(); resetCell(ri, ci) }}
-                                    className="absolute right-0.5 top-0.5 p-0.5 rounded text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    title="Reset to original"
-                                  >
-                                    <RotateCcw className="w-2.5 h-2.5" />
-                                  </button>
-                                )}
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      ))}
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </td>
+                            {row.map((cell, ci) => {
+                              if (deletedColIndices.has(ci)) return null
+                              const conf      = result.confidence[ri]?.[ci] ?? 1.0
+                              const isEditing = editingCell?.r === ri && editingCell?.c === ci
+                              const isEdited  = cell !== (result.rawRows[ri]?.[ci] ?? '')
+
+                              return (
+                                <td
+                                  key={ci}
+                                  className={`relative px-3 py-1.5 ${cellCls(conf)} ${isEdited ? 'font-semibold' : ''}`}
+                                  title={conf < 0.85
+                                    ? `Confidence: ${Math.round(conf * 100)}%  |  Original: ${result.rawRows[ri]?.[ci] ?? ''}`
+                                    : undefined}
+                                >
+                                  {isEditing ? (
+                                    <input
+                                      autoFocus
+                                      value={editValue}
+                                      onChange={e => setEditValue(e.target.value)}
+                                      onBlur={commitEdit}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter')  commitEdit()
+                                        if (e.key === 'Escape') setEditingCell(null)
+                                      }}
+                                      className="w-full min-w-[80px] px-1 py-0.5 border border-primary rounded text-xs outline-none focus:ring-1 focus:ring-primary/30 bg-white text-gray-900"
+                                    />
+                                  ) : (
+                                    <span
+                                      onClick={() => startEdit(ri, ci)}
+                                      className="cursor-text block min-h-[1rem] min-w-[2rem]"
+                                    >
+                                      {cell || <span className="text-gray-300">—</span>}
+                                    </span>
+                                  )}
+                                  {isEdited && !isEditing && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); resetCell(ri, ci) }}
+                                      className="absolute right-0.5 top-0.5 p-0.5 rounded text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      title="Reset to original"
+                                    >
+                                      <RotateCcw className="w-2.5 h-2.5" />
+                                    </button>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -593,7 +652,8 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
 
               {/* Helper notes */}
               <div className="text-xs text-gray-400 space-y-0.5">
-                <p>Click any cell to edit inline. Amber and red cells have lower extraction confidence — verify before importing.</p>
+                <p>Click any cell to edit inline. Hover a row number or column header to delete that row or column.</p>
+                <p>Amber and red cells have lower extraction confidence — verify before importing.</p>
                 <p>Download XLSX includes raw data, your edits, and extraction warnings across three sheets.</p>
               </div>
 
