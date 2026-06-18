@@ -238,6 +238,7 @@ interface Props {
   skipTxnIds?:     Set<string>
   bank?:           { id: string; name: string } | null
   preloadedFile?:  File | null
+  onPdfFile?:      (file: File) => void
 }
 
 interface ImportResult {
@@ -257,7 +258,7 @@ interface ImportTemplate {
 
 const TEMPLATES_KEY = 'church-import-templates'
 
-export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: Props) {
+export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, onPdfFile }: Props) {
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const inputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore.getState()
@@ -782,13 +783,17 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile }: 
     e.preventDefault()
     setDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file) parseFile(file)
+    if (!file) return
+    if (file.name.match(/\.pdf$/i) && onPdfFile) { onPdfFile(file); onClose(); return }
+    parseFile(file)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) parseFile(file)
     e.target.value = ''
+    if (!file) return
+    if (file.name.match(/\.pdf$/i) && onPdfFile) { onPdfFile(file); onClose(); return }
+    parseFile(file)
   }
 
   // ── Step 2 → 3: build initial mapping ────────────────────────────────────
