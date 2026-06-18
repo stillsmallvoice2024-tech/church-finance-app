@@ -317,6 +317,7 @@ function BankSummaryRow({ summary, currency, bankId, openingBalance, refBalance,
   // An account is only "healthy" if it has an opening balance, a reference
   // balance, and no critical/warning issues. Everything else is "unverified".
   const effectiveStatus: HealthStatus = (() => {
+    if (summary.status === 'incomplete') return 'incomplete'
     if (summary.status === 'critical') return 'critical'
     if (summary.status === 'warning')  return 'warning'
     if (openingBalance === null || openingBalance === undefined) return 'incomplete'
@@ -494,7 +495,7 @@ export default function ReconciliationCenter() {
         criticalCount: 0,
         warningCount: 0,
         infoCount: 0,
-        status: 'healthy',
+        status: 'incomplete',
         possibleCauses: [],
       })
     }
