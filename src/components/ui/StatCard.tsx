@@ -6,6 +6,7 @@ import { Card } from './Card'
 interface StatCardProps {
   title: string
   value: ReactNode
+  subValue?: ReactNode
   icon?: ReactNode
   trend?: { value: number; label: string }
   note?: ReactNode
@@ -18,6 +19,7 @@ interface StatCardProps {
 export function StatCard({
   title,
   value,
+  subValue,
   icon,
   trend,
   note,
@@ -38,6 +40,9 @@ export function StatCard({
       <p className="text-[2.75rem] font-extrabold tracking-tight text-primary dark:text-primary-dm mt-2 tabular-nums leading-none">
         {value}
       </p>
+      {subValue && (
+        <p className="mt-1 text-[11px] tabular-nums text-gray-400 dark:text-white/30">{subValue}</p>
+      )}
       {trend && (
         <div className={`flex items-center gap-1 mt-3 text-xs font-semibold ${isPositive ? 'text-success dark:text-success-dm' : 'text-danger dark:text-danger-dm'}`}>
           {isPositive ? <TrendingUp className="w-3.5 h-3.5 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 shrink-0" />}
@@ -59,6 +64,9 @@ export function StatCard({
         <p className={`text-3xl font-extrabold tracking-tight mt-2 tabular-nums leading-none ${isBrand ? 'text-white' : 'text-gray-900'}`}>
           {value}
         </p>
+        {subValue && (
+          <p className={`mt-1 text-[11px] tabular-nums ${isBrand ? 'text-white/40' : 'text-gray-400 dark:text-white/30'}`}>{subValue}</p>
+        )}
         {trend && (
           <div className={`flex items-center gap-1 mt-2.5 text-xs font-semibold ${
             isBrand

@@ -26,7 +26,7 @@ import { useCategories }           from '../hooks/useCategories'
 import { useAuth }                 from '../hooks/useAuth'
 import { usePageTitle }            from '../hooks/usePageTitle'
 import { supabase }                from '../lib/supabase'
-import { formatCurrencyCompact, formatDate, formatWithTimezone, getCurrencyLocale } from '../utils/formatters'
+import { formatCurrency, formatCurrencyCompact, formatDate, formatWithTimezone, getCurrencyLocale } from '../utils/formatters'
 import { ChartEmpty, EmptyState } from '../components/ui/EmptyState'
 import { useOrgCurrency }          from '../hooks/useOrgCurrency'
 import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
@@ -341,6 +341,7 @@ export default function Dashboard() {
                 variant="hero"
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
+                subValue={formatCurrency(stats.totalInflow, baseCurrencyCode)}
                 note={stats.openingBalanceTotal > 0
                   ? `Includes ${formatCurrencyCompact(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
                   : undefined}
@@ -350,12 +351,14 @@ export default function Dashboard() {
                 variant="hero"
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
+                subValue={formatCurrency(stats.totalOutflow, baseCurrencyCode)}
                 href="/outflows"
               />
               <StatCard
                 variant="hero"
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
+                subValue={formatCurrency(stats.netBalance, baseCurrencyCode)}
                 href="/bank-ledger"
               />
               <StatCard
