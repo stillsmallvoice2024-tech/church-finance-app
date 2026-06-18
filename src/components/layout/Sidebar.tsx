@@ -41,7 +41,7 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Dashboard',         path: '/',           icon: LayoutDashboard },
       { label: 'Inflows',           path: '/inflows',    icon: TrendingUp      },
       { label: 'Outflows',          path: '/outflows',   icon: TrendingDown    },
-      { label: 'Import',            path: '/import',     icon: FileUp,         canWriteOnly: true },
+      { label: 'Import',            path: '/import',         icon: FileUp,     canWriteOnly: true },
       { label: 'Category Fund Transfers', path: '/intra-flow', icon: Repeat2 },
       { label: 'Receipts',          path: '/receipts',   icon: Receipt         },
     ],

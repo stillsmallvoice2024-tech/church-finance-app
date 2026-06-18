@@ -12,6 +12,7 @@ import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
+import { PdfConverterOverlay } from '../components/modals/PdfConverterOverlay'
 import { ImportWizardModal } from '../components/modals/ImportWizardModal'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
@@ -93,10 +94,11 @@ export default function Import() {
   const [dupLoading, setDupLoading]   = useState(false)
   const [duplicates, setDuplicates]   = useState<DupRecord[]>([])
   const [dupChecked, setDupChecked]   = useState(false)
-  const [parseError, setParseError]   = useState<string | null>(null)
+  const [parseError, setParseError]       = useState<string | null>(null)
   const [selectedBankId, setSelectedBankId] = useState('')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [wizardOpen, setWizardOpen] = useState(false)
+  const [selectedFile, setSelectedFile]   = useState<File | null>(null)
+  const [pdfToConvert, setPdfToConvert]   = useState<File | null>(null)
+  const [wizardOpen,   setWizardOpen]     = useState(false)
 
   const { banks } = useBanks()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -229,13 +231,17 @@ export default function Import() {
     e.preventDefault()
     setDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file) parseAndCheck(file)
+    if (!file) return
+    if (file.name.match(/\.pdf$/i)) { setPdfToConvert(file); return }
+    parseAndCheck(file)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) parseAndCheck(file)
     e.target.value = ''
+    if (!file) return
+    if (file.name.match(/\.pdf$/i)) { setPdfToConvert(file); return }
+    parseAndCheck(file)
   }
 
   return (
@@ -325,7 +331,7 @@ export default function Import() {
                   Drop your file here, or{' '}
                   <span className="text-primary underline underline-offset-2">click to browse</span>
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, and .csv</p>
+                <p className="text-xs text-gray-500 mt-1">Accepts .xlsx, .xls, .csv and .pdf</p>
               </div>
             </div>
           ) : (
@@ -490,7 +496,7 @@ export default function Import() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls,.csv,.pdf"
             className="hidden"
             onChange={handleFileInput}
           />
@@ -564,6 +570,18 @@ export default function Import() {
         bank={selectedBankId ? (banks.find(b => b.id === selectedBankId) ?? null) : null}
         preloadedFile={selectedFile}
       />
+
+      {/* PDF converter overlay — intercepts PDF drops before the import wizard */}
+      {pdfToConvert && (
+        <PdfConverterOverlay
+          file={pdfToConvert}
+          onConfirm={xlsxFile => {
+            setPdfToConvert(null)
+            parseAndCheck(xlsxFile)
+          }}
+          onCancel={() => setPdfToConvert(null)}
+        />
+      )}
     </div>
   )
 }

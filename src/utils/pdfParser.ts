@@ -3,6 +3,54 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
+// ── Exported error types ───────────────────────────────────────────────────────
+
+export class PdfPasswordError extends Error {
+  readonly reason: 'required' | 'incorrect'
+  constructor(reason: 'required' | 'incorrect') {
+    super(reason === 'required' ? 'Password required' : 'Incorrect password')
+    this.name   = 'PdfPasswordError'
+    this.reason = reason
+  }
+}
+
+export class PdfDecryptError extends Error {
+  constructor(detail: string) {
+    super(detail)
+    this.name = 'PdfDecryptError'
+  }
+}
+
+/**
+ * Converts a raw pdfjs load error into a typed PdfPasswordError / PdfDecryptError.
+ * Exported so pdfPageRenderer can reuse the same logic without duplicating it.
+ *
+ * Always throws — return type is `never`.
+ */
+export function throwAsPdfError(err: unknown, hadPassword: boolean): never {
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    if (e.name === 'PasswordException') {
+      // pdfjs PasswordResponses: 1 = NEED_PASSWORD, 2 = INCORRECT_PASSWORD
+      throw new PdfPasswordError(e.code === 2 ? 'incorrect' : 'required')
+    }
+  }
+  const msg = err instanceof Error ? err.message : String(err)
+  // Surface a clear "unable to decrypt" for any encryption-related failure, whether or
+  // not a password was already supplied (covers unsupported algorithms, certificate
+  // security, corrupted encryption dictionaries, unknown cipher handlers, etc.).
+  if (hadPassword || /encrypt|decrypt|password|cipher|crypt|security|handler/i.test(msg)) {
+    throw new PdfDecryptError(
+      'This PDF uses an encryption format that cannot be opened here. ' +
+      'Try one of the following:\n' +
+      '1. Open it in Adobe Acrobat, Preview, or any PDF reader, then use File → Print → Save as PDF — this usually removes the encryption.\n' +
+      '2. Log in to your bank\'s online portal and re-download the statement; many banks offer an unencrypted option.\n' +
+      '3. Contact your bank and ask for the statement in CSV or Excel format instead.',
+    )
+  }
+  throw err instanceof Error ? err : new Error(msg)
+}
+
 export interface ParsedSheet {
   name: string
   headers: string[]
@@ -65,14 +113,20 @@ function looksLikeHeader(row: string[]): boolean {
   return numericCount < nonEmpty.length / 2
 }
 
-export async function parsePDF(file: File): Promise<ParsedSheet[]> {
+export async function parsePDF(file: File, password?: string): Promise<ParsedSheet[]> {
   const buffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+  let pdf: pdfjsLib.PDFDocumentProxy
+  try {
+    pdf = await pdfjsLib.getDocument({ data: buffer, password }).promise
+  } catch (err) {
+    throwAsPdfError(err, !!password)
+  }
 
   const allItems: TextItem[] = []
+  let yOffset = 0
 
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p)
+  for (let p = 1; p <= pdf!.numPages; p++) {
+    const page = await pdf!.getPage(p)
     const viewport = page.getViewport({ scale: 1 })
     const content = await page.getTextContent()
 
@@ -81,9 +135,11 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
       const tx = item.transform
       // tx is [scaleX, skewX, skewY, scaleY, x, y]
       const x = tx[4]
-      const y = viewport.height - tx[5]  // flip Y (PDF coords are bottom-up)
+      const y = yOffset + (viewport.height - tx[5])  // page-offset Y so pages don't collide
       allItems.push({ x, y, text: item.str.trim() })
     }
+
+    yOffset += viewport.height
   }
 
   if (allItems.length === 0) return []
@@ -102,42 +158,141 @@ export async function parsePDF(file: File): Promise<ParsedSheet[]> {
     rowMap.get(y)!.sort((a, b) => a.x - b.x)
   )
 
-  // Filter rows that have at least 2 non-empty items (skip title/blank lines)
-  const dataRows = textRows.filter(r => r.filter(i => i.text).length >= 2)
-  if (dataRows.length === 0) return []
+  // Keep rows with at least one text item; preserve Y so continuation direction can
+  // be determined later (leading vs. trailing wraps need to know which anchor is closer).
+  const dataRowsWithY = sortedYKeys
+    .map((y, idx) => ({ y, row: textRows[idx] }))
+    .filter(({ row }) => row.some(i => i.text))
+
+  if (dataRowsWithY.length === 0) return []
 
   // Detect column positions
-  const colPositions = detectColumns(dataRows)
+  const colPositions = detectColumns(dataRowsWithY.map(r => r.row))
 
-  // Build 2D string array
-  const grid: string[][] = dataRows.map(row => assignToColumns(row, colPositions))
+  // Build 2D string array, keeping Y metadata
+  const gridWithY = dataRowsWithY.map(({ y, row }) => ({
+    y,
+    cells: assignToColumns(row, colPositions),
+  }))
 
   // Remove completely empty columns
   const usedCols: number[] = []
   for (let ci = 0; ci < colPositions.length; ci++) {
-    if (grid.some(row => row[ci]?.trim())) usedCols.push(ci)
+    if (gridWithY.some(({ cells }) => cells[ci]?.trim())) usedCols.push(ci)
   }
-  const trimmedGrid = grid.map(row => usedCols.map(ci => row[ci] ?? ''))
+  const trimmedGridWithY = gridWithY.map(({ y, cells }) => ({
+    y,
+    cells: usedCols.map(ci => cells[ci] ?? ''),
+  }))
 
-  if (trimmedGrid.length === 0) return []
+  if (trimmedGridWithY.length === 0) return []
 
   // Determine header row
   let headers: string[]
   let dataStart: number
-  if (looksLikeHeader(trimmedGrid[0])) {
-    headers   = trimmedGrid[0].map((h, i) => h.trim() || `Column ${i + 1}`)
+  if (looksLikeHeader(trimmedGridWithY[0].cells)) {
+    headers   = trimmedGridWithY[0].cells.map((h, i) => h.trim() || `Column ${i + 1}`)
     dataStart = 1
   } else {
-    headers   = trimmedGrid[0].map((_, i) => `Column ${i + 1}`)
+    headers   = trimmedGridWithY[0].cells.map((_, i) => `Column ${i + 1}`)
     dataStart = 0
   }
 
-  const rows = trimmedGrid.slice(dataStart).filter(r => r.some(c => c.trim()))
+  // Normalise header key: collapse internal whitespace so minor spacing
+  // differences between pages don't cause repeated header rows to slip through.
+  const normalise = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+  const headerKey = headers.map(normalise).join('|')
+
+  const filteredRowsWithY = trimmedGridWithY.slice(dataStart).filter(({ cells: r }) => {
+    if (!r.some(c => c.trim())) return false
+    // Drop any row that is an exact (normalised) repeat of the header — bank
+    // statement PDFs print headers at the top of every page; those rows must not
+    // appear as data rows or be merged into a preceding anchor by the continuation
+    // logic, which is what causes duplicate/mangled rows in the import modal.
+    const rowKey = r.map(normalise).join('|')
+    return rowKey !== headerKey
+  })
+
+  // Merge continuation rows (sparse rows with empty first column) into their anchor.
+  //
+  // Direction is determined by Y-proximity to the surrounding anchor rows:
+  //   • distToNext <= distToPrev  →  "leading" continuation: description text that
+  //     starts at the TOP of a cell (above the anchor's Y), so belongs to the NEXT
+  //     anchor — prepend in document order.
+  //   • distToNext >  distToPrev  →  "trailing" continuation: text that wraps below
+  //     the anchor's Y, so belongs to the PREVIOUS anchor — append.
+  //
+  // This correctly handles Oracle-style bank statements where a multi-line description
+  // starts rendering before (above) the row's date/amount columns.
+  const mergedRows: string[][] = []
+  const pending: Array<{ y: number; cells: string[] }> = []
+  let prevAnchorY: number | null = null
+
+  for (const { y, cells } of filteredRowsWithY) {
+    const firstEmpty = !cells[0]?.trim()
+    const nonEmptyCount = cells.filter(c => c.trim()).length
+    const isContinuation = firstEmpty && nonEmptyCount < Math.ceil(cells.length / 2)
+
+    if (isContinuation) {
+      pending.push({ y, cells: [...cells] })
+    } else {
+      // Classify each pending continuation as leading (→ next anchor) or trailing (→ prev)
+      const leading: string[][] = []
+      const trailing: string[][] = []
+
+      for (const cont of pending) {
+        const distToPrev = prevAnchorY !== null ? Math.abs(cont.y - prevAnchorY) : Infinity
+        const distToNext = Math.abs(cont.y - y)
+        if (distToNext <= distToPrev) {
+          leading.push(cont.cells)
+        } else {
+          trailing.push(cont.cells)
+        }
+      }
+
+      // Append trailing continuations to previous anchor
+      if (trailing.length > 0 && mergedRows.length > 0) {
+        const prev = mergedRows[mergedRows.length - 1]
+        for (const cont of trailing) {
+          cont.forEach((cell, ci) => {
+            if (cell.trim()) {
+              prev[ci] = prev[ci] ? `${prev[ci]} ${cell.trim()}` : cell.trim()
+            }
+          })
+        }
+      }
+
+      // Prepend leading continuations (in Y order) before this anchor's own content
+      const anchorCells = [...cells]
+      for (let ci = 0; ci < anchorCells.length; ci++) {
+        const leadingParts = leading.map(cont => cont[ci]?.trim()).filter(Boolean)
+        if (leadingParts.length > 0) {
+          anchorCells[ci] = [...leadingParts, anchorCells[ci]].filter(Boolean).join(' ')
+        }
+      }
+
+      pending.length = 0
+      prevAnchorY = y
+      mergedRows.push(anchorCells)
+    }
+  }
+
+  // Flush any remaining continuations after the last anchor as trailing
+  if (pending.length > 0 && mergedRows.length > 0) {
+    const prev = mergedRows[mergedRows.length - 1]
+    for (const cont of pending) {
+      cont.cells.forEach((cell, ci) => {
+        if (cell.trim()) {
+          prev[ci] = prev[ci] ? `${prev[ci]} ${cell.trim()}` : cell.trim()
+        }
+      })
+    }
+  }
 
   return [{
     name: file.name.replace(/\.pdf$/i, ''),
     headers,
-    rows,
-    rowCount: rows.length,
+    rows: mergedRows,
+    rowCount: mergedRows.length,
   }]
 }
