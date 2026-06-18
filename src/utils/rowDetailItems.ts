@@ -10,6 +10,17 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   balance_brought_forward: 'Balance Brought Forward',
 }
 
+export const FUND_TYPE_LABELS: Record<string, string> = {
+  'Percentage Allocation': 'Regular Funds',
+  'Specific Seed':         'Designated Gift',
+  'Savings':               'Savings',
+}
+
+function fundTypeLabel(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  return FUND_TYPE_LABELS[raw] ?? raw
+}
+
 export function inflowDetailItems(row: InflowTransaction, _currency: string): DetailItem[] {
   return [
     { label: 'Txn Ref',         value: row.transaction_ref,          mono: true, breakAll: true },
@@ -17,7 +28,7 @@ export function inflowDetailItems(row: InflowTransaction, _currency: string): De
     { label: 'Raw Description', value: row.description,              breakAll: true },
     { label: 'Remark',          value: row.remark,                   breakAll: true },
     { label: 'Department',       value: row.stage_code_1 },
-    { label: 'Fund Type',        value: row.stage_code_2 },
+    { label: 'Fund Type',        value: fundTypeLabel(row.stage_code_2) },
     { label: 'Sub-category',     value: row.stage_code_3 },
     { label: 'Designated Gift', value: row.specific_seed_description },
     {
@@ -54,7 +65,7 @@ export function outflowDetailItems(row: OutflowTransaction, currency: string): D
     { label: `Transfer Charge (${sym})`, value: Number(row.transfer_charge) > 0 ? formatCurrency(Number(row.transfer_charge), currency) : null, mono: true },
     { label: `Net (${sym})`,             value: net !== Number(row.amount_disbursed) ? formatCurrency(net, currency) : null, mono: true },
     { label: 'Department',           value: row.stage_code_1 },
-    { label: 'Fund Type',            value: row.stage_code_2 },
+    { label: 'Fund Type',            value: fundTypeLabel(row.stage_code_2) },
     { label: 'Outflow Type',        value: row.outflow_type_name },
     {
       label: 'FX',

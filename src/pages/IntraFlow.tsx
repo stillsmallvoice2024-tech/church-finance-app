@@ -32,6 +32,7 @@ import { filterInputCls }         from '../components/ui/FormField'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { SearchableSelect }       from '../components/ui/SearchableSelect'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
+import { FUND_TYPE_LABELS }                from '../utils/rowDetailItems'
 import { BulkActionBar }          from '../components/ui/BulkActionBar'
 import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowModal'
 import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
@@ -148,8 +149,8 @@ export default function IntraFlow() {
       { label: 'Transaction Ref',  value: row.transaction_ref, mono: true, breakAll: true },
       { label: 'Description',      value: row.description, breakAll: true },
       { label: 'Remark',           value: row.remark, breakAll: true },
-      { label: 'From Stage 2',     value: row.account_from_stage2 },
-      { label: 'To Stage 2',       value: row.account_to_stage2 },
+      { label: 'From Fund Type',    value: FUND_TYPE_LABELS[row.account_from_stage2 ?? ''] ?? row.account_from_stage2 },
+      { label: 'To Fund Type',      value: FUND_TYPE_LABELS[row.account_to_stage2 ?? ''] ?? row.account_to_stage2 },
     ]
   }
 
