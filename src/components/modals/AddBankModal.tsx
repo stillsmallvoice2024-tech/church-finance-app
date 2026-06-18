@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AlertTriangle, Plus, Trash2, Check, X } from 'lucide-react'
+import { AlertTriangle, Plus, Trash2, Check, X, Sparkles } from 'lucide-react'
 import { TechDetails } from '../ui/TechDetails'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { Field, inputCls, focusFirstInvalid } from '../ui/FormField'
@@ -19,6 +19,7 @@ import { formatCurrency, parseCurrency } from '../../utils/currency'
 import { useToastStore } from '../../store/toastStore'
 import { propagateBankOpeningBalance } from '../../utils/bankOpeningBalance'
 import { allocatePercent } from '../../utils/financeMath'
+import { useAllocationStore } from '../../store/allocationStore'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -57,7 +58,7 @@ const schema = z.object({
 })
 
 type FormValues = z.infer<typeof schema>
-type AllocType  = 'percentage' | 'amount'
+type AllocType  = 'percentage' | 'amount' | 'config'
 interface RowDraft { category_name: string; budget_portion: string; value: string; apply_to_category: boolean }
 interface NewCatMode { rowIndex: number; draft: string; saving: boolean; error: string | null }
 
@@ -95,6 +96,32 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [newCatMode,      setNewCatMode]      = useState<NewCatMode | null>(null)
   const [schemaStatus,   setSchemaStatus]   = useState<SchemaStatus>('ok')
   const [checkingSchema, setCheckingSchema] = useState(false)
+  const [selectedConfigId, setSelectedConfigId] = useState('')
+
+  const { configs, fetch: fetchAllocationConfigs, loaded: allocLoaded } = useAllocationStore()
+  // Locked non-special configs with percentage rows — eligible for "From Budget Plan" mode
+  const eligibleConfigs = useMemo(
+    () => configs.filter(c =>
+      c.status === 'locked' &&
+      !c.is_special &&
+      c.allocation_type !== 'amount' &&
+      (c.rows ?? []).some(r => typeof r.percentage === 'number' && r.percentage > 0)
+    ),
+    [configs]
+  )
+  const configDerivedRows: RowDraft[] = useMemo(() => {
+    if (allocType !== 'config' || !selectedConfigId) return []
+    const cfg = eligibleConfigs.find(c => c.id === selectedConfigId)
+    if (!cfg) return []
+    return (cfg.rows ?? [])
+      .filter(r => r.category_name && typeof r.percentage === 'number' && r.percentage > 0)
+      .map(r => ({
+        category_name:     r.category_name,
+        budget_portion:    r.budget_portion ?? 'Percentage Allocation',
+        value:             String(r.percentage ?? 0),
+        apply_to_category: true,
+      }))
+  }, [allocType, selectedConfigId, eligibleConfigs])
   const newCatInputRef   = useRef<HTMLInputElement>(null)
   const cacheRetryCount  = useRef(0)
   const initialAllocRef  = useRef<{ type: AllocType; rows: RowDraft[] }>({
@@ -125,7 +152,12 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
   const runningTotal = rows.reduce((s, r) => s + (parseFloat(r.value) || 0), 0)
   const target       = allocType === 'percentage' ? 100 : (startingBalance ?? 0)
-  const balanced     = !hasBalance || (target > 0 && Math.abs(runningTotal - target) < 0.01)
+  const configTotal  = configDerivedRows.reduce((s, r) => s + (parseFloat(r.value) || 0), 0)
+  const balanced     = !hasBalance || (
+    allocType === 'config'
+      ? selectedConfigId !== '' && configDerivedRows.length > 0 && Math.abs(configTotal - 100) < 0.01
+      : (target > 0 && Math.abs(runningTotal - target) < 0.01)
+  )
 
   const addRow      = () => setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '', apply_to_category: true }])
   const removeRow   = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i))
@@ -145,7 +177,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     setAllocError(null)
     setNewCatMode(null)
     setSchemaStatus('ok')
+    setSelectedConfigId('')
     cacheRetryCount.current = 0
+    if (!allocLoaded) fetchAllocationConfigs()
 
     // Populate form fields synchronously
     if (editRecord) {
@@ -251,28 +285,37 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const onSubmit = async (values: FormValues) => {
     setAllocError(null)
     if (hasBalance) {
-      const validRows = rows.filter(r => r.category_name && r.budget_portion && parseFloat(r.value) > 0)
-      if (validRows.length === 0) {
-        setAllocError('Add at least one complete allocation row')
-        return
-      }
-      if (!balanced) {
-        setAllocError(
-          allocType === 'percentage'
-            ? `Allocations total ${runningTotal.toFixed(1)}% — must equal 100%`
-            : `Allocations total ${selectedCurrencySymbol}${runningTotal.toLocaleString()} — must equal starting balance ${selectedCurrencySymbol}${(values.starting_balance ?? 0).toLocaleString()}`
-        )
-        return
+      if (allocType === 'config') {
+        if (!selectedConfigId) { setAllocError('Select a budget plan to apply.'); return }
+        if (configDerivedRows.length === 0) { setAllocError('The selected budget plan has no percentage rows.'); return }
+        if (!balanced) { setAllocError(`Budget plan rows total ${configTotal.toFixed(1)}% — must equal 100%.`); return }
+      } else {
+        const validRows = rows.filter(r => r.category_name && r.budget_portion && parseFloat(r.value) > 0)
+        if (validRows.length === 0) {
+          setAllocError('Add at least one complete allocation row')
+          return
+        }
+        if (!balanced) {
+          setAllocError(
+            allocType === 'percentage'
+              ? `Allocations total ${runningTotal.toFixed(1)}% — must equal 100%`
+              : `Allocations total ${selectedCurrencySymbol}${runningTotal.toLocaleString()} — must equal starting balance ${selectedCurrencySymbol}${(values.starting_balance ?? 0).toLocaleString()}`
+          )
+          return
+        }
       }
     }
 
-    const validRows = rows.filter(r => r.category_name && r.budget_portion && parseFloat(r.value) > 0)
+    // Config mode: use derived rows as percentage allocations
+    const sourceRows = allocType === 'config' ? configDerivedRows : rows
+    const validRows  = sourceRows.filter(r => r.category_name && r.budget_portion && parseFloat(r.value) > 0)
+    const saveAllocType: 'percentage' | 'amount' = allocType === 'config' ? 'percentage' : (allocType as 'percentage' | 'amount')
     const allocations: StartingBalanceRow[] = hasBalance
       ? validRows.map(r => ({
           category_name:     r.category_name,
           budget_portion:    r.budget_portion,
           apply_to_category: r.apply_to_category,
-          ...(allocType === 'percentage'
+          ...(saveAllocType === 'percentage'
             ? { percentage: parseFloat(r.value) }
             : { amount: parseFloat(r.value) }),
         }))
@@ -289,7 +332,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       currency:           bankCurrency,
       is_foreign_currency: bankCurrency !== '' && bankCurrency !== (defaultCurrency ?? 'NGN'),
       starting_balance:             values.starting_balance || undefined,
-      starting_balance_alloc_type:  hasBalance ? allocType : undefined,
+      starting_balance_alloc_type:  hasBalance ? saveAllocType : undefined,
       starting_balance_allocations: hasBalance ? allocations : undefined,
     }
 
@@ -349,7 +392,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             skipped.push(row.category_name)
             continue
           }
-          const amount = allocType === 'percentage'
+          const amount = saveAllocType === 'percentage'
             ? allocatePercent(totalBalance, row.percentage ?? 0)
             : (row.amount ?? 0)
           if (!isFinite(amount) || isNaN(amount) || amount <= 0) continue
@@ -540,7 +583,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
               {/* Allocation type toggle */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-600">Allocation Type</label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {(['percentage', 'amount'] as const).map(t => (
                     <button
                       key={t}
@@ -555,11 +598,89 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                       {t === 'percentage' ? 'Percentage %' : `Amount ${selectedCurrencySymbol}`}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => { setAllocType('config'); if (!allocLoaded) fetchAllocationConfigs() }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                      allocType === 'config'
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    From Budget Plan
+                  </button>
                 </div>
               </div>
 
-              {/* Row builder */}
-              <div className="space-y-2">
+              {/* Config picker — shown when allocType === 'config' */}
+              {allocType === 'config' && (
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-600">Budget Plan *</label>
+                    {eligibleConfigs.length === 0 ? (
+                      <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                        No locked budget plans with percentage rows found. Set one up in Setup → Allocation, then return here.
+                      </p>
+                    ) : (
+                      <select
+                        value={selectedConfigId}
+                        onChange={e => setSelectedConfigId(e.target.value)}
+                        className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      >
+                        <option value="">— Select a budget plan —</option>
+                        {eligibleConfigs.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Preview derived rows */}
+                  {selectedConfigId && configDerivedRows.length > 0 && (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px] bg-black/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06]">
+                        <span>Category</span>
+                        <span>Portion</span>
+                        <span>%</span>
+                        <span title="Count in category balance" className="cursor-help">Count</span>
+                      </div>
+                      <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                        {configDerivedRows.map((row, i) => (
+                          <div key={i} className="px-3 py-1.5 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px] sm:items-center sm:gap-2 text-xs text-gray-700">
+                            <span className="font-medium">{row.category_name}</span>
+                            <span className="text-gray-500">{BUDGET_PORTION_LABELS[row.budget_portion] ?? row.budget_portion}</span>
+                            <span className="font-mono text-gray-600">{parseFloat(row.value).toFixed(1)}%</span>
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={row.apply_to_category}
+                                onChange={e => {
+                                  const updated = configDerivedRows.map((r, idx) =>
+                                    idx === i ? { ...r, apply_to_category: e.target.checked } : r
+                                  )
+                                  // configDerivedRows is a memo — to allow editing the apply_to_category,
+                                  // we store overrides in a local shadow copy via selectedConfigId change trick.
+                                  // Simplest approach: reflect into rows state as a one-time copy.
+                                  setRows(updated)
+                                  setAllocType('percentage')
+                                }}
+                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                              />
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      <div className={`px-3 py-1.5 text-[11px] font-semibold border-t ${Math.abs(configTotal - 100) < 0.01 ? 'text-green-600' : 'text-amber-600'}`}>
+                        Total: {configTotal.toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Row builder — hidden in config mode */}
+              {allocType !== 'config' && <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-gray-600">Allocations *</label>
                   <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
@@ -710,16 +831,16 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 <p className="text-xs text-gray-500">
                   <span className="font-medium">Count</span>: tick if this amount is new and should be added to the category balance. Untick if it already exists in the category's transaction records.
                 </p>
-              </div>
-
-              {/* Allocation error / imbalance warning */}
-              {(allocError || (!balanced && runningTotal > 0)) && (
+              </div>}
+              {(allocError || (!balanced && (allocType === 'config' ? configDerivedRows.length > 0 : runningTotal > 0))) && (
                 <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   {allocError ?? (
                     allocType === 'percentage'
                       ? `Total is ${runningTotal.toFixed(1)}% — must equal 100%`
-                      : `Total ${selectedCurrencySymbol}${runningTotal.toLocaleString()} doesn't match starting balance ${selectedCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`
+                      : allocType === 'config'
+                        ? `Budget plan rows total ${configTotal.toFixed(1)}% — must equal 100%`
+                        : `Total ${selectedCurrencySymbol}${runningTotal.toLocaleString()} doesn't match starting balance ${selectedCurrencySymbol}${(startingBalance ?? 0).toLocaleString()}`
                   )}
                 </div>
               )}

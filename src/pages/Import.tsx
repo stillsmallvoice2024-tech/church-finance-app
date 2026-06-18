@@ -13,6 +13,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { ImportModal, detectHeaderRow } from '../components/modals/ImportModal'
 import { PdfConverterOverlay } from '../components/modals/PdfConverterOverlay'
+import { ImportWizardModal } from '../components/modals/ImportWizardModal'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useCategories } from '../hooks/useCategories'
@@ -37,7 +38,7 @@ import { isOffsetableType } from '../utils/transactionTypes'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'file' | 'manual'
+type Tab = 'file' | 'manual' | 'wizard'
 
 interface DupRecord {
   id: string
@@ -76,8 +77,9 @@ function findTxnIdColumn(headers: string[]): { header: string; index: number } |
 }
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: 'file',   label: 'File Import',  icon: Upload  },
-  { id: 'manual', label: 'Manual Entry', icon: PenLine },
+  { id: 'file',   label: 'File Import',   icon: Upload   },
+  { id: 'manual', label: 'Manual Entry',  icon: PenLine  },
+  { id: 'wizard', label: 'Guided Import', icon: Sparkles },
 ]
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -96,6 +98,7 @@ export default function Import() {
   const [selectedBankId, setSelectedBankId] = useState('')
   const [selectedFile, setSelectedFile]   = useState<File | null>(null)
   const [pdfToConvert, setPdfToConvert]   = useState<File | null>(null)
+  const [wizardOpen,   setWizardOpen]     = useState(false)
 
   const { banks } = useBanks()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -518,7 +521,46 @@ export default function Import() {
       {/* ── Manual Entry tab ─────────────────────────────────────────────── */}
       {activeTab === 'manual' && <ManualEntryForm />}
 
-      {/* Import wizard modal */}
+      {/* ── Guided Import tab ────────────────────────────────────────────── */}
+      {activeTab === 'wizard' && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center space-y-5">
+            <div className="flex justify-center">
+              <div className="p-4 rounded-full bg-primary/10">
+                <Sparkles className="w-8 h-8 text-primary" />
+              </div>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+                Guided Import
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-md mx-auto">
+                Walk through importing your bank statement step by step.
+                The wizard auto-detects columns, lets you pick an income category and budget plan,
+                checks for duplicates, then imports everything in one go.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <Sparkles className="w-4 h-4" />
+              Start Guided Import
+            </button>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Excel files only (.xlsx / .xls) · PDF files require the File Import tab
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Guided Import wizard — lazy-mounted to avoid hook overhead when closed */}
+      {wizardOpen && (
+        <ImportWizardModal open={wizardOpen} onClose={() => setWizardOpen(false)} />
+      )}
+
+      {/* Standard Import modal */}
       <ImportModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
