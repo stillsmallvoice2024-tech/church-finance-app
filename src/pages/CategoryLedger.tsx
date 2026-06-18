@@ -26,7 +26,8 @@ import { useOrgStore } from '../store/orgStore'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { useFXTransactions, type FXTransaction } from '../hooks/useFX'
-import { useBanks } from '../hooks/useBanks'
+import { useBanks }           from '../hooks/useBanks'
+import { FUND_TYPE_LABELS }   from '../utils/rowDetailItems'
 
 // ── Sort field definitions ────────────────────────────────────────────────────
 
@@ -553,7 +554,7 @@ export default function CategoryLedger() {
         outRows.push({
           id:          `if-out-${r.id}`,
           date:        r.date as string,
-          description: `Transfer → ${r.account_to}${r.account_to_stage2 ? ' (' + r.account_to_stage2 + ')' : ''}${r.description ? ': ' + r.description : ''}`,
+          description: `Transfer → ${r.account_to}${r.account_to_stage2 ? ' (' + (FUND_TYPE_LABELS[r.account_to_stage2 as string] ?? r.account_to_stage2) + ')' : ''}${r.description ? ': ' + r.description : ''}`,
           inflow:      0,
           outflow:     amount,
           balance:     0,
@@ -575,7 +576,7 @@ export default function CategoryLedger() {
         inRows.push({
           id:          `if-in-${r.id}`,
           date:        r.date as string,
-          description: `Transfer ← ${r.account_from}${r.account_from_stage2 ? ' (' + r.account_from_stage2 + ')' : ''}${r.description ? ': ' + r.description : ''}`,
+          description: `Transfer ← ${r.account_from}${r.account_from_stage2 ? ' (' + (FUND_TYPE_LABELS[r.account_from_stage2 as string] ?? r.account_from_stage2) + ')' : ''}${r.description ? ': ' + r.description : ''}`,
           inflow:      amount,
           outflow:     0,
           balance:     0,
@@ -1671,8 +1672,8 @@ function buildIntraflowDetailItems(meta: IntraflowMeta, row: LedgerRow): DetailI
   return [
     { label: 'Amount',    value: row.outflow > 0 ? `−${row.outflow.toLocaleString()}` : `+${row.inflow.toLocaleString()}`, mono: true },
     { label: 'Direction', value: direction },
-    { label: 'From',      value: `${meta.fromCategory} › ${meta.fromPortion}` },
-    { label: 'To',        value: `${meta.toCategory} › ${meta.toPortion}` },
+    { label: 'From',      value: `${meta.fromCategory} › ${FUND_TYPE_LABELS[meta.fromPortion] ?? meta.fromPortion}` },
+    { label: 'To',        value: `${meta.toCategory} › ${FUND_TYPE_LABELS[meta.toPortion] ?? meta.toPortion}` },
     { label: 'Note',      value: meta.note, breakAll: true },
     { label: 'Status',    value: meta.status ?? 'active', badge: statusBadge },
   ]
