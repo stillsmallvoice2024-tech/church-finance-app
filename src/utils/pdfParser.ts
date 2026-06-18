@@ -41,8 +41,11 @@ export function throwAsPdfError(err: unknown, hadPassword: boolean): never {
   // security, corrupted encryption dictionaries, unknown cipher handlers, etc.).
   if (hadPassword || /encrypt|decrypt|password|cipher|crypt|security|handler/i.test(msg)) {
     throw new PdfDecryptError(
-      'Unable to decrypt this PDF. The encryption format may not be supported. ' +
-      'If the password is correct, try opening the file in your PDF reader and re-saving it as an unencrypted copy.',
+      'This PDF uses an encryption format that cannot be opened here. ' +
+      'Try one of the following:\n' +
+      '1. Open it in Adobe Acrobat, Preview, or any PDF reader, then use File → Print → Save as PDF — this usually removes the encryption.\n' +
+      '2. Log in to your bank\'s online portal and re-download the statement; many banks offer an unencrypted option.\n' +
+      '3. Contact your bank and ask for the statement in CSV or Excel format instead.',
     )
   }
   throw err instanceof Error ? err : new Error(msg)

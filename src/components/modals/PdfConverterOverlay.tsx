@@ -99,7 +99,8 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const [editingCell,    setEditingCell]    = useState<{ r: number; c: number } | null>(null)
   const [editValue,      setEditValue]      = useState('')
   const [ocrProgress,    setOcrProgress]    = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
-  const [extractError,   setExtractError]   = useState<string | null>(null)
+  const [extractError,      setExtractError]      = useState<string | null>(null)
+  const [extractErrorTitle, setExtractErrorTitle] = useState('Extraction failed')
   const [warningsOpen,   setWarningsOpen]   = useState(false)
   const [passwordValue,  setPasswordValue]  = useState('')
   const [passwordError,  setPasswordError]  = useState<string | null>(null)
@@ -121,6 +122,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const extract = useCallback(async (f: File, password?: string) => {
     setPhase('extracting')
     setExtractError(null)
+    setExtractErrorTitle('Extraction failed')
     setPasswordError(null)
     setOcrProgress({ current: 0, total: 0, statusText: 'Analysing PDF…' })
 
@@ -142,7 +144,8 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
 
       if (rawRows.length === 0) {
         throw new Error(
-          'No data could be extracted. The PDF may be empty, password-protected, or contain only images that could not be read.',
+          'No data could be read from this file. The PDF may be empty, unsupported, or corrupted. ' +
+          'Try downloading it again from your bank\'s portal, or contact your bank and ask for the statement in CSV or Excel format.',
         )
       }
 
@@ -154,11 +157,16 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
       applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount })
     } catch (e) {
       if (e instanceof PdfPasswordError) {
-        setPasswordError(e.reason === 'incorrect' ? 'Incorrect password. Please try again.' : null)
+        setPasswordError(
+          e.reason === 'incorrect'
+            ? 'That password didn\'t work. Confirm the correct password with your bank or financial provider — it\'s often sent by email or SMS separately from the statement — then try again.'
+            : null,
+        )
         setPhase('password')
         return
       }
       if (e instanceof PdfDecryptError) {
+        setExtractErrorTitle('Unable to open this PDF')
         setExtractError(e.message)
         setPhase('error')
         return
@@ -171,6 +179,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const reExtractWithOcr = useCallback(async () => {
     setPhase('extracting')
     setExtractError(null)
+    setExtractErrorTitle('Extraction failed')
     setPasswordError(null)
 
     try {
@@ -184,11 +193,16 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
       applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount })
     } catch (e) {
       if (e instanceof PdfPasswordError) {
-        setPasswordError(e.reason === 'incorrect' ? 'Incorrect password. Please try again.' : null)
+        setPasswordError(
+          e.reason === 'incorrect'
+            ? 'That password didn\'t work. Confirm the correct password with your bank or financial provider — it\'s often sent by email or SMS separately from the statement — then try again.'
+            : null,
+        )
         setPhase('password')
         return
       }
       if (e instanceof PdfDecryptError) {
+        setExtractErrorTitle('Unable to open this PDF')
         setExtractError(e.message)
         setPhase('error')
         return
@@ -376,7 +390,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                   <div>
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">Password required</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                      This PDF is password-protected. Enter the password your bank provided to unlock it.
+                      This PDF is password-protected. Banks usually send the password separately — check the email or SMS that came with the statement, or look in your bank's online portal and enter the provided password to unlock it.
                     </p>
                   </div>
                 </div>
@@ -440,9 +454,11 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
             <div className="rounded-xl border border-red-200 bg-red-50 p-6 space-y-3">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-red-700">Extraction failed</p>
-                  <p className="text-sm text-red-600 mt-0.5">{extractError}</p>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-semibold text-red-700">{extractErrorTitle}</p>
+                  {extractError?.split('\n').map((line, i) => (
+                    <p key={i} className="text-sm text-red-600">{line}</p>
+                  ))}
                 </div>
               </div>
               <button
