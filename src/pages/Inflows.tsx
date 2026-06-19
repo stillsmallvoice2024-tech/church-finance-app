@@ -180,7 +180,7 @@ export default function Inflows() {
 
   const isInflowUnmapped = (row: InflowTransaction) => {
     if (!row.transaction_type) return !row.allocation_config_id
-    if (row.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE) return false
+    if (['balance_brought_forward', 'bank_deposit', 'intrabank_transfer'].includes(row.transaction_type)) return false
     return !row.offset_role || (row.offset_role === 'offset' && !row.root_transaction_id)
   }
 
