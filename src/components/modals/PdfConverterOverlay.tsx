@@ -91,21 +91,24 @@ interface Props {
 }
 
 export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
-  const [phase,              setPhase]              = useState<Phase>('extracting')
-  const [result,             setResult]             = useState<ExtractionResult | null>(null)
-  const [editedRows,         setEditedRows]         = useState<string[][]>([])
-  const [isDirty,            setIsDirty]            = useState(false)
-  const [discardConfirm,     setDiscardConfirm]     = useState(false)
-  const [editingCell,        setEditingCell]        = useState<{ r: number; c: number } | null>(null)
-  const [editValue,          setEditValue]          = useState('')
-  const [ocrProgress,        setOcrProgress]        = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
-  const [extractError,       setExtractError]       = useState<string | null>(null)
-  const [extractErrorTitle,  setExtractErrorTitle]  = useState('Extraction failed')
-  const [warningsOpen,       setWarningsOpen]       = useState(false)
-  const [passwordValue,      setPasswordValue]      = useState('')
-  const [passwordError,      setPasswordError]      = useState<string | null>(null)
-  const [deletedRowIndices,  setDeletedRowIndices]  = useState<Set<number>>(new Set())
-  const [deletedColIndices,  setDeletedColIndices]  = useState<Set<number>>(new Set())
+  const [phase,             setPhase]             = useState<Phase>('extracting')
+  const [result,            setResult]            = useState<ExtractionResult | null>(null)
+  const [editedRows,        setEditedRows]        = useState<string[][]>([])
+  const [isDirty,           setIsDirty]           = useState(false)
+  const [discardConfirm,    setDiscardConfirm]    = useState(false)
+  const [editingCell,       setEditingCell]       = useState<{ r: number; c: number } | null>(null)
+  const [editValue,         setEditValue]         = useState('')
+  const [ocrProgress,       setOcrProgress]       = useState<OcrProgress>({ current: 0, total: 0, statusText: '' })
+  const [extractError,      setExtractError]      = useState<string | null>(null)
+  const [extractErrorTitle, setExtractErrorTitle] = useState('Extraction failed')
+  const [warningsOpen,      setWarningsOpen]      = useState(false)
+  const [passwordValue,     setPasswordValue]     = useState('')
+  const [passwordError,     setPasswordError]     = useState<string | null>(null)
+  // Two-stage deletion: soft = greyed + restorable; hard = removed from view
+  const [softDeletedRows,   setSoftDeletedRows]   = useState<Set<number>>(new Set())
+  const [hardDeletedRows,   setHardDeletedRows]   = useState<Set<number>>(new Set())
+  const [softDeletedCols,   setSoftDeletedCols]   = useState<Set<number>>(new Set())
+  const [hardDeletedCols,   setHardDeletedCols]   = useState<Set<number>>(new Set())
   // Retains the password that last unlocked the file so re-extract-with-OCR can reuse it
   const lastPasswordRef = useRef<string | undefined>(undefined)
 
@@ -113,12 +116,13 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     setResult(res)
     setEditedRows(res.rawRows.map(r => [...r]))
     setIsDirty(false)
-    setDeletedRowIndices(new Set())
-    setDeletedColIndices(new Set())
+    setSoftDeletedRows(new Set())
+    setHardDeletedRows(new Set())
+    setSoftDeletedCols(new Set())
+    setHardDeletedCols(new Set())
     setPhase('preview')
   }
 
-  // Guard close/cancel — ask for confirmation when the user has unsaved edits.
   const handleCancel = () => {
     if (isDirty) { setDiscardConfirm(true) } else { onCancel() }
   }
@@ -216,7 +220,6 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     }
   }, [file, result]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-start extraction when the overlay mounts with the provided file
   useEffect(() => { extract(file) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cell editing ────────────────────────────────────────────────────────────
@@ -229,7 +232,6 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   const commitEdit = () => {
     if (!editingCell) return
     const { r, c } = editingCell
-    // Check outside the updater — calling setState inside another setState updater is a side-effect
     if (editedRows[r]?.[c] !== editValue) setIsDirty(true)
     setEditedRows(prev => {
       const next = prev.map(row => [...row])
@@ -248,17 +250,38 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     })
   }
 
-  // ── Row / column deletion ───────────────────────────────────────────────────
+  // ── Row deletion (two-stage) ────────────────────────────────────────────────
 
-  const deleteRow = (ri: number) => {
-    setDeletedRowIndices(prev => new Set([...prev, ri]))
+  const softDeleteRow = (ri: number) => {
+    setSoftDeletedRows(prev => new Set([...prev, ri]))
     setIsDirty(true)
   }
+  const hardDeleteRow = (ri: number) => {
+    setSoftDeletedRows(prev => { const n = new Set(prev); n.delete(ri); return n })
+    setHardDeletedRows(prev => new Set([...prev, ri]))
+  }
+  const restoreRow = (ri: number) => {
+    setSoftDeletedRows(prev => { const n = new Set(prev); n.delete(ri); return n })
+  }
 
-  const deleteCol = (ci: number) => {
-    setDeletedColIndices(prev => new Set([...prev, ci]))
+  // ── Column deletion (two-stage) ─────────────────────────────────────────────
+
+  const softDeleteCol = (ci: number) => {
+    setSoftDeletedCols(prev => new Set([...prev, ci]))
     setIsDirty(true)
   }
+  const hardDeleteCol = (ci: number) => {
+    setSoftDeletedCols(prev => { const n = new Set(prev); n.delete(ci); return n })
+    setHardDeletedCols(prev => new Set([...prev, ci]))
+  }
+  const restoreCol = (ci: number) => {
+    setSoftDeletedCols(prev => { const n = new Set(prev); n.delete(ci); return n })
+  }
+
+  // ── Export helpers ──────────────────────────────────────────────────────────
+
+  const isRowExcluded = (ri: number) => softDeletedRows.has(ri) || hardDeletedRows.has(ri)
+  const isColExcluded = (ci: number) => softDeletedCols.has(ci) || hardDeletedCols.has(ci)
 
   // ── Export / confirm ────────────────────────────────────────────────────────
 
@@ -266,13 +289,13 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     if (!result) return
     const wb = XLSX.utils.book_new()
 
-    const activeHeaders  = result.headers.filter((_, ci) => !deletedColIndices.has(ci))
+    const activeHeaders  = result.headers.filter((_, ci) => !isColExcluded(ci))
     const activeRawRows  = result.rawRows
-      .filter((_, ri) => !deletedRowIndices.has(ri))
-      .map(row => row.filter((_, ci) => !deletedColIndices.has(ci)))
+      .filter((_, ri) => !isRowExcluded(ri))
+      .map(row => row.filter((_, ci) => !isColExcluded(ci)))
     const activeEditRows = editedRows
-      .filter((_, ri) => !deletedRowIndices.has(ri))
-      .map(row => row.filter((_, ci) => !deletedColIndices.has(ci)))
+      .filter((_, ri) => !isRowExcluded(ri))
+      .map(row => row.filter((_, ci) => !isColExcluded(ci)))
 
     XLSX.utils.book_append_sheet(
       wb,
@@ -287,9 +310,9 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
 
     const warnRows: string[][] = [['Row', 'Column', 'Issue', 'Original Value', 'Confidence']]
     result.confidence.forEach((row, ri) => {
-      if (deletedRowIndices.has(ri)) return
+      if (isRowExcluded(ri)) return
       row.forEach((conf, ci) => {
-        if (deletedColIndices.has(ci)) return
+        if (isColExcluded(ci)) return
         if (conf < 0.85) {
           warnRows.push([
             String(ri + 1),
@@ -309,10 +332,10 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
 
   const handleConfirm = () => {
     if (!result) return
-    const activeHeaders = result.headers.filter((_, ci) => !deletedColIndices.has(ci))
+    const activeHeaders = result.headers.filter((_, ci) => !isColExcluded(ci))
     const activeRows    = editedRows
-      .filter((_, ri) => !deletedRowIndices.has(ri))
-      .map(row => row.filter((_, ci) => !deletedColIndices.has(ci)))
+      .filter((_, ri) => !isRowExcluded(ri))
+      .map(row => row.filter((_, ci) => !isColExcluded(ci)))
     const ws  = XLSX.utils.aoa_to_sheet([activeHeaders, ...activeRows])
     const wb  = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Data')
@@ -331,8 +354,10 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     ? result.confidence.flat().filter(c => c < 0.85).length
     : 0
 
-  const activeRowCount = editedRows.length - deletedRowIndices.size
-  const activeColCount = result ? result.headers.length - deletedColIndices.size : 0
+  const excludedRowCount = softDeletedRows.size + hardDeletedRows.size
+  const excludedColCount = softDeletedCols.size + hardDeletedCols.size
+  const activeRowCount   = editedRows.length - excludedRowCount
+  const activeColCount   = result ? result.headers.length - excludedColCount : 0
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -512,8 +537,8 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                 <span className="text-sm font-medium text-gray-700 truncate">{file.name}</span>
                 <span className="text-xs text-gray-400 shrink-0">
                   · {activeRowCount.toLocaleString()} row{activeRowCount !== 1 ? 's' : ''}
-                  {deletedRowIndices.size > 0 && ` (${deletedRowIndices.size} deleted)`}
-                  {deletedColIndices.size > 0 && ` · ${activeColCount} of ${result.headers.length} columns`}
+                  {excludedRowCount > 0 && ` (${excludedRowCount} excluded)`}
+                  {excludedColCount > 0 && ` · ${activeColCount} of ${result.headers.length} columns`}
                 </span>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
                   result.method === 'native'
@@ -563,18 +588,41 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                       <tr>
                         <th className="w-8 px-2 py-2.5 text-left font-normal text-gray-400 select-none">#</th>
                         {result.headers.map((h, ci) => {
-                          if (deletedColIndices.has(ci)) return null
+                          if (hardDeletedCols.has(ci)) return null
+                          const isSoftCol = softDeletedCols.has(ci)
                           return (
-                            <th key={ci} className="group/col px-3 py-2.5 text-left text-gray-600 font-semibold whitespace-nowrap">
+                            <th
+                              key={ci}
+                              className={`group/col px-3 py-2.5 text-left font-semibold whitespace-nowrap ${isSoftCol ? 'text-gray-300' : 'text-gray-600'}`}
+                            >
                               <span className="inline-flex items-center gap-1.5">
-                                {h}
-                                <button
-                                  onClick={() => deleteCol(ci)}
-                                  className="opacity-0 group-hover/col:opacity-100 transition-opacity text-gray-300 hover:text-red-500"
-                                  title={`Delete column "${h}"`}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                                <span className={isSoftCol ? 'line-through' : ''}>{h}</span>
+                                {isSoftCol ? (
+                                  <>
+                                    <button
+                                      onClick={() => restoreCol(ci)}
+                                      className="text-green-500 hover:text-green-700 transition-colors"
+                                      title="Restore column"
+                                    >
+                                      <RotateCcw className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => hardDeleteCol(ci)}
+                                      className="text-gray-400 hover:text-red-500 transition-colors"
+                                      title="Remove column permanently"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => softDeleteCol(ci)}
+                                    className="opacity-0 group-hover/col:opacity-100 transition-opacity text-gray-300 hover:text-red-500"
+                                    title={`Delete column "${h}"`}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
                               </span>
                             </th>
                           )
@@ -583,34 +631,63 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {editedRows.map((row, ri) => {
-                        if (deletedRowIndices.has(ri)) return null
+                        if (hardDeletedRows.has(ri)) return null
+                        const isSoftRow = softDeletedRows.has(ri)
                         return (
-                          <tr key={ri} className="hover:bg-gray-50/40 group">
-                            <td className="relative w-8 px-2 py-1.5 text-gray-300 select-none text-right">
-                              <span className="group-hover:opacity-0 transition-opacity">{ri + 1}</span>
-                              <button
-                                onClick={() => deleteRow(ri)}
-                                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
-                                title="Delete row"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
+                          <tr key={ri} className={`group ${isSoftRow ? 'bg-gray-50/60' : 'hover:bg-gray-50/40'}`}>
+                            {/* # cell — normal: hover-reveal trash; soft-deleted: restore + hard-delete always visible */}
+                            <td className="relative w-8 px-2 py-1.5 select-none">
+                              {isSoftRow ? (
+                                <span className="flex items-center justify-end gap-0.5">
+                                  <button
+                                    onClick={() => restoreRow(ri)}
+                                    className="p-0.5 text-green-500 hover:text-green-700 transition-colors"
+                                    title="Restore row"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => hardDeleteRow(ri)}
+                                    className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                                    title="Remove row permanently"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="block text-right text-gray-300 group-hover:opacity-0 transition-opacity">{ri + 1}</span>
+                                  <button
+                                    onClick={() => softDeleteRow(ri)}
+                                    className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
+                                    title="Delete row"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </>
+                              )}
                             </td>
                             {row.map((cell, ci) => {
-                              if (deletedColIndices.has(ci)) return null
-                              const conf      = result.confidence[ri]?.[ci] ?? 1.0
-                              const isEditing = editingCell?.r === ri && editingCell?.c === ci
-                              const isEdited  = cell !== (result.rawRows[ri]?.[ci] ?? '')
+                              if (hardDeletedCols.has(ci)) return null
+                              const isSoftCol  = softDeletedCols.has(ci)
+                              const isExcluded = isSoftRow || isSoftCol
+                              const conf       = result.confidence[ri]?.[ci] ?? 1.0
+                              const isEditing  = !isExcluded && editingCell?.r === ri && editingCell?.c === ci
+                              const isEdited   = cell !== (result.rawRows[ri]?.[ci] ?? '')
 
                               return (
                                 <td
                                   key={ci}
-                                  className={`relative px-3 py-1.5 ${cellCls(conf)} ${isEdited ? 'font-semibold' : ''}`}
-                                  title={conf < 0.85
+                                  className={`relative px-3 py-1.5 ${isExcluded ? 'text-gray-300' : cellCls(conf)} ${isEdited && !isExcluded ? 'font-semibold' : ''}`}
+                                  title={!isExcluded && conf < 0.85
                                     ? `Confidence: ${Math.round(conf * 100)}%  |  Original: ${result.rawRows[ri]?.[ci] ?? ''}`
                                     : undefined}
                                 >
-                                  {isEditing ? (
+                                  {isExcluded ? (
+                                    <span className="block line-through min-h-[1rem] min-w-[2rem]">
+                                      {cell || '—'}
+                                    </span>
+                                  ) : isEditing ? (
                                     <input
                                       autoFocus
                                       value={editValue}
@@ -630,7 +707,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
                                       {cell || <span className="text-gray-300">—</span>}
                                     </span>
                                   )}
-                                  {isEdited && !isEditing && (
+                                  {isEdited && !isEditing && !isExcluded && (
                                     <button
                                       onClick={e => { e.stopPropagation(); resetCell(ri, ci) }}
                                       className="absolute right-0.5 top-0.5 p-0.5 rounded text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -652,7 +729,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
 
               {/* Helper notes */}
               <div className="text-xs text-gray-400 space-y-0.5">
-                <p>Click any cell to edit inline. Hover a row number or column header to delete that row or column.</p>
+                <p>Click any cell to edit inline. Hover a row number or column header to mark it for deletion — use ↩ to restore or × to remove it from view entirely.</p>
                 <p>Amber and red cells have lower extraction confidence — verify before importing.</p>
                 <p>Download XLSX includes raw data, your edits, and extraction warnings across three sheets.</p>
               </div>
