@@ -148,8 +148,8 @@ const INFLOW_SEARCH_COLS = new Set(['description', 'bank_name', 'transaction_ref
 
 const INFLOW_UNMAPPED_OR =
   'and(transaction_type.is.null,allocation_config_id.is.null),' +
-  'and(transaction_type.not.is.null,transaction_type.neq.balance_brought_forward,offset_role.is.null),' +
-  'and(transaction_type.not.is.null,transaction_type.neq.balance_brought_forward,offset_role.eq.offset,root_transaction_id.is.null)'
+  'and(transaction_type.not.is.null,transaction_type.neq.balance_brought_forward,transaction_type.neq.bank_deposit,transaction_type.neq.intrabank_transfer,offset_role.is.null),' +
+  'and(transaction_type.not.is.null,transaction_type.neq.balance_brought_forward,transaction_type.neq.bank_deposit,transaction_type.neq.intrabank_transfer,offset_role.eq.offset,root_transaction_id.is.null)'
 
 const OUTFLOW_UNMAPPED_OR =
   'and(transaction_type.is.null,stage_code_1.is.null),' +
