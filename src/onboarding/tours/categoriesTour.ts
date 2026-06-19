@@ -5,6 +5,7 @@ export const categoriesTour: TourDefinition = {
   pageId: 'categories',
   title: 'Categories Tour',
   description: 'Learn how categories organise your financial transactions.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'categories-header',

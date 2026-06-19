@@ -1786,6 +1786,7 @@ export function SetupWizard() {
   const { prefs, updatePrefs }        = useUserPreferences()
   const { canWrite }                  = useRole()
   const orgType                       = useOrgStore(s => s.orgType)
+  const user                          = useAuthStore(s => s.user)
 
   const activeStepIds = useMemo<WizardStepId[]>(
     () => orgType === 'personal'
@@ -1830,7 +1831,11 @@ export function SetupWizard() {
 
   const handleBack  = () => { if (currentIdx > 0) goToStep(currentIdx - 1) }
   const handleSkip  = () => { goToStep(currentIdx + 1) }
-  const handleClose = () => { updatePrefs({ wizard_step: currentIdx, wizard_auto_show_dismissed: true }); closeWizard() }
+  const handleClose = () => {
+    updatePrefs({ wizard_step: currentIdx, wizard_auto_show_dismissed: true })
+    markWizardDismissed(user?.id)
+    closeWizard()
+  }
 
   if (!isWizardOpen || !canWrite()) return null
 
@@ -1984,22 +1989,42 @@ export function SetupWizard() {
   )
 }
 
+// ── Wizard-dismissed localStorage layer (user-scoped, resilient to DB issues) ─
+
+function wizardDismissedKey(userId: string | undefined) {
+  return userId ? `clariva-wizard-dismissed-${userId}` : null
+}
+
+function getWizardDismissed(userId: string | undefined): boolean {
+  const k = wizardDismissedKey(userId)
+  if (!k) return false
+  try { return localStorage.getItem(k) === '1' } catch { return false }
+}
+
+function markWizardDismissed(userId: string | undefined) {
+  const k = wizardDismissedKey(userId)
+  if (!k) return
+  try { localStorage.setItem(k, '1') } catch { /* storage unavailable */ }
+}
+
 // ── Auto-show hook ────────────────────────────────────────────────────────────
 
 export function useWizardAutoShow() {
   const { prefs, loading } = useUserPreferences()
+  const user               = useAuthStore(s => s.user)
   const orgId              = useOrgStore(s => s.orgId)
   const orgRole            = useOrgStore(s => s.orgRole)
   const openWizard         = useOnboardingStore(s => s.openWizard)
   const isWizardOpen       = useOnboardingStore(s => s.isWizardOpen)
 
   useEffect(() => {
-    if (loading)                          return
-    if (!orgId)                           return
-    if (isWizardOpen)                     return
-    if (prefs.wizard_completed)           return
-    if (prefs.wizard_auto_show_dismissed) return
+    if (loading)                                    return
+    if (!orgId)                                     return
+    if (isWizardOpen)                               return
+    if (prefs.wizard_completed)                     return
+    if (prefs.wizard_auto_show_dismissed)           return
+    if (getWizardDismissed(user?.id))               return
     if (orgRole !== 'owner' && orgRole !== 'admin') return
     openWizard()
-  }, [loading, orgId, orgRole, prefs.wizard_completed, prefs.wizard_auto_show_dismissed]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, orgId, orgRole, prefs.wizard_completed, prefs.wizard_auto_show_dismissed, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 }

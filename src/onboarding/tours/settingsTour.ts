@@ -5,6 +5,7 @@ export const settingsTour: TourDefinition = {
   pageId: 'settings',
   title: 'Settings Tour',
   description: 'Learn what you can configure in Settings.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'settings-header',

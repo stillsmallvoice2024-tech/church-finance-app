@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useLocation } from 'react-router-dom'
 import { X, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
@@ -240,6 +241,12 @@ export function TourEngine() {
   } = useOnboardingStore()
 
   const { prefs, updatePrefs } = useUserPreferences()
+  const { pathname } = useLocation()
+
+  // Exit tour when the user navigates to a different page
+  useEffect(() => {
+    if (isTourOpen) exitTour()
+  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tour = activeTourId ? getTourById(activeTourId) : null
   const step = tour ? (tour.steps[activeTourStep] ?? null) : null

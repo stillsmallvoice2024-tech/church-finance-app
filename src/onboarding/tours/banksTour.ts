@@ -5,6 +5,7 @@ export const banksTour: TourDefinition = {
   pageId: 'bank-ledger',
   title: 'Bank Ledger Tour',
   description: 'Understand how to manage and monitor your bank accounts.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'banks-header',

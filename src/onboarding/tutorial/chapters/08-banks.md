@@ -1,62 +1,101 @@
-## What is this chapter about?
+## How to Add a Bank Account
 
-Three pages help you watch your bank accounts: the **Bank Ledger** (every transaction per bank with a running balance), **Bank Deposits & Transfers** (cash put into the bank, and money moved between your own banks), and the **Reconciliation Center** (a health check that your app records match the real bank).
+**What you'll need:** The account name and its opening balance before you started using Clariva.
 
-## Part 1: Bank Ledger
+**Where to go:** Administration → Setup → Banks tab
 
-Find it at **Banking → Bank Ledger** (or the **Ledger** button at the bottom on a phone).
+**Time:** ~2 minutes per account.
 
-### How to view a bank's history
+---
 
-1. Pick a bank from the **Bank** dropdown in the filter card.
-2. Optional: set **From** and **To** dates, or use the quick date buttons.
-3. Three cards appear: **Total Inflows**, **Total Outflows**, and **Net Balance**.
-4. Below is the list. Each row shows the Date, Description, Inflow (green), Outflow (red), and the running **Balance** after that row.
-5. The blue row at the top called **Balance Brought Forward** is the bank's opening balance.
-6. Click the small arrow on a row to see full details; click the **pencil** to fix a mistake.
+### Steps
 
-## Part 2: Bank Deposits & Transfers
+1. Open **Administration → Setup** in the left sidebar.
+2. Click the **Banks** tab at the top of the Setup page.
+3. Click **Add Bank**.
+4. Type the **Bank Name** — use the exact name you will choose when importing statements (e.g. "Zenith Bank — Ministry Account"). Consistency matters: a transaction imported under "Zenith Bank" will not appear in the Bank Ledger if the account is saved as "Zenith".
+5. Enter the **Starting Balance** — the amount held in this account on the day you began using Clariva. Enter 0 if you are starting fresh with no opening balance.
+6. If this is a foreign-currency account, tick **Foreign Currency Account** and choose the currency.
+7. Click **Save**.
 
-Find it at **Banking → Bank Deposits & Transfers**. Two tabs:
+![Screenshot: the Add Bank form filled in with a bank name and starting balance](./screenshots/08-banks-step-07.png)
 
-- **Bank Deposits** — records of physical cash being deposited into a bank account.
-- **Intrabank Transfers** — money moved between two of your own bank accounts.
+### Result
 
-Both use pairs: a **Root** (the original entry) and an **Offset** (its matching entry). The summary cards show **Originals**, the paired entries, and **Needs review** — rows that haven't been classified yet.
+The bank account appears in the Banks list and is immediately available in the bank dropdown during statement import, in the Bank Ledger, and in Bank Deposits.
 
-### How to link an unclassified row
+---
 
-1. Find a row with the amber **link** icon (it has no pair yet).
-2. Click the link icon and choose the matching original transaction.
-3. Once linked, the pair shows together and the "Needs review" count goes down.
+### Common issues
 
-### The reconciliation panel (Deposits tab)
+- **Bank not showing in the Import dropdown:** The bank must be saved in Setup before you import. Return to Administration → Setup → Banks tab and confirm it is listed.
+- **Starting balance is wrong:** Click the pencil icon on the bank row, correct the balance, and save. The Bank Ledger's opening Balance Brought Forward row will update.
+- **You see "Access denied":** Only Admins and Owners can add or edit bank accounts.
 
-Click **Reconciliation — Tagged Inflows vs Tagged Outflows** to expand it. It compares deposit-tagged inflows against deposit-tagged outflows. The **Net** should be zero — if it's amber, a pair is missing somewhere.
+---
 
-## Part 3: Reconciliation Center
+## How to Read the Bank Ledger
 
-Find it at **Review & Processing → Reconciliation**. This is your record health check — run it weekly or after every import.
+**What you'll need:** At least one bank account configured and some imported transactions.
 
-### How to run a check
+**Where to go:** Banking → Bank Ledger
 
-1. Click **Run Reconciliation** at the top right.
-2. Wait while it says **Checking your records…**
-3. You get a result card: green **Healthy**, amber **Warnings Detected**, or red **Critical Issues Found**, with counts.
+**Time:** ~2 minutes.
 
-### How to fix issues
+---
 
-1. Open the **Issues to Resolve** section. Start with the red (critical) ones.
-2. Each issue card explains the problem in plain words, shows the affected record, and gives a link like **View Bank Ledger** or **View Deposits** that takes you straight to the right page.
-3. Fix the record on that page, come back, and click **Run Reconciliation** again.
-4. When everything is fixed you'll see **Everything looks good**.
+### Steps
 
-### Reference balances
+1. Open **Banking → Bank Ledger** in the left sidebar.
+2. Use the **Bank** dropdown in the filter card to select the account you want to review.
+3. Optionally set a **From** and **To** date range to narrow the view.
+4. Three summary cards appear: **Total Inflows**, **Total Outflows**, and **Net Balance** for the selected period.
+5. The transaction table shows each entry in date order with a running **Balance** column.
+6. The blue **Balance Brought Forward** row at the top shows the account's opening balance.
+7. Click the small **arrow** on any row to expand and see full transaction details.
+8. Click the **pencil** on a row to correct a mistake.
 
-In the **Account Status** table, each bank shows a **Book Balance** (what the app calculates) and a **Reference Balance** (what your real bank statement says). Click the **pencil** next to the reference balance to type the closing balance and date from your bank statement. The **Difference** column shows any gap.
+![Screenshot: the Bank Ledger with a bank selected, summary cards visible, and the transaction table below](./screenshots/08-banks-step-08.png)
 
-## If something goes wrong
+### Result
 
-- **"Select a bank above to view its ledger."** — pick a bank from the dropdown first.
-- **Net Balance doesn't match your bank statement** — run a reconciliation check and follow the issue links.
-- **You can't edit reference balances** — you need write access; ask an Admin.
+You can see every transaction for that account and verify the running balance matches your real bank statement.
+
+---
+
+### Common issues
+
+- **"Select a bank above to view its ledger":** Pick a bank from the dropdown — the ledger is blank until a bank is chosen.
+- **Net Balance does not match your statement:** Run a reconciliation check (Banking → Bank Ledger → Reconciliation, or Review & Processing → Reconciliation) and follow the issue links to identify the discrepancy.
+
+---
+
+## How to Run a Reconciliation Check
+
+**What you'll need:** At least one bank account with transactions. Ideally, your paper or PDF bank statement for reference balances.
+
+**Where to go:** Review & Processing → Reconciliation
+
+**Time:** ~5 minutes including fixing any issues.
+
+---
+
+### Steps
+
+1. Open **Review & Processing → Reconciliation** in the left sidebar.
+2. Click **Run Reconciliation** at the top right.
+3. Wait while the system checks your records.
+4. Read the result card — green **Healthy**, amber **Warnings Detected**, or red **Critical Issues Found**.
+5. Open the **Issues to Resolve** section. Start with red (critical) issues.
+6. Each issue card explains the problem in plain words and provides a direct link (e.g. **View Bank Ledger**) — click it to go straight to the affected record.
+7. Fix the record on that page, return here, and click **Run Reconciliation** again.
+8. In the **Account Status** table, click the pencil next to a bank's Reference Balance to enter the closing balance and date from your actual bank statement.
+
+### Result
+
+When all issues are resolved you see **Everything looks good** — your app records are consistent with your bank statements.
+
+### Common issues
+
+- **"You can't edit reference balances":** You need write access. Ask an Admin.
+- **Issues keep reappearing after fixing:** The fix may not have saved. Check that you clicked Save or Confirm on the affected record before re-running.

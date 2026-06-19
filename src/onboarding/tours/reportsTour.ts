@@ -5,6 +5,7 @@ export const reportsTour: TourDefinition = {
   pageId: 'reports',
   title: 'Reports Tour',
   description: 'Learn how to generate and customise financial reports.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'reports-header',

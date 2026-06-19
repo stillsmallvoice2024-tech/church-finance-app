@@ -1,9 +1,22 @@
 // ── Simple Markdown renderer ──────────────────────────────────────────────────
 // Shared by HelpCenter (modal) and the full-page Tutorial.
 // Handles: ## / ### headings, **bold**, `code`, bullet lists (- ),
-// numbered lists (1. ), tables (| ), blank lines.
+// numbered lists (1. ), tables (| ), horizontal rules (---), images (![]), blank lines.
 
-export function renderMarkdown(raw: string): JSX.Element {
+export interface MarkdownRenderOptions {
+  /** Called when a tutorial screenshot image is clicked — enables lightbox. */
+  onImageClick?: (src: string, alt: string) => void
+}
+
+// Resolve tutorial screenshot relative paths to public static paths
+function resolveImgSrc(src: string): string {
+  if (src.startsWith('./screenshots/')) {
+    return `/tutorial/screenshots/${src.slice('./screenshots/'.length)}`
+  }
+  return src
+}
+
+export function renderMarkdown(raw: string, options?: MarkdownRenderOptions): JSX.Element {
   const lines = raw.split('\n')
   const elements: JSX.Element[] = []
   let i = 0
@@ -27,6 +40,50 @@ export function renderMarkdown(raw: string): JSX.Element {
           {line.slice(4)}
         </h3>,
       )
+      i++
+      continue
+    }
+
+    // Horizontal rule
+    if (line.trim() === '---') {
+      elements.push(
+        <hr key={i} className="border-t border-gray-200 dark:border-white/[0.07] my-4" />,
+      )
+      i++
+      continue
+    }
+
+    // Image: ![alt](src)
+    const imgMatch = line.match(/^!\[(.+?)\]\((.+?)\)$/)
+    if (imgMatch) {
+      const alt = imgMatch[1]
+      const src = resolveImgSrc(imgMatch[2])
+      if (options?.onImageClick) {
+        elements.push(
+          <button
+            key={i}
+            type="button"
+            onClick={() => options.onImageClick!(src, alt)}
+            className="block cursor-zoom-in w-full text-left"
+            aria-label={`Enlarge: ${alt}`}
+          >
+            <img
+              src={src}
+              alt={alt}
+              className="max-w-full h-auto rounded-lg border border-gray-200 dark:border-white/[0.07] shadow-sm my-4"
+            />
+          </button>,
+        )
+      } else {
+        elements.push(
+          <img
+            key={i}
+            src={src}
+            alt={alt}
+            className="max-w-full h-auto rounded-lg border border-gray-200 dark:border-white/[0.07] shadow-sm my-4"
+          />,
+        )
+      }
       i++
       continue
     }
