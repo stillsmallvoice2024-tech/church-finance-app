@@ -68,7 +68,7 @@ You can see every transaction for that account and verify the running balance ma
 ### Common issues
 
 - **"Select a bank above to view its ledger":** Pick a bank from the dropdown — the ledger is blank until a bank is chosen.
-- **Net Balance does not match your statement:** Run a reconciliation check (Banking → Bank Ledger → Reconciliation, or Review & Processing → Reconciliation) and follow the issue links to identify the discrepancy.
+- **Net Balance does not match your statement:** Run a reconciliation check via **Review & Processing → Reconciliation** and follow the issue links to identify the discrepancy.
 
 ---
 
@@ -87,7 +87,7 @@ You can see every transaction for that account and verify the running balance ma
 1. Open **Review & Processing → Reconciliation** in the left sidebar.
 2. Click **Run Reconciliation** at the top right.
 3. Wait while the system checks your records.
-4. Read the result card — green **Healthy**, amber **Warnings Detected**, or red **Critical Issues Found**.
+4. Read the result card — green **Healthy**, amber **Warning**, or red **Critical**.
 5. Open the **Issues to Resolve** section. Start with red (critical) issues.
 6. Each issue card explains the problem in plain words and provides a direct link (e.g. **View Bank Ledger**) — click it to go straight to the affected record.
 7. Fix the record on that page, return here, and click **Run Reconciliation** again.

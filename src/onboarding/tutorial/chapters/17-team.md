@@ -75,11 +75,11 @@ The invited person receives a secure link. Once they create their account and lo
 
 ## How to Investigate a Change in Activity History
 
-**Where to go:** Administration → Change Log
+**Where to go:** Administration → Activity History
 
 ### Steps
 
-1. Open **Administration → Change Log**.
+1. Open **Administration → Activity History**.
 2. Use the **Table** dropdown to filter by record type (e.g. "Inflow Transactions").
 3. Set the **From** and **To** dates around when you think the change happened.
 4. Use the search box to find a description or value.

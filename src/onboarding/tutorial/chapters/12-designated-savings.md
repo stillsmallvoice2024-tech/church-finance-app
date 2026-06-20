@@ -10,7 +10,7 @@ A designated gift is money with a sticky note on it: "use this for the building 
 
 ### How to read the page
 
-1. The big card at the top shows the **Total Specific Givings** for the year.
+1. The big card at the top shows the **Total Designated Gifts** for the year.
 2. Below it, one card per category. Each card lists its **targets** — the purposes people gave for — with how many gifts, the latest date, and the total.
 3. Use the search box to find a category, and **Export** to download a spreadsheet.
 

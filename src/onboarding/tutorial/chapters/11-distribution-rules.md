@@ -9,14 +9,14 @@ A **distribution rule** (also called an allocation config) is a recipe that spli
 3. It splits the money into each category's pockets exactly as the rule says.
 4. You can watch the growing balances on the Regular Funds page.
 
-## Part 1: Creating a distribution rule (Setup → Allocation)
+## Part 1: Creating a distribution rule (Setup → Distribution Rules)
 
 Admins only.
 
-1. Go to **Setup**, click the **Allocation** tab, then **+ New Configuration**.
+1. Go to **Setup**, click the **Distribution Rules** tab, then **New Distribution Rule**.
 2. Type a **Configuration Name** (example: 2026 Allocation).
 3. Pick **Effective From** — the date the rule starts working.
-4. Add rows: for each row pick a **Category**, a **Budget Portion** (Percentage, Specific Seed, or Savings), and a **Percentage**. Click **Add row** for more.
+4. Add rows: for each row pick a **Category**, a **Budget Portion** (**Regular Funds**, **Designated Gift**, or **Savings Funds**), and a **Percentage**. Click **Add row** for more.
 5. Watch the **Running total** strip at the bottom — it turns green when your percentages add up to 100%.
 6. Click **Save as Draft**.
 7. Back in the list, click the **lock** icon (**Approve & Lock**) on your draft. Important: a rule does nothing until it is locked! Drafts say "Not in use — approve & lock to activate".
@@ -36,9 +36,9 @@ Find it at **Budget & Allocation → Distribution Rules**. This is a viewing pag
 
 Find it at **Budget & Allocation → Regular Funds**. It shows what the rules have collected over time: for each category, the **Total Allocated**, **Withdrawn**, and **Net Balance**. Three cards at the top show the overall totals. Red balances mean a bucket spent more than it received.
 
-## Part 4: Special Configs (one-off rules)
+## Part 4: Special Rules (one-off rules)
 
-A special config is a rule for a special occasion — like an Easter offering with its own split. Admins create them in **Setup → Special Configs**.
+A special rule is a one-off split for a special occasion — like an Easter offering with its own allocation. Admins create them in **Setup → Special Rules**.
 
 1. Click **+ Create New Group**.
 2. Type a **Name** (example: Easter Special Allocation) and the **Effective From** date.
@@ -51,6 +51,6 @@ A group can have many **versions** over time — click **+ New Version** on the 
 
 ## If something goes wrong
 
-- **Inflows are not being split** — the rule is probably still a draft. Lock it in Setup → Allocation.
+- **Inflows are not being split** — the rule is probably still a draft. Lock it in Setup → Distribution Rules.
 - **Total shows ⚠** — percentages don't add to 100%. Edit the rule (drafts) or create a corrected version (locked).
 - **A special offering used the wrong split** — edit the inflow and pick the right **Allocation Config** in the edit window.

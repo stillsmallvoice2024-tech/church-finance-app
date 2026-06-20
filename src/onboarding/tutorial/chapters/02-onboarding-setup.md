@@ -12,7 +12,7 @@ You see this right after creating a new organisation.
 
 ## Part 2: The Setup page
 
-Only **Admins** and **Accountants** can open Setup. Find it in the left menu under **Administration → Setup**. It has tabs across the top: **General**, **Banks**, **Allocation**, **Special Configs**, **Income Types**, **Outflow Types**, **Departments**, **Currencies**.
+Only **Admins** and **Accountants** can open Setup. Find it in the left menu under **Administration → Setup**. It has tabs across the top: **General**, **Banks**, **Distribution Rules**, **Special Rules**, **Income Types**, **Outflow Types**, **Departments**, **Currencies**.
 
 ### How to add a bank
 
@@ -59,7 +59,7 @@ Outflow types are name tags for money going out, like "Salaries" or "Utilities".
 2. Fill in **Code** (like CHF), **Symbol** (like Fr.), **Name** (like Swiss Franc), and an optional flag emoji.
 3. Click **+ Add Currency**.
 
-### What about the Allocation and Special Configs tabs?
+### What about the Distribution Rules and Special Rules tabs?
 
 Those control how incoming money is split between categories. They are explained fully in Chapter 11 (Distribution Rules).
 
