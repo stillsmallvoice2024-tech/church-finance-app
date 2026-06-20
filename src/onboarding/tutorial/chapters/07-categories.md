@@ -16,7 +16,7 @@
 4. Type the **Category Name** — keep it short and recognisable (e.g. "Welfare", "Building Fund", "Missions").
 5. Optional: select or create a **Group** to keep related categories together. Click the folder-plus icon to create a new group right inside the form.
 6. Optional: type a **Description** to clarify what this category is for.
-7. Optional: click **Add** under Opening Balances to record money this bucket already held before you started using Clariva. Choose a portion type (Percentage Allocation, Specific Seed, or Savings) and enter the amount.
+7. Optional: under **Opening Balances by Portion**, click **+ Add** to record money this bucket already held before you started using Clariva. Choose a portion type — **Regular Funds**, **Designated Gift**, or **Savings Funds** — and enter the amount.
 8. Click **Create**.
 
 ![Screenshot: the Add Category form with a name, group, and opening balance filled in](./screenshots/07-categories-step-08.png)
@@ -49,7 +49,7 @@ The category appears in the category list and is immediately available in alloca
 
 1. Open **Budget & Allocation → Category Ledger** in the left sidebar.
 2. Click the **Ledger** view tab at the top.
-3. Choose a **Portion** from the dropdown: Percentage Allocation, Specific Seed, or Savings.
+3. Choose a **Portion** from the dropdown: Regular Funds, Designated Gift, or Savings Funds.
 4. Choose a **Category** from the next dropdown.
 5. The transaction list appears with a running **Balance** column. The first row is the **Balance Brought Forward** — the opening balance.
 6. Rows labelled "Transfer →" or "Transfer ←" are internal moves between buckets (Fund Transfers). Click the arrow to expand and see the transfer details.

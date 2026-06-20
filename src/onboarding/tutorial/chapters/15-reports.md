@@ -2,7 +2,7 @@
 
 **What you'll need:** Imported transactions for the year you want to review.
 
-**Where to go:** Reports → Reports → Monthly Breakdown tab
+**Where to go:** Reports → Reports → Monthly Breakdown
 
 **Time:** ~3 minutes.
 
@@ -11,7 +11,7 @@
 ### Steps
 
 1. Open **Reports → Reports** in the left sidebar.
-2. Click the **Monthly Breakdown** tab across the top of the page.
+2. Select **Monthly Breakdown** from the Reports navigation.
 3. Use the **Year** selector to choose the year.
 4. The table shows each month with its total inflows, total outflows, and net balance.
 5. To export the table as a spreadsheet, click the **CSV** button at the top right of the tab.
@@ -33,12 +33,12 @@ You have a month-by-month summary of all financial activity for the year, ready 
 
 ## How to Generate an Annual Summary
 
-**Where to go:** Reports → Reports → Annual Summary tab
+**Where to go:** Reports → Reports → Annual Summary
 
 ### Steps
 
 1. Open **Reports → Reports**.
-2. Click the **Annual Summary** tab.
+2. Select **Annual Summary** from the Reports navigation.
 3. The table lists every year on record with its total inflows, outflows, and net balance.
 4. Click **CSV** to export.
 
@@ -46,13 +46,13 @@ You have a month-by-month summary of all financial activity for the year, ready 
 
 ## How to View Income and Outflow Breakdowns
 
-**Where to go:** Reports → Reports → Income Type Breakdown or Outflow Type Breakdown tab
+**Where to go:** Reports → Reports → Income Type Breakdown or Outflow Type Breakdown
 
 ### Steps
 
 1. Open **Reports → Reports**.
-2. Click **Income Type Breakdown** to see how much each income category brought in, with percentage shares and a progress bar.
-3. Click **Outflow Type Breakdown** to see the same for expenditure categories.
+2. Select **Income Type Breakdown** from the Reports navigation to see how much each income category brought in, with percentage shares and a progress bar.
+3. Select **Outflow Type Breakdown** to see the same for expenditure categories.
 4. Use the **Year** and **Month** selectors at the top to filter the period.
 5. Click **CSV** to export the breakdown.
 

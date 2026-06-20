@@ -65,7 +65,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 4,
     title: 'Importing Bank Statements',
     summary: 'The main way transactions enter the app: file upload, column mapping, duplicates, and manual entry.',
-    updatedAt: '2026-06-19',
+    updatedAt: '2026-06-20',
     content: ch04,
   },
   {
@@ -89,7 +89,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 7,
     title: 'Categories & Category Accounts',
     summary: 'Create money buckets, group them, set opening balances, and read their ledgers.',
-    updatedAt: '2026-06-19',
+    updatedAt: '2026-06-20',
     content: ch07,
   },
   {
@@ -97,7 +97,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 8,
     title: 'Banks: Setup, Ledger & Reconciliation',
     summary: 'Add bank accounts in Setup, read per-bank transaction histories, and run reconciliation checks.',
-    updatedAt: '2026-06-19',
+    updatedAt: '2026-06-20',
     content: ch08,
   },
   {
@@ -153,7 +153,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 15,
     title: 'Reports',
     summary: 'Ready-made summaries, the Financial Report builder, and live Custom Reports.',
-    updatedAt: '2026-06-19',
+    updatedAt: '2026-06-20',
     content: ch15,
   },
   {

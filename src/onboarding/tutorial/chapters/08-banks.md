@@ -14,11 +14,13 @@
 2. Click the **Banks** tab at the top of the Setup page.
 3. Click **Add Bank**.
 4. Type the **Bank Name** — use the exact name you will choose when importing statements (e.g. "Zenith Bank — Ministry Account"). Consistency matters: a transaction imported under "Zenith Bank" will not appear in the Bank Ledger if the account is saved as "Zenith".
-5. Enter the **Starting Balance** — the amount held in this account on the day you began using Clariva. Enter 0 if you are starting fresh with no opening balance.
-6. If this is a foreign-currency account, tick **Foreign Currency Account** and choose the currency.
-7. Click **Save**.
+5. Optional: type the **Account Number** and choose the **Account Type** (e.g. Savings, Current).
+6. Under **Opening Balance**, enter the **Starting Balance** — the amount held in this account on the day you began using Clariva. Enter 0 if you are starting fresh.
+7. If this is a foreign-currency account, change the **Account Currency** dropdown from the default to the relevant currency.
+8. Optional: under **Allocations**, add rows to specify which categories and budget portions transactions imported from this bank should default to.
+9. Click **Add Bank**.
 
-![Screenshot: the Add Bank form filled in with a bank name and starting balance](./screenshots/08-banks-step-07.png)
+![Screenshot: the Add Bank form filled in with a bank name, account type, and starting balance](./screenshots/08-banks-step-07.png)
 
 ### Result
 

@@ -21,8 +21,8 @@
 
 7. **Sheet and table selection:** If your file has multiple sheets, pick the right one. Leave Target Table as "Bank Statement (auto-split → Inflow / Outflow)" unless you have a specific reason to change it.
 8. **Column mapping:** The system shows your file's column headers and guesses which Clariva field each one represents. Check every dropdown and correct any wrong guesses. Set any unwanted columns to **Skip**.
-9. Click **Save as template** to remember this mapping for the next import from the same bank.
-10. Click **Next** to reach the Configure Rows step.
+9. To save this mapping for future imports from the same bank, type a name in the **Save mapping as template** field and click **Save template**.
+10. Click **Configure Rows** to proceed to the next step.
 
 ![Screenshot: the column mapping screen with dropdowns set for Date, Description, Credit, and Debit](./screenshots/04-import-step-10.png)
 
