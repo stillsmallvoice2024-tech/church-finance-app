@@ -100,6 +100,14 @@ export default function Settings() {
     })
   }, [role, mfaEnrollOpen])
 
+  // Teal Mist page background — reset on unmount
+  useEffect(() => {
+    const main = document.getElementById('main-content')
+    if (!main) return
+    main.style.backgroundColor = '#E6F4F1'
+    return () => { main.style.backgroundColor = '' }
+  }, [])
+
   const handleRemoveMFA = async (factorId: string) => {
     setMfaLoading(true); setMfaError(null)
     const { error } = await supabase.auth.mfa.unenroll({ factorId })
