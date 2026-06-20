@@ -3032,21 +3032,17 @@ export default function SetupPage() {
           <p className="text-sm text-gray-500 mt-1">Configure your organisation finance settings</p>
         </div>
 
-        {/* Mobile: scrollable pill tabs */}
-        <div className="flex overflow-x-auto gap-1.5 pb-0.5 md:hidden">
-          {TABS.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                activeTab === tab
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+        {/* Mobile: compact select dropdown */}
+        <div className="md:hidden">
+          <select
+            value={activeTab}
+            onChange={e => setActiveTab(e.target.value as Tab)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          >
+            {TABS.map(tab => (
+              <option key={tab} value={tab}>{tab}</option>
+            ))}
+          </select>
         </div>
 
         {/* Desktop: sidebar nav + content */}
