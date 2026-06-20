@@ -3063,18 +3063,19 @@ export default function SetupPage() {
 
         {/* Desktop: sidebar nav + content */}
         <div className="flex gap-7 items-start">
-          <nav className="hidden md:flex flex-col w-44 shrink-0 gap-0.5">
-            {TABS.map(tab => (
+          <nav className="hidden md:flex flex-col w-48 shrink-0 gap-0.5">
+            {TAB_CARDS.map(({ tab, Icon, label }) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors leading-tight ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors leading-tight ${
                   activeTab === tab
                     ? 'bg-gray-100 text-gray-900 font-semibold'
                     : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
                 }`}
               >
-                {tab}
+                <Icon className="w-4 h-4 shrink-0" />
+                {label}
               </button>
             ))}
           </nav>
