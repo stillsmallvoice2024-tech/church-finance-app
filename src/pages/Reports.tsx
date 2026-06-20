@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Printer, Download, AlertCircle, FileText, FilePlus, BarChart2, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Printer, Download, AlertCircle, FileText, FilePlus, BarChart2, ChevronRight, ChevronDown, ChevronUp, CalendarDays, TrendingUp, TrendingDown, Users, Globe, ShieldAlert } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../hooks/useRole'
@@ -19,6 +19,16 @@ import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 
 type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'departments' | 'fx' | 'audit'
+
+const REPORT_TAB_CARDS: { id: ReportTab; Icon: React.ComponentType<{ className?: string }>; label: string }[] = [
+  { id: 'annual',        Icon: BarChart2,    label: 'Annual'        },
+  { id: 'monthly',       Icon: CalendarDays, label: 'Monthly'       },
+  { id: 'income_types',  Icon: TrendingUp,   label: 'Income Types'  },
+  { id: 'outflow_types', Icon: TrendingDown, label: 'Outflow Types' },
+  { id: 'departments',   Icon: Users,        label: 'Departments'   },
+  { id: 'fx',            Icon: Globe,        label: 'FX Holdings'   },
+  { id: 'audit',         Icon: ShieldAlert,  label: 'Audit Log'     },
+]
 
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS        = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i)
@@ -1444,17 +1454,7 @@ export default function Reports() {
   usePageTitle('Reports')
   useFirstVisitTour('reports')
 
-  const allTabs: { id: ReportTab; label: string; adminOnly?: boolean }[] = [
-    { id: 'annual',        label: 'Annual Summary'         },
-    { id: 'monthly',       label: 'Monthly Breakdown'      },
-    { id: 'income_types',  label: 'Income Type Breakdown'  },
-    { id: 'outflow_types', label: 'Outflow Type Breakdown' },
-    { id: 'departments',   label: 'Departments'            },
-    { id: 'fx',            label: 'FX Holdings'            },
-    { id: 'audit',         label: 'Audit Log', adminOnly: true },
-  ]
-
-  const visibleTabs = allTabs.filter(t => !t.adminOnly || isAdmin())
+  const visibleTabCards = REPORT_TAB_CARDS.filter(c => c.id !== 'audit' || isAdmin())
 
   return (
     <div className="space-y-5">
@@ -1536,30 +1536,52 @@ export default function Reports() {
         <p className="text-sm text-gray-500">Generated: {new Date().toLocaleDateString()}</p>
       </div>
 
-      {/* Tabs */}
-      <div data-tour="report-template" className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit max-w-full print:hidden overflow-x-auto">
-        {visibleTabs.map(t => (
+      {/* Mobile: icon card grid */}
+      <div className="grid grid-cols-4 gap-2 md:hidden print:hidden">
+        {visibleTabCards.map(({ id, Icon, label }) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
-              tab === t.id ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-xl transition-colors ${
+              tab === id
+                ? 'bg-primary text-white'
+                : 'bg-gray-100 text-gray-500 active:bg-gray-200'
             }`}
           >
-            {t.label}
+            <Icon className="w-5 h-5" />
+            <span className="text-[10px] font-medium leading-tight text-center">{label}</span>
           </button>
         ))}
       </div>
 
-      {/* Report content */}
-      <div className="print:space-y-8">
-        {tab === 'annual'        && <AnnualSummaryPanel />}
-        {tab === 'monthly'       && <MonthlyBreakdownPanel />}
-        {tab === 'income_types'  && <IncomeTypeBreakdownPanel />}
-        {tab === 'outflow_types' && <OutflowTypeBreakdownPanel />}
-        {tab === 'departments'   && <DepartmentBreakdownPanel />}
-        {tab === 'fx'            && <FXHoldingsPanel />}
-        {tab === 'audit'         && isAdmin() && <AuditLogPanel />}
+      {/* Desktop: sidebar nav + content */}
+      <div data-tour="report-template" className="flex gap-7 items-start">
+        <nav className="hidden md:flex flex-col w-48 shrink-0 gap-0.5 print:hidden">
+          {visibleTabCards.map(({ id, Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors leading-tight ${
+                tab === id
+                  ? 'bg-gray-100 text-gray-900 font-semibold'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex-1 min-w-0 print:space-y-8">
+          {tab === 'annual'        && <AnnualSummaryPanel />}
+          {tab === 'monthly'       && <MonthlyBreakdownPanel />}
+          {tab === 'income_types'  && <IncomeTypeBreakdownPanel />}
+          {tab === 'outflow_types' && <OutflowTypeBreakdownPanel />}
+          {tab === 'departments'   && <DepartmentBreakdownPanel />}
+          {tab === 'fx'            && <FXHoldingsPanel />}
+          {tab === 'audit'         && isAdmin() && <AuditLogPanel />}
+        </div>
       </div>
     </div>
   )
