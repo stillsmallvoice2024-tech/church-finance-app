@@ -27,7 +27,7 @@ function Section({ icon: Icon, title, iconColor, children }: {
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5 bg-[#E6F4F1] rounded-t-xl">
         {iconColor
           ? <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconColor}`}><Icon className="w-4 h-4" /></div>
           : <Icon className="w-4 h-4 text-gray-500" />
@@ -147,7 +147,7 @@ export default function Settings() {
   const lastSync = new Date().toLocaleString()
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5">
       {/* Header */}
       <div data-tour="page-header" className="flex items-start justify-between gap-3">
         <div>
@@ -186,7 +186,7 @@ export default function Settings() {
       {/* ── Account (Profile + Password + 2FA) ─────────────────────────── */}
       <div id="section-account" data-tour="org-settings" className="bg-white rounded-xl border border-gray-200 shadow-sm">
         {/* Card header */}
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5 bg-[#E6F4F1] rounded-t-xl">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-blue-100 text-blue-600"><User className="w-4 h-4" /></div>
           <h2 className="text-sm font-semibold text-gray-800">Account</h2>
         </div>
