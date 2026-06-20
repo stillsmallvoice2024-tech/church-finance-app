@@ -160,8 +160,28 @@ export default function Settings() {
         <strong>Backup</strong> to export a full data snapshot at any time.
       </PageHelpBanner>
 
+      {/* Jump nav */}
+      <nav className="flex flex-wrap gap-x-5 gap-y-1 pb-3 border-b border-gray-100">
+        {([
+          ['section-profile',  'Profile'],
+          ['section-password', 'Password'],
+          ...((role === 'owner' || role === 'admin') ? [['section-2fa', '2FA']] : []),
+          ['section-theme',    'Theme'],
+          ['section-data',     'Data'],
+          ['section-info',     'Info'],
+        ] as [string, string][]).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="text-sm text-gray-400 hover:text-primary font-medium transition-colors"
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
       {/* ── My Profile ──────────────────────────────────────────────────── */}
-      <div data-tour="org-settings">
+      <div id="section-profile" data-tour="org-settings">
       <Section icon={User} title="My Profile">
         <div className="space-y-4">
           {/* Avatar + info row */}
@@ -208,29 +228,18 @@ export default function Settings() {
             <p className="text-xs text-gray-500">Leave blank to log in with your email only.</p>
           </div>
 
-          {/* Email (read-only) */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">Email Address</label>
-            <input
-              type="email"
-              value={user?.email ?? ''}
-              readOnly
-              className="w-full px-3 py-2.5 text-sm border border-gray-100 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
-            />
-            <p className="text-xs text-gray-500">Email address cannot be changed here.</p>
+          {/* Read-only account info — compact */}
+          <div className="rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100">
+            <div className="flex items-center justify-between px-3 py-2.5">
+              <span className="text-xs text-gray-400 font-medium">Email</span>
+              <span className="text-xs text-gray-600">{user?.email}</span>
+            </div>
+            <div className="flex items-center justify-between px-3 py-2.5">
+              <span className="text-xs text-gray-400 font-medium">Role</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{role ? ROLE_LABELS[role] : '—'}</span>
+            </div>
           </div>
-
-          {/* Role (read-only) */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">Role</label>
-            <input
-              type="text"
-              value={role ? ROLE_LABELS[role] : '—'}
-              readOnly
-              className="w-full px-3 py-2.5 text-sm border border-gray-100 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
-            />
-            <p className="text-xs text-gray-500">Roles are assigned by an administrator.</p>
-          </div>
+          <p className="text-xs text-gray-400">Email and role are managed by your administrator.</p>
 
           <button
             onClick={handleSaveProfile}
@@ -245,6 +254,7 @@ export default function Settings() {
       </div>
 
       {/* ── Change Password ──────────────────────────────────────────────── */}
+      <div id="section-password">
       <Section icon={Lock} title="Change Password">
         <div className="space-y-4">
           {pwDone && (
@@ -307,9 +317,11 @@ export default function Settings() {
           </button>
         </div>
       </Section>
+      </div>
 
       {/* ── Two-Factor Authentication (owner/admin only) ────────────────── */}
       {(role === 'owner' || role === 'admin') && (
+        <div id="section-2fa">
         <Section icon={Shield} title="Two-Factor Authentication">
           <div className="space-y-4">
             <p className="text-sm text-gray-500">
@@ -361,10 +373,11 @@ export default function Settings() {
             )}
           </div>
         </Section>
+        </div>
       )}
 
       {/* ── Theme ───────────────────────────────────────────────────────── */}
-      <div data-tour="appearance-settings">
+      <div id="section-theme" data-tour="appearance-settings">
       <Section icon={Palette} title="Theme">
         <div className="space-y-4">
           <p className="text-sm text-gray-500">Choose your preferred colour scheme. Your preference is saved automatically.</p>
@@ -395,6 +408,7 @@ export default function Settings() {
       </div>
 
       {/* ── Data Management ─────────────────────────────────────────────── */}
+      <div id="section-data">
       <Section icon={Database} title="Data Management">
         <div className="space-y-4">
           <p className="text-sm text-gray-500">
@@ -446,8 +460,10 @@ export default function Settings() {
           </div>
         </div>
       </Section>
+      </div>
 
       {/* ── App Info ────────────────────────────────────────────────────── */}
+      <div id="section-info">
       <Section icon={Info} title="App Information">
         <div className="space-y-3 text-sm">
           <InfoRow label="Version" value={`v${APP_VERSION}`} />
@@ -482,6 +498,7 @@ export default function Settings() {
           <InfoRow label="Environment" value={import.meta.env.MODE === 'production' ? 'Production' : 'Development'} />
         </div>
       </Section>
+      </div>
       {/* ── Receipt Path Migration (admin only) ─────────────────────── */}
       {role === 'admin' && <ReceiptMigrationPanel />}
 
