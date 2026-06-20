@@ -184,12 +184,7 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <div className="flex-1">
               {isMigrationError
-                ? (
-                  <>
-                    <p>Income types aren't fully set up yet. Ask your administrator to enable this feature, then try again.</p>
-                    <TechDetails>{MIGRATION_SQL}</TechDetails>
-                  </>
-                )
+                ? 'Income types aren\'t fully set up yet — please contact your administrator, then try again.'
                 : error}
             </div>
           </div>

@@ -228,6 +228,9 @@ export function useAuthListener(): void {
 
       if (isAuthenticatedEvent && session?.user) {
         useAuthStore.getState().setUser(session.user)
+        if (event === 'SIGNED_IN') {
+          useAuthStore.getState().setLoading(true)
+        }
 
         const timeoutId = setTimeout(() => {
           if (requestIdRef.current === requestId) {

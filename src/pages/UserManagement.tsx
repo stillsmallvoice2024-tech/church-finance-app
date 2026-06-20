@@ -392,12 +392,7 @@ function EditProfileModal({
           <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
             <p className="font-medium mb-1">{error}</p>
             {isMigrationError && (
-              <>
-                <p className="mb-1 text-gray-500">Run this migration in Supabase first:</p>
-                <pre className="bg-gray-900 text-green-300 rounded p-2 overflow-x-auto whitespace-pre-wrap text-xs">
-                  {USERNAME_MIGRATION_SQL}
-                </pre>
-              </>
+              <p className="mt-1 text-gray-500">A database update is required — please contact your administrator.</p>
             )}
           </div>
         )}

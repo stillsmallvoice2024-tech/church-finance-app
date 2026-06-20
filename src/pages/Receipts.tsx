@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Paperclip, Download, Trash2, Loader2, FolderOpen, FileText, Image, AlertTriangle, Terminal } from 'lucide-react'
+import { Paperclip, Download, Trash2, Loader2, FolderOpen, FileText, Image, AlertTriangle } from 'lucide-react'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { Card } from '../components/ui/Card'
@@ -154,19 +154,10 @@ export default function Receipts() {
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
               {isMigrationError
-                ? 'The receipts table does not exist yet. Run the SQL below in your Supabase SQL Editor to create it, then reload.'
+                ? 'The receipts feature requires a database update — please contact your administrator, then reload.'
                 : error}
             </span>
           </div>
-          {isMigrationError && (
-            <div className="rounded-xl border border-gray-200 bg-gray-900 overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
-                <Terminal className="w-3.5 h-3.5 text-gray-400" />
-                <span className="text-xs text-gray-500 font-mono">Supabase SQL Editor</span>
-              </div>
-              <pre className="px-4 py-3 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
-            </div>
-          )}
         </div>
       )}
 

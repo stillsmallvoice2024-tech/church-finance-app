@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment, useMemo, useRef } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Terminal, Eye, EyeOff, FolderPlus, X, Check, Globe } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Eye, EyeOff, FolderPlus, X, Check, Globe } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
@@ -251,17 +251,8 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           <div className="space-y-2">
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{isMigrationError ? 'Database migration required — run the SQL below in your Supabase SQL Editor, then try again.' : displayError}</span>
+              <span>{isMigrationError ? 'Database migration required — please contact your administrator, then try again.' : displayError}</span>
             </div>
-            {isMigrationError && (
-              <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
-                  <Terminal className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-500 font-mono">Supabase SQL Editor</span>
-                </div>
-                <pre className="px-3 py-3 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
-              </div>
-            )}
           </div>
         )}
 

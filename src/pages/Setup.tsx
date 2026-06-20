@@ -837,7 +837,7 @@ function CurrenciesTab() {
   const [symbol, setSymbol] = useState('')
   const [flag,   setFlag]   = useState('')
   const [formErr, setFormErr] = useState<string | null>(null)
-  const [showMigration, setShowMigration] = useState(false)
+
   const isMigrationError = !!error && /relation.*does not exist|does not exist/i.test(error)
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -870,26 +870,15 @@ function CurrenciesTab() {
   return (
     <div className="max-w-2xl space-y-5">
       {/* Migration hint */}
-      {(isMigrationError || showMigration) && (
-        <div className="space-y-2">
-          <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>Run this SQL in your Supabase editor to create the currencies table, then refresh.</span>
-          </div>
-          <pre className="bg-gray-900 text-green-300 text-xs rounded-xl p-4 overflow-x-auto whitespace-pre-wrap">
-            {CURRENCIES_MIGRATION_SQL}
-          </pre>
+      {isMigrationError && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>The currencies table is missing — please run the latest database migration, then refresh.</span>
         </div>
       )}
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">Manage the currencies available across banks, FX transactions, and deposits.</p>
-        <button
-          onClick={() => setShowMigration(v => !v)}
-          className="text-xs text-gray-500 hover:text-gray-600 underline"
-        >
-          {showMigration ? 'Hide' : 'Show'} migration SQL
-        </button>
       </div>
 
       {/* Add form */}

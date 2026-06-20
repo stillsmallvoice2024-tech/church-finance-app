@@ -194,12 +194,7 @@ function friendlyUploadError(msg: string | null): string {
                 <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   {isMigrationError
-                    ? (
-                      <>
-                        <p>Receipts aren't set up yet. Ask your administrator to enable this feature.</p>
-                        <TechDetails>{MIGRATION_SQL}</TechDetails>
-                      </>
-                    )
+                    ? 'Receipts aren\'t set up yet — please contact your administrator to enable this feature.'
                     : error}
                 </div>
               </div>
