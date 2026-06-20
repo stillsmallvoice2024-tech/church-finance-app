@@ -42,10 +42,10 @@ type Tab = typeof TABS[number]
 const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
   { tab: 'General',            Icon: Settings2,    label: 'General'      },
   { tab: 'Banks',              Icon: Landmark,     label: 'Banks'        },
-  { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution' },
-  { tab: 'Special Rules',      Icon: Star,         label: 'Special'      },
-  { tab: 'Income Types',       Icon: TrendingUp,   label: 'Income'       },
-  { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow'      },
+  { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution Rules' },
+  { tab: 'Special Rules',      Icon: Star,         label: 'Special Rules'      },
+  { tab: 'Income Types',       Icon: TrendingUp,   label: 'Income Types'       },
+  { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow Types'      },
   { tab: 'Departments',        Icon: Users,        label: 'Departments'  },
   { tab: 'Currencies',         Icon: Globe,        label: 'Currencies'   },
 ]
