@@ -20,15 +20,19 @@ import { migrateReceiptPaths, auditLegacyReceiptPaths, type MigrationStats } fro
 
 const APP_VERSION = '1.0.0'
 
-function Section({ icon: Icon, title, children }: {
+function Section({ icon: Icon, title, iconColor, children }: {
   icon: React.ElementType
   title: string
+  iconColor?: string
   children: React.ReactNode
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
-        <Icon className="w-4 h-4 text-gray-500" />
+        {iconColor
+          ? <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconColor}`}><Icon className="w-4 h-4" /></div>
+          : <Icon className="w-4 h-4 text-gray-500" />
+        }
         <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
       </div>
       <div className="p-5">{children}</div>
@@ -184,7 +188,7 @@ export default function Settings() {
       <div id="section-account" data-tour="org-settings" className="bg-white rounded-xl border border-gray-200 shadow-sm">
         {/* Card header */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
-          <User className="w-4 h-4 text-gray-500" />
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-blue-100 text-blue-600"><User className="w-4 h-4" /></div>
           <h2 className="text-sm font-semibold text-gray-800">Account</h2>
         </div>
 
@@ -387,7 +391,7 @@ export default function Settings() {
 
       {/* ── Theme ───────────────────────────────────────────────────────── */}
       <div id="section-theme" data-tour="appearance-settings">
-      <Section icon={Palette} title="Theme">
+      <Section icon={Palette} title="Theme" iconColor="bg-violet-100 text-violet-600">
         <div className="space-y-4">
           <p className="text-sm text-gray-500">Choose your preferred colour scheme. Your preference is saved automatically.</p>
           <div className="flex gap-3">
@@ -418,7 +422,7 @@ export default function Settings() {
 
       {/* ── Data Management ─────────────────────────────────────────────── */}
       <div id="section-data">
-      <Section icon={Database} title="Data Management">
+      <Section icon={Database} title="Data Management" iconColor="bg-emerald-100 text-emerald-700">
         <div className="space-y-4">
           <p className="text-sm text-gray-500">
             Back up your entire account, restore from a previous backup, or download your data as CSV spreadsheets.
@@ -473,7 +477,7 @@ export default function Settings() {
 
       {/* ── App Info ────────────────────────────────────────────────────── */}
       <div id="section-info">
-      <Section icon={Info} title="App Information">
+      <Section icon={Info} title="App Information" iconColor="bg-slate-100 text-slate-500">
         <div className="space-y-3 text-sm">
           <InfoRow label="Version" value={`v${APP_VERSION}`} />
           <InfoRow label="Last sync" value={lastSync} />
