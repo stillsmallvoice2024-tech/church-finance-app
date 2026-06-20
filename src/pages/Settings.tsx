@@ -163,7 +163,7 @@ export default function Settings() {
       {/* Jump nav */}
       <nav className="flex flex-wrap gap-x-5 gap-y-1 pb-3 border-b border-gray-100">
         {([
-          ['section-profile',  'Profile'],
+          ['section-account',  'Account'],
           ['section-password', 'Password'],
           ...((role === 'owner' || role === 'admin') ? [['section-2fa', '2FA']] : []),
           ['section-theme',    'Theme'],
@@ -180,10 +180,16 @@ export default function Settings() {
         ))}
       </nav>
 
-      {/* ── My Profile ──────────────────────────────────────────────────── */}
-      <div id="section-profile" data-tour="org-settings">
-      <Section icon={User} title="My Profile">
-        <div className="space-y-4">
+      {/* ── Account (Profile + Password + 2FA) ─────────────────────────── */}
+      <div id="section-account" data-tour="org-settings" className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        {/* Card header */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
+          <User className="w-4 h-4 text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-800">Account</h2>
+        </div>
+
+        {/* Profile */}
+        <div className="p-5 space-y-4">
           {/* Avatar + info row */}
           <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
             <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold shrink-0">
@@ -250,131 +256,134 @@ export default function Settings() {
             {savingName ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
-      </Section>
-      </div>
 
-      {/* ── Change Password ──────────────────────────────────────────────── */}
-      <div id="section-password">
-      <Section icon={Lock} title="Change Password">
-        <div className="space-y-4">
-          {pwDone && (
-            <div className="flex items-center gap-2.5 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-success">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              Password updated successfully.
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">New Password</label>
-            <div className="relative">
-              <input
-                type={showNewPw ? 'text' : 'password'}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="Minimum 8 characters"
-                autoComplete="new-password"
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-10"
-              />
-              <button type="button" onClick={() => setShowNewPw(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+        {/* Password sub-section */}
+        <div id="section-password" className="border-t border-gray-100">
+          <div className="px-5 py-3 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-gray-400" />
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Change Password</h3>
           </div>
+          <div className="px-5 pb-5 space-y-4">
+            {pwDone && (
+              <div className="flex items-center gap-2.5 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-success">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                Password updated successfully.
+              </div>
+            )}
 
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">Confirm New Password</label>
-            <div className="relative">
-              <input
-                type={showConfPw ? 'text' : 'password'}
-                value={confirmPw}
-                onChange={e => setConfirmPw(e.target.value)}
-                placeholder="Re-enter new password"
-                autoComplete="new-password"
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-10"
-              />
-              <button type="button" onClick={() => setShowConfPw(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showConfPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600">New Password</label>
+              <div className="relative">
+                <input
+                  type={showNewPw ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Minimum 8 characters"
+                  autoComplete="new-password"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-10"
+                />
+                <button type="button" onClick={() => setShowNewPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          {pwError && (
-            <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-danger">
-              <XCircle className="w-3.5 h-3.5 shrink-0" />
-              {pwError}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600">Confirm New Password</label>
+              <div className="relative">
+                <input
+                  type={showConfPw ? 'text' : 'password'}
+                  value={confirmPw}
+                  onChange={e => setConfirmPw(e.target.value)}
+                  placeholder="Re-enter new password"
+                  autoComplete="new-password"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-10"
+                />
+                <button type="button" onClick={() => setShowConfPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  {showConfPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          )}
 
-          <button
-            onClick={handleChangePassword}
-            disabled={changingPw || !newPassword || !confirmPw}
-            className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
-          >
-            {changingPw && <Loader2 className="w-4 h-4 animate-spin" />}
-            {changingPw ? 'Updating…' : 'Update Password'}
-          </button>
-        </div>
-      </Section>
-      </div>
-
-      {/* ── Two-Factor Authentication (owner/admin only) ────────────────── */}
-      {(role === 'owner' || role === 'admin') && (
-        <div id="section-2fa">
-        <Section icon={Shield} title="Two-Factor Authentication">
-          <div className="space-y-4">
-            <p className="text-sm text-gray-500">
-              Add an authenticator app (e.g. Google Authenticator, Authy) as a second factor.
-              Once enabled, you will be asked for a time-based code each time you sign in.
-            </p>
-
-            {mfaError && (
+            {pwError && (
               <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-danger">
                 <XCircle className="w-3.5 h-3.5 shrink-0" />
-                {mfaError}
+                {pwError}
               </div>
             )}
 
-            {mfaFactors.length > 0 ? (
-              <div className="space-y-2">
-                {mfaFactors.map(f => (
-                  <div key={f.id} className="flex items-center justify-between p-3 rounded-xl bg-green-50 border border-green-200">
-                    <div className="flex items-center gap-2.5">
-                      <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Authenticator app</p>
-                        {f.friendly_name && (
-                          <p className="text-xs text-gray-500">{f.friendly_name}</p>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveMFA(f.id)}
-                      disabled={mfaLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-danger border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-60 transition-colors"
-                    >
-                      {mfaLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setMfaEnrollOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
-              >
-                <Shield className="w-4 h-4 text-primary" />
-                Enable 2FA
-              </button>
-            )}
+            <button
+              onClick={handleChangePassword}
+              disabled={changingPw || !newPassword || !confirmPw}
+              className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light disabled:opacity-60 flex items-center gap-2"
+            >
+              {changingPw && <Loader2 className="w-4 h-4 animate-spin" />}
+              {changingPw ? 'Updating…' : 'Update Password'}
+            </button>
           </div>
-        </Section>
         </div>
-      )}
+
+        {/* 2FA sub-section */}
+        {(role === 'owner' || role === 'admin') && (
+          <div id="section-2fa" className="border-t border-gray-100">
+            <div className="px-5 py-3 flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5 text-gray-400" />
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Two-Factor Authentication</h3>
+            </div>
+            <div className="px-5 pb-5 space-y-4">
+              <p className="text-sm text-gray-500">
+                Add an authenticator app (e.g. Google Authenticator, Authy) as a second factor.
+                Once enabled, you will be asked for a time-based code each time you sign in.
+              </p>
+
+              {mfaError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-danger">
+                  <XCircle className="w-3.5 h-3.5 shrink-0" />
+                  {mfaError}
+                </div>
+              )}
+
+              {mfaFactors.length > 0 ? (
+                <div className="space-y-2">
+                  {mfaFactors.map(f => (
+                    <div key={f.id} className="flex items-center justify-between p-3 rounded-xl bg-green-50 border border-green-200">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Authenticator app</p>
+                          {f.friendly_name && (
+                            <p className="text-xs text-gray-500">{f.friendly_name}</p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMFA(f.id)}
+                        disabled={mfaLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-danger border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-60 transition-colors"
+                      >
+                        {mfaLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setMfaEnrollOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
+                >
+                  <Shield className="w-4 h-4 text-primary" />
+                  Enable 2FA
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ── Theme ───────────────────────────────────────────────────────── */}
       <div id="section-theme" data-tour="appearance-settings">
