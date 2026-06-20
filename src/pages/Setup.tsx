@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, Star, TrendingUp, TrendingDown, Users } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -38,6 +38,17 @@ import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
 const TABS = ['General', 'Banks', 'Distribution Rules', 'Special Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
+
+const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
+  { tab: 'General',            Icon: Settings2,    label: 'General'      },
+  { tab: 'Banks',              Icon: Landmark,     label: 'Banks'        },
+  { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution' },
+  { tab: 'Special Rules',      Icon: Star,         label: 'Special'      },
+  { tab: 'Income Types',       Icon: TrendingUp,   label: 'Income'       },
+  { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow'      },
+  { tab: 'Departments',        Icon: Users,        label: 'Departments'  },
+  { tab: 'Currencies',         Icon: Globe,        label: 'Currencies'   },
+]
 
 // ── Compact shared search + sort bar for Setup tabs ──────────────────────────────
 
@@ -3032,18 +3043,22 @@ export default function SetupPage() {
           <p className="text-sm text-gray-500 mt-1">Configure your organisation finance settings</p>
         </div>
 
-        {/* Mobile: styled select nav */}
-        <div className="md:hidden relative">
-          <select
-            value={activeTab}
-            onChange={e => setActiveTab(e.target.value as Tab)}
-            className="w-full appearance-none border-2 border-gray-200 rounded-xl px-4 pr-10 py-3 text-sm font-semibold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-          >
-            {TABS.map(tab => (
-              <option key={tab} value={tab}>{tab}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        {/* Mobile: icon + label card grid */}
+        <div className="grid grid-cols-4 gap-2 md:hidden">
+          {TAB_CARDS.map(({ tab, Icon, label }) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-xl transition-colors ${
+                activeTab === tab
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-100 text-gray-500 active:bg-gray-200'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium leading-tight text-center">{label}</span>
+            </button>
+          ))}
         </div>
 
         {/* Desktop: sidebar nav + content */}
