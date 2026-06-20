@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Paperclip, X, Download, Trash2, Loader2, Upload, AlertTriangle } from 'lucide-react'
-import { TechDetails } from './TechDetails'
 import { useReceipts, type ReceiptEntityType, type Receipt } from '../../hooks/useReceipts'
 import { useToastStore } from '../../store/toastStore'
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `-- Receipts table
 CREATE TABLE IF NOT EXISTS public.receipts (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -798,7 +798,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
 
 // ── Currencies tab ───────────────────────────────────────────────────────────────────
 
-const CURRENCIES_MIGRATION_SQL =
+export const CURRENCIES_MIGRATION_SQL =
 `-- Create currencies table
 CREATE TABLE IF NOT EXISTS public.currencies (
   code       text PRIMARY KEY,

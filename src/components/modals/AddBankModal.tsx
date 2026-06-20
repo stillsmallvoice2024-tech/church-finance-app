@@ -31,7 +31,7 @@ const BUDGET_PORTION_LABELS: Record<string, string> = {
 const NEW_SENTINEL = '__new__'
 const MAX_CACHE_RETRIES = 3
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `ALTER TABLE banks
   ADD COLUMN IF NOT EXISTS currency                  text NOT NULL DEFAULT 'NGN',
   ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,

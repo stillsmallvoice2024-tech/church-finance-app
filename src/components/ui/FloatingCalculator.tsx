@@ -100,7 +100,7 @@ function getDefaultPos() {
   const margin = 16
   const panelH = 420
   return {
-    x: window.innerWidth - PANEL_W - margin,
+    x: window.innerWidth - getPanelW() - margin,
     y: Math.max(8, window.innerHeight - panelH - 80),
   }
 }

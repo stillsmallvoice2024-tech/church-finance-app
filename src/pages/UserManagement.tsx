@@ -304,7 +304,7 @@ function InviteUserModal({
 
 // ── Edit Profile Modal ─────────────────────────────────────────────────────────
 
-const USERNAME_MIGRATION_SQL = `-- Run in Supabase SQL editor:
+export const USERNAME_MIGRATION_SQL = `-- Run in Supabase SQL editor:
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS username text UNIQUE;`
 

@@ -52,7 +52,7 @@ const BUDGET_PORTION_LABELS: Record<string, string> = {
   Savings:                 'Savings Funds',
 }
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `-- Run in Supabase SQL Editor:
 CREATE TABLE IF NOT EXISTS public.category_groups (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),

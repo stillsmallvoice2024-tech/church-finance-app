@@ -15,7 +15,7 @@ import {
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `ALTER TABLE allocation_configs
   ADD COLUMN IF NOT EXISTS is_special       boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS allocation_type  text    NOT NULL DEFAULT 'percentage'

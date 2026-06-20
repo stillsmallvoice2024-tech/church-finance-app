@@ -20,7 +20,7 @@ const RCP_COLUMNS: TableColumnDef<Receipt>[] = [
 
 const RCP_SORT_FIELDS = deriveSortFields(RCP_COLUMNS)
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `-- Receipts table
 CREATE TABLE IF NOT EXISTS public.receipts (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

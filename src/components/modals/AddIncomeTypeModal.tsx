@@ -4,14 +4,13 @@ import { Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
-import { TechDetails } from '../ui/TechDetails'
 import { TypeColorPicker, TYPE_PRESET_COLORS } from '../ui/TypeColorPicker'
 import {
   saveIncomeType, useSpecialConfigGroupOptions,
   type IncomeType, type IncomeTypeInput,
 } from '../../hooks/useIncomeTypes'
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `CREATE TABLE IF NOT EXISTS public.income_types (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name              text NOT NULL,
