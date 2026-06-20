@@ -147,7 +147,7 @@ export default function Settings() {
   const lastSync = new Date().toLocaleString()
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5">
       {/* Header */}
       <div data-tour="page-header" className="flex items-start justify-between gap-3">
         <div>
