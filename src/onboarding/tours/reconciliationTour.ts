@@ -5,6 +5,7 @@ export const reconciliationTour: TourDefinition = {
   pageId: 'reconciliation',
   title: 'Reconciliation Center Tour',
   description: 'Learn how to verify your records and resolve discrepancies.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'recon-header',

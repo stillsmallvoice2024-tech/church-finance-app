@@ -5,6 +5,7 @@ export const usersTour: TourDefinition = {
   pageId: 'users',
   title: 'Team Members Tour',
   description: 'Learn how to manage team members and their access levels.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'users-header',

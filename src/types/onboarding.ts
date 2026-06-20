@@ -67,6 +67,8 @@ export interface TourDefinition {
   title: string
   description: string
   steps: TourStep[]
+  /** ISO date this tour was last verified against the live UI. */
+  lastVerified?: string
 }
 
 // ── Help ──────────────────────────────────────────────────────────────────────
@@ -90,6 +92,14 @@ export interface HelpArticle {
   category: HelpCategory
   relatedPageId?: PageId
   updatedAt: string
+  /** Optional navigation path rendered as a breadcrumb trail above the article body. */
+  breadcrumb?: string[]
+  /** ISO date this article was last verified against the live UI. */
+  lastVerified?: string
+  /** True = appears in the "How To" tab as a task-oriented guide. */
+  howTo?: boolean
+  /** Estimated time to complete the task in minutes. */
+  estimatedMinutes?: number
 }
 
 export interface FAQEntry {

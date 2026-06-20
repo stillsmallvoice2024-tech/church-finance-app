@@ -5,6 +5,7 @@ export const dashboardTour: TourDefinition = {
   pageId: 'dashboard',
   title: 'Dashboard Tour',
   description: 'Learn how to read your financial overview at a glance.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'dashboard-welcome',
@@ -19,7 +20,7 @@ export const dashboardTour: TourDefinition = {
       target: '[data-tour="summary-cards"]',
       title: 'Summary Cards',
       content:
-        'These cards show your total inflows, outflows, and net balance for the selected period. Click any card to drill into the detail.',
+        'These cards show your total inflows, outflows, and net balance for the selected period. Use the sidebar to navigate to Inflows or Outflows for a detailed view.',
       placement: 'bottom',
     },
     {
@@ -35,7 +36,7 @@ export const dashboardTour: TourDefinition = {
       target: '[data-tour="recent-transactions"]',
       title: 'Recent Transactions',
       content:
-        'The latest transactions appear here. Click any row to see full details or navigate to the full Inflows / Outflows pages for advanced filtering.',
+        'The latest transactions appear here. Navigate to Daily Finance → Inflows or Outflows in the sidebar for advanced filtering and bulk editing.',
       placement: 'top',
     },
   ],

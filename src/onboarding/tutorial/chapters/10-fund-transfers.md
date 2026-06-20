@@ -10,7 +10,7 @@ Find both at **Daily Finance → Category Fund Transfers**. The page has two tab
 
 1. Click **Add Transfer**.
 2. Pick the **Date** and type the **Amount**.
-3. Pick the **From Category** (where the money leaves) and the **From Portion** (which pocket: Percentage Allocation, Specific Seed, or Savings).
+3. Pick the **From Category** (where the money leaves) and the **From Portion** (which pocket: **Regular Funds**, **Designated Gift**, or **Savings Funds**).
 4. Pick the **To Category** and the **To Portion**.
 5. Type a **Description** (example: "Move surplus to Building Fund").
 6. Optional: add a **Transaction Ref** and a **Remark**.

@@ -98,9 +98,7 @@ export function useUserPreferences() {
           { onConflict: 'user_id,org_id' },
         )
         .then(({ error }) => {
-          if (error) {
-            // Table might not exist in dev — silently fall back to localStorage
-          }
+          if (error) console.error('[useUserPreferences] updatePrefs failed:', error)
         })
     },
     [user?.id, orgId, key], // eslint-disable-line react-hooks/exhaustive-deps

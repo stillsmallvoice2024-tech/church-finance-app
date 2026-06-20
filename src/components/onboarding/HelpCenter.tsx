@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import {
   X, Search, BookOpen, HelpCircle, Compass, Megaphone,
   ChevronDown, ChevronRight, Play, ArrowLeft, Tag,
-  Sparkles, GraduationCap, ExternalLink,
+  Sparkles, GraduationCap, ExternalLink, ListChecks,
+  FileUp, Landmark, Layers, BarChart2, Users, Clock,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { HELP_ARTICLES } from '../../onboarding/help/articles'
@@ -12,24 +13,65 @@ import { RELEASE_NOTES } from '../../onboarding/help/releaseNotes'
 import { ALL_TOURS } from '../../onboarding/tours'
 import { renderMarkdown, InlineMarkdown } from '../../onboarding/help/markdown'
 import { TUTORIAL_CHAPTERS } from '../../onboarding/tutorial'
+import { ArticleBreadcrumb } from './ArticleBreadcrumb'
+import { ImageLightbox } from '../ui/ImageLightbox'
 import type { TutorialChapter } from '../../onboarding/tutorial'
-import type { HelpArticle, FAQEntry } from '../../types/onboarding'
+import type { HelpArticle, FAQEntry, HelpCategory } from '../../types/onboarding'
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
 
-type TabId = 'articles' | 'tutorial' | 'faqs' | 'tours' | 'whats-new'
+type TabId = 'how-to' | 'articles' | 'tutorial' | 'faqs' | 'tours' | 'whats-new'
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
-  { id: 'articles',  label: 'Articles',   Icon: BookOpen  },
+  { id: 'how-to',    label: 'How To',     Icon: ListChecks  },
+  { id: 'articles',  label: 'Articles',   Icon: BookOpen    },
   { id: 'tutorial',  label: 'Tutorial',   Icon: GraduationCap },
-  { id: 'faqs',      label: 'FAQs',       Icon: HelpCircle },
-  { id: 'tours',     label: 'Tours',      Icon: Compass   },
-  { id: 'whats-new', label: "What's New", Icon: Megaphone },
+  { id: 'faqs',      label: 'FAQs',       Icon: HelpCircle  },
+  { id: 'tours',     label: 'Tours',      Icon: Compass     },
+  { id: 'whats-new', label: "What's New", Icon: Megaphone   },
 ]
+
+// ── How To card icon map ──────────────────────────────────────────────────────
+
+const CATEGORY_ICONS: Record<HelpCategory, React.ElementType> = {
+  'import':          FileUp,
+  'banks':           Landmark,
+  'categories':      Layers,
+  'reports':         BarChart2,
+  'team':            Users,
+  'getting-started': Sparkles,
+  'transactions':    BookOpen,
+  'settings':        BookOpen,
+}
+
+// ── How To groups ─────────────────────────────────────────────────────────────
+
+const HOW_TO_GROUPS: { label: string; categories: HelpCategory[] }[] = [
+  { label: 'Setup tasks',     categories: ['getting-started', 'banks', 'categories'] },
+  { label: 'Daily tasks',     categories: ['import', 'transactions'] },
+  { label: 'Reporting tasks', categories: ['reports'] },
+  { label: 'Team tasks',      categories: ['team', 'settings'] },
+]
+
+// ── Highlight search match ────────────────────────────────────────────────────
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>
+  const lower = text.toLowerCase()
+  const idx = lower.indexOf(query.toLowerCase())
+  if (idx === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-100 text-yellow-800 rounded not-italic">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function ArticleCard({ article, onClick }: { article: HelpArticle; onClick: () => void }) {
+function ArticleCard({ article, onClick, query }: { article: HelpArticle; onClick: () => void; query: string }) {
   return (
     <button
       type="button"
@@ -38,7 +80,7 @@ function ArticleCard({ article, onClick }: { article: HelpArticle; onClick: () =
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 group-hover:text-primary transition-colors">
-          {article.title}
+          <HighlightText text={article.title} query={query} />
         </p>
         <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary shrink-0 mt-0.5 transition-colors" />
       </div>
@@ -69,9 +111,45 @@ function ArticleDetail({ article, onBack }: { article: HelpArticle; onBack: () =
       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-1">{article.title}</h2>
       <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">Updated {article.updatedAt}</p>
       <div className="overflow-y-auto flex-1 pr-1">
+        {article.breadcrumb && article.breadcrumb.length > 0 && (
+          <ArticleBreadcrumb path={article.breadcrumb} />
+        )}
         {renderMarkdown(article.content)}
       </div>
     </div>
+  )
+}
+
+function HowToCard({ article, onClick }: { article: HelpArticle; onClick: () => void }) {
+  const Icon = CATEGORY_ICONS[article.category] ?? BookOpen
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left border border-gray-200 dark:border-white/[0.07] rounded-xl p-4 bg-white dark:bg-[#141416] hover:border-primary/40 hover:shadow-sm cursor-pointer transition-all group"
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-primary/20 transition-colors">
+          <Icon className="w-4 h-4 text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 group-hover:text-primary transition-colors leading-snug">
+            {article.title}
+          </p>
+          <div className="flex items-center justify-between gap-2 mt-1">
+            {article.estimatedMinutes && (
+              <span className="flex items-center gap-1 text-xs text-gray-400">
+                <Clock className="w-3 h-3" />
+                ~{article.estimatedMinutes} min
+              </span>
+            )}
+            <span className="text-xs text-primary font-medium ml-auto group-hover:underline">
+              View guide →
+            </span>
+          </div>
+        </div>
+      </div>
+    </button>
   )
 }
 
@@ -111,6 +189,8 @@ function ChapterDetail({
   const prev = idx > 0 ? TUTORIAL_CHAPTERS[idx - 1] : null
   const next = idx < TUTORIAL_CHAPTERS.length - 1 ? TUTORIAL_CHAPTERS[idx + 1] : null
 
+  const [lightboxSrc, setLightboxSrc] = useState<{ src: string; alt: string } | null>(null)
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-2 mb-4">
@@ -137,7 +217,9 @@ function ChapterDetail({
       </h2>
       <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Updated {chapter.updatedAt}</p>
       <div className="overflow-y-auto flex-1 pr-1">
-        {renderMarkdown(chapter.content)}
+        {renderMarkdown(chapter.content, {
+          onImageClick: (src, alt) => setLightboxSrc({ src, alt }),
+        })}
         <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-gray-200 dark:border-white/[0.07]">
           {prev ? (
             <button
@@ -161,6 +243,13 @@ function ChapterDetail({
           )}
         </div>
       </div>
+      {lightboxSrc && (
+        <ImageLightbox
+          src={lightboxSrc.src}
+          alt={lightboxSrc.alt}
+          onClose={() => setLightboxSrc(null)}
+        />
+      )}
     </div>
   )
 }
@@ -194,17 +283,26 @@ export function HelpCenter() {
   const startTour        = useOnboardingStore(s => s.startTour)
   const initialTab       = useOnboardingStore(s => s.helpCenterInitialTab)
 
-  const [tab, setTab]         = useState<TabId>('articles')
+  const [tab, setTab]         = useState<TabId>('how-to')
+  const [rawQuery, setRawQuery] = useState('')
   const [query, setQuery]     = useState('')
   const [openFAQ, setOpenFAQ] = useState<string | null>(null)
   const [selectedArticle, setSelectedArticle] = useState<HelpArticle | null>(null)
   const [selectedChapter, setSelectedChapter] = useState<TutorialChapter | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
+  // Debounce search query 200ms
+  useEffect(() => {
+    if (!rawQuery) { setQuery(''); return }
+    const t = setTimeout(() => setQuery(rawQuery), 200)
+    return () => clearTimeout(t)
+  }, [rawQuery])
+
   // Reset state on open, respecting initialTab
   useEffect(() => {
     if (isOpen) {
-      setTab((initialTab as TabId | null) ?? 'articles')
+      setTab((initialTab as TabId | null) ?? 'how-to')
+      setRawQuery('')
       setQuery('')
       setSelectedArticle(null)
       setSelectedChapter(null)
@@ -227,8 +325,11 @@ export function HelpCenter() {
     !q ||
     a.title.toLowerCase().includes(q) ||
     a.summary.toLowerCase().includes(q) ||
-    a.tags.some(t => t.includes(q)),
+    a.tags.some(t => t.includes(q)) ||
+    a.content.toLowerCase().includes(q),
   )
+
+  const howToArticles = HELP_ARTICLES.filter(a => a.howTo === true)
 
   const filteredFAQs = FAQS.filter(f =>
     !q ||
@@ -255,11 +356,21 @@ export function HelpCenter() {
     setTimeout(() => startTour(tourId), 150)
   }, [closeCenter, startTour])
 
+  // Result count for current tab
+  const resultCount = (() => {
+    if (!q) return null
+    switch (tab) {
+      case 'how-to':    return null
+      case 'articles':  return filteredArticles.length
+      case 'tutorial':  return filteredChapters.length
+      case 'faqs':      return filteredFAQs.length
+      case 'tours':     return filteredTours.length
+      default:          return null
+    }
+  })()
+
   if (!isOpen) return null
 
-  // Portal into #layout-safe-zone so the modal is structurally bounded by the
-  // safe area (viewport minus tab bar). absolute inset-0 covers that area exactly
-  // with no viewport arithmetic — the container's own height enforces the boundary.
   const container = document.getElementById('layout-safe-zone')
   if (!container) return null
 
@@ -298,22 +409,30 @@ export function HelpCenter() {
             <input
               ref={searchRef}
               type="search"
-              value={query}
-              onChange={e => { setQuery(e.target.value); setSelectedArticle(null); setSelectedChapter(null) }}
+              value={rawQuery}
+              onChange={e => { setRawQuery(e.target.value); setSelectedArticle(null); setSelectedChapter(null) }}
               placeholder="Search the tutorial, articles, FAQs, and tours…"
               className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-white/[0.07] rounded-lg bg-gray-50 dark:bg-[#141416] text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
             />
           </div>
+          {resultCount !== null && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 pl-1">
+              {resultCount === 0
+                ? 'No results found'
+                : `${resultCount} ${resultCount === 1 ? 'result' : 'results'} found`
+              }
+            </p>
+          )}
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-white/[0.07] shrink-0 px-5">
+        <div className="flex border-b border-gray-200 dark:border-white/[0.07] shrink-0 px-5 overflow-x-auto">
           {TABS.map(({ id, label, Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => { setTab(id); setSelectedArticle(null); setSelectedChapter(null) }}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
                 tab === id
                   ? 'border-primary text-primary'
                   : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
@@ -348,6 +467,38 @@ export function HelpCenter() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
 
+          {/* ── How To ── */}
+          {tab === 'how-to' && (
+            <div className="space-y-5">
+              {HOW_TO_GROUPS.map(group => {
+                const cards = howToArticles.filter(a => group.categories.includes(a.category))
+                if (!cards.length) return null
+                return (
+                  <div key={group.label}>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                      {group.label}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {cards.map(a => (
+                        <HowToCard
+                          key={a.id}
+                          article={a}
+                          onClick={() => { setSelectedArticle(a); setTab('articles') }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+              {howToArticles.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <ListChecks className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-3" />
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No how-to guides yet</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Articles ── */}
           {tab === 'articles' && !selectedArticle && (
             <div className="space-y-2">
@@ -355,7 +506,7 @@ export function HelpCenter() {
                 <EmptySearch query={query} />
               ) : (
                 filteredArticles.map(a => (
-                  <ArticleCard key={a.id} article={a} onClick={() => setSelectedArticle(a)} />
+                  <ArticleCard key={a.id} article={a} query={q} onClick={() => setSelectedArticle(a)} />
                 ))
               )}
             </div>

@@ -5,6 +5,7 @@ export const outflowsTour: TourDefinition = {
   pageId: 'outflows',
   title: 'Outflows Tour',
   description: 'Learn how to view and manage outgoing transactions.',
+  lastVerified: '2026-06-19',
   steps: [
     {
       id: 'outflows-header',

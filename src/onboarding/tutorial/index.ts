@@ -49,7 +49,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 2,
     title: 'First-Time Setup',
     summary: 'The onboarding wizard and the Setup page: banks, income types, outflow types, departments, currencies.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch02,
   },
   {
@@ -65,7 +65,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 4,
     title: 'Importing Bank Statements',
     summary: 'The main way transactions enter the app: file upload, column mapping, duplicates, and manual entry.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch04,
   },
   {
@@ -89,15 +89,15 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 7,
     title: 'Categories & Category Accounts',
     summary: 'Create money buckets, group them, set opening balances, and read their ledgers.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch07,
   },
   {
     id: 'banks',
     number: 8,
-    title: 'Banks: Ledger, Deposits & Reconciliation',
-    summary: 'Per-bank history with running balances, deposits and transfers, and the record health check.',
-    updatedAt: '2026-06-12',
+    title: 'Banks: Setup, Ledger & Reconciliation',
+    summary: 'Add bank accounts in Setup, read per-bank transaction histories, and run reconciliation checks.',
+    updatedAt: '2026-06-20',
     content: ch08,
   },
   {
@@ -113,7 +113,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 10,
     title: 'Fund Transfers & Bulk Reallocation',
     summary: 'Move money between categories and pockets — one at a time or for many categories at once.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch10,
   },
   {
@@ -121,7 +121,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 11,
     title: 'Distribution Rules & Regular Funds',
     summary: 'The recipes that split incoming money automatically, plus special one-off configs.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch11,
   },
   {
@@ -129,7 +129,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 12,
     title: 'Designated Gifts, Savings & Upcoming Deductions',
     summary: 'Restricted gifts, reserve funds, and approved payments that have not left the bank yet.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch12,
   },
   {
@@ -137,7 +137,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 13,
     title: 'Refunds & Reversals',
     summary: 'Money paid back vs records cancelled — and how matched pairs work.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch13,
   },
   {
@@ -153,7 +153,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 15,
     title: 'Reports',
     summary: 'Ready-made summaries, the Financial Report builder, and live Custom Reports.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch15,
   },
   {
@@ -169,7 +169,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     number: 17,
     title: 'Team & Activity History',
     summary: 'Roles, invitations, removing members, ownership, and the diary of every change.',
-    updatedAt: '2026-06-12',
+    updatedAt: '2026-06-20',
     content: ch17,
   },
   {

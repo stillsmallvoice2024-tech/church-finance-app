@@ -1,57 +1,78 @@
-## What is the Import page?
+## How to Import a Bank Statement
 
-Import is where transactions enter the app. You upload your bank statement (an Excel or PDF file from your bank), and the app reads every line and saves it as inflows (money in) and outflows (money out). You can also type one transaction by hand using **Manual Entry**.
+**What you'll need:** A bank statement from your bank saved as Excel (.xlsx or .xls) or CSV. PDF files are also supported but column mapping is manual.
 
-Only **Admins** and **Accountants** can import. Find it in the left menu: **Daily Finance → Import**.
+**Where to go:** Daily Finance → Import
 
-## The two tabs
+**Time:** ~5 minutes on a first import; ~2 minutes once you have a saved template.
 
-- **File Import** — upload a whole bank statement file. Use this most of the time.
-- **Manual Entry** — type one transaction yourself.
+---
 
-## How to import a bank statement (step by step)
+### Steps
 
-### Step A: Choose your file
-
-1. Get your bank statement from your bank as an Excel file (.xlsx or .xls) or a PDF.
-2. On the Import page, find the big box that says **Drop your file here, or click to browse**.
-3. Click it and pick your file (or drag the file onto the box).
-
-### Step B: Review and confirm
-
-1. The app reads the file and shows its name and how many rows it found.
-2. The app checks for **duplicates** — lines you already imported before. Wait for the check to finish.
-3. If it says **No duplicates found** (green), great.
-4. If duplicates ARE found (red box), you get two choices: **Skip Duplicates & Import** (recommended — leaves out the repeated lines) or **Import Anyway** (keeps everything, may double-count!).
-5. Pick the **Bank** this statement belongs to from the Bank dropdown. This is important — transactions without a bank don't show in the Bank Ledger.
+1. Open **Daily Finance → Import** in the left sidebar. Only Admins and Accountants can access this page.
+2. Click the **File Import** tab if it is not already active.
+3. Drag your file onto the upload zone, or click **Browse** and pick your file.
+4. Wait for the system to read the file. You will see the filename and a row count appear.
+5. Choose the **Bank** this statement belongs to from the dropdown. This links transactions to the correct bank ledger.
 6. Click **Continue to Import Wizard**.
 
-### Step C: The Import Wizard
+![Screenshot: the upload zone with a file selected and the bank dropdown filled in](./screenshots/04-import-step-06.png)
 
-1. **Pick the sheet and table.** If your Excel file has several sheets, choose the right one. The Target Table is usually **Bank Statement (auto-split → Inflow / Outflow)** — the app sorts money-in and money-out lines for you.
-2. **Map the columns.** The app shows your file's column names and guesses what each one means (Date, Description, Credit, Debit, Reference…). Check each dropdown and fix any wrong guesses. Pick SKIP for columns you don't need. Tip: click **Save as template** so the app remembers this mapping for next time.
-3. **Configure the rows.** You see two tabs: **Inflow** and **Outflow**. For inflow rows, the app suggests an **Income Type** from the description (you can change it) and an allocation **Config**. For outflow rows, pick a **Category**, **Fund Type**, and **Outflow Type** where needed. Use the batch bar at the top to apply one choice to many selected rows at once.
-4. **Import.** Click Next and watch the progress bar. At the end you see how many rows were imported and how many were skipped.
-5. **Optional but smart:** type the **Statement Date** and **Closing Balance** printed on your bank statement and click **Save Statement Balance**. The Reconciliation Center uses this to check your records.
-6. Click **Import Another** for the next statement, or **Back to Dashboard**.
+7. **Sheet and table selection:** If your file has multiple sheets, pick the right one. Leave Target Table as "Bank Statement (auto-split → Inflow / Outflow)" unless you have a specific reason to change it.
+8. **Column mapping:** The system shows your file's column headers and guesses which Clariva field each one represents. Check every dropdown and correct any wrong guesses. Set any unwanted columns to **Skip**.
+9. To save this mapping for future imports from the same bank, type a name in the **Save mapping as template** field and click **Save template**.
+10. Click **Configure Rows** to proceed to the next step.
 
-## How to add one transaction by hand (Manual Entry)
+![Screenshot: the column mapping screen with dropdowns set for Date, Description, Credit, and Debit](./screenshots/04-import-step-10.png)
 
-1. Click the **Manual Entry** tab.
-2. Click **Inflow** (money in, green) or **Outflow** (money out, red).
-3. Fill the boxes. The ones with a star are required: **Date**, **Amount**, and **Bank**.
-4. Add a **Description** so you remember what it was (example: "Generator fuel purchase").
-5. For outflows, you can pick a **Category**, **Fund Type**, and **Outflow Type**, and tick **Mark as Pending Deduction** if the money has been approved but hasn't left the bank yet.
+11. Review the **Inflow** tab. For each row you want to categorise now, choose an **Income Type** and a **Config** from the dropdowns. Use the batch bar at the top to apply one choice to many rows at once.
+12. Click the **Outflow** tab and repeat for expenditure rows.
+13. Deselect any rows that are duplicates or that you do not want to import (click the checkbox on the row).
+14. Click **Next** to start the import. Watch the progress bar.
+15. **Optional but recommended:** When the import finishes, type the **Statement Date** and **Closing Balance** printed on your actual bank statement, then click **Save Statement Balance**. The Reconciliation Centre uses this figure to check your records.
+16. Click **Import Another** to continue with the next statement, or **Back to Dashboard** when done.
+
+### Result
+
+All imported transactions appear immediately in **Daily Finance → Inflows** and **Daily Finance → Outflows**, in the **Banking → Bank Ledger** for the selected bank, and in all report totals.
+
+---
+
+### Common issues
+
+- **Duplicate warning (amber or red box):** Click **Skip Duplicates & Import** to leave out already-imported rows. Only use **Import Anyway** if you are certain none of the flagged rows are real duplicates — importing duplicates inflates your totals.
+- **"No transaction ID column detected":** Your file has no reference column. Duplicate checking is disabled. Be careful not to import the same file twice.
+- **Wrong amounts after import:** The Debit and Credit columns were probably swapped in step 8. Find the affected rows in Inflows/Outflows and edit them, or re-import with the corrected mapping.
+- **Import page is not in the menu:** Your account role is Viewer. Ask an Admin or Accountant to import.
+- **PDF detected:** Column mapping is fully manual for PDFs — the system cannot read column headers from a PDF. You will need to identify each column yourself in step 8.
+
+---
+
+## How to Add One Transaction by Hand (Manual Entry)
+
+**What you'll need:** The date, amount, and bank account for the transaction.
+
+**Where to go:** Daily Finance → Import → Manual Entry tab
+
+**Time:** ~1–2 minutes per transaction.
+
+---
+
+### Steps
+
+1. Open **Daily Finance → Import** and click the **Manual Entry** tab.
+2. Click **Inflow** (green, money coming in) or **Outflow** (red, money going out).
+3. Fill in the required fields (marked with a star): **Date**, **Amount**, and **Bank**.
+4. Add a **Description** so the entry is identifiable later (e.g. "Generator fuel — June 2026").
+5. For outflows: optionally pick a **Category**, **Fund Type**, and **Outflow Type**. Tick **Mark as Pending Deduction** if the payment is approved but has not left the bank yet.
 6. Click **Save Inflow** or **Save Outflow**.
-7. If the app warns **Possible Duplicate**, it means a transaction with the same ID already exists. Click **Cancel** to check, or **Save Anyway** if you are sure.
 
-## What you'll see afterwards
+### Result
 
-Your new transactions appear on the **Inflows** and **Outflows** pages, in the **Bank Ledger**, and in all reports.
+The transaction appears in Inflows or Outflows, the Bank Ledger, and all reports immediately.
 
-## If something goes wrong
+### Common issues
 
-- **"No transaction ID column detected"** — your file has no reference column, so duplicates can't be checked. You can still import; just be careful not to import the same file twice.
-- **PDF detected** — duplicate checking is skipped for PDFs. The wizard will still read and map the columns.
-- **Wrong numbers after import** — open Inflows/Outflows, find the row, and edit it (Chapters 5 and 6). Or check your column mapping next time.
-- **You can't see the Import page** — your role is Viewer. Ask an Admin or Accountant to import.
+- **"Possible Duplicate" warning:** A transaction with the same reference already exists. Click **Cancel** and check Inflows/Outflows before saving to avoid double-counting.
+- **Bank dropdown is empty:** No bank accounts are configured yet. Go to Administration → Setup → Banks tab and add one.
