@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, Star, TrendingUp, TrendingDown, Users } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -38,6 +38,17 @@ import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
 const TABS = ['General', 'Banks', 'Distribution Rules', 'Special Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
+
+const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
+  { tab: 'General',            Icon: Settings2,    label: 'General'      },
+  { tab: 'Banks',              Icon: Landmark,     label: 'Banks'        },
+  { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution Rules' },
+  { tab: 'Special Rules',      Icon: Star,         label: 'Special Rules'      },
+  { tab: 'Income Types',       Icon: TrendingUp,   label: 'Income Types'       },
+  { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow Types'      },
+  { tab: 'Departments',        Icon: Users,        label: 'Departments'  },
+  { tab: 'Currencies',         Icon: Globe,        label: 'Currencies'   },
+]
 
 // ── Compact shared search + sort bar for Setup tabs ──────────────────────────────
 
@@ -3032,63 +3043,81 @@ export default function SetupPage() {
           <p className="text-sm text-gray-500 mt-1">Configure your organisation finance settings</p>
         </div>
 
-        {/* Tab bar */}
-        <div className="border-b border-gray-200 overflow-x-auto">
-          <nav className="-mb-px flex gap-6">
-            {TABS.map(tab => (
+        {/* Mobile: icon + label card grid */}
+        <div className="grid grid-cols-4 gap-2 md:hidden">
+          {TAB_CARDS.map(({ tab, Icon, label }) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-xl transition-colors ${
+                activeTab === tab
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-100 text-gray-500 active:bg-gray-200'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium leading-tight text-center">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Desktop: sidebar nav + content */}
+        <div className="flex gap-7 items-start">
+          <nav className="hidden md:flex flex-col w-48 shrink-0 gap-0.5">
+            {TAB_CARDS.map(({ tab, Icon, label }) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors leading-tight ${
                   activeTab === tab
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'bg-gray-100 text-gray-900 font-semibold'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
                 }`}
               >
-                {tab}
+                <Icon className="w-4 h-4 shrink-0" />
+                {label}
               </button>
             ))}
           </nav>
-        </div>
 
-        {/* Tab content */}
-        <div>
-          {activeTab === 'General'        && <GeneralTab />}
-          {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-          {activeTab === 'Distribution Rules' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
-          {activeTab === 'Special Rules' && (
-            <SpecialConfigsTab
-              key={specialRefetch}
-              onNew={handleNewGroup}
-              onNewVersion={handleNewVersion}
-              onRefetch={() => setSpecialRefetch(n => n + 1)}
-            />
-          )}
-          {activeTab === 'Income Types' && (
-            <IncomeTypesTab
-              key={incomeTypeRefetch}
-              onAdd={() => { setEditIncomeType(null); setIncomeTypeModalOpen(true) }}
-              onEdit={t => { setEditIncomeType(t); setIncomeTypeModalOpen(true) }}
-              onDelete={t => setDeleteIncomeTypeTarget(t)}
-            />
-          )}
-          {activeTab === 'Outflow Types' && (
-            <OutflowTypesTab
-              key={outflowTypeRefetch}
-              onAdd={() => { setEditOutflowType(null); setOutflowTypeModalOpen(true) }}
-              onEdit={t => { setEditOutflowType(t); setOutflowTypeModalOpen(true) }}
-              onDelete={t => setDeleteOutflowTypeTarget(t)}
-            />
-          )}
-          {activeTab === 'Departments' && (
-            <DepartmentsTab
-              key={departmentRefetch}
-              onAdd={() => { setEditDepartment(null); setDepartmentModalOpen(true) }}
-              onEdit={d => { setEditDepartment(d); setDepartmentModalOpen(true) }}
-              onDelete={d => setDeleteDepartmentTarget(d)}
-            />
-          )}
-          {activeTab === 'Currencies'     && <CurrenciesTab />}
+          <div className="flex-1 min-w-0">
+            {activeTab === 'General'        && <GeneralTab />}
+            {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
+            {activeTab === 'Distribution Rules' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
+            {activeTab === 'Special Rules' && (
+              <SpecialConfigsTab
+                key={specialRefetch}
+                onNew={handleNewGroup}
+                onNewVersion={handleNewVersion}
+                onRefetch={() => setSpecialRefetch(n => n + 1)}
+              />
+            )}
+            {activeTab === 'Income Types' && (
+              <IncomeTypesTab
+                key={incomeTypeRefetch}
+                onAdd={() => { setEditIncomeType(null); setIncomeTypeModalOpen(true) }}
+                onEdit={t => { setEditIncomeType(t); setIncomeTypeModalOpen(true) }}
+                onDelete={t => setDeleteIncomeTypeTarget(t)}
+              />
+            )}
+            {activeTab === 'Outflow Types' && (
+              <OutflowTypesTab
+                key={outflowTypeRefetch}
+                onAdd={() => { setEditOutflowType(null); setOutflowTypeModalOpen(true) }}
+                onEdit={t => { setEditOutflowType(t); setOutflowTypeModalOpen(true) }}
+                onDelete={t => setDeleteOutflowTypeTarget(t)}
+              />
+            )}
+            {activeTab === 'Departments' && (
+              <DepartmentsTab
+                key={departmentRefetch}
+                onAdd={() => { setEditDepartment(null); setDepartmentModalOpen(true) }}
+                onEdit={d => { setEditDepartment(d); setDepartmentModalOpen(true) }}
+                onDelete={d => setDeleteDepartmentTarget(d)}
+              />
+            )}
+            {activeTab === 'Currencies'     && <CurrenciesTab />}
+          </div>
         </div>
 
         {/* Developer Tools — hidden from UI; code kept in DatabaseTab for developer reference.
