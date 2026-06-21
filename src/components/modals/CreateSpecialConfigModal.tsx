@@ -15,7 +15,7 @@ import {
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `ALTER TABLE allocation_configs
   ADD COLUMN IF NOT EXISTS is_special       boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS allocation_type  text    NOT NULL DEFAULT 'percentage'
@@ -551,15 +551,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
               <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>{isMigration
-                  ? 'Database migration required. Run the SQL below in your Supabase SQL Editor, then try again.'
+                  ? 'Database migration required — please contact your administrator, then try again.'
                   : error}
                 </span>
               </div>
-              {isMigration && (
-                <div className="rounded-lg border border-gray-200 bg-gray-900 overflow-hidden">
-                  <pre className="px-3 py-3 text-xs text-green-300 font-mono overflow-x-auto whitespace-pre">{MIGRATION_SQL}</pre>
-                </div>
-              )}
             </div>
           )
         })()}

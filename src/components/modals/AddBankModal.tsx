@@ -31,7 +31,7 @@ const BUDGET_PORTION_LABELS: Record<string, string> = {
 const NEW_SENTINEL = '__new__'
 const MAX_CACHE_RETRIES = 3
 
-const MIGRATION_SQL =
+export const MIGRATION_SQL =
 `ALTER TABLE banks
   ADD COLUMN IF NOT EXISTS currency                  text NOT NULL DEFAULT 'NGN',
   ADD COLUMN IF NOT EXISTS starting_balance          numeric(15,2) DEFAULT 0,
@@ -499,7 +499,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <div className="flex-1 space-y-1">
-                <p>Bank setup requires a one-time database migration. Ask your administrator to run the SQL below, then click Re-check.</p>
+                <p>Bank setup requires a one-time database migration — please contact your administrator, then click Re-check.</p>
                 <button
                   type="button"
                   onClick={async () => {
@@ -512,7 +512,6 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 >
                   Re-check now
                 </button>
-                <TechDetails>{MIGRATION_SQL}</TechDetails>
               </div>
             </div>
           )

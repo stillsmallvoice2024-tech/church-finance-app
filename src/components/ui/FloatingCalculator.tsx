@@ -47,7 +47,9 @@ const KEYBOARD_MAP: Record<string, string> = {
   '%': '%',
 }
 
-const PANEL_W = Math.min(320, typeof window !== 'undefined' ? window.innerWidth - 16 : 320)
+function getPanelW() {
+  return Math.min(320, window.innerWidth - 16)
+}
 
 function formatDisplay(val: string): string {
   if (val === 'Error') return 'Error'
@@ -98,7 +100,7 @@ function getDefaultPos() {
   const margin = 16
   const panelH = 420
   return {
-    x: window.innerWidth - PANEL_W - margin,
+    x: window.innerWidth - getPanelW() - margin,
     y: Math.max(8, window.innerHeight - panelH - 80),
   }
 }
@@ -220,16 +222,28 @@ export function FloatingCalculator() {
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       if (!isDraggingRef.current) return
-      const x = Math.max(0, Math.min(window.innerWidth - PANEL_W, e.clientX - dragOffsetRef.current.x))
+      const x = Math.max(0, Math.min(window.innerWidth - getPanelW(), e.clientX - dragOffsetRef.current.x))
       const y = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - dragOffsetRef.current.y))
       setPanelPos({ x, y })
     }
     const onUp = () => { isDraggingRef.current = false }
+    const onResize = () => {
+      setPanelPos(prev => {
+        if (!prev) return prev
+        const w = getPanelW()
+        return {
+          x: Math.max(0, Math.min(window.innerWidth - w, prev.x)),
+          y: Math.max(0, Math.min(window.innerHeight - 60, prev.y)),
+        }
+      })
+    }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('resize', onResize)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('resize', onResize)
     }
   }, [])
 
@@ -274,7 +288,7 @@ export function FloatingCalculator() {
             position: 'fixed',
             left: pos.x,
             top: pos.y,
-            width: PANEL_W,
+            width: getPanelW(),
             zIndex: 49,
             pointerEvents: 'auto',
           }}

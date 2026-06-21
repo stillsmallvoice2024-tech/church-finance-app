@@ -116,6 +116,9 @@ export function AuthGuard() {
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
 
+  // Profile is mid-fetch: authenticated but not yet loaded and not confirmed failed
+  if (!profile && !profileFetchFailed) return <FullPageSpinner />
+
   if (!profile && profileFetchFailed) return <ProfileErrorScreen onSignOut={signOut} />
 
   // Authenticated + profile loaded but no org membership — allow /onboarding so

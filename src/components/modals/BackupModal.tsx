@@ -9,7 +9,6 @@ import { useToastStore } from '../../store/toastStore'
 import { useOrgStore } from '../../store/orgStore'
 import {
   MANAGED_TABLES,
-  SCHEMA_DISCOVERY_MIGRATION_SQL,
   createBackup,
   downloadBackup,
   uploadBackupForLink,
@@ -45,7 +44,6 @@ export function BackupModal({ open, onClose }: Props) {
   const [copied,         setCopied]         = useState(false)
   const [errMsg,         setErrMsg]         = useState<string | null>(null)
   const [showUnmanaged,  setShowUnmanaged]  = useState(false)
-  const [showMigSQL,     setShowMigSQL]     = useState(false)
   const cancelRef = useRef(false)
 
   // Reset everything when modal closes
@@ -60,7 +58,6 @@ export function BackupModal({ open, onClose }: Props) {
       setCopied(false)
       setErrMsg(null)
       setShowUnmanaged(false)
-      setShowMigSQL(false)
     } else {
       cancelRef.current = false
     }
@@ -233,17 +230,6 @@ export function BackupModal({ open, onClose }: Props) {
                 <p className="text-xs text-amber-700">
                   Unmanaged tables could not be detected. Install the discovery view to enable full protection.
                 </p>
-                <button
-                  onClick={() => setShowMigSQL(v => !v)}
-                  className="text-xs text-amber-700 underline"
-                >
-                  {showMigSQL ? 'Hide' : 'Show'} migration SQL
-                </button>
-                {showMigSQL && (
-                  <pre className="text-xs font-mono bg-white border border-amber-200 rounded p-2 whitespace-pre-wrap break-all select-all text-gray-700 mt-1">
-                    {SCHEMA_DISCOVERY_MIGRATION_SQL}
-                  </pre>
-                )}
               </div>
             )}
 

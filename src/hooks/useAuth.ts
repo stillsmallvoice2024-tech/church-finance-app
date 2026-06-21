@@ -227,7 +227,13 @@ export function useAuthListener(): void {
           event === 'FOCUS_REVALIDATE')
 
       if (isAuthenticatedEvent && session?.user) {
-        useAuthStore.getState().setUser(session.user)
+        if (event === 'SIGNED_IN') {
+          // Single atomic commit so no render exists where isAuthenticated=true
+          // but loading=false before profile+org are ready (avoids blank dashboard)
+          useAuthStore.setState({ user: session.user, loading: true })
+        } else {
+          useAuthStore.getState().setUser(session.user)
+        }
 
         const timeoutId = setTimeout(() => {
           if (requestIdRef.current === requestId) {
