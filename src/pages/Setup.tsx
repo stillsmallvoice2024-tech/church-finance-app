@@ -2328,6 +2328,182 @@ CREATE INDEX IF NOT EXISTS idx_project_entries_import_seq ON public.project_entr
 
 NOTIFY pgrst, 'reload schema';`
 
+// ── Distribution Rules Unification — Phase 1 migration ────────────────────────────────
+// Run this ONCE in Supabase SQL editor on each existing database.
+// Safe to re-run (all ops are idempotent).
+export const DISTRIBUTION_RULES_MIGRATION_SQL = `-- ── Distribution Rules Unification — Phase 1 ────────────────────────────────
+-- Run once in Supabase SQL editor. Safe to re-run (idempotent).
+
+-- 1. New columns
+ALTER TABLE public.special_config_groups
+  ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.categories
+  ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
+
+-- 2. Performance indexes
+CREATE INDEX IF NOT EXISTS idx_alloc_configs_group_date
+  ON public.allocation_configs(config_group_id, status, effective_from, effective_to)
+  WHERE config_group_id IS NOT NULL;
+
+DO $$ BEGIN
+  CREATE UNIQUE INDEX idx_alloc_configs_group_effrom_unique
+    ON public.allocation_configs(config_group_id, effective_from)
+    WHERE status = 'locked';
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+
+-- 3. Per-org migration: create General rule group + version history
+DO $$
+DECLARE
+  v_org         record;
+  v_group_id    uuid;
+  v_cfg         record;
+  v_next_effrom date;
+  v_idx         int;
+BEGIN
+  FOR v_org IN SELECT id, created_at FROM public.organizations LOOP
+
+    IF EXISTS (
+      SELECT 1 FROM public.special_config_groups
+      WHERE org_id = v_org.id AND is_default = true
+    ) THEN CONTINUE; END IF;
+
+    INSERT INTO public.special_config_groups (org_id, name, is_default)
+    VALUES (v_org.id, 'General', true)
+    RETURNING id INTO v_group_id;
+
+    IF EXISTS (
+      SELECT 1 FROM public.allocation_configs
+      WHERE org_id = v_org.id
+        AND (is_special = false OR is_special IS NULL)
+        AND config_group_id IS NULL
+    ) THEN
+      -- Scenario A/B: migrate existing general configs
+      v_idx := 1;
+      FOR v_cfg IN
+        SELECT * FROM public.allocation_configs
+        WHERE org_id = v_org.id
+          AND (is_special = false OR is_special IS NULL)
+          AND config_group_id IS NULL
+        ORDER BY start_date ASC, created_at ASC
+      LOOP
+        UPDATE public.allocation_configs
+        SET config_group_id = v_group_id,
+            effective_from  = COALESCE(effective_from, v_cfg.start_date),
+            version_number  = v_idx
+        WHERE id = v_cfg.id;
+        v_idx := v_idx + 1;
+      END LOOP;
+
+      FOR v_cfg IN
+        SELECT id, COALESCE(effective_from, start_date) AS eff_from
+        FROM public.allocation_configs
+        WHERE config_group_id = v_group_id AND org_id = v_org.id
+        ORDER BY COALESCE(effective_from, start_date) ASC
+      LOOP
+        SELECT COALESCE(effective_from, start_date)
+        INTO   v_next_effrom
+        FROM   public.allocation_configs
+        WHERE  config_group_id = v_group_id
+          AND  org_id = v_org.id
+          AND  COALESCE(effective_from, start_date) > v_cfg.eff_from
+        ORDER BY COALESCE(effective_from, start_date) ASC
+        LIMIT 1;
+
+        IF v_next_effrom IS NOT NULL THEN
+          UPDATE public.allocation_configs
+          SET effective_to = v_next_effrom - INTERVAL '1 day'
+          WHERE id = v_cfg.id;
+        END IF;
+      END LOOP;
+
+    ELSE
+      -- Scenario C: no general configs — create draft placeholder
+      INSERT INTO public.allocation_configs (
+        org_id, config_group_id, name,
+        start_date, effective_from, effective_to,
+        status, is_special, allocation_type, rows, version_number
+      ) VALUES (
+        v_org.id, v_group_id, 'General Distribution Rule',
+        v_org.created_at::date, v_org.created_at::date, NULL,
+        'draft', false, 'percentage', '[]'::jsonb, 1
+      );
+    END IF;
+
+  END LOOP;
+END $$;
+
+-- 4. Update complete_org_onboarding() for new orgs
+DROP FUNCTION IF EXISTS public.complete_org_onboarding(uuid, text, text, int, text);
+
+CREATE OR REPLACE FUNCTION public.complete_org_onboarding(
+  p_org_id            uuid,
+  p_name              text,
+  p_default_currency  text,
+  p_fiscal_year_start int  DEFAULT 1,
+  p_timezone          text DEFAULT 'Africa/Lagos'
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user_id  uuid := auth.uid();
+  v_group_id uuid;
+  v_org_date date;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.org_members
+    WHERE org_id = p_org_id AND user_id = v_user_id
+      AND role IN ('owner','admin') AND status = 'active'
+  ) THEN RAISE EXCEPTION 'Unauthorized: only org admins can complete onboarding'; END IF;
+
+  UPDATE public.organizations
+  SET name = trim(p_name), default_currency = p_default_currency,
+      fiscal_year_start = p_fiscal_year_start, timezone = p_timezone,
+      onboarding_complete = true, updated_at = now()
+  WHERE id = p_org_id;
+
+  SELECT created_at::date INTO v_org_date
+  FROM public.organizations WHERE id = p_org_id;
+
+  IF NOT EXISTS (SELECT 1 FROM public.income_types WHERE org_id = p_org_id LIMIT 1) THEN
+    INSERT INTO public.income_types (org_id, name, color) VALUES
+      (p_org_id,'Tithe','#6366f1'),(p_org_id,'Offering','#10b981'),
+      (p_org_id,'Donation','#f59e0b'),(p_org_id,'Special Giving','#ec4899'),
+      (p_org_id,'Thanksgiving','#3b82f6'),(p_org_id,'Project','#8b5cf6');
+  END IF;
+
+  INSERT INTO public.outflow_types (org_id, name, color, is_system, is_locked)
+  VALUES (p_org_id,'General','#64748b',true,true)
+  ON CONFLICT (org_id, name) DO NOTHING;
+
+  IF NOT EXISTS (SELECT 1 FROM public.categories WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.categories (org_id, name, is_default)
+    VALUES (p_org_id, 'General', true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.special_config_groups WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.special_config_groups (org_id, name, is_default)
+    VALUES (p_org_id, 'General', true)
+    RETURNING id INTO v_group_id;
+
+    INSERT INTO public.allocation_configs (
+      org_id, config_group_id, name,
+      start_date, effective_from, effective_to,
+      status, is_special, allocation_type, rows, version_number
+    ) VALUES (
+      p_org_id, v_group_id, 'General Distribution Rule',
+      v_org_date, v_org_date, NULL,
+      'locked', false, 'percentage',
+      '[{"category_name":"General","budget_portion":"Percentage","percentage":100}]'::jsonb,
+      1
+    );
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.complete_org_onboarding(uuid,text,text,int,text) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';`
+
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
 
 function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
@@ -2683,6 +2859,7 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
 
 function DatabaseTab() {
   const [copied, setCopied] = useState(false)
+  const [copiedDR, setCopiedDR] = useState(false)
   const { push: toast } = useToastStore()
 
   const [backfilling, setBackfilling] = useState(false)
@@ -2694,6 +2871,12 @@ function DatabaseTab() {
     await navigator.clipboard.writeText(MIGRATION_SQL)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleCopyDR = async () => {
+    await navigator.clipboard.writeText(DISTRIBUTION_RULES_MIGRATION_SQL)
+    setCopiedDR(true)
+    setTimeout(() => setCopiedDR(false), 2000)
   }
 
   const runBackfill = async () => {
@@ -2879,6 +3062,44 @@ function DatabaseTab() {
           <span>
             After running this migration, enable Row Level Security on the new tables if your project uses RLS.
             Go to <strong>Supabase → Table Editor → bank_deposits / intrabank_transfers → RLS</strong> and add appropriate policies.
+          </span>
+        </div>
+      </div>
+
+      {/* Distribution Rules Unification — Phase 1 */}
+      <div className="bg-white border border-amber-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-amber-600" />
+          <h2 className="text-base font-semibold text-gray-900">Distribution Rules Unification</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Phase 1</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Run this migration to unify General and Custom Distribution Rules under a single versioned model.
+          Migrates existing general allocation configs into a General rule group per organisation.
+          Organisations with no general config receive a draft placeholder — a setup prompt will appear in the app until they lock a rule.
+          Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopyDR}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedDR ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {DISTRIBUTION_RULES_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run the <strong>main Database Migration above first</strong> if you have not already done so, then run this one.
+            After running, existing calculations and category ledger totals will remain identical — no data is changed, only grouped.
           </span>
         </div>
       </div>

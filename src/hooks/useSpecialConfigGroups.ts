@@ -12,6 +12,7 @@ function orgPayload(): { org_id: string } {
 export interface SpecialConfigGroupWithVersions {
   id:                        string
   name:                      string
+  is_default:                boolean
   created_at:                string
   versions:                  AllocationConfig[]
   active_version:            AllocationConfig | null
@@ -31,8 +32,9 @@ export function useSpecialConfigGroups() {
     setLoading(true); setError(null)
     const { data: groupRows, error: gErr } = await supabase
       .from('special_config_groups')
-      .select('id, name, created_at')
+      .select('id, name, is_default, created_at')
       .eq('org_id', orgId)
+      .eq('is_default', false)   // General rule group is managed separately
       .order('created_at', { ascending: false })
     if (gErr) { setError(gErr.message); setLoading(false); return }
 
@@ -71,6 +73,7 @@ export function useSpecialConfigGroups() {
       return {
         id:                      g.id as string,
         name:                    g.name as string,
+        is_default:              (g.is_default as boolean) ?? false,
         created_at:              g.created_at as string,
         versions:                gVersions,
         active_version:          active,

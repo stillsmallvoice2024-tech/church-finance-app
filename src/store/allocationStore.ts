@@ -30,6 +30,7 @@ export interface AllocationConfig {
 export interface SpecialConfigGroup {
   id:         string
   name:       string
+  is_default: boolean
   created_at: string
 }
 

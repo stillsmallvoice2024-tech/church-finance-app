@@ -247,6 +247,7 @@ create trigger on_auth_user_created
 create table public.special_config_groups (
   id         uuid        primary key default gen_random_uuid(),
   name       text        not null,
+  is_default boolean     not null default false,
   org_id     uuid        not null default public.get_current_org_id()
              references public.organizations(id) on delete set null,
   created_at timestamptz not null default now()
@@ -269,6 +270,7 @@ create table public.categories (
   description text,
   group_id    uuid        references public.category_groups(id) on delete set null,
   is_hidden   boolean     not null default false,
+  is_default  boolean     not null default false,
   currency    text,
   org_id      uuid        not null default public.get_current_org_id()
               references public.organizations(id) on delete set null,
@@ -1564,6 +1566,8 @@ create index if not exists idx_inflow_org_txn_type         on public.inflow_tran
 create index if not exists idx_outflow_org_pending         on public.outflow_transactions(org_id, is_pending_deduction)
   where is_pending_deduction = true;
 create index if not exists idx_alloc_configs_org_effective on public.allocation_configs(org_id, effective_from, effective_to);
+create index if not exists idx_alloc_configs_group_date   on public.allocation_configs(config_group_id, status, effective_from, effective_to) where config_group_id is not null;
+create unique index if not exists idx_alloc_configs_group_effrom_unique on public.allocation_configs(config_group_id, effective_from) where status = 'locked';
 create index if not exists idx_receipts_org_entity         on public.receipts(org_id, entity_type, entity_id);
 create index if not exists idx_intra_flows_org_batch       on public.intra_flows(org_id, batch_id)
   where batch_id is not null;
@@ -1962,7 +1966,10 @@ create or replace function public.complete_org_onboarding(
   p_timezone          text default 'Africa/Lagos'
 )
 returns void language plpgsql security definer as $$
-declare v_user_id uuid := auth.uid();
+declare
+  v_user_id  uuid := auth.uid();
+  v_group_id uuid;
+  v_org_date date;
 begin
   if not exists (
     select 1 from public.org_members
@@ -1980,6 +1987,10 @@ begin
       onboarding_complete = true, updated_at = now()
   where id = p_org_id;
 
+  select created_at::date into v_org_date
+  from public.organizations where id = p_org_id;
+
+  -- Seed default income types
   if not exists (select 1 from public.income_types where org_id = p_org_id limit 1) then
     insert into public.income_types (org_id, name, color) values
       (p_org_id, 'Tithe',          '#6366f1'),
@@ -1990,9 +2001,39 @@ begin
       (p_org_id, 'Project',        '#8b5cf6');
   end if;
 
+  -- Seed system General outflow type
   insert into public.outflow_types (org_id, name, color, is_system, is_locked)
   values (p_org_id, 'General', '#64748b', true, true)
   on conflict (org_id, name) do nothing;
+
+  -- Seed General category (is_default = true, fully visible to users)
+  if not exists (
+    select 1 from public.categories where org_id = p_org_id and is_default = true
+  ) then
+    insert into public.categories (org_id, name, is_default)
+    values (p_org_id, 'General', true);
+  end if;
+
+  -- Seed General rule group + default locked version (100% → General category)
+  if not exists (
+    select 1 from public.special_config_groups where org_id = p_org_id and is_default = true
+  ) then
+    insert into public.special_config_groups (org_id, name, is_default)
+    values (p_org_id, 'General', true)
+    returning id into v_group_id;
+
+    insert into public.allocation_configs (
+      org_id, config_group_id, name,
+      start_date, effective_from, effective_to,
+      status, is_special, allocation_type, rows, version_number
+    ) values (
+      p_org_id, v_group_id, 'General Distribution Rule',
+      v_org_date, v_org_date, null,
+      'locked', false, 'percentage',
+      '[{"category_name":"General","budget_portion":"Percentage","percentage":100}]'::jsonb,
+      1
+    );
+  end if;
 end;
 $$;
 
