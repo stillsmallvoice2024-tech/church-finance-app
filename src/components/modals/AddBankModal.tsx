@@ -99,11 +99,10 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [selectedConfigId, setSelectedConfigId] = useState('')
 
   const { configs, fetch: fetchAllocationConfigs, loaded: allocLoaded } = useAllocationStore()
-  // Locked non-special configs with percentage rows — eligible for "From Budget Plan" mode
+  // Locked configs with percentage rows — eligible for "From Budget Plan" mode
   const eligibleConfigs = useMemo(
     () => configs.filter(c =>
       c.status === 'locked' &&
-      !c.is_special &&
       c.allocation_type !== 'amount' &&
       (c.rows ?? []).some(r => typeof r.percentage === 'number' && r.percentage > 0)
     ),

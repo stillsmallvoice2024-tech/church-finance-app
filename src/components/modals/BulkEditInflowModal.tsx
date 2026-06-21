@@ -21,7 +21,7 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onRe
   const { categories }              = useCategories()
   const { incomeTypes }             = useIncomeTypes()
   const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: configsLoaded } = useAllocationStore()
-  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked' && !c.is_special)
+  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
 
   useEffect(() => { if (!configsLoaded) fetchAllocConfigs() }, [configsLoaded, fetchAllocConfigs])
 
