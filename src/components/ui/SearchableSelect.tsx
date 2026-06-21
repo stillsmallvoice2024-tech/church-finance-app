@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useId } from 'react'
+import { useState, useRef, useEffect, useId, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
 
 export interface SelectOption {
@@ -31,6 +32,7 @@ export function SearchableSelect({
   const [open,        setOpen]        = useState(false)
   const [query,       setQuery]       = useState('')
   const [highlighted, setHighlighted] = useState(-1)
+  const [dropRect,    setDropRect]    = useState<{ top: number; left: number; width: number } | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
@@ -45,15 +47,26 @@ export function SearchableSelect({
     ? options.filter(o => o.label.toLowerCase().includes(query.trim().toLowerCase()))
     : options
 
-  // When query is empty the placeholder item occupies index 0; options start at 1.
-  // When query is non-empty the placeholder is hidden; options start at 0.
   const offset   = hasQuery ? 0 : 1
   const totalOpts = filtered.length + offset
 
+  const updateDropRect = useCallback(() => {
+    if (!containerRef.current) return
+    const r = containerRef.current.getBoundingClientRect()
+    const listH = 240 // max-h-60
+    const spaceBelow = window.innerHeight - r.bottom
+    const top = spaceBelow >= listH + 8 ? r.bottom + 4 : Math.max(8, r.top - listH - 4)
+    setDropRect({ top, left: r.left, width: r.width })
+  }, [])
+
+  // Close on outside click — check both trigger and portal list
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
+      if (
+        !containerRef.current?.contains(e.target as Node) &&
+        !listRef.current?.contains(e.target as Node)
+      ) {
         setOpen(false)
         setQuery('')
         setHighlighted(-1)
@@ -63,6 +76,18 @@ export function SearchableSelect({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  // Reposition dropdown on scroll/resize
+  useEffect(() => {
+    if (!open) return
+    const update = () => updateDropRect()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [open, updateDropRect])
+
   useEffect(() => {
     if (!open || highlighted < 0 || !listRef.current) return
     ;(listRef.current.children[highlighted] as HTMLElement | undefined)
@@ -71,6 +96,7 @@ export function SearchableSelect({
 
   const openList = () => {
     if (disabled) return
+    updateDropRect()
     setQuery('')
     setHighlighted(-1)
     setOpen(true)
@@ -153,13 +179,14 @@ export function SearchableSelect({
         }`}
       />
 
-      {open && (
+      {open && dropRect && createPortal(
         <ul
           ref={listRef}
           id={listId}
           role="listbox"
           aria-label="Options"
-          className="absolute z-50 left-0 right-0 mt-1 max-h-60 sm:max-h-60 max-sm:max-h-[40dvh] overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+          style={{ position: 'fixed', top: dropRect.top, left: dropRect.left, width: dropRect.width, zIndex: 9999 }}
+          className="max-h-60 overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
           {/* Placeholder / clear option — only when not filtering */}
           {!hasQuery && (
@@ -206,7 +233,8 @@ export function SearchableSelect({
               </li>
             )
           })}
-        </ul>
+        </ul>,
+        document.body
       )}
     </div>
   )

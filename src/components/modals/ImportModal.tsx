@@ -2601,13 +2601,15 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
                         placeholder="Category"
                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                         wrapperClassName="flex-1 min-w-[100px]" />
-                      <select value={applyS2} onChange={e => setApplyS2(e.target.value)}
-                        className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[100px]">
-                        <option value="">Fund Type</option>
-                        <option value="Percentage Allocation">Regular Funds</option>
-                        <option value="Specific Seed">Designated Gift</option>
-                        <option value="Savings">Savings</option>
-                      </select>
+                      <SearchableSelect value={applyS2} onChange={setApplyS2}
+                        options={[
+                          { value: 'Percentage Allocation', label: 'Regular Funds' },
+                          { value: 'Specific Seed',         label: 'Designated Gift' },
+                          { value: 'Savings',               label: 'Savings' },
+                        ]}
+                        placeholder="Fund Type"
+                        className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                        wrapperClassName="flex-1 min-w-[100px]" />
                       {outflowTypeOptions.length > 0 && (
                         <SearchableSelect value={applyOutflowType} onChange={setApplyOutflowType}
                           options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
