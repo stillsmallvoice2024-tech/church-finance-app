@@ -263,7 +263,8 @@ const SYSTEM_TABLE_BLACKLIST = new Set([
 ])
 
 export const SCHEMA_DISCOVERY_MIGRATION_SQL = `-- Enable automatic unmanaged table detection in backup system
-CREATE OR REPLACE VIEW public.schema_discovery_view AS
+CREATE OR REPLACE VIEW public.schema_discovery_view
+  WITH (security_invoker = true) AS
   SELECT table_name::text
   FROM information_schema.tables
   WHERE table_schema = 'public'
