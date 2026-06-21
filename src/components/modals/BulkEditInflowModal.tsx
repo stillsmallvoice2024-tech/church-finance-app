@@ -6,12 +6,14 @@ import { useBulkUpdateTransaction } from '../../hooks/useMutations'
 import { useToastStore }          from '../../store/toastStore'
 import { useCategories }          from '../../hooks/useCategories'
 import { useIncomeTypes }         from '../../hooks/useIncomeTypes'
+import { useAllocationStore }     from '../../store/allocationStore'
 
-export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onResults }: {
+export function BulkEditInflowModal({ open, onClose, ids, banks, allNonNormal = false, onSuccess, onResults }: {
   open: boolean
   onClose: () => void
   ids: string[]
   banks: { id: string; name: string }[]
+  allNonNormal?: boolean
   onSuccess: () => void
   onResults?: (r: { action: string; succeeded: number; failures: { id: string; reason: string }[] }) => void
 }) {
@@ -19,13 +21,18 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onRe
   const { push: toast }             = useToastStore()
   const { categories }              = useCategories()
   const { incomeTypes }             = useIncomeTypes()
+  const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: configsLoaded } = useAllocationStore()
+  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
 
-  const [bankName,     setBankName]     = useState('')
-  const [recordedAt,   setRecordedAt]   = useState('')
-  const [txnType,      setTxnType]      = useState('')
-  const [incomeTypeId, setIncomeTypeId] = useState('')
-  const [stageCode1,   setStageCode1]   = useState('')
-  const [stageCode2,   setStageCode2]   = useState('')
+  useEffect(() => { if (!configsLoaded) fetchAllocConfigs() }, [configsLoaded, fetchAllocConfigs])
+
+  const [bankName,      setBankName]      = useState('')
+  const [recordedAt,    setRecordedAt]    = useState('')
+  const [txnType,       setTxnType]       = useState('')
+  const [incomeTypeId,  setIncomeTypeId]  = useState('')
+  const [stageCode1,    setStageCode1]    = useState('')
+  const [stageCode2,    setStageCode2]    = useState('')
+  const [allocConfigId, setAllocConfigId] = useState('')
 
   useEffect(() => {
     if (open) return
@@ -35,9 +42,10 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onRe
     setIncomeTypeId('')
     setStageCode1('')
     setStageCode2('')
+    setAllocConfigId('')
   }, [open])
 
-  const hasChanges = !!bankName || !!recordedAt || !!txnType || !!incomeTypeId || !!stageCode1 || !!stageCode2
+  const hasChanges = !!bankName || !!recordedAt || !!txnType || !!incomeTypeId || !!stageCode1 || !!stageCode2 || !!allocConfigId
   const modalRef = useRef<ModalHandle>(null)
 
   const handleApply = async () => {
@@ -49,6 +57,14 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onRe
     if (incomeTypeId) baseUpdates.income_type_id  = incomeTypeId
     if (stageCode1)   baseUpdates.stage_code_1    = stageCode1
     if (stageCode2)   baseUpdates.stage_code_2    = stageCode2
+    // Mirror single-edit: transaction_type clears the rule; otherwise honour the picker
+    if (txnType) {
+      baseUpdates.allocation_config_id = null
+    } else if (allocConfigId === '__clear__') {
+      baseUpdates.allocation_config_id = null
+    } else if (allocConfigId) {
+      baseUpdates.allocation_config_id = allocConfigId
+    }
 
     const { failed, failures } = await execute(ids, baseUpdates)
     if (failed === 0) toast(`${ids.length} transaction${ids.length !== 1 ? 's' : ''} updated.`, 'success')
@@ -94,22 +110,45 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onRe
           </div>
         )}
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Category</label>
-          <SearchableSelect value={stageCode1} onChange={setStageCode1}
-            options={categories.map(c => ({ value: c.name, label: c.name }))}
-            placeholder="— Keep existing —" className={filterInputCls} />
-        </div>
+        {allNonNormal && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Category</label>
+            <SearchableSelect value={stageCode1} onChange={setStageCode1}
+              options={categories.map(c => ({ value: c.name, label: c.name }))}
+              placeholder="— Keep existing —" className={filterInputCls} />
+          </div>
+        )}
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Fund Type</label>
-          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            <option value="Percentage Allocation">Regular Funds</option>
-            <option value="Specific Seed">Designated Gift</option>
-            <option value="Savings">Savings</option>
-          </select>
-        </div>
+        {allNonNormal && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Fund Type</label>
+            <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
+              <option value="">— Keep existing —</option>
+              <option value="Percentage Allocation">Regular Funds</option>
+              <option value="Specific Seed">Designated Gift</option>
+              <option value="Savings">Savings</option>
+            </select>
+          </div>
+        )}
+
+        {!allNonNormal && lockedConfigs.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Distribution Rule</label>
+            <SearchableSelect
+              value={allocConfigId}
+              onChange={setAllocConfigId}
+              options={[
+                { value: '__clear__', label: '— Remove rule —' },
+                ...lockedConfigs.map(c => ({ value: c.id, label: c.name })),
+              ]}
+              placeholder="— Keep existing —"
+              className={filterInputCls}
+            />
+            {txnType && allocConfigId && allocConfigId !== '__clear__' && (
+              <p className="text-xs text-amber-600">Setting a transaction type will clear the distribution rule.</p>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={() => modalRef.current?.requestClose()} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">

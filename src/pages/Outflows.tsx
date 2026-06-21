@@ -443,9 +443,46 @@ export default function Outflows() {
           variant="compact"
         />
 
+        {/* Bulk action bar — shown in both card and table views */}
+        {(() => {
+          const selectedRows  = displayed.filter(r => selectedIds.has(r.id))
+          const selHasOffsets = selectedRows.some(r => r.offset_role === 'offset')
+          const selEffective  = selectedRows.reduce((s, r) =>
+            r.offset_role === 'offset' ? s - Number(r.amount_disbursed) : s + Number(r.amount_disbursed), 0)
+          const selTotal = selectedRows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
+          return (
+            <BulkActionBar
+              count={selectedIds.size}
+              onClear={clearAll}
+              actions={[
+                { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true),      show: canWrite() },
+                { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 className="w-3.5 h-3.5" /> },
+              ]}
+              summary={selHasOffsets ? (
+                <span className="text-xs text-gray-500 font-mono">
+                  Total: <span className="font-semibold text-danger">{formatCurrency(selTotal, baseCurrencyCode)}</span>
+                  {' · '}Effective: <span className="font-semibold text-amber-600">{formatCurrency(selEffective, baseCurrencyCode)}</span>
+                </span>
+              ) : undefined}
+            />
+          )
+        })()}
+
         {/* Cards / Table */}
         {outState.view === 'cards' ? (
           <div className="space-y-3">
+            {/* Select-all row */}
+            {!loading && displayed.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300"
+                  checked={allSelected}
+                  onChange={e => e.target.checked ? selectAllRows() : clearAll()}
+                />
+                <span className="text-xs text-gray-500">Select all on page</span>
+              </div>
+            )}
             {loading && displayed.length === 0 ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
@@ -465,12 +502,21 @@ export default function Outflows() {
             ) : displayed.map(row => {
               const net = Number(row.amount_disbursed) - Number(row.amount_refunded) - Number(row.transfer_charge)
               const netDiffers = net !== Number(row.amount_disbursed)
+              const isSelected = selectedIds.has(row.id)
               return (
-                <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                <div key={row.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : 'border-gray-200'}`}>
                   {/* Card header */}
                   <div className="px-4 pt-3.5 pb-3">
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300 shrink-0"
+                          checked={isSelected}
+                          onChange={() => toggleRow(row.id)}
+                        />
+                        <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      </div>
                       <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                         {row.is_pending_deduction && (
                           <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">Pending</span>
@@ -548,29 +594,6 @@ export default function Outflows() {
         )}
 
         {outState.view === 'table' && <Card padding={false} data-tour="data-table">
-          {(() => {
-            const selectedRows = displayed.filter(r => selectedIds.has(r.id))
-            const selHasOffsets = selectedRows.some(r => r.offset_role === 'offset')
-            const selEffective = selectedRows.reduce((s, r) =>
-              r.offset_role === 'offset' ? s - Number(r.amount_disbursed) : s + Number(r.amount_disbursed), 0)
-            const selTotal = selectedRows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
-            return (
-              <BulkActionBar
-                count={selectedIds.size}
-                onClear={clearAll}
-                actions={[
-                  { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true),      show: canWrite() },
-                  { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 className="w-3.5 h-3.5" /> },
-                ]}
-                summary={selHasOffsets ? (
-                  <span className="text-xs text-gray-500 font-mono">
-                    Total: <span className="font-semibold text-danger">{formatCurrency(selTotal, baseCurrencyCode)}</span>
-                    {' · '}Effective: <span className="font-semibold text-amber-600">{formatCurrency(selEffective, baseCurrencyCode)}</span>
-                  </span>
-                ) : undefined}
-              />
-            )
-          })()}
           <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>

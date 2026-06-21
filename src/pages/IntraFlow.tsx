@@ -362,10 +362,46 @@ export default function IntraFlow() {
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
 
+        {/* Bulk action bar — shown in both card and table views */}
+        <BulkActionBar
+          count={selectedIds.size}
+          onClear={clearAll}
+          actions={[
+            {
+              key: 'edit',
+              label: 'Edit selected',
+              icon: <Pencil className="w-3.5 h-3.5" />,
+              onClick: () => setBulkEditOpen(true),
+              show: canWrite(),
+            },
+            {
+              key: 'delete',
+              label: 'Delete selected',
+              icon: <Trash2 className="w-3.5 h-3.5" />,
+              variant: 'danger',
+              onClick: () => setBulkDeleteConfirmOpen(true),
+              loading: bulkDeleting,
+              show: canDelete(),
+            },
+          ]}
+        />
+
         {/* Table / Card view */}
         <Card padding={false}>
           {iflState.view === 'cards' ? (
             <div className="p-4 space-y-3">
+              {/* Select-all row */}
+              {!loading && displayed.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-gray-300"
+                    checked={displayed.length > 0 && displayed.every(r => selectedIds.has(r.id))}
+                    onChange={e => e.target.checked ? selectAllRows() : clearAll()}
+                  />
+                  <span className="text-xs text-gray-500">Select all on page</span>
+                </div>
+              )}
               {loading && displayed.length === 0 ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
@@ -384,11 +420,21 @@ export default function IntraFlow() {
                   <p className="text-sm">No internal transfers match your filters.</p>
                 </div>
               ) : (
-                displayed.map(row => (
-                  <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                displayed.map(row => {
+                  const isSelected = selectedIds.has(row.id)
+                  return (
+                  <div key={row.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : 'border-gray-200'}`}>
                     {/* Card header */}
                     <div className="px-4 pt-3.5 pb-3">
-                      <p className="text-xs font-semibold mb-2 text-gray-400">{formatDate(row.date)}</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300 shrink-0"
+                          checked={isSelected}
+                          onChange={() => toggleRow(row.id)}
+                        />
+                        <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      </div>
                       <div className="flex items-center gap-2 text-sm text-gray-700 mb-1">
                         <span className="font-medium truncate">{row.account_from ?? '—'}</span>
                         <ArrowLeftRight className="w-3 h-3 text-gray-400 shrink-0" />
@@ -425,33 +471,12 @@ export default function IntraFlow() {
                       </div>
                     </div>
                   </div>
-                ))
+                  )
+                })
               )}
             </div>
           ) : (
             <>
-              <BulkActionBar
-                count={selectedIds.size}
-                onClear={clearAll}
-                actions={[
-                  {
-                    key: 'edit',
-                    label: 'Edit selected',
-                    icon: <Pencil className="w-3.5 h-3.5" />,
-                    onClick: () => setBulkEditOpen(true),
-                    show: canWrite(),
-                  },
-                  {
-                    key: 'delete',
-                    label: 'Delete selected',
-                    icon: <Trash2 className="w-3.5 h-3.5" />,
-                    variant: 'danger',
-                    onClick: () => setBulkDeleteConfirmOpen(true),
-                    loading: bulkDeleting,
-                    show: canDelete(),
-                  },
-                ]}
-              />
             <div className="overflow-x-auto scroll-x-fade">
               <table className="min-w-full">
                 <thead>
