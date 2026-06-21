@@ -8,11 +8,12 @@ import { useCategories }          from '../../hooks/useCategories'
 import { useIncomeTypes }         from '../../hooks/useIncomeTypes'
 import { useAllocationStore }     from '../../store/allocationStore'
 
-export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onResults }: {
+export function BulkEditInflowModal({ open, onClose, ids, banks, allNonNormal = false, onSuccess, onResults }: {
   open: boolean
   onClose: () => void
   ids: string[]
   banks: { id: string; name: string }[]
+  allNonNormal?: boolean
   onSuccess: () => void
   onResults?: (r: { action: string; succeeded: number; failures: { id: string; reason: string }[] }) => void
 }) {
@@ -109,24 +110,28 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, onSuccess, onRe
           </div>
         )}
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Category</label>
-          <SearchableSelect value={stageCode1} onChange={setStageCode1}
-            options={categories.map(c => ({ value: c.name, label: c.name }))}
-            placeholder="— Keep existing —" className={filterInputCls} />
-        </div>
+        {allNonNormal && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Category</label>
+            <SearchableSelect value={stageCode1} onChange={setStageCode1}
+              options={categories.map(c => ({ value: c.name, label: c.name }))}
+              placeholder="— Keep existing —" className={filterInputCls} />
+          </div>
+        )}
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Fund Type</label>
-          <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
-            <option value="">— Keep existing —</option>
-            <option value="Percentage Allocation">Regular Funds</option>
-            <option value="Specific Seed">Designated Gift</option>
-            <option value="Savings">Savings</option>
-          </select>
-        </div>
+        {allNonNormal && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Fund Type</label>
+            <select value={stageCode2} onChange={e => setStageCode2(e.target.value)} className={filterInputCls}>
+              <option value="">— Keep existing —</option>
+              <option value="Percentage Allocation">Regular Funds</option>
+              <option value="Specific Seed">Designated Gift</option>
+              <option value="Savings">Savings</option>
+            </select>
+          </div>
+        )}
 
-        {lockedConfigs.length > 0 && (
+        {!allNonNormal && lockedConfigs.length > 0 && (
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-500">Distribution Rule</label>
             <SearchableSelect

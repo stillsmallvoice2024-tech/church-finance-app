@@ -732,6 +732,7 @@ export default function Inflows() {
         onClose={() => setBulkEditOpen(false)}
         ids={[...selectedIds]}
         banks={banks}
+        allNonNormal={data.filter(r => selectedIds.has(r.id)).every(r => !!r.transaction_type)}
         onSuccess={() => { clearAll(); refetch() }}
         onResults={setBulkResults}
       />
