@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useId } from 'react'
+import { useState, useRef, useEffect, useId, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronDown, X } from 'lucide-react'
 import { useAddCategory } from '../../hooks/useMutations'
 
@@ -22,7 +23,7 @@ export function InlineCategorySelect({
   selectCls,
   disabled,
 }: Props) {
-  // ── Add-new-category mode (preserved from original) ────────────────────────
+  // ── Add-new-category mode ────────────────────────────────────────────────────
   const [adding,    setAdding]    = useState(false)
   const [newName,   setNewName]   = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -59,27 +60,37 @@ export function InlineCategorySelect({
   const [open,        setOpen]        = useState(false)
   const [query,       setQuery]       = useState('')
   const [highlighted, setHighlighted] = useState(-1)
+  const [dropRect,    setDropRect]    = useState<{ top: number; left: number; width: number } | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
   const listRef      = useRef<HTMLUListElement>(null)
   const listId       = useId()
 
-  // Case-insensitive substring filtering
   const filtered = query.trim()
-    ? categories.filter(c =>
-        c.name.toLowerCase().includes(query.trim().toLowerCase()),
-      )
+    ? categories.filter(c => c.name.toLowerCase().includes(query.trim().toLowerCase()))
     : categories
 
-  const ADD_NEW_IDX = filtered.length   // index of the "Add new" entry
+  const ADD_NEW_IDX = filtered.length
   const totalOpts   = filtered.length + 1
 
-  // Close on outside click
+  const updateDropRect = useCallback(() => {
+    if (!containerRef.current) return
+    const r = containerRef.current.getBoundingClientRect()
+    const listH = 240 // max-h-60
+    const spaceBelow = window.innerHeight - r.bottom
+    const top = spaceBelow >= listH + 8 ? r.bottom + 4 : Math.max(8, r.top - listH - 4)
+    setDropRect({ top, left: r.left, width: r.width })
+  }, [])
+
+  // Close on outside click — check both trigger and portal list
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
+      if (
+        !containerRef.current?.contains(e.target as Node) &&
+        !listRef.current?.contains(e.target as Node)
+      ) {
         setOpen(false)
         setQuery('')
         setHighlighted(-1)
@@ -89,7 +100,18 @@ export function InlineCategorySelect({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  // Scroll highlighted item into view
+  // Reposition dropdown on scroll/resize
+  useEffect(() => {
+    if (!open) return
+    const update = () => updateDropRect()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [open, updateDropRect])
+
   useEffect(() => {
     if (!open || highlighted < 0 || !listRef.current) return
     ;(listRef.current.children[highlighted] as HTMLElement | undefined)
@@ -98,6 +120,7 @@ export function InlineCategorySelect({
 
   const openList = () => {
     if (disabled) return
+    updateDropRect()
     setQuery('')
     setHighlighted(-1)
     setOpen(true)
@@ -141,12 +164,12 @@ export function InlineCategorySelect({
         close()
         break
       case 'Tab':
-        if (open) close()   // let default Tab behaviour propagate
+        if (open) close()
         break
     }
   }
 
-  // ── Add-new mode UI (unchanged from original) ──────────────────────────────
+  // ── Add-new mode UI ──────────────────────────────────────────────────────────
   if (adding) {
     return (
       <div className="space-y-1">
@@ -223,13 +246,14 @@ export function InlineCategorySelect({
         }`}
       />
 
-      {open && (
+      {open && dropRect && createPortal(
         <ul
           ref={listRef}
           id={listId}
           role="listbox"
           aria-label="Categories"
-          className="absolute z-50 left-0 right-0 mt-1 max-h-60 sm:max-h-60 max-sm:max-h-[40dvh] overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
+          style={{ position: 'fixed', top: dropRect.top, left: dropRect.left, width: dropRect.width, zIndex: 9999 }}
+          className="max-h-60 overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
           {filtered.length === 0 && (
             <li className="px-3 py-2 text-sm text-gray-400 italic" role="presentation">
@@ -270,7 +294,8 @@ export function InlineCategorySelect({
           >
             ＋ Add new category…
           </li>
-        </ul>
+        </ul>,
+        document.body
       )}
     </div>
   )
