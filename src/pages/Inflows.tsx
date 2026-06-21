@@ -426,9 +426,31 @@ export default function Inflows() {
           variant="compact"
         />
 
+        {/* Bulk action bar — shown in both card and table views */}
+        <BulkActionBar
+          count={selectedIds.size}
+          onClear={clearAll}
+          actions={[
+            { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true),      show: canWrite() },
+            { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 className="w-3.5 h-3.5" /> },
+          ]}
+        />
+
         {/* Cards / Table */}
         {infState.view === 'cards' ? (
           <div className="space-y-3">
+            {/* Select-all row */}
+            {!loading && displayed.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300"
+                  checked={allSelected}
+                  onChange={e => e.target.checked ? selectAllRows() : clearAll()}
+                />
+                <span className="text-xs text-gray-500">Select all on page</span>
+              </div>
+            )}
             {loading && displayed.length === 0 ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-pulse">
@@ -447,12 +469,24 @@ export default function Inflows() {
                 : <PageEmptyState pageId="inflows" compact />
             ) : displayed.map(row => {
               const it = incomeTypes.find(t => t.id === row.income_type_id)
+              const isProtected = PROTECTED_TYPES.has(row.transaction_type ?? '')
+              const isSelected  = selectedIds.has(row.id)
               return (
-                <div key={row.id} className="rounded-xl border overflow-hidden shadow-sm bg-white border-gray-200">
+                <div key={row.id} className={`rounded-xl border overflow-hidden shadow-sm bg-white transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : 'border-gray-200'}`}>
                   {/* Card header */}
                   <div className="px-4 pt-3.5 pb-3">
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {!isProtected && (
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded border-gray-300 shrink-0"
+                            checked={isSelected}
+                            onChange={() => toggleRow(row.id)}
+                          />
+                        )}
+                        <p className="text-xs font-semibold text-gray-400">{formatDate(row.date)}</p>
+                      </div>
                       <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                         {it && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: `${it.color}22`, color: it.color }}>{it.name}</span>
@@ -486,12 +520,12 @@ export default function Inflows() {
                       <p className="text-sm font-mono font-bold tabular-nums text-success">{formatCurrency(Number(row.amount), baseCurrencyCode)}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
-                      {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
+                      {canWrite() && !isProtected && (
                         <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      {canDelete() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
+                      {canDelete() && !isProtected && (
                         <button onClick={() => setDeleteId(row.id)} className="touch-target p-1.5 rounded text-gray-400 hover:text-danger hover:bg-red-50 transition-colors" title="Delete" aria-label="Delete">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -514,14 +548,6 @@ export default function Inflows() {
         )}
 
         {infState.view === 'table' && <Card padding={false} data-tour="data-table">
-          <BulkActionBar
-            count={selectedIds.size}
-            onClear={clearAll}
-            actions={[
-              { key: 'edit',   label: 'Edit selected',   variant: 'outline', onClick: () => setBulkEditOpen(true),      show: canWrite() },
-              { key: 'delete', label: 'Delete selected', variant: 'danger',  onClick: () => setConfirmBulkDelete(true), show: canDelete(), icon: <Trash2 className="w-3.5 h-3.5" /> },
-            ]}
-          />
           <div className="overflow-x-auto scroll-x-fade">
             <table className="min-w-full">
               <thead>
