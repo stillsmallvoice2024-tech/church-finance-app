@@ -29,3 +29,6 @@ dist-ssr
 .env.*.local
 *.env
 .claude/
+
+# Auto-generated at build time — not source-controlled
+public/version.json
