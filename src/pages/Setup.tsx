@@ -2361,7 +2361,10 @@ DECLARE
   v_next_effrom date;
   v_idx         int;
 BEGIN
-  FOR v_org IN SELECT id, created_at FROM public.organizations LOOP
+  FOR v_org IN
+    SELECT id, created_at FROM public.organizations
+    WHERE status IS NULL OR status = 'active'
+  LOOP
 
     IF EXISTS (
       SELECT 1 FROM public.special_config_groups

@@ -39,7 +39,10 @@ DECLARE
   v_next_effrom    date;
   v_idx            int;
 BEGIN
-  FOR v_org IN SELECT id, created_at FROM public.organizations LOOP
+  FOR v_org IN
+    SELECT id, created_at FROM public.organizations
+    WHERE status IS NULL OR status = 'active'
+  LOOP
 
     -- Skip if General group already exists for this org (idempotent re-run)
     IF EXISTS (
