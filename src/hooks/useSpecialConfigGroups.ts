@@ -13,6 +13,7 @@ export interface SpecialConfigGroupWithVersions {
   id:                        string
   name:                      string
   is_default:                boolean
+  is_archived:               boolean
   created_at:                string
   versions:                  AllocationConfig[]
   active_version:            AllocationConfig | null
@@ -23,7 +24,8 @@ export interface SpecialConfigGroupWithVersions {
 export function useSpecialConfigGroups() {
   const orgId = useOrgStore((s) => s.orgId)
 
-  const [groups,  setGroups]  = useState<SpecialConfigGroupWithVersions[]>([])
+  const [groups,         setGroups]         = useState<SpecialConfigGroupWithVersions[]>([])
+  const [archivedGroups, setArchivedGroups] = useState<SpecialConfigGroupWithVersions[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
@@ -32,7 +34,7 @@ export function useSpecialConfigGroups() {
     setLoading(true); setError(null)
     const { data: groupRows, error: gErr } = await supabase
       .from('special_config_groups')
-      .select('id, name, is_default, created_at')
+      .select('id, name, is_default, is_archived, created_at')
       .eq('org_id', orgId)
       .eq('is_default', false)   // General rule group is managed separately
       .order('created_at', { ascending: false })
@@ -75,6 +77,7 @@ export function useSpecialConfigGroups() {
         id:                      g.id as string,
         name:                    g.name as string,
         is_default:              (g.is_default as boolean) ?? false,
+        is_archived:             (g.is_archived as boolean) ?? false,
         created_at:              g.created_at as string,
         versions:                gVersions,
         active_version:          active,
@@ -82,13 +85,14 @@ export function useSpecialConfigGroups() {
         linked_income_type_name: it?.name ?? null,
       }
     })
-    setGroups(built)
+    setGroups(built.filter(g => !g.is_archived))
+    setArchivedGroups(built.filter(g => g.is_archived))
     setLoading(false)
   }, [orgId])
 
   useEffect(() => { load() }, [load])
 
-  return { groups, loading, error, refetch: load }
+  return { groups, archivedGroups, loading, error, refetch: load }
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────────
@@ -352,6 +356,22 @@ export async function createVersionWithSplit(params: {
   if (updateErr) throw new Error(updateErr.message)
 
   return newId
+}
+
+export async function archiveGroup(groupId: string): Promise<void> {
+  const { error } = await supabase
+    .from('special_config_groups')
+    .update({ is_archived: true })
+    .eq('id', groupId)
+  if (error) throw new Error(error.message)
+}
+
+export async function restoreGroup(groupId: string): Promise<void> {
+  const { error } = await supabase
+    .from('special_config_groups')
+    .update({ is_archived: false })
+    .eq('id', groupId)
+  if (error) throw new Error(error.message)
 }
 
 export async function setGroupIncomeTypeLink(

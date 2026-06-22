@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, TrendingUp, TrendingDown, Users, Info, Clock } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, TrendingUp, TrendingDown, Users, Info, Clock, EyeOff, Eye } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -12,7 +12,7 @@ import { useToastStore } from '../store/toastStore'
 import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
 import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
 import { CreateSpecialConfigModal } from '../components/modals/CreateSpecialConfigModal'
-import { useSpecialConfigGroups, type SpecialConfigGroupWithVersions } from '../hooks/useSpecialConfigGroups'
+import { useSpecialConfigGroups, archiveGroup, restoreGroup, type SpecialConfigGroupWithVersions } from '../hooks/useSpecialConfigGroups'
 import { ResetDataModal }           from '../components/modals/ResetDataModal'
 import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeModal'
 import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
@@ -805,10 +805,11 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
   hideHeader?:  boolean
 }) {
   const { baseCurrencySymbol } = useOrgCurrency()
-  const { groups, loading, error } = useSpecialConfigGroups()
+  const { groups, archivedGroups, loading, error } = useSpecialConfigGroups()
   const [expandedGroups,   setExpandedGroups]   = useState<Set<string>>(new Set())
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
   const [pastInfoDialog,   setPastInfoDialog]   = useState<{ g: SpecialConfigGroupWithVersions; v: AllocationConfig } | null>(null)
+  const [showArchived,     setShowArchived]      = useState(false)
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
 
@@ -836,6 +837,21 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
       .eq('id', g.id)
     if (err) { window.alert(err.message); return }
     onRefetch()
+  }
+
+  const handleArchiveGroup = async (g: SpecialConfigGroupWithVersions) => {
+    if (!window.confirm(`Hide "${g.name}"? It will be removed from the active list but all its data is preserved. You can restore it at any time.`)) return
+    try {
+      await archiveGroup(g.id)
+      onRefetch()
+    } catch (e: unknown) { window.alert(e instanceof Error ? e.message : String(e)) }
+  }
+
+  const handleRestoreGroup = async (g: SpecialConfigGroupWithVersions) => {
+    try {
+      await restoreGroup(g.id)
+      onRefetch()
+    } catch (e: unknown) { window.alert(e instanceof Error ? e.message : String(e)) }
   }
 
   const handleDeleteVersion = async (v: AllocationConfig) => {
@@ -894,6 +910,8 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
             const isExpanded = expandedGroups.has(g.id)
             const av = g.active_version
             const isAmt = av?.allocation_type === 'amount'
+            const today = new Date().toISOString().slice(0, 10)
+            const isGroupUsed = g.versions.some(v => v.status === 'locked' && v.superseded_by_id == null && !!v.effective_from && v.effective_from <= today)
             return (
               <div key={g.id} className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                 {/* Group header row */}
@@ -935,13 +953,23 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                     >
                       {isExpanded ? 'Hide' : 'History'}
                     </button>
-                    <button
-                      onClick={() => handleDeleteGroup(g)}
-                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                      title="Delete group"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isGroupUsed ? (
+                      <button
+                        onClick={() => handleArchiveGroup(g)}
+                        className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                        title="Hide group (has locked versions — cannot delete)"
+                      >
+                        <EyeOff className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDeleteGroup(g)}
+                        className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                        title="Delete group"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1048,13 +1076,15 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                                             <Info className="w-3.5 h-3.5" />
                                           </button>
                                         )}
-                                        <button
-                                          onClick={() => handleDeleteVersion(v)}
-                                          className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
-                                          title="Delete version"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        {(!vLocked || isFuture) && (
+                                          <button
+                                            onClick={() => handleDeleteVersion(v)}
+                                            className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                                            title="Delete version"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -1100,11 +1130,59 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
           )}
         </>
       )}
-      <p className="text-xs text-gray-500">
-        {visible.length !== groups.length
-          ? `${visible.length} of ${groups.length} groups`
-          : `${groups.length} group${groups.length !== 1 ? 's' : ''}`}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">
+          {visible.length !== groups.length
+            ? `${visible.length} of ${groups.length} groups`
+            : `${groups.length} group${groups.length !== 1 ? 's' : ''}`}
+        </p>
+        {archivedGroups.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowArchived(s => !s)}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors"
+          >
+            {showArchived ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            {showArchived ? 'Hide archived' : `Show archived (${archivedGroups.length})`}
+          </button>
+        )}
+      </div>
+
+      {showArchived && archivedGroups.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Archived Groups</p>
+          {archivedGroups.map(g => (
+            <div key={g.id} className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 opacity-70">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-gray-700 text-sm">{g.name}</span>
+                    {g.linked_income_type_name && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                        {g.linked_income_type_name}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                      <EyeOff className="w-3 h-3" /> Archived
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {g.versions.length} version{g.versions.length !== 1 ? 's' : ''} — data preserved
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRestoreGroup(g)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors"
+                  title="Restore group to active list"
+                >
+                  <Eye className="w-3 h-3" /> Restore
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {pastInfoDialog && (
         <Modal open onClose={() => setPastInfoDialog(null)} title="Historical Version">
           <div className="space-y-4">
@@ -2969,6 +3047,117 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.complete_org_onboarding(uuid,text,text,int,text) TO authenticated;`
 
+export const SPECIAL_CONFIG_RPC_MIGRATION_SQL =
+`-- ── Special Config Version RPC ───────────────────────────────────────────────
+-- Atomic function to create a new special config version.
+-- Required for "Create New Version" (including from past versions) to work.
+-- Safe to re-run (CREATE OR REPLACE).
+
+CREATE OR REPLACE FUNCTION public.create_special_config_version(
+  p_group_id       uuid,
+  p_org_id         uuid,
+  p_name           text,
+  p_allocation_type text,
+  p_total_amount   numeric(15,2),
+  p_rows           jsonb,
+  p_effective_from date,
+  p_status         text DEFAULT 'draft'
+)
+RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_covering_id   uuid;
+  v_covering_from date;
+  v_next_from     date;
+  v_new_to        date;
+  v_max_ver       integer;
+  v_new_id        uuid;
+BEGIN
+  IF NOT public.is_org_admin(p_org_id) THEN
+    RAISE EXCEPTION 'create_special_config_version: caller must be an org admin';
+  END IF;
+
+  IF p_status NOT IN ('draft', 'locked') THEN
+    RAISE EXCEPTION 'create_special_config_version: invalid status %', p_status;
+  END IF;
+
+  -- Lock the group row to prevent concurrent version creation
+  PERFORM id FROM public.special_config_groups
+  WHERE id = p_group_id AND org_id = p_org_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'create_special_config_version: group % not found in org %', p_group_id, p_org_id;
+  END IF;
+
+  -- Find covering version (the one whose date range contains p_effective_from)
+  SELECT id, effective_from INTO v_covering_id, v_covering_from
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id
+    AND  org_id          = p_org_id
+    AND  effective_from <= p_effective_from
+    AND  (effective_to IS NULL OR effective_to >= p_effective_from)
+  LIMIT  1;
+
+  -- Find the immediately following version to determine new effective_to
+  SELECT effective_from INTO v_next_from
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id
+    AND  org_id          = p_org_id
+    AND  effective_from  > p_effective_from
+  ORDER BY effective_from
+  LIMIT  1;
+
+  v_new_to := CASE WHEN v_next_from IS NOT NULL
+                   THEN v_next_from - 1
+                   ELSE NULL END;
+
+  -- Close the covering version
+  IF v_covering_id IS NOT NULL THEN
+    UPDATE public.allocation_configs
+    SET    effective_to = p_effective_from - 1
+    WHERE  id = v_covering_id;
+  END IF;
+
+  -- Compute next version number server-side
+  SELECT COALESCE(MAX(version_number), 0) INTO v_max_ver
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id AND org_id = p_org_id;
+
+  -- Insert new version
+  INSERT INTO public.allocation_configs (
+    name, is_special, allocation_type, total_amount, rows,
+    effective_from, effective_to, version_number,
+    config_group_id, start_date, status, org_id
+  ) VALUES (
+    p_name, true, p_allocation_type, p_total_amount, p_rows,
+    p_effective_from, v_new_to, v_max_ver + 1,
+    p_group_id, p_effective_from, p_status, p_org_id
+  )
+  RETURNING id INTO v_new_id;
+
+  RETURN v_new_id;
+END;
+$$;
+
+REVOKE ALL   ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';`
+
+export const ARCHIVE_GROUPS_MIGRATION_SQL =
+`-- ── Config Group Archive / Hide ──────────────────────────────────────────────
+-- Adds is_archived flag to special_config_groups.
+-- Archived groups are hidden from the active list but all data is preserved.
+-- Safe to re-run (idempotent).
+
+ALTER TABLE public.special_config_groups
+  ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+
+NOTIFY pgrst, 'reload schema';`
+
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
 
 function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
@@ -3334,9 +3523,11 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
 }
 
 function DatabaseTab() {
-  const [copied,   setCopied]   = useState(false)
-  const [copiedDR, setCopiedDR] = useState(false)
-  const [copiedSD, setCopiedSD] = useState(false)
+  const [copied,      setCopied]      = useState(false)
+  const [copiedDR,    setCopiedDR]    = useState(false)
+  const [copiedRPC,   setCopiedRPC]   = useState(false)
+  const [copiedSD,    setCopiedSD]    = useState(false)
+  const [copiedAG,    setCopiedAG]    = useState(false)
   const { push: toast } = useToastStore()
 
   const [backfilling, setBackfilling] = useState(false)
@@ -3356,10 +3547,22 @@ function DatabaseTab() {
     setTimeout(() => setCopiedDR(false), 2000)
   }
 
+  const handleCopyRPC = async () => {
+    await navigator.clipboard.writeText(SPECIAL_CONFIG_RPC_MIGRATION_SQL)
+    setCopiedRPC(true)
+    setTimeout(() => setCopiedRPC(false), 2000)
+  }
+
   const handleCopySD = async () => {
     await navigator.clipboard.writeText(SYSTEM_DEFAULTS_MIGRATION_SQL)
     setCopiedSD(true)
     setTimeout(() => setCopiedSD(false), 2000)
+  }
+
+  const handleCopyAG = async () => {
+    await navigator.clipboard.writeText(ARCHIVE_GROUPS_MIGRATION_SQL)
+    setCopiedAG(true)
+    setTimeout(() => setCopiedAG(false), 2000)
   }
 
   const runBackfill = async () => {
@@ -3453,6 +3656,31 @@ function DatabaseTab() {
 
   return (
     <div className="max-w-3xl space-y-5">
+      {/* Quick navigation */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Migration Checklist — run in order</p>
+        <ol className="space-y-1">
+          {[
+            { id: 'db-migration-core',    label: 'Core Schema (main migration)' },
+            { id: 'db-migration-dist',    label: 'Distribution Rules' },
+            { id: 'db-migration-rpc',     label: 'Special Config Version RPC' },
+            { id: 'db-migration-sysdef',  label: 'System Defaults (is_system)' },
+            { id: 'db-migration-archive', label: 'Config Group Archive (hide/restore)' },
+          ].map((item, idx) => (
+            <li key={item.id} className="flex items-center gap-2 text-sm">
+              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-[10px] font-bold shrink-0">{idx + 1}</span>
+              <button
+                type="button"
+                onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="text-primary hover:underline text-left"
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </div>
+
       {/* Backfill Transaction IDs */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
         <div className="flex items-center gap-2">
@@ -3513,10 +3741,11 @@ function DatabaseTab() {
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+      <div id="db-migration-core" className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal className="w-5 h-5 text-primary" />
           <h2 className="text-base font-semibold text-gray-900">Database Migration</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Step 1</span>
         </div>
         <p className="text-sm text-gray-500">
           Run the following SQL in your Supabase SQL editor to add the columns and tables required for new features.
@@ -3550,11 +3779,11 @@ function DatabaseTab() {
       </div>
 
       {/* Distribution Rules Unification — Phase 1 */}
-      <div className="bg-white border border-amber-200 rounded-xl p-5 space-y-4">
+      <div id="db-migration-dist" className="bg-white border border-amber-200 rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal className="w-5 h-5 text-amber-600" />
           <h2 className="text-base font-semibold text-gray-900">Distribution Rules Unification</h2>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Phase 1</span>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Step 2</span>
         </div>
         <p className="text-sm text-gray-500">
           Run this migration to unify General and Custom Distribution Rules under a single versioned model.
@@ -3587,12 +3816,48 @@ function DatabaseTab() {
         </div>
       </div>
 
+      {/* Special Config Version RPC */}
+      <div id="db-migration-rpc" className="bg-white border border-violet-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-violet-600" />
+          <h2 className="text-base font-semibold text-gray-900">Special Config Version RPC</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">Step 3</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Creates the <code className="font-mono text-xs bg-gray-100 px-1 rounded">create_special_config_version</code> database function.
+          Required for creating new versions of custom distribution rules (including corrections to past versions).
+          Without this, saving a new version returns "Database migration required." Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopyRPC}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedRPC ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {SPECIAL_CONFIG_RPC_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-violet-50 border border-violet-200 px-4 py-3 text-sm text-violet-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run <strong>Steps 1 and 2 first</strong>. This step can be re-run safely any time — it uses <code className="font-mono text-xs">CREATE OR REPLACE</code>.
+          </span>
+        </div>
+      </div>
+
       {/* System Defaults */}
-      <div className="bg-white border border-blue-200 rounded-xl p-5 space-y-4">
+      <div id="db-migration-sysdef" className="bg-white border border-blue-200 rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal className="w-5 h-5 text-blue-600" />
           <h2 className="text-base font-semibold text-gray-900">System Defaults</h2>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Phase 3</span>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Step 4</span>
         </div>
         <p className="text-sm text-gray-500">
           Adds <code className="font-mono text-xs bg-gray-100 px-1 rounded">is_system</code> flag to income types and categories.
@@ -3618,8 +3883,44 @@ function DatabaseTab() {
         <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
-            Run the <strong>Distribution Rules Unification migration above first</strong>, then run this one.
+            Run <strong>Step 2 (Distribution Rules) first</strong>, then run this one.
             Existing income types and categories are not affected — only the new column and the seeded "General Donation" type are added.
+          </span>
+        </div>
+      </div>
+
+      {/* Archive Groups */}
+      <div id="db-migration-archive" className="bg-white border border-green-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-green-600" />
+          <h2 className="text-base font-semibold text-gray-900">Config Group Archive</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Step 5</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Adds <code className="font-mono text-xs bg-gray-100 px-1 rounded">is_archived</code> flag to custom config groups.
+          Allows hiding groups that have been used in records without deleting any history.
+          Archived groups can be restored at any time. Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopyAG}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedAG ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {ARCHIVE_GROUPS_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run <strong>Step 2 (Distribution Rules) first</strong>. This step can be run independently of Steps 3 and 4.
           </span>
         </div>
       </div>
