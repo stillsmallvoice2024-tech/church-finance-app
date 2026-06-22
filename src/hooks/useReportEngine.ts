@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { isNonContributing } from '../utils/transactionTypes'
-import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
+import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
 import { useOrgStore } from '../store/orgStore'
 import { useCategories } from './useCategories'
 import type { ReportCategoryBalance, ReportBasis, OperationalBalanceMap } from '../types'
@@ -24,7 +24,7 @@ export function useReportEngine(
   const [error,   setError]   = useState<string | null>(null)
 
   const orgId = useOrgStore((s) => s.orgId)
-  const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
+  const { configs, groups, fetch: fetchConfigs, loaded } = useAllocationStore()
   const { categories } = useCategories()
 
   useEffect(() => { if (!loaded) fetchConfigs() }, [loaded, fetchConfigs])
@@ -49,7 +49,7 @@ export function useReportEngine(
 
 
     const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, pctOutRes, cobRes,
-           opInflowTypeRes, opTxnTypeRes, opNormalRes, intraFlowRes] = await Promise.all([
+           opInflowTypeRes, opTxnTypeRes, opNormalRes, intraFlowRes, incomeTypeRes] = await Promise.all([
       fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('stage_code_1, amount')
@@ -76,7 +76,7 @@ export function useReportEngine(
         .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)),
       fetchAllRows(() => supabase
         .from('inflow_transactions')
-        .select('date, amount, stage_code_2, allocation_config_id, transaction_type, offset_role')
+        .select('date, amount, stage_code_2, allocation_config_id, income_type_id, transaction_type, offset_role')
         .eq('org_id', orgId)
         .lte(dateField, dateValue)),
       fetchAllRows(() => supabase
@@ -120,6 +120,7 @@ export function useReportEngine(
         .eq('org_id', orgId)
         .eq('status', 'active')
         .lte('date', reportDate)),
+      supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId),
     ])
 
     const firstErr =
@@ -169,14 +170,23 @@ export function useReportEngine(
     }
 
     // ── Percentage-allocated inflows ────────────────────────────────────────
+    const incomeTypeGroupMap = new Map<string, string | null>(
+      (incomeTypeRes.data ?? []).map((r: Record<string, unknown>) =>
+        [r.id as string, r.special_config_group_id as string | null]
+      )
+    )
+    const versionIndex = buildVersionIndex(configs, groups)
+
     const allocMap = new Map<string, number>()
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
       if (isNonContributing(r)) continue
-      const configId = r.allocation_config_id as string | null
+      const configId     = r.allocation_config_id as string | null
+      const incomeTypeId = r.income_type_id as string | null
+      const groupId      = incomeTypeId ? (incomeTypeGroupMap.get(incomeTypeId) ?? null) : null
       const cfg = configId
-        ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
-        : getConfigForDate(configs, r.date as string)
+        ? (configs.find(c => c.id === configId) ?? versionIndex.resolve(groupId, r.date as string))
+        : versionIndex.resolve(groupId, r.date as string)
       if (!cfg) continue
       for (const catRow of cfg.rows) {
         let allocated: number
@@ -280,7 +290,7 @@ export function useReportEngine(
 
     setOperationalBalances(opMap)
     setLoading(false)
-  }, [orgId, reportDate, reportBasis, configs, categories])
+  }, [orgId, reportDate, reportBasis, configs, groups, categories])
 
   useEffect(() => { compute() }, [compute])
 

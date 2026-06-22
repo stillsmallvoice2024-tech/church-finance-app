@@ -4,7 +4,7 @@ import { isNonContributing } from '../utils/transactionTypes'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
-import { useAllocationStore, getConfigForDate } from '../store/allocationStore'
+import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
 import { useCategories, useCategoryGroups } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency, formatDate, getCurrencyLocale } from '../utils/formatters'
@@ -107,7 +107,7 @@ export default function CategoryLedger() {
 
   const { categories }                           = useCategories()
   const { groups }                               = useCategoryGroups()
-  const { configs, fetch: fetchConfigs, loaded } = useAllocationStore()
+  const { configs, groups: allocGroups, fetch: fetchConfigs, loaded } = useAllocationStore()
   const outflowVersion   = useTransactionSyncStore(s => s.outflowVersion)
   const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
   const inflowVersion    = useTransactionSyncStore(s => s.inflowVersion)
@@ -171,18 +171,19 @@ export default function CategoryLedger() {
     setLoading(true)
     setError(null)
 
-    const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes] = await Promise.all([
+    const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes, incomeTypeRes] = await Promise.all([
       fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('org_id', orgId!).eq('stage_code_2', 'Specific Seed')),
       fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId!).eq('stage_code_2', 'Specific Seed')),
       fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('org_id', orgId!).eq('stage_code_2', 'Savings')),
       fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId!).eq('stage_code_2', 'Savings')),
-      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, transaction_type, offset_role').eq('org_id', orgId!)),
+      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, income_type_id, transaction_type, offset_role').eq('org_id', orgId!)),
       supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)').eq('org_id', orgId!),
       fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('org_id', orgId!).eq('status', 'active')),
       fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role')
         .eq('org_id', orgId!)
         .not('stage_code_2', 'eq', 'Specific Seed')
         .not('stage_code_2', 'eq', 'Savings')),
+      supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId!),
     ])
 
     if (seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {
@@ -197,14 +198,18 @@ export default function CategoryLedger() {
 
     const cobRows = cobRes.error ? [] : (cobRes.data ?? [])
 
-    const today  = new Date().toISOString().slice(0, 10)
-    const active = configs
-      .filter(c => c.start_date <= today && c.status === 'locked')
-      .sort((a, b) => b.start_date.localeCompare(a.start_date))[0] ?? null
+    const incomeTypeGroupMap = new Map<string, string | null>(
+      (incomeTypeRes.data ?? []).map((r: Record<string, unknown>) =>
+        [r.id as string, r.special_config_group_id as string | null]
+      )
+    )
+    const versionIndex = buildVersionIndex(configs, allocGroups)
 
+    const today = new Date().toISOString().slice(0, 10)
+    const currentGeneral = versionIndex.resolve(null, today)
     const pctMap = new Map<string, number>()
-    if (active) {
-      for (const r of active.rows) pctMap.set(r.category_name, Number(r.percentage ?? 0))
+    if (currentGeneral) {
+      for (const r of currentGeneral.rows) pctMap.set(r.category_name, Number(r.percentage ?? 0))
     }
 
     const map = new Map<string, Omit<CategoryRow, 'name' | 'percentage' | 'percentageAllocated'>>()
@@ -244,10 +249,12 @@ export default function CategoryLedger() {
     for (const r of allInflowRes.data ?? []) {
       if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
       if (isNonContributing(r)) continue
-      const configId = r.allocation_config_id as string | null
+      const configId     = r.allocation_config_id as string | null
+      const incomeTypeId = r.income_type_id as string | null
+      const groupId      = incomeTypeId ? (incomeTypeGroupMap.get(incomeTypeId) ?? null) : null
       const cfg = configId
-        ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
-        : getConfigForDate(configs, r.date as string)
+        ? (configs.find(c => c.id === configId) ?? versionIndex.resolve(groupId, r.date as string))
+        : versionIndex.resolve(groupId, r.date as string)
       if (!cfg) continue
       for (const catRow of cfg.rows) {
         let allocated: number
@@ -323,7 +330,7 @@ export default function CategoryLedger() {
 
     setRows(result)
     setLoading(false)
-  }, [categories, configs, orgId])
+  }, [categories, configs, allocGroups, orgId])
 
   useEffect(() => { loadSummary() }, [loadSummary, inflowVersion, outflowVersion, intraflowVersion])
 
@@ -339,9 +346,9 @@ export default function CategoryLedger() {
       const outRows: LedgerRow[] = []
 
       if (ledgerPortion === 'Percentage') {
-        const [inflowRes, outflowRes] = await Promise.all([
+        const [inflowRes, outflowRes, ledgerItRes] = await Promise.all([
           fetchAllRows(() => supabase.from('inflow_transactions')
-            .select('id, date, description, amount, stage_code_2, allocation_config_id, transaction_type, offset_role, import_seq')
+            .select('id, date, description, amount, stage_code_2, allocation_config_id, income_type_id, transaction_type, offset_role, import_seq')
             .eq('org_id', orgId!)
             .order('date').order('import_seq', { ascending: true })),
           fetchAllRows(() => supabase.from('outflow_transactions')
@@ -349,17 +356,27 @@ export default function CategoryLedger() {
             .eq('org_id', orgId!)
             .eq('stage_code_1', activeCategory)
             .order('date').order('import_seq', { ascending: true })),
+          supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId!),
         ])
         if (inflowRes.error) throw inflowRes.error
         if (outflowRes.error) throw outflowRes.error
 
+        const ledgerItGroupMap = new Map<string, string | null>(
+          (ledgerItRes.data ?? []).map((r: Record<string, unknown>) =>
+            [r.id as string, r.special_config_group_id as string | null]
+          )
+        )
+        const ledgerVersionIndex = buildVersionIndex(configs, allocGroups)
+
         for (const r of inflowRes.data ?? []) {
           if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
           if (isNonContributing(r)) continue
-          const configId = r.allocation_config_id as string | null
+          const configId     = r.allocation_config_id as string | null
+          const incomeTypeId = r.income_type_id as string | null
+          const groupId      = incomeTypeId ? (ledgerItGroupMap.get(incomeTypeId) ?? null) : null
           const cfg = configId
-            ? (configs.find(c => c.id === configId) ?? getConfigForDate(configs, r.date as string))
-            : getConfigForDate(configs, r.date as string)
+            ? (configs.find(c => c.id === configId) ?? ledgerVersionIndex.resolve(groupId, r.date as string))
+            : ledgerVersionIndex.resolve(groupId, r.date as string)
           const catRow = cfg?.rows.find(c => c.category_name === activeCategory && (c.budget_portion === 'Percentage' || c.budget_portion === 'Percentage Allocation' || !c.budget_portion))
           if (!catRow) continue
           let allocated: number
@@ -601,7 +618,7 @@ export default function CategoryLedger() {
     } finally {
       setLedgerLoading(false)
     }
-  }, [activeCategory, ledgerPortion, configs, orgId])
+  }, [activeCategory, ledgerPortion, configs, allocGroups, orgId])
 
   useEffect(() => {
     if (viewMode === 'ledger' && activeCategory) loadLedger()

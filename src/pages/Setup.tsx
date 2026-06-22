@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, Star, TrendingUp, TrendingDown, Users } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, TrendingUp, TrendingDown, Users } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -36,14 +36,13 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
 import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
-const TABS = ['General', 'Banks', 'Distribution Rules', 'Special Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
+const TABS = ['General', 'Banks', 'Distribution Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
   { tab: 'General',            Icon: Settings2,    label: 'General'      },
   { tab: 'Banks',              Icon: Landmark,     label: 'Banks'        },
   { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution Rules' },
-  { tab: 'Special Rules',      Icon: Star,         label: 'Special Rules'      },
   { tab: 'Income Types',       Icon: TrendingUp,   label: 'Income Types'       },
   { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow Types'      },
   { tab: 'Departments',        Icon: Users,        label: 'Departments'  },
@@ -417,174 +416,261 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
-// ── Allocation tab ─────────────────────────────────────────────────────────────────
+// ── General Distribution Rule panel ───────────────────────────────────────────
 
-function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
-  onNew:        () => void
-  onEdit:       (c: AllocationConfig) => void
-  onLock:       (c: AllocationConfig) => void
-  onEditLocked: (c: AllocationConfig) => void
-  onDelete:     (c: AllocationConfig) => void
+function GeneralGroupPanel({
+  onNewVersion,
+  refetchKey,
+}: {
+  onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  refetchKey:   number
 }) {
-  const { configs, loading, error, fetch } = useAllocationStore()
-  const [search, setSearch] = useState('')
-  const [sort,   setSort]   = useState('name|asc')
+  const orgId = useOrgStore(s => s.orgId)
+  const { baseCurrencySymbol } = useOrgCurrency()
+  const [group,    setGroup]    = useState<SpecialConfigGroupWithVersions | null>(null)
+  const [loading,  setLoading]  = useState(true)
+  const [expanded, setExpanded] = useState(false)
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => {
+    if (!orgId) return
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      const { data: grp } = await supabase
+        .from('special_config_groups')
+        .select('id, name, is_default, created_at')
+        .eq('org_id', orgId)
+        .eq('is_default', true)
+        .maybeSingle()
+      if (cancelled || !grp) { setLoading(false); return }
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const filtered = q
-      ? configs.filter(c => [c.name, c.status ?? ''].some(v => v.toLowerCase().includes(q)))
-      : configs
-    return applySetupSort(filtered, sort)
-  }, [configs, search, sort])
+      const { data: versions } = await supabase
+        .from('allocation_configs')
+        .select('*')
+        .eq('config_group_id', grp.id)
+        .order('effective_from', { ascending: false })
 
-  const statusBadge = (config: AllocationConfig) => {
-    const isLocked = config.status === 'locked'
-    return (
-      <div className="flex flex-col gap-0.5">
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
-          isLocked
-            ? 'bg-green-50 text-green-700 border border-green-200'
-            : 'bg-amber-50 text-amber-700 border border-amber-200'
-        }`}>
-          {isLocked ? <Lock className="w-3 h-3" /> : <FileEdit className="w-3 h-3" />}
-          {isLocked ? 'Approved & Locked' : 'Draft'}
-        </span>
-        {!isLocked && (
-          <span className="text-xs text-gray-500">Not in use — approve &amp; lock to activate</span>
-        )}
-      </div>
-    )
+      const today = new Date().toISOString().slice(0, 10)
+      const active = (versions ?? []).find((v: AllocationConfig) =>
+        v.status === 'locked' &&
+        v.effective_from != null &&
+        v.effective_from <= today &&
+        (v.effective_to == null || v.effective_to >= today)
+      ) ?? null
+
+      if (!cancelled) {
+        setGroup({
+          id:                      grp.id as string,
+          name:                    grp.name as string,
+          is_default:              true,
+          created_at:              grp.created_at as string,
+          versions:                (versions ?? []) as AllocationConfig[],
+          active_version:          active as AllocationConfig | null,
+          linked_income_type_id:   null,
+          linked_income_type_name: null,
+        })
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [orgId, refetchKey])
+
+  const handleDeleteVersion = async (v: AllocationConfig) => {
+    if (v.status === 'locked') { window.alert('Locked versions cannot be deleted. Create a new version to supersede it.'); return }
+    if (!window.confirm(`Delete draft version #${v.version_number ?? '?'}? This cannot be undone.`)) return
+    const { error: err } = await supabase.from('allocation_configs').delete().eq('id', v.id)
+    if (err) { window.alert(err.message); return }
+    setGroup(prev => prev ? { ...prev, versions: prev.versions.filter(x => x.id !== v.id) } : prev)
   }
 
+  if (loading) return <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+
+  if (!group) return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+      General Distribution Rule not found. Run the Distribution Rules Unification migration from the Database tab.
+    </div>
+  )
+
+  const av    = group.active_version
+  const isAmt = av?.allocation_type === 'amount'
+
   return (
-    <div className="max-w-2xl space-y-3">
-      <div className="flex justify-end">
-        <button
-          onClick={onNew}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-        >
-          <Plus className="w-4 h-4" /> New Distribution Rule
-        </button>
+    <div className="rounded-xl border-2 border-primary/20 bg-white overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-primary/5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900 text-sm">General Distribution Rule</span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary border border-primary/20">
+              Default fallback
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Applies to any income type without a custom rule.
+          </p>
+          {av ? (
+            <p className="text-xs text-gray-500 mt-1">
+              Active: v{av.version_number} &nbsp;&middot;&nbsp;
+              {av.effective_from ?? '—'}{av.effective_to ? ` → ${av.effective_to}` : ' → open'} &nbsp;&middot;&nbsp;
+              <span className={isAmt ? 'text-blue-600' : 'text-purple-600'}>
+                {isAmt ? `Amount ${baseCurrencySymbol}` : 'Percentage %'}
+              </span>
+              &nbsp;&middot;&nbsp;<span className="text-green-700">Locked</span>
+            </p>
+          ) : (
+            <p className="text-xs text-amber-600 mt-1">No active version for today — create a new version to activate.</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onNewVersion(group, av)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            <Plus className="w-3 h-3" /> New Version
+          </button>
+          {group.versions.length > 0 && (
+            <button
+              onClick={() => setExpanded(p => !p)}
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              {expanded ? 'Hide' : 'History'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {loading && (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {!loading && error && (
-        <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && configs.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
-          <Layers className="w-10 h-10 text-gray-300" />
-          <div>
-            <p className="text-sm font-medium text-gray-600">No distribution rules yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a distribution rule to define how income is split across categories.</p>
+      {/* Active version rows preview */}
+      {av && (
+        <div className="px-4 py-2 border-t border-gray-100">
+          <p className="text-xs font-medium text-gray-500 mb-1.5">Current allocation</p>
+          <div className="space-y-0.5">
+            {av.rows.map((r, i) => (
+              <div key={i} className="flex justify-between text-xs text-gray-700">
+                <span>{r.category_name}</span>
+                <span className="font-medium tabular-nums">
+                  {r.percentage != null ? `${r.percentage}%` : r.amount != null ? `${baseCurrencySymbol}${r.amount}` : '—'}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {!loading && !error && configs.length > 0 && (
-        <>
-          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={ALLOC_SORT_OPTS} placeholder="Search distribution rules…" />
-          {visible.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">No distribution rules match your search.</p>
+      {/* Version history */}
+      {expanded && (
+        <div className="border-t border-gray-100">
+          {group.versions.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-gray-500">No versions yet.</p>
           ) : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
-                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Effective From</th>
-                    <th className="px-4 py-3 text-right text-[11px] font-bold text-gray-400 uppercase tracking-widest">Total %</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-                    <th className="px-4 py-3 w-28" />
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Version</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Effective From</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Effective To</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Status</th>
+                  <th className="px-4 py-2 w-12" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {group.versions.map(v => (
+                  <tr key={v.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-700">v{v.version_number}</td>
+                    <td className="px-4 py-2 text-gray-600">{v.effective_from ?? '—'}</td>
+                    <td className="px-4 py-2 text-gray-600">{v.effective_to ?? 'open'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium ${
+                        v.status === 'locked'
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}>
+                        {v.status === 'locked' ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                        {v.status === 'locked' ? 'Locked' : 'Draft'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      {v.status === 'draft' && (
+                        <button
+                          onClick={() => handleDeleteVersion(v)}
+                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                          title="Delete draft"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-black/[0.05]">
-                  {visible.map(config => {
-                    const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
-                    const balanced = Math.abs(total - 100) < 0.01
-                    return (
-                      <tr key={config.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
-                        <td className="px-4 py-3 font-medium text-gray-900">{config.name}</td>
-                        <td className="px-4 py-3 text-gray-500">{formatDate(config.start_date)}</td>
-                        <td className={`px-4 py-3 text-right font-mono font-semibold ${balanced ? 'text-success' : 'text-danger'}`}>
-                          {total.toFixed(1)}%
-                        </td>
-                        <td className="px-4 py-3">{statusBadge(config)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
-                            {config.status === 'draft' ? (
-                              <>
-                                <button
-                                  onClick={() => onLock(config)}
-                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-                                  title="Approve & Lock"
-                                >
-                                  <Lock className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => onEdit(config)}
-                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                                  title="Edit" aria-label="Edit"
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() => onEditLocked(config)}
-                                className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                                title="Edit locked config"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => onDelete(config)}
-                              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                              title="Delete" aria-label="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           )}
-          <p className="text-xs text-gray-500">
-            {visible.length !== configs.length
-              ? `${visible.length} of ${configs.length} distribution rules`
-              : `${configs.length} distribution rule${configs.length !== 1 ? 's' : ''}`}
-          </p>
-        </>
+        </div>
       )}
     </div>
   )
 }
 
-// ── Special Rules tab ─────────────────────────────────────────────────────────────
+// ── Unified Distribution Rules tab ─────────────────────────────────────────────
 
-function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
+function DistributionRulesTab({
+  onNewCustom,
+  onNewVersion,
+  refetchKey,
+  onRefetch,
+}: {
+  onNewCustom:  () => void
+  onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  refetchKey:   number
+  onRefetch:    () => void
+}) {
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* General rule — always first */}
+      <div className="space-y-2">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">General Rule</h3>
+          <p className="text-xs text-gray-500 mt-0.5">The fallback rule applied when an income type has no custom rule.</p>
+        </div>
+        <GeneralGroupPanel onNewVersion={onNewVersion} refetchKey={refetchKey} />
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-gray-200" />
+
+      {/* Custom rules */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800">Custom Rules</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Income-type-specific rules that override the General rule.</p>
+          </div>
+          <button
+            onClick={onNewCustom}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Custom Rule
+          </button>
+        </div>
+        <SpecialConfigsTab
+          key={refetchKey}
+          onNew={onNewCustom}
+          onNewVersion={onNewVersion}
+          onRefetch={onRefetch}
+          hideHeader
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Custom Rules tab ─────────────────────────────────────────────────────────────
+
+function SpecialConfigsTab({ onNew, onNewVersion, onRefetch, hideHeader = false }: {
   onNew:        () => void
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
   onRefetch:    () => void
+  hideHeader?:  boolean
 }) {
   const { baseCurrencySymbol } = useOrgCurrency()
   const { groups, loading, error } = useSpecialConfigGroups()
@@ -641,21 +727,23 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
 
   return (
     <div className="max-w-3xl space-y-3">
-      <div className="flex justify-end">
-        <button
-          onClick={onNew}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Create New Group
-        </button>
-      </div>
+      {!hideHeader && (
+        <div className="flex justify-end">
+          <button
+            onClick={onNew}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Create New Group
+          </button>
+        </div>
+      )}
 
       {groups.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
-          <Layers className="w-10 h-10 text-gray-300" />
+        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
+          <Layers className="w-8 h-8 text-gray-300" />
           <div>
-            <p className="text-sm font-medium text-gray-600">No special rule groups yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a group to manage versioned special rules.</p>
+            <p className="text-sm font-medium text-gray-600">No custom rules yet</p>
+            <p className="text-xs text-gray-500 mt-1">Create a custom rule to override the General rule for specific income types.</p>
           </div>
         </div>
       ) : (
@@ -3156,13 +3244,7 @@ export default function SetupPage() {
   // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
   if (!canWrite()) return <Navigate to="/" replace />
 
-  const handleNewAlloc    = () => { setEditAllocRecord(null); setAllocModalOpen(true) }
-  const handleEditAlloc   = (c: AllocationConfig) => { setEditAllocRecord(c); setAllocModalOpen(true) }
   const handleAllocSuccess = () => { reloadAllocs() }
-
-  const handleLock        = (c: AllocationConfig) => setLockTarget(c)
-  const handleEditLocked  = (c: AllocationConfig) => setEditLockedTarget(c)
-  const handleDeleteAlloc = (c: AllocationConfig) => setDeleteAllocTarget(c)
 
   const confirmDeleteAlloc = async () => {
     if (!deleteAllocTarget) return
@@ -3296,12 +3378,11 @@ export default function SetupPage() {
           <div className="flex-1 min-w-0">
             {activeTab === 'General'        && <GeneralTab />}
             {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-            {activeTab === 'Distribution Rules' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
-            {activeTab === 'Special Rules' && (
-              <SpecialConfigsTab
-                key={specialRefetch}
-                onNew={handleNewGroup}
+            {activeTab === 'Distribution Rules' && (
+              <DistributionRulesTab
+                onNewCustom={handleNewGroup}
                 onNewVersion={handleNewVersion}
+                refetchKey={specialRefetch}
                 onRefetch={() => setSpecialRefetch(n => n + 1)}
               />
             )}
