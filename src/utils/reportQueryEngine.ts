@@ -23,39 +23,73 @@ export const STAGE_CODE_MAP: Record<string, string> = {
 
 // Internal config shape returned by fetchLockedConfigs
 interface RawConfig {
-  id:            string
-  rows:          unknown
-  start_date?:   string | null
-  end_date?:     string | null
+  id:              string
+  rows:            unknown
+  config_group_id?: string | null
+  start_date?:     string | null
+  end_date?:       string | null
   effective_from?: string | null
   effective_to?:   string | null
-  is_special?:   boolean | null
+  is_special?:     boolean | null
 }
 
-// Find the most-recent locked non-special config whose date window covers `date`
-function findConfigForDate(configs: RawConfig[], date: string): RawConfig | null {
-  const matching = configs.filter(c => {
-    if (c.is_special) return false          // special configs only via explicit cfgId
-    const from = c.effective_from ?? c.start_date
-    const to   = c.effective_to   ?? c.end_date
-    if (from && date < from) return false
-    if (to   && date > to)   return false
-    return true
-  })
-  return matching.sort((a, b) => {
-    const af = a.effective_from ?? a.start_date ?? ''
-    const bf = b.effective_from ?? b.start_date ?? ''
-    return bf.localeCompare(af)
-  })[0] ?? null
+interface RawGroup {
+  id:         string
+  is_default: boolean
 }
 
-// Fetch ALL locked allocation configs (regular + special) so that explicit
-// allocation_config_id references to special configs are resolved correctly.
+// Build a minimal version index for batch resolution inside this module.
+function buildRawIndex(configs: RawConfig[], groups: RawGroup[]) {
+  const generalGroupId = groups.find(g => g.is_default)?.id ?? null
+  const byGroup = new Map<string, RawConfig[]>()
+  for (const c of configs) {
+    if (!c.config_group_id) continue
+    const arr = byGroup.get(c.config_group_id) ?? []
+    arr.push(c)
+    byGroup.set(c.config_group_id, arr)
+  }
+  return {
+    generalGroupId,
+    resolve(groupId: string | null, date: string): RawConfig | null {
+      const target = groupId ?? generalGroupId
+      if (!target) return null
+      const versions = byGroup.get(target) ?? []
+      let result: RawConfig | null = null
+      for (const v of versions) {
+        const from = v.effective_from ?? v.start_date
+        const to   = v.effective_to   ?? v.end_date
+        if (from && date < from) continue
+        if (to   && date > to)   continue
+        if (!result) { result = v; continue }
+        const vFrom = v.effective_from ?? v.start_date ?? ''
+        const rFrom = result.effective_from ?? result.start_date ?? ''
+        if (vFrom > rFrom) result = v
+      }
+      return result
+    },
+  }
+}
+
+// Fetch ALL locked allocation configs so explicit allocation_config_id
+// references to special configs are resolved correctly.
 async function fetchLockedConfigs(): Promise<{ data: RawConfig[] | null; error: { message: string } | null }> {
   return supabase
     .from('allocation_configs')
-    .select('id, rows, effective_from, effective_to, start_date, end_date, is_special')
+    .select('id, rows, config_group_id, effective_from, effective_to, start_date, end_date, is_special')
     .eq('status', 'locked')
+}
+
+async function fetchGroups(): Promise<{ data: RawGroup[] | null; error: { message: string } | null }> {
+  return supabase
+    .from('special_config_groups')
+    .select('id, is_default')
+}
+
+async function fetchIncomeTypeGroupMap(): Promise<Map<string, string | null>> {
+  const { data } = await supabase.from('income_types').select('id, special_config_group_id')
+  return new Map<string, string | null>(
+    (data ?? []).map((r: Record<string, unknown>) => [r.id as string, r.special_config_group_id as string | null])
+  )
 }
 
 // ── Config-distributed inflow helper ──────────────────────────────────────────
@@ -81,7 +115,7 @@ async function getCategoryConfigInflows(
 
   let inflowQ = supabase
     .from('inflow_transactions')
-    .select('amount, allocation_config_id, date, transaction_type, stage_code_2, offset_role')
+    .select('amount, allocation_config_id, income_type_id, date, transaction_type, stage_code_2, offset_role')
     // Allow null (normal inflows) and fx_conversion (converted naira). All other tagged
     // types (reversal, refund, bank_deposit, intrabank_transfer, balance_brought_forward)
     // are pass-through entries that carry no allocatable income.
@@ -92,12 +126,18 @@ async function getCategoryConfigInflows(
     inflowQ = inflowQ.gte(col, dateRange.from).lte(col, to)
   }
 
-  const [inflowRes, configRes] = await Promise.all([inflowQ, fetchLockedConfigs()])
+  const [inflowRes, configRes, groupsRes, itGroupMap] = await Promise.all([
+    inflowQ,
+    fetchLockedConfigs(),
+    fetchGroups(),
+    fetchIncomeTypeGroupMap(),
+  ])
 
   if (inflowRes.error) return { value: 0, error: inflowRes.error.message }
   if (configRes.error) return { value: 0, error: configRes.error.message }
 
-  const configs = configRes.data ?? []
+  const configs   = configRes.data ?? []
+  const rawIndex  = buildRawIndex(configs, groupsRes.data ?? [])
   let total = 0
 
   for (const inflow of inflowRes.data ?? []) {
@@ -108,11 +148,12 @@ async function getCategoryConfigInflows(
     // Direct seed/savings inflows are counted via stage_code_1 direct queries
     if (s2 === 'Specific Seed' || s2 === 'Savings') continue
 
-    const cfgId = inflow.allocation_config_id as string | null
-    // Explicit cfgId can reference special configs; date-based fallback only uses non-special
+    const cfgId        = inflow.allocation_config_id as string | null
+    const incomeTypeId = inflow.income_type_id as string | null
+    const groupId      = incomeTypeId ? (itGroupMap.get(incomeTypeId) ?? null) : null
     const cfg = cfgId
-      ? (configs.find(c => c.id === cfgId) ?? findConfigForDate(configs, inflow.date as string))
-      : findConfigForDate(configs, inflow.date as string)
+      ? (configs.find(c => c.id === cfgId) ?? rawIndex.resolve(groupId, inflow.date as string))
+      : rawIndex.resolve(groupId, inflow.date as string)
     if (!cfg) continue
 
     const rows = Array.isArray(cfg.rows) ? cfg.rows : []

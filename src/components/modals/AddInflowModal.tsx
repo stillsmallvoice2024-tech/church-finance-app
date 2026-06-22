@@ -14,7 +14,7 @@ import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddInflow, useUpdateTransaction, type AddInflowInput } from '../../hooks/useMutations'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
-import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../../store/allocationStore'
+import { useAllocationStore, buildVersionIndex } from '../../store/allocationStore'
 import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import type { InflowTransaction } from '../../hooks/useTransactions'
@@ -40,7 +40,7 @@ const schema = z.object({
   recorded_at_date:           z.string().optional(),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   description:                z.string().optional(),
-  bank_name:                  z.string().optional(),
+  bank_name:                  z.string().min(1, 'Bank is required'),
   stage_code_1:               z.string().optional(),
   stage_code_2:               z.string().optional(),
   transaction_ref:            z.string().optional(),
@@ -69,9 +69,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const { banks } = useBanks()
   const fxBanks    = banks.filter(b => b.is_foreign_currency)
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
-  const { configs: allocConfigs, fetch: fetchAllocConfigs } = useAllocationStore()
+  const { configs: allocConfigs, groups: allocGroups, fetch: fetchAllocConfigs } = useAllocationStore()
   useEffect(() => { fetchAllocConfigs() }, [fetchAllocConfigs])
-  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
+  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked' && c.superseded_by_id == null)
+  const versionIndex  = useMemo(() => buildVersionIndex(allocConfigs, allocGroups), [allocConfigs, allocGroups])
 
   const { incomeTypes } = useIncomeTypes()
 
@@ -115,6 +116,11 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
 
+  const resolvedConfig = useMemo(() => {
+    if (!watchedDate || transactionType) return null
+    return versionIndex.resolve(selectedIncomeType?.special_config_group_id ?? null, watchedDate)
+  }, [watchedDate, transactionType, selectedIncomeType, versionIndex])
+
   const filteredCategories = useMemo(
     () => categories.filter(c => !c.currency),
     [categories],
@@ -148,42 +154,13 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     }
   }, [description, stageCode1, incomeTypes, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-apply special config when income type changes (unless config was manually picked)
+  // Clear config state when switching away from Normal transaction type
   useEffect(() => {
-    if (transactionType) {               // non-Normal: no allocation config
+    if (transactionType) {
       setSelectedConfigId('')
       setConfigManuallySet(false)
-      return
     }
-    if (configManuallySet) return
-    const isCatchAll = selectedIncomeType !== null && selectedIncomeType.rules.length === 0
-    if (!isCatchAll && selectedIncomeType?.special_config_group_id && watchedDate) {
-      const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
-      setSelectedConfigId(version?.id ?? '')
-    } else if (!isCatchAll && selectedIncomeType?.special_config_id) {
-      setSelectedConfigId(selectedIncomeType.special_config_id)
-    } else {
-      if (watchedDate) {
-        const cfg = getConfigForDate(lockedConfigs, watchedDate)
-        setSelectedConfigId(cfg?.id ?? '')
-      }
-    }
-  }, [incomeTypeId, selectedIncomeType, watchedDate, allocConfigs, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-select allocation config by date (unless manually overridden or income-type config applied)
-  useEffect(() => {
-    if (transactionType) return          // non-Normal: no allocation config
-    if (configManuallySet || !watchedDate) return
-    const isCatchAll = selectedIncomeType !== null && selectedIncomeType.rules.length === 0
-    if (!isCatchAll && selectedIncomeType?.special_config_group_id) {
-      const version = getSpecialConfigVersionForDate(allocConfigs, selectedIncomeType.special_config_group_id, watchedDate)
-      setSelectedConfigId(version?.id ?? '')
-      return
-    }
-    if (!isCatchAll && selectedIncomeType?.special_config_id) return
-    const cfg = getConfigForDate(lockedConfigs, watchedDate)
-    setSelectedConfigId(cfg?.id ?? '')
-  }, [watchedDate, lockedConfigs, configManuallySet, allocConfigs, selectedIncomeType, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [transactionType])
 
   // Clear category + fund type when transaction type is cleared
   useEffect(() => {
@@ -269,7 +246,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             date:                       values.date,
             amount:                     values.amount,
             description:                values.description  || null,
-            allocation_config_id:       values.transaction_type ? null : (selectedConfigId || null),
+            allocation_config_id:       (!values.transaction_type && configManuallySet) ? (selectedConfigId || null) : null,
             bank_name:                  values.bank_name   || null,
             stage_code_1:               values.stage_code_1 || null,
             stage_code_2:               values.stage_code_2 || null,
@@ -305,7 +282,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           date:                       values.date,
           amount:                     values.amount,
           description:                values.description  || undefined,
-          allocation_config_id:       values.transaction_type ? undefined : (selectedConfigId || undefined),
+          allocation_config_id:       (!values.transaction_type && configManuallySet) ? (selectedConfigId || undefined) : undefined,
           bank_name:                  values.bank_name   || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
@@ -409,7 +386,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </Field>
 
         {/* Bank — FX banks excluded; FX transactions go through the FX module */}
-        <Field label="Bank" error={errors.bank_name?.message}>
+        <Field label="Bank *" error={errors.bank_name?.message}>
           <Controller name="bank_name" control={control} render={({ field }) => {
             const selectedIsFx = fxBanks.some(b => b.name === field.value)
             const bankOptions  = isEdit
@@ -419,7 +396,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
               <>
                 <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                   options={bankOptions}
-                  placeholder="— None —" className={inputCls(!!errors.bank_name)} />
+                  placeholder="— Select bank —" className={inputCls(!!errors.bank_name)} />
                 {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
                   <p className="flex items-center gap-1 text-xs text-amber-600 mt-0.5">
                     <ExternalLink className="w-3 h-3 shrink-0" />
@@ -515,42 +492,55 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
         {/* Distribution Rule */}
         <Field label="Distribution Rule"
-          help="Defines how this inflow is split between funds (e.g. 70% to General Fund, 20% to Building Fund). The system auto-selects the rule active on the transaction date. Choose a specific rule to override.">
+          help="Defines how this inflow is split between funds. The system auto-selects the active rule for the transaction date and income type. Click Override to pin a specific version.">
           {transactionType ? (
             <p className="text-xs text-gray-500 italic">Not applicable for non-Normal transactions</p>
-          ) : selectedIncomeType?.special_config_id && !configManuallySet ? (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
-                <span className="text-xs text-primary font-medium">
-                  Auto-applying: {selectedIncomeType.special_config_name ?? 'Special Rule'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setConfigManuallySet(true)}
-                  className="text-xs text-gray-500 hover:text-gray-600 underline"
-                >
-                  Override
-                </button>
-              </div>
+          ) : !configManuallySet ? (
+            <div>
+              {resolvedConfig ? (
+                <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
+                  <div className="min-w-0">
+                    <span className="text-xs text-primary font-medium">{resolvedConfig.name}</span>
+                    {selectedIncomeType?.special_config_group_id && (
+                      <span className="text-xs text-gray-400 ml-1.5">
+                        · {selectedIncomeType.special_config_group_name ?? 'Custom group'}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedConfigId(resolvedConfig.id); setConfigManuallySet(true) }}
+                    className="text-xs text-gray-500 hover:text-gray-600 underline shrink-0 ml-2"
+                  >
+                    Override
+                  </button>
+                </div>
+              ) : watchedDate ? (
+                <p className="text-xs text-amber-600 italic px-1">No distribution rule found for {watchedDate}</p>
+              ) : (
+                <p className="text-xs text-gray-400 italic px-1">Select a date to see which rule applies</p>
+              )}
             </div>
           ) : (
-            <>
+            <div className="space-y-1">
               <select
                 value={selectedConfigId}
-                onChange={e => { setSelectedConfigId(e.target.value); setConfigManuallySet(true) }}
+                onChange={e => setSelectedConfigId(e.target.value)}
                 className={inputCls(false)}
               >
-                <option value="">Date-based (auto)</option>
+                <option value="">— Auto-resolve (date-based) —</option>
                 {lockedConfigs.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} — effective {c.start_date}</option>
+                  <option key={c.id} value={c.id}>{c.name} — {c.effective_from ?? c.start_date}</option>
                 ))}
               </select>
-              {!selectedConfigId && watchedDate && (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Auto: {getConfigForDate(lockedConfigs, watchedDate)?.name ?? 'no config found for this date'}
-                </p>
-              )}
-            </>
+              <button
+                type="button"
+                onClick={() => { setConfigManuallySet(false); setSelectedConfigId('') }}
+                className="text-xs text-primary underline"
+              >
+                Reset to auto
+              </button>
+            </div>
           )}
         </Field>
 

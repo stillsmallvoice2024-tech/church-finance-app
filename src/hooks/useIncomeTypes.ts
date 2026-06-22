@@ -16,6 +16,7 @@ export interface IncomeType {
   name:                     string
   description:              string | null
   color:                    string
+  is_system:                boolean
   special_config_id:        string | null
   special_config_name:      string | null  // joined from allocation_configs
   special_config_group_id:  string | null
@@ -39,7 +40,7 @@ export function useIncomeTypes() {
     const { data, error: err } = await supabase
       .from('income_types')
       .select(`
-        id, name, description, color, special_config_id, special_config_group_id, created_at,
+        id, name, description, color, is_system, special_config_id, special_config_group_id, created_at,
         allocation_configs ( name ),
         special_config_groups ( name ),
         income_type_rules ( id, income_type_id, rule_type, rule_value )
@@ -57,6 +58,7 @@ export function useIncomeTypes() {
           name:                     r.name,
           description:              r.description ?? null,
           color:                    r.color,
+          is_system:                (r.is_system as boolean) ?? false,
           special_config_id:        r.special_config_id ?? null,
           special_config_name:      cfg?.name ?? null,
           special_config_group_id:  r.special_config_group_id ?? null,

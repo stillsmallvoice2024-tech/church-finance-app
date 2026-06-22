@@ -20,9 +20,8 @@ import { useCategories } from '../hooks/useCategories'
 import { useAddInflow, useAddOutflow, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
-import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../store/allocationStore'
+import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
 import { getFinalConfig, type RowResolverState } from '../utils/configResolver'
-import { formatDate } from '../utils/formatters'
 import { friendlyError } from '../utils/friendlyError'
 import { formatCurrency } from '../utils/currency'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
@@ -594,7 +593,7 @@ function ManualEntryForm() {
   const { categories }                                 = useCategories()
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
-  const { configs, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
+  const { configs, groups: allocGroups, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
   const addInflow  = useAddInflow()
   const addOutflow = useAddOutflow()
 
@@ -738,15 +737,8 @@ function ManualEntryForm() {
   const doSaveInflow = async (pregenRef?: string) => {
     setSaving(true)
     try {
-      const selectedIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
       const effectiveConfigId: string | undefined = txnType ? undefined : (getFinalConfig(
-        {
-          incomeType:         selectedIncomeType,
-          allocationConfigId: configOverride,
-          isManualOverride:   !!configOverride,
-        } satisfies RowResolverState,
-        getConfigForDate(configs, v('date'))?.id ?? null,
-        (groupId) => getSpecialConfigVersionForDate(configs, groupId, v('date'))?.id ?? null,
+        { incomeType: null, allocationConfigId: configOverride, isManualOverride: !!configOverride } satisfies RowResolverState,
       ) ?? undefined)
       const selectedBank = banks.find(b => b.id === v('bank_id'))
       let input: AddInflowInput = {
@@ -812,7 +804,6 @@ function ManualEntryForm() {
         date:                    v('date'),
         amount_disbursed:        parseFloat(v('amount_disbursed')),
         description:             v('description')      || undefined,
-        allocation_config_id:    txnType ? undefined : getConfigForDate(configs, v('date'))?.id,
         bank_name:               selectedBank?.name    || undefined,
         bank_description:        v('bank_description') || undefined,
         transaction_id:          pregenId || v('transaction_id') || await generateFallbackTransactionId(v('date'), v('amount_disbursed'), v('description') ?? v('bank_description') ?? '', selectedBank?.name ?? ''),
@@ -1034,41 +1025,32 @@ function ManualEntryForm() {
             </div>
           ) : cfgLoaded && v('date') && (() => {
             const selIncomeType = incomeTypes.find(t => t.id === incomeTypeId) ?? null
-            const isCatchAll = selIncomeType !== null && selIncomeType.rules.length === 0
-            const resolvedConfigId = getFinalConfig(
-              {
-                incomeType:         selIncomeType,
-                allocationConfigId: configOverride,
-                isManualOverride:   !!configOverride,
-              } satisfies RowResolverState,
-              getConfigForDate(configs, v('date'))?.id ?? null,
-              (groupId) => getSpecialConfigVersionForDate(configs, groupId, v('date'))?.id ?? null,
-            )
-            const effectiveCfg = resolvedConfigId ? configs.find(c => c.id === resolvedConfigId) : null
-            const isAutoSpecial = !configOverride && !isCatchAll &&
-              selIncomeType && (selIncomeType.special_config_id || selIncomeType.special_config_group_id)
+            const vIndex = buildVersionIndex(configs, allocGroups)
+            const autoResolvedCfg = vIndex.resolve(selIncomeType?.special_config_group_id ?? null, v('date'))
+            const overrideCfg = configOverride ? configs.find(c => c.id === configOverride) : null
+            const displayCfg = overrideCfg ?? autoResolvedCfg
             return (
               <div className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500">Distribution Rule</p>
-                {effectiveCfg ? (
+                {displayCfg ? (
                   <p className="text-xs text-primary">
-                    {isAutoSpecial ? 'Auto-applying: ' : 'Using: '}
-                    <strong>{effectiveCfg.name}</strong>
-                    {!isAutoSpecial && !configOverride && (
-                      <span className="text-gray-400 ml-1">— effective {formatDate(effectiveCfg.start_date)}</span>
+                    {overrideCfg ? 'Override: ' : 'Auto: '}
+                    <strong>{displayCfg.name}</strong>
+                    {selIncomeType?.special_config_group_id && !overrideCfg && (
+                      <span className="text-gray-400 ml-1">· {selIncomeType.special_config_group_name ?? 'Custom group'}</span>
                     )}
                   </p>
                 ) : (
-                  <p className="text-xs text-amber-600">No config found for this date — transaction saved without allocation</p>
+                  <p className="text-xs text-amber-600">No distribution rule found for this date</p>
                 )}
                 <select
                   value={configOverride}
                   onChange={e => setConfigOverride(e.target.value)}
                   className={`${iCls} bg-white text-xs`}
                 >
-                  <option value="">— Use auto-detected —</option>
-                  {configs.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  <option value="">— Auto-resolve —</option>
+                  {configs.filter(c => c.status === 'locked' && c.superseded_by_id == null).map(c => (
+                    <option key={c.id} value={c.id}>{c.name} — {c.effective_from ?? c.start_date}</option>
                   ))}
                 </select>
               </div>

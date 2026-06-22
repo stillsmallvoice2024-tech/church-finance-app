@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, Star, TrendingUp, TrendingDown, Users } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, TrendingUp, TrendingDown, Users, Info, Clock, EyeOff, Eye } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -12,7 +12,7 @@ import { useToastStore } from '../store/toastStore'
 import { useAllocationStore, type AllocationConfig } from '../store/allocationStore'
 import { AllocationConfigModal } from '../components/modals/AllocationConfigModal'
 import { CreateSpecialConfigModal } from '../components/modals/CreateSpecialConfigModal'
-import { useSpecialConfigGroups, type SpecialConfigGroupWithVersions } from '../hooks/useSpecialConfigGroups'
+import { useSpecialConfigGroups, archiveGroup, restoreGroup, type SpecialConfigGroupWithVersions } from '../hooks/useSpecialConfigGroups'
 import { ResetDataModal }           from '../components/modals/ResetDataModal'
 import { AddIncomeTypeModal }        from '../components/modals/AddIncomeTypeModal'
 import { useIncomeTypes, deleteIncomeType, type IncomeType } from '../hooks/useIncomeTypes'
@@ -28,7 +28,6 @@ import {
   useDeleteAllocationConfig,
 } from '../hooks/useMutations'
 import { Modal } from '../components/ui/Modal'
-import { formatDate } from '../utils/formatters'
 import { friendlyError } from '../utils/friendlyError'
 import { supabase } from '../lib/supabase'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
@@ -36,14 +35,13 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
 import { COMMON_TIMEZONES, getOrgTimezone } from '../utils/timezones'
 
-const TABS = ['General', 'Banks', 'Distribution Rules', 'Special Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
+const TABS = ['General', 'Banks', 'Distribution Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
   { tab: 'General',            Icon: Settings2,    label: 'General'      },
   { tab: 'Banks',              Icon: Landmark,     label: 'Banks'        },
   { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution Rules' },
-  { tab: 'Special Rules',      Icon: Star,         label: 'Special Rules'      },
   { tab: 'Income Types',       Icon: TrendingUp,   label: 'Income Types'       },
   { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow Types'      },
   { tab: 'Departments',        Icon: Users,        label: 'Departments'  },
@@ -114,15 +112,6 @@ const BANK_SORT_OPTS: SortOpt[] = [
   { value: 'name|desc',       label: 'Name Z→A' },
   { value: 'created_at|desc', label: 'Newest' },
   { value: 'created_at|asc',  label: 'Oldest' },
-]
-
-const ALLOC_SORT_OPTS: SortOpt[] = [
-  { value: 'name|asc',        label: 'Name A→Z' },
-  { value: 'name|desc',       label: 'Name Z→A' },
-  { value: 'start_date|desc', label: 'Effective date newest' },
-  { value: 'start_date|asc',  label: 'Effective date oldest' },
-  { value: 'created_at|desc', label: 'Created newest' },
-  { value: 'created_at|asc',  label: 'Created oldest' },
 ]
 
 const SPECIAL_SORT_OPTS: SortOpt[] = [
@@ -417,180 +406,415 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
-// ── Allocation tab ─────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function AllocationTab({ onNew, onEdit, onLock, onEditLocked, onDelete }: {
-  onNew:        () => void
-  onEdit:       (c: AllocationConfig) => void
-  onLock:       (c: AllocationConfig) => void
-  onEditLocked: (c: AllocationConfig) => void
-  onDelete:     (c: AllocationConfig) => void
+const portionLabel = (p?: string): string => {
+  if (!p || p === 'Percentage' || p === 'Percentage Allocation') return 'Regular Funds'
+  return p
+}
+
+// ── General Distribution Rule panel ───────────────────────────────────────────
+
+function GeneralGroupPanel({
+  onNewVersion,
+  onAmend,
+  refetchKey,
+}: {
+  onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
+  refetchKey:   number
 }) {
-  const { configs, loading, error, fetch } = useAllocationStore()
-  const [search, setSearch] = useState('')
-  const [sort,   setSort]   = useState('name|asc')
+  const orgId = useOrgStore(s => s.orgId)
+  const { baseCurrencySymbol } = useOrgCurrency()
+  const [group,            setGroup]            = useState<SpecialConfigGroupWithVersions | null>(null)
+  const [loading,          setLoading]          = useState(true)
+  const [expanded,         setExpanded]         = useState(false)
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
+  const [pastInfoVersion,  setPastInfoVersion]  = useState<AllocationConfig | null>(null)
 
-  useEffect(() => { fetch() }, [fetch])
+  const toggleVersion = (id: string) =>
+    setExpandedVersions(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const filtered = q
-      ? configs.filter(c => [c.name, c.status ?? ''].some(v => v.toLowerCase().includes(q)))
-      : configs
-    return applySetupSort(filtered, sort)
-  }, [configs, search, sort])
+  useEffect(() => {
+    if (!orgId) return
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      const { data: grp } = await supabase
+        .from('special_config_groups')
+        .select('id, name, is_default, created_at')
+        .eq('org_id', orgId)
+        .eq('is_default', true)
+        .maybeSingle()
+      if (cancelled || !grp) { setLoading(false); return }
 
-  const statusBadge = (config: AllocationConfig) => {
-    const isLocked = config.status === 'locked'
-    return (
-      <div className="flex flex-col gap-0.5">
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
-          isLocked
-            ? 'bg-green-50 text-green-700 border border-green-200'
-            : 'bg-amber-50 text-amber-700 border border-amber-200'
-        }`}>
-          {isLocked ? <Lock className="w-3 h-3" /> : <FileEdit className="w-3 h-3" />}
-          {isLocked ? 'Approved & Locked' : 'Draft'}
-        </span>
-        {!isLocked && (
-          <span className="text-xs text-gray-500">Not in use — approve &amp; lock to activate</span>
-        )}
-      </div>
-    )
+      const { data: versions } = await supabase
+        .from('allocation_configs')
+        .select('*')
+        .eq('config_group_id', grp.id)
+        .order('effective_from', { ascending: false })
+
+      const today = new Date().toISOString().slice(0, 10)
+      const active = (versions ?? []).find((v: AllocationConfig) =>
+        v.status === 'locked' &&
+        v.effective_from != null &&
+        v.effective_from <= today &&
+        (v.effective_to == null || v.effective_to >= today) &&
+        v.superseded_by_id == null
+      ) ?? null
+
+      if (!cancelled) {
+        setGroup({
+          id:                      grp.id as string,
+          name:                    grp.name as string,
+          is_default:              true,
+          created_at:              grp.created_at as string,
+          versions:                (versions ?? []) as AllocationConfig[],
+          active_version:          active as AllocationConfig | null,
+          linked_income_type_id:   null,
+          linked_income_type_name: null,
+        })
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [orgId, refetchKey])
+
+  const handleDeleteVersion = async (v: AllocationConfig) => {
+    if (v.status === 'locked') { window.alert('Locked versions cannot be deleted. Create a new version to supersede it.'); return }
+    if (!window.confirm(`Delete draft version #${v.version_number ?? '?'}? This cannot be undone.`)) return
+    const { error: err } = await supabase.from('allocation_configs').delete().eq('id', v.id)
+    if (err) { window.alert(err.message); return }
+    setGroup(prev => prev ? { ...prev, versions: prev.versions.filter(x => x.id !== v.id) } : prev)
   }
 
+  if (loading) return <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+
+  if (!group) return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+      General Distribution Rule not found. Run the Distribution Rules Unification migration from the Database tab.
+    </div>
+  )
+
+  const av    = group.active_version
+  const isAmt = av?.allocation_type === 'amount'
+  const today = new Date().toISOString().slice(0, 10)
+
   return (
-    <div className="max-w-2xl space-y-3">
-      <div className="flex justify-end">
-        <button
-          onClick={onNew}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-        >
-          <Plus className="w-4 h-4" /> New Distribution Rule
-        </button>
+    <>
+    <div className="rounded-xl border-2 border-primary/20 bg-white overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-primary/5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900 text-sm">General Distribution Rule</span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary border border-primary/20">
+              Default fallback
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Applies to any income type without a custom rule.
+          </p>
+          {av ? (
+            <p className="text-xs text-gray-500 mt-1">
+              Active: v{av.version_number} &nbsp;&middot;&nbsp;
+              {av.effective_from ?? '—'}{av.effective_to ? ` → ${av.effective_to}` : ' → open'} &nbsp;&middot;&nbsp;
+              <span className={isAmt ? 'text-blue-600' : 'text-purple-600'}>
+                {isAmt ? `Amount ${baseCurrencySymbol}` : 'Percentage %'}
+              </span>
+              &nbsp;&middot;&nbsp;<span className="text-green-700">Locked</span>
+            </p>
+          ) : (
+            <p className="text-xs text-amber-600 mt-1">No active version for today — create a new version to activate.</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onNewVersion(group, av)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            <Plus className="w-3 h-3" /> New Version
+          </button>
+          {group.versions.length > 0 && (
+            <button
+              onClick={() => setExpanded(p => !p)}
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              {expanded ? 'Hide' : 'History'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {loading && (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {!loading && error && (
-        <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && configs.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
-          <Layers className="w-10 h-10 text-gray-300" />
-          <div>
-            <p className="text-sm font-medium text-gray-600">No distribution rules yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a distribution rule to define how income is split across categories.</p>
+      {/* Active version rows preview */}
+      {av && (
+        <div className="px-4 py-2 border-t border-gray-100">
+          <p className="text-xs font-medium text-gray-500 mb-1.5">Current allocation</p>
+          <div className="space-y-0.5">
+            {av.rows.map((r, i) => (
+              <div key={i} className="flex justify-between text-xs text-gray-700">
+                <span>{r.category_name}</span>
+                <span className="font-medium tabular-nums">
+                  {r.percentage != null ? `${r.percentage}%` : r.amount != null ? `${baseCurrencySymbol}${r.amount}` : '—'}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {!loading && !error && configs.length > 0 && (
-        <>
-          <SetupSearchSort search={search} onSearch={setSearch} sort={sort} onSort={setSort} sortOptions={ALLOC_SORT_OPTS} placeholder="Search distribution rules…" />
-          {visible.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">No distribution rules match your search.</p>
+      {/* Version history */}
+      {expanded && (
+        <div className="border-t border-gray-100">
+          {group.versions.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-gray-500">No versions yet.</p>
           ) : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
-                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Name</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Effective From</th>
-                    <th className="px-4 py-3 text-right text-[11px] font-bold text-gray-400 uppercase tracking-widest">Total %</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-                    <th className="px-4 py-3 w-28" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-black/[0.05]">
-                  {visible.map(config => {
-                    const total    = config.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
-                    const balanced = Math.abs(total - 100) < 0.01
-                    return (
-                      <tr key={config.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
-                        <td className="px-4 py-3 font-medium text-gray-900">{config.name}</td>
-                        <td className="px-4 py-3 text-gray-500">{formatDate(config.start_date)}</td>
-                        <td className={`px-4 py-3 text-right font-mono font-semibold ${balanced ? 'text-success' : 'text-danger'}`}>
-                          {total.toFixed(1)}%
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Version</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Effective From</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Effective To</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">Status</th>
+                  <th className="px-4 py-2 w-8" />
+                  <th className="px-4 py-2 w-12" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {group.versions.map(v => {
+                  const isSuperseded     = v.superseded_by_id != null
+                  const isCurrent        = v.id === av?.id
+                  const isPast           = v.status === 'locked' && !!v.effective_to && v.effective_to < today && !isCurrent && !isSuperseded
+                  const isFuture         = v.status === 'locked' && !!v.effective_from && v.effective_from > today
+                  const isVersionExpanded = expandedVersions.has(v.id)
+                  return (
+                    <React.Fragment key={v.id}>
+                      <tr className={`hover:bg-gray-50 ${isSuperseded ? 'opacity-60' : ''}`}>
+                        <td className="px-4 py-2 font-medium text-gray-700">v{v.version_number}</td>
+                        <td className="px-4 py-2 text-gray-600">{v.effective_from ?? '—'}</td>
+                        <td className="px-4 py-2 text-gray-600">{v.effective_to ?? 'open'}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium ${
+                              v.status === 'locked'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {v.status === 'locked' ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                              {v.status === 'locked' ? 'Locked' : 'Draft'}
+                            </span>
+                            {isCurrent && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">Current</span>
+                            )}
+                            {isPast && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                <Clock className="w-2.5 h-2.5" />Past
+                              </span>
+                            )}
+                            {isFuture && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">Future</span>
+                            )}
+                            {v.change_type === 'amendment' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">Amendment</span>
+                            )}
+                            {v.change_type === 'date_split' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">Date split</span>
+                            )}
+                            {isSuperseded && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">Superseded</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-4 py-3">{statusBadge(config)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
-                            {config.status === 'draft' ? (
-                              <>
-                                <button
-                                  onClick={() => onLock(config)}
-                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-                                  title="Approve & Lock"
-                                >
-                                  <Lock className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => onEdit(config)}
-                                  className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                                  title="Edit" aria-label="Edit"
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </button>
-                              </>
-                            ) : (
+                        <td className="px-4 py-2">
+                          {v.rows.length > 0 && (
+                            <button
+                              onClick={() => toggleVersion(v.id)}
+                              className="p-1 text-gray-400 hover:text-gray-700 rounded transition-colors"
+                              title={isVersionExpanded ? 'Hide breakdown' : 'Show breakdown'}
+                            >
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isVersionExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-1">
+                            {isCurrent && (
                               <button
-                                onClick={() => onEditLocked(config)}
-                                className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
-                                title="Edit locked config"
+                                onClick={() => onAmend(group!, v)}
+                                className="p-1 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
+                                title="Amend this version"
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Pencil className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            <button
-                              onClick={() => onDelete(config)}
-                              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                              title="Delete" aria-label="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {isPast && (
+                              <button
+                                onClick={() => setPastInfoVersion(v)}
+                                className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="About this past version"
+                              >
+                                <Info className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {v.status === 'draft' && (
+                              <button
+                                onClick={() => handleDeleteVersion(v)}
+                                className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                title="Delete draft"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      {isVersionExpanded && v.rows.length > 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-6 pb-3 pt-0 bg-gray-50/60">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-gray-200">
+                                  <th className="py-1.5 text-left text-gray-500 font-medium">Category</th>
+                                  <th className="py-1.5 text-left text-gray-500 font-medium">Fund Type</th>
+                                  <th className="py-1.5 text-right text-gray-500 font-medium">Value</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {v.rows.map((r, i) => (
+                                  <tr key={i} className="border-b border-gray-100 last:border-0">
+                                    <td className="py-1 text-gray-700">{r.category_name}</td>
+                                    <td className="py-1 text-gray-500">{portionLabel(r.budget_portion)}</td>
+                                    <td className="py-1 text-right font-medium text-gray-700 tabular-nums">
+                                      {r.percentage != null ? `${r.percentage}%` : r.amount != null ? `${baseCurrencySymbol}${r.amount}` : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
-          <p className="text-xs text-gray-500">
-            {visible.length !== configs.length
-              ? `${visible.length} of ${configs.length} distribution rules`
-              : `${configs.length} distribution rule${configs.length !== 1 ? 's' : ''}`}
-          </p>
-        </>
+        </div>
       )}
+    </div>
+    {/* Past version info dialog */}
+    {pastInfoVersion && (
+      <Modal open onClose={() => setPastInfoVersion(null)} title="Historical Version">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            This rule covered{' '}
+            <strong>{pastInfoVersion.effective_from ?? '—'}</strong>
+            {' → '}
+            <strong>{pastInfoVersion.effective_to ?? 'open'}</strong>
+            {' '}and is no longer active.
+          </p>
+          <p className="text-sm text-gray-600">
+            To make corrections to how records from that period were distributed, create a new version with those same dates — the date-split system will handle any overlaps automatically.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setPastInfoVersion(null)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => { onNewVersion(group!, pastInfoVersion); setPastInfoVersion(null) }}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+            >
+              Create New Version
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
+    </>
+  )
+}
+
+// ── Unified Distribution Rules tab ─────────────────────────────────────────────
+
+function DistributionRulesTab({
+  onNewCustom,
+  onNewVersion,
+  onAmend,
+  refetchKey,
+  onRefetch,
+}: {
+  onNewCustom:  () => void
+  onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
+  refetchKey:   number
+  onRefetch:    () => void
+}) {
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* General rule — always first */}
+      <div className="space-y-2">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">General Rule</h3>
+          <p className="text-xs text-gray-500 mt-0.5">The fallback rule applied when an income type has no custom rule.</p>
+        </div>
+        <GeneralGroupPanel onNewVersion={onNewVersion} onAmend={onAmend} refetchKey={refetchKey} />
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-gray-200" />
+
+      {/* Custom rules */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800">Custom Rules</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Income-type-specific rules that override the General rule.</p>
+          </div>
+          <button
+            onClick={onNewCustom}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Custom Rule
+          </button>
+        </div>
+        <SpecialConfigsTab
+          key={refetchKey}
+          onNew={onNewCustom}
+          onNewVersion={onNewVersion}
+          onAmend={onAmend}
+          onRefetch={onRefetch}
+          hideHeader
+        />
+      </div>
     </div>
   )
 }
 
-// ── Special Rules tab ─────────────────────────────────────────────────────────────
+// ── Custom Rules tab ─────────────────────────────────────────────────────────────
 
-function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
+function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader = false }: {
   onNew:        () => void
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   onRefetch:    () => void
+  hideHeader?:  boolean
 }) {
   const { baseCurrencySymbol } = useOrgCurrency()
-  const { groups, loading, error } = useSpecialConfigGroups()
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const { groups, archivedGroups, loading, error } = useSpecialConfigGroups()
+  const [expandedGroups,   setExpandedGroups]   = useState<Set<string>>(new Set())
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
+  const [pastInfoDialog,   setPastInfoDialog]   = useState<{ g: SpecialConfigGroupWithVersions; v: AllocationConfig } | null>(null)
+  const [showArchived,     setShowArchived]      = useState(false)
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
+
+  const toggleVersionExpand = (id: string) =>
+    setExpandedVersions(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -613,6 +837,21 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
       .eq('id', g.id)
     if (err) { window.alert(err.message); return }
     onRefetch()
+  }
+
+  const handleArchiveGroup = async (g: SpecialConfigGroupWithVersions) => {
+    if (!window.confirm(`Hide "${g.name}"? It will be removed from the active list but all its data is preserved. You can restore it at any time.`)) return
+    try {
+      await archiveGroup(g.id)
+      onRefetch()
+    } catch (e: unknown) { window.alert(e instanceof Error ? e.message : String(e)) }
+  }
+
+  const handleRestoreGroup = async (g: SpecialConfigGroupWithVersions) => {
+    try {
+      await restoreGroup(g.id)
+      onRefetch()
+    } catch (e: unknown) { window.alert(e instanceof Error ? e.message : String(e)) }
   }
 
   const handleDeleteVersion = async (v: AllocationConfig) => {
@@ -641,21 +880,23 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
 
   return (
     <div className="max-w-3xl space-y-3">
-      <div className="flex justify-end">
-        <button
-          onClick={onNew}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Create New Group
-        </button>
-      </div>
+      {!hideHeader && (
+        <div className="flex justify-end">
+          <button
+            onClick={onNew}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Create New Group
+          </button>
+        </div>
+      )}
 
       {groups.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
-          <Layers className="w-10 h-10 text-gray-300" />
+        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center border border-dashed border-gray-300 rounded-xl bg-gray-50">
+          <Layers className="w-8 h-8 text-gray-300" />
           <div>
-            <p className="text-sm font-medium text-gray-600">No special rule groups yet</p>
-            <p className="text-xs text-gray-500 mt-1">Create a group to manage versioned special rules.</p>
+            <p className="text-sm font-medium text-gray-600">No custom rules yet</p>
+            <p className="text-xs text-gray-500 mt-1">Create a custom rule to override the General rule for specific income types.</p>
           </div>
         </div>
       ) : (
@@ -669,6 +910,8 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
             const isExpanded = expandedGroups.has(g.id)
             const av = g.active_version
             const isAmt = av?.allocation_type === 'amount'
+            const today = new Date().toISOString().slice(0, 10)
+            const isGroupUsed = g.versions.some(v => v.status === 'locked' && v.superseded_by_id == null && !!v.effective_from && v.effective_from <= today)
             return (
               <div key={g.id} className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                 {/* Group header row */}
@@ -710,13 +953,23 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                     >
                       {isExpanded ? 'Hide' : 'History'}
                     </button>
-                    <button
-                      onClick={() => handleDeleteGroup(g)}
-                      className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                      title="Delete group"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isGroupUsed ? (
+                      <button
+                        onClick={() => handleArchiveGroup(g)}
+                        className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                        title="Hide group (has locked versions — cannot delete)"
+                      >
+                        <EyeOff className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDeleteGroup(g)}
+                        className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                        title="Delete group"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -725,59 +978,149 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
                   <div className="border-t border-gray-100">
                     {g.versions.length === 0 ? (
                       <p className="px-4 py-3 text-xs text-gray-500">No versions yet.</p>
-                    ) : (
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Type</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status</th>
-                            <th className="px-4 py-2 text-right text-gray-500 font-semibold">Rows</th>
-                            <th className="px-4 py-2 w-10" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {g.versions.map(v => {
-                            const vAmt = v.allocation_type === 'amount'
-                            const vLocked = v.status === 'locked'
-                            return (
-                              <tr key={v.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
-                                <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
-                                <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
-                                <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
-                                <td className="px-4 py-2">
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                                    vAmt ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                                  }`}>
-                                    {vAmt ? 'Amount' : 'Pct'}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2">
-                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
-                                    vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                                  }`}>
-                                    {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
-                                    {vLocked ? 'Locked' : 'Draft'}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2 text-right text-gray-500">{v.rows.length}</td>
-                                <td className="px-4 py-2">
-                                  <button
-                                    onClick={() => handleDeleteVersion(v)}
-                                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
-                                    title="Delete version"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    )}
+                    ) : (() => {
+                      const today = new Date().toISOString().slice(0, 10)
+                      return (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Type</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status / Lineage</th>
+                              <th className="px-4 py-2 w-8" />
+                              <th className="px-4 py-2 w-20" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {g.versions.map(v => {
+                              const vAmt             = v.allocation_type === 'amount'
+                              const vLocked          = v.status === 'locked'
+                              const isSuperseded     = v.superseded_by_id != null
+                              const isCurrent        = v.id === av?.id
+                              const isPast           = vLocked && !!v.effective_to && v.effective_to < today && !isCurrent && !isSuperseded
+                              const isFuture         = vLocked && !!v.effective_from && v.effective_from > today
+                              const isVersionExpanded = expandedVersions.has(v.id)
+                              return (
+                                <React.Fragment key={v.id}>
+                                  <tr className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${isSuperseded ? 'opacity-60' : ''}`}>
+                                    <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
+                                    <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
+                                    <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
+                                    <td className="px-4 py-2">
+                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                                        vAmt ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                                      }`}>
+                                        {vAmt ? 'Amount' : 'Pct'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      <div className="flex flex-wrap items-center gap-1">
+                                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
+                                          vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                                        }`}>
+                                          {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                                          {vLocked ? 'Locked' : 'Draft'}
+                                        </span>
+                                        {isCurrent && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">Current</span>
+                                        )}
+                                        {isPast && (
+                                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                            <Clock className="w-2.5 h-2.5" />Past
+                                          </span>
+                                        )}
+                                        {isFuture && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">Future</span>
+                                        )}
+                                        {v.change_type === 'amendment' && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">Amendment</span>
+                                        )}
+                                        {v.change_type === 'date_split' && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">Date split</span>
+                                        )}
+                                        {isSuperseded && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">Superseded</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      {v.rows.length > 0 && (
+                                        <button
+                                          onClick={() => toggleVersionExpand(v.id)}
+                                          className="touch-target p-1 rounded text-gray-400 hover:text-gray-700 transition-colors"
+                                          title={isVersionExpanded ? 'Hide breakdown' : 'Show breakdown'}
+                                        >
+                                          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isVersionExpanded ? 'rotate-180' : ''}`} />
+                                        </button>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      <div className="flex items-center justify-end gap-1">
+                                        {isCurrent && (
+                                          <button
+                                            onClick={() => onAmend(g, v)}
+                                            className="touch-target p-1 rounded text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                                            title="Amend this version"
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        {isPast && (
+                                          <button
+                                            onClick={() => setPastInfoDialog({ g, v })}
+                                            className="touch-target p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                            title="About this past version"
+                                          >
+                                            <Info className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        {(!vLocked || isFuture) && (
+                                          <button
+                                            onClick={() => handleDeleteVersion(v)}
+                                            className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                                            title="Delete version"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {isVersionExpanded && v.rows.length > 0 && (
+                                    <tr>
+                                      <td colSpan={7} className="px-6 pb-3 pt-0 bg-gray-50/60">
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="border-b border-gray-200">
+                                              <th className="py-1.5 text-left text-gray-500 font-medium">Category</th>
+                                              <th className="py-1.5 text-left text-gray-500 font-medium">Fund Type</th>
+                                              <th className="py-1.5 text-right text-gray-500 font-medium">Value</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {v.rows.map((r, i) => (
+                                              <tr key={i} className="border-b border-gray-100 last:border-0">
+                                                <td className="py-1 text-gray-700">{r.category_name}</td>
+                                                <td className="py-1 text-gray-500">{portionLabel(r.budget_portion)}</td>
+                                                <td className="py-1 text-right font-medium text-gray-700 tabular-nums">
+                                                  {r.percentage != null ? `${r.percentage}%` : r.amount != null ? `${baseCurrencySymbol}${r.amount}` : '—'}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
@@ -787,11 +1130,89 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch }: {
           )}
         </>
       )}
-      <p className="text-xs text-gray-500">
-        {visible.length !== groups.length
-          ? `${visible.length} of ${groups.length} groups`
-          : `${groups.length} group${groups.length !== 1 ? 's' : ''}`}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">
+          {visible.length !== groups.length
+            ? `${visible.length} of ${groups.length} groups`
+            : `${groups.length} group${groups.length !== 1 ? 's' : ''}`}
+        </p>
+        {archivedGroups.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowArchived(s => !s)}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors"
+          >
+            {showArchived ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            {showArchived ? 'Hide archived' : `Show archived (${archivedGroups.length})`}
+          </button>
+        )}
+      </div>
+
+      {showArchived && archivedGroups.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Archived Groups</p>
+          {archivedGroups.map(g => (
+            <div key={g.id} className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 opacity-70">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-gray-700 text-sm">{g.name}</span>
+                    {g.linked_income_type_name && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                        {g.linked_income_type_name}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                      <EyeOff className="w-3 h-3" /> Archived
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {g.versions.length} version{g.versions.length !== 1 ? 's' : ''} — data preserved
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRestoreGroup(g)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors"
+                  title="Restore group to active list"
+                >
+                  <Eye className="w-3 h-3" /> Restore
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {pastInfoDialog && (
+        <Modal open onClose={() => setPastInfoDialog(null)} title="Historical Version">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              This rule covered{' '}
+              <strong>{pastInfoDialog.v.effective_from ?? '—'}</strong>
+              {' → '}
+              <strong>{pastInfoDialog.v.effective_to ?? 'open'}</strong>
+              {' '}and is no longer active.
+            </p>
+            <p className="text-sm text-gray-600">
+              To make corrections to how records from that period were distributed, create a new version with those same dates — the date-split system will handle any overlaps automatically.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setPastInfoDialog(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => { onNewVersion(pastInfoDialog.g, pastInfoDialog.v); setPastInfoDialog(null) }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+              >
+                Create New Version
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -2328,6 +2749,428 @@ CREATE INDEX IF NOT EXISTS idx_project_entries_import_seq ON public.project_entr
 
 NOTIFY pgrst, 'reload schema';`
 
+// ── Distribution Rules Unification — Phase 1 migration ────────────────────────────────
+// Run this ONCE in Supabase SQL editor on each existing database.
+// Safe to re-run (all ops are idempotent).
+export const DISTRIBUTION_RULES_MIGRATION_SQL = `-- ── Distribution Rules Unification — Phase 1 ────────────────────────────────
+-- Run once in Supabase SQL editor. Safe to re-run (idempotent).
+
+-- 1. New columns
+ALTER TABLE public.special_config_groups
+  ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.categories
+  ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
+
+-- 2. Performance indexes
+CREATE INDEX IF NOT EXISTS idx_alloc_configs_group_date
+  ON public.allocation_configs(config_group_id, status, effective_from, effective_to)
+  WHERE config_group_id IS NOT NULL;
+
+DO $$ BEGIN
+  CREATE UNIQUE INDEX idx_alloc_configs_group_effrom_unique
+    ON public.allocation_configs(config_group_id, effective_from)
+    WHERE status = 'locked';
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+
+-- 3. Per-org migration: create General rule group + version history
+DO $$
+DECLARE
+  v_org         record;
+  v_group_id    uuid;
+  v_cfg         record;
+  v_next_effrom date;
+  v_idx         int;
+BEGIN
+  FOR v_org IN
+    SELECT id, created_at FROM public.organizations
+    WHERE status IS NULL OR status = 'active'
+  LOOP
+
+    IF EXISTS (
+      SELECT 1 FROM public.special_config_groups
+      WHERE org_id = v_org.id AND is_default = true
+    ) THEN CONTINUE; END IF;
+
+    INSERT INTO public.special_config_groups (org_id, name, is_default)
+    VALUES (v_org.id, 'General', true)
+    RETURNING id INTO v_group_id;
+
+    IF EXISTS (
+      SELECT 1 FROM public.allocation_configs
+      WHERE org_id = v_org.id
+        AND (is_special = false OR is_special IS NULL)
+        AND config_group_id IS NULL
+    ) THEN
+      -- Scenario A/B: migrate existing general configs
+      v_idx := 1;
+      FOR v_cfg IN
+        SELECT * FROM public.allocation_configs
+        WHERE org_id = v_org.id
+          AND (is_special = false OR is_special IS NULL)
+          AND config_group_id IS NULL
+        ORDER BY start_date ASC, created_at ASC
+      LOOP
+        UPDATE public.allocation_configs
+        SET config_group_id = v_group_id,
+            effective_from  = COALESCE(effective_from, v_cfg.start_date),
+            version_number  = v_idx
+        WHERE id = v_cfg.id;
+        v_idx := v_idx + 1;
+      END LOOP;
+
+      FOR v_cfg IN
+        SELECT id, COALESCE(effective_from, start_date) AS eff_from
+        FROM public.allocation_configs
+        WHERE config_group_id = v_group_id AND org_id = v_org.id
+        ORDER BY COALESCE(effective_from, start_date) ASC
+      LOOP
+        SELECT COALESCE(effective_from, start_date)
+        INTO   v_next_effrom
+        FROM   public.allocation_configs
+        WHERE  config_group_id = v_group_id
+          AND  org_id = v_org.id
+          AND  COALESCE(effective_from, start_date) > v_cfg.eff_from
+        ORDER BY COALESCE(effective_from, start_date) ASC
+        LIMIT 1;
+
+        IF v_next_effrom IS NOT NULL THEN
+          UPDATE public.allocation_configs
+          SET effective_to = v_next_effrom - INTERVAL '1 day'
+          WHERE id = v_cfg.id;
+        END IF;
+      END LOOP;
+
+    ELSE
+      -- Scenario C: no general configs — create draft placeholder
+      INSERT INTO public.allocation_configs (
+        org_id, config_group_id, name,
+        start_date, effective_from, effective_to,
+        status, is_special, allocation_type, rows, version_number
+      ) VALUES (
+        v_org.id, v_group_id, 'General Distribution Rule',
+        v_org.created_at::date, v_org.created_at::date, NULL,
+        'draft', false, 'percentage', '[]'::jsonb, 1
+      );
+    END IF;
+
+  END LOOP;
+END $$;
+
+-- 4. Update complete_org_onboarding() for new orgs
+DROP FUNCTION IF EXISTS public.complete_org_onboarding(uuid, text, text, int, text);
+
+CREATE OR REPLACE FUNCTION public.complete_org_onboarding(
+  p_org_id            uuid,
+  p_name              text,
+  p_default_currency  text,
+  p_fiscal_year_start int  DEFAULT 1,
+  p_timezone          text DEFAULT 'Africa/Lagos'
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user_id  uuid := auth.uid();
+  v_group_id uuid;
+  v_org_date date;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.org_members
+    WHERE org_id = p_org_id AND user_id = v_user_id
+      AND role IN ('owner','admin') AND status = 'active'
+  ) THEN RAISE EXCEPTION 'Unauthorized: only org admins can complete onboarding'; END IF;
+
+  UPDATE public.organizations
+  SET name = trim(p_name), default_currency = p_default_currency,
+      fiscal_year_start = p_fiscal_year_start, timezone = p_timezone,
+      onboarding_complete = true, updated_at = now()
+  WHERE id = p_org_id;
+
+  SELECT created_at::date INTO v_org_date
+  FROM public.organizations WHERE id = p_org_id;
+
+  IF NOT EXISTS (SELECT 1 FROM public.income_types WHERE org_id = p_org_id LIMIT 1) THEN
+    INSERT INTO public.income_types (org_id, name, color) VALUES
+      (p_org_id,'Tithe','#6366f1'),(p_org_id,'Offering','#10b981'),
+      (p_org_id,'Donation','#f59e0b'),(p_org_id,'Special Giving','#ec4899'),
+      (p_org_id,'Thanksgiving','#3b82f6'),(p_org_id,'Project','#8b5cf6');
+  END IF;
+
+  INSERT INTO public.outflow_types (org_id, name, color, is_system, is_locked)
+  VALUES (p_org_id,'General','#64748b',true,true)
+  ON CONFLICT (org_id, name) DO NOTHING;
+
+  IF NOT EXISTS (SELECT 1 FROM public.categories WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.categories (org_id, name, is_default)
+    VALUES (p_org_id, 'General', true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.special_config_groups WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.special_config_groups (org_id, name, is_default)
+    VALUES (p_org_id, 'General', true)
+    RETURNING id INTO v_group_id;
+
+    INSERT INTO public.allocation_configs (
+      org_id, config_group_id, name,
+      start_date, effective_from, effective_to,
+      status, is_special, allocation_type, rows, version_number
+    ) VALUES (
+      p_org_id, v_group_id, 'General Distribution Rule',
+      v_org_date, v_org_date, NULL,
+      'draft', false, 'percentage',
+      '[]'::jsonb,
+      1
+    );
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.complete_org_onboarding(uuid,text,text,int,text) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ── Distribution Rules — Phase 2: Supersede / Amendment / Date-split audit ────
+-- Add columns for version lineage and audit trail. Safe to re-run (idempotent).
+
+ALTER TABLE public.allocation_configs
+  ADD COLUMN IF NOT EXISTS superseded_by_id  uuid
+    REFERENCES public.allocation_configs(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS superseded_at     timestamptz,
+  ADD COLUMN IF NOT EXISTS change_type       text
+    CHECK (change_type IN ('initial','new_version','date_split','amendment'))
+    DEFAULT 'initial',
+  ADD COLUMN IF NOT EXISTS source_version_id uuid
+    REFERENCES public.allocation_configs(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS amendment_reason  text;
+
+NOTIFY pgrst, 'reload schema';`
+
+export const SYSTEM_DEFAULTS_MIGRATION_SQL =
+`-- ── System Defaults: is_system columns + protected seeds ────────────────────
+-- Adds is_system flag to income_types and categories.
+-- Marks the "General Donation" income type and "General" category as system-protected.
+-- Safe to re-run (idempotent).
+
+ALTER TABLE public.income_types
+  ADD COLUMN IF NOT EXISTS is_system boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.categories
+  ADD COLUMN IF NOT EXISTS is_system boolean NOT NULL DEFAULT false;
+
+NOTIFY pgrst, 'reload schema';
+
+-- Mark existing "General Donation" rows as system-protected (no data overridden)
+UPDATE public.income_types
+SET is_system = true
+WHERE name = 'General Donation' AND (is_system = false OR is_system IS NULL);
+
+-- Insert "General Donation" only for orgs that don't have one yet
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT o.id FROM public.organizations o
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.income_types i
+      WHERE i.org_id = o.id AND i.name = 'General Donation'
+    )
+  LOOP
+    BEGIN
+      INSERT INTO public.income_types (org_id, name, color, is_system)
+      VALUES (r.id, 'General Donation', '#6b7280', true);
+    EXCEPTION WHEN OTHERS THEN NULL; -- skip locked/deleted orgs
+    END;
+  END LOOP;
+END;
+$$;
+
+-- Mark "General" category as system-protected for all orgs (idempotent)
+UPDATE public.categories
+SET is_system = true
+WHERE name = 'General' AND is_default = true AND is_system = false;
+
+-- Update complete_org_onboarding() to seed General Donation for new orgs
+DROP FUNCTION IF EXISTS public.complete_org_onboarding(uuid, text, text, int, text);
+
+CREATE OR REPLACE FUNCTION public.complete_org_onboarding(
+  p_org_id            uuid,
+  p_name              text,
+  p_default_currency  text,
+  p_fiscal_year_start int  DEFAULT 1,
+  p_timezone          text DEFAULT 'Africa/Lagos'
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user_id  uuid := auth.uid();
+  v_group_id uuid;
+  v_org_date date;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.org_members
+    WHERE org_id = p_org_id AND user_id = v_user_id
+      AND role IN ('owner','admin') AND status = 'active'
+  ) THEN RAISE EXCEPTION 'Unauthorized: only org admins can complete onboarding'; END IF;
+
+  UPDATE public.organizations
+  SET name = trim(p_name), default_currency = p_default_currency,
+      fiscal_year_start = p_fiscal_year_start, timezone = p_timezone,
+      onboarding_complete = true, updated_at = now()
+  WHERE id = p_org_id;
+
+  SELECT created_at::date INTO v_org_date
+  FROM public.organizations WHERE id = p_org_id;
+
+  IF NOT EXISTS (SELECT 1 FROM public.income_types WHERE org_id = p_org_id LIMIT 1) THEN
+    INSERT INTO public.income_types (org_id, name, color, is_system) VALUES
+      (p_org_id,'General Donation','#6b7280',true);
+    INSERT INTO public.income_types (org_id, name, color) VALUES
+      (p_org_id,'Tithe','#6366f1'),(p_org_id,'Offering','#10b981'),
+      (p_org_id,'Donation','#f59e0b'),(p_org_id,'Special Giving','#ec4899'),
+      (p_org_id,'Thanksgiving','#3b82f6'),(p_org_id,'Project','#8b5cf6');
+  END IF;
+
+  INSERT INTO public.outflow_types (org_id, name, color, is_system, is_locked)
+  VALUES (p_org_id,'General','#64748b',true,true)
+  ON CONFLICT (org_id, name) DO NOTHING;
+
+  IF NOT EXISTS (SELECT 1 FROM public.categories WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.categories (org_id, name, is_default, is_system)
+    VALUES (p_org_id, 'General', true, true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.special_config_groups WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.special_config_groups (org_id, name, is_default)
+    VALUES (p_org_id, 'General', true)
+    RETURNING id INTO v_group_id;
+
+    INSERT INTO public.allocation_configs (
+      org_id, config_group_id, name,
+      start_date, effective_from, effective_to,
+      status, is_special, allocation_type, rows, version_number
+    ) VALUES (
+      p_org_id, v_group_id, 'General Distribution Rule',
+      v_org_date, v_org_date, NULL,
+      'draft', false, 'percentage',
+      '[]'::jsonb,
+      1
+    );
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.complete_org_onboarding(uuid,text,text,int,text) TO authenticated;`
+
+export const SPECIAL_CONFIG_RPC_MIGRATION_SQL =
+`-- ── Special Config Version RPC ───────────────────────────────────────────────
+-- Atomic function to create a new special config version.
+-- Required for "Create New Version" (including from past versions) to work.
+-- Safe to re-run (CREATE OR REPLACE).
+
+CREATE OR REPLACE FUNCTION public.create_special_config_version(
+  p_group_id       uuid,
+  p_org_id         uuid,
+  p_name           text,
+  p_allocation_type text,
+  p_total_amount   numeric(15,2),
+  p_rows           jsonb,
+  p_effective_from date,
+  p_status         text DEFAULT 'draft'
+)
+RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_covering_id   uuid;
+  v_covering_from date;
+  v_next_from     date;
+  v_new_to        date;
+  v_max_ver       integer;
+  v_new_id        uuid;
+BEGIN
+  IF NOT public.is_org_admin(p_org_id) THEN
+    RAISE EXCEPTION 'create_special_config_version: caller must be an org admin';
+  END IF;
+
+  IF p_status NOT IN ('draft', 'locked') THEN
+    RAISE EXCEPTION 'create_special_config_version: invalid status %', p_status;
+  END IF;
+
+  -- Lock the group row to prevent concurrent version creation
+  PERFORM id FROM public.special_config_groups
+  WHERE id = p_group_id AND org_id = p_org_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'create_special_config_version: group % not found in org %', p_group_id, p_org_id;
+  END IF;
+
+  -- Find covering version (the one whose date range contains p_effective_from)
+  SELECT id, effective_from INTO v_covering_id, v_covering_from
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id
+    AND  org_id          = p_org_id
+    AND  effective_from <= p_effective_from
+    AND  (effective_to IS NULL OR effective_to >= p_effective_from)
+  LIMIT  1;
+
+  -- Find the immediately following version to determine new effective_to
+  SELECT effective_from INTO v_next_from
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id
+    AND  org_id          = p_org_id
+    AND  effective_from  > p_effective_from
+  ORDER BY effective_from
+  LIMIT  1;
+
+  v_new_to := CASE WHEN v_next_from IS NOT NULL
+                   THEN v_next_from - 1
+                   ELSE NULL END;
+
+  -- Close the covering version
+  IF v_covering_id IS NOT NULL THEN
+    UPDATE public.allocation_configs
+    SET    effective_to = p_effective_from - 1
+    WHERE  id = v_covering_id;
+  END IF;
+
+  -- Compute next version number server-side
+  SELECT COALESCE(MAX(version_number), 0) INTO v_max_ver
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id AND org_id = p_org_id;
+
+  -- Insert new version
+  INSERT INTO public.allocation_configs (
+    name, is_special, allocation_type, total_amount, rows,
+    effective_from, effective_to, version_number,
+    config_group_id, start_date, status, org_id
+  ) VALUES (
+    p_name, true, p_allocation_type, p_total_amount, p_rows,
+    p_effective_from, v_new_to, v_max_ver + 1,
+    p_group_id, p_effective_from, p_status, p_org_id
+  )
+  RETURNING id INTO v_new_id;
+
+  RETURN v_new_id;
+END;
+$$;
+
+REVOKE ALL   ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';`
+
+export const ARCHIVE_GROUPS_MIGRATION_SQL =
+`-- ── Config Group Archive / Hide ──────────────────────────────────────────────
+-- Adds is_archived flag to special_config_groups.
+-- Archived groups are hidden from the active list but all data is preserved.
+-- Safe to re-run (idempotent).
+
+ALTER TABLE public.special_config_groups
+  ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+
+NOTIFY pgrst, 'reload schema';`
+
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
 
 function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
@@ -2335,9 +3178,16 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
   onEdit:   (t: IncomeType) => void
   onDelete: (t: IncomeType) => void
 }) {
-  const { incomeTypes, loading, error } = useIncomeTypes()
+  const { incomeTypes, loading, error, refetch } = useIncomeTypes()
+  const orgId = useOrgStore(s => s.orgId)
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
+  const [promotingOverlap, setPromotingOverlap] = useState(false)
+
+  const dismissKey = orgId ? `it-overlap-dismissed-${orgId}` : null
+  const [overlapDismissed, setOverlapDismissed] = useState(
+    () => dismissKey ? localStorage.getItem(dismissKey) === '1' : false
+  )
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -2347,6 +3197,29 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
     return applySetupSort(filtered, sort)
   }, [incomeTypes, search, sort])
 
+  const systemType = incomeTypes.find(t => t.is_system)
+  const shadowType = incomeTypes.find(t => !t.is_system && /^general/i.test(t.name))
+  const showOverlap = !!(systemType && shadowType && !overlapDismissed && !loading)
+
+  const handlePromoteShadow = async () => {
+    if (!shadowType || !systemType) return
+    setPromotingOverlap(true)
+    try {
+      const { error: e1 } = await supabase.from('income_types').update({ is_system: true }).eq('id', shadowType.id)
+      if (e1) throw new Error(e1.message)
+      const { error: e2 } = await supabase.from('income_types').update({ is_system: false }).eq('id', systemType.id)
+      if (e2) throw new Error(e2.message)
+      refetch()
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : String(e))
+    } finally { setPromotingOverlap(false) }
+  }
+
+  const handleDismissOverlap = () => {
+    if (dismissKey) localStorage.setItem(dismissKey, '1')
+    setOverlapDismissed(true)
+  }
+
   if (loading) return (
     <div className="max-w-2xl space-y-2">
       {Array.from({ length: 3 }).map((_, i) => (
@@ -2355,19 +3228,54 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
     </div>
   )
 
-  if (error && !/income_types|relation.*does not exist/i.test(error)) return (
+  if (error && !/relation.*does not exist|column.*does not exist|Could not find/i.test(error)) return (
     <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 max-w-2xl">
       <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
     </div>
   )
 
+  const isTableMissing  = !!error && /relation.*does not exist/i.test(error)
+  const isColumnMissing = !!error && /column.*does not exist|Could not find/i.test(error)
+
   return (
     <div className="max-w-2xl space-y-4">
       {/* Migration hint */}
-      {error && /income_types|relation.*does not exist/i.test(error) && (
+      {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">income_types</code> table doesn't exist yet. Add an income type to see the migration SQL.</span>
+          <span>The <code className="font-mono text-xs">income_types</code> table doesn't exist yet — run the <strong>Core Schema</strong> migration in Setup → Database (Step 1).</span>
+        </div>
+      )}
+      {isColumnMissing && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>A required column is missing — run the <strong>System Defaults</strong> migration in Setup → Database (Step 4).</span>
+        </div>
+      )}
+
+      {showOverlap && (
+        <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+          <div className="flex-1 min-w-0 space-y-2">
+            <p className="text-sm text-amber-800">
+              <strong>"{shadowType!.name}"</strong> and the system <strong>"{systemType!.name}"</strong> may serve the same purpose. You can designate your existing type as the system type, or keep both.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handlePromoteShadow}
+                disabled={promotingOverlap}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-60"
+              >
+                {promotingOverlap ? 'Updating…' : `Make "${shadowType!.name}" the system type`}
+              </button>
+              <button
+                onClick={handleDismissOverlap}
+                className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors"
+              >
+                Keep both
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2397,7 +3305,12 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                 <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
                   <div className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ backgroundColor: t.color }} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                      {t.is_system && (
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>
+                      )}
+                    </div>
                     {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
                     {t.rules.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
@@ -2417,9 +3330,15 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                     <button onClick={() => onEdit(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {t.is_system ? (
+                      <span className="p-1.5 text-gray-300" title="System type — cannot be deleted">
+                        <Lock className="w-4 h-4" />
+                      </span>
+                    ) : (
+                      <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -2682,7 +3601,11 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
 }
 
 function DatabaseTab() {
-  const [copied, setCopied] = useState(false)
+  const [copied,      setCopied]      = useState(false)
+  const [copiedDR,    setCopiedDR]    = useState(false)
+  const [copiedRPC,   setCopiedRPC]   = useState(false)
+  const [copiedSD,    setCopiedSD]    = useState(false)
+  const [copiedAG,    setCopiedAG]    = useState(false)
   const { push: toast } = useToastStore()
 
   const [backfilling, setBackfilling] = useState(false)
@@ -2694,6 +3617,30 @@ function DatabaseTab() {
     await navigator.clipboard.writeText(MIGRATION_SQL)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleCopyDR = async () => {
+    await navigator.clipboard.writeText(DISTRIBUTION_RULES_MIGRATION_SQL)
+    setCopiedDR(true)
+    setTimeout(() => setCopiedDR(false), 2000)
+  }
+
+  const handleCopyRPC = async () => {
+    await navigator.clipboard.writeText(SPECIAL_CONFIG_RPC_MIGRATION_SQL)
+    setCopiedRPC(true)
+    setTimeout(() => setCopiedRPC(false), 2000)
+  }
+
+  const handleCopySD = async () => {
+    await navigator.clipboard.writeText(SYSTEM_DEFAULTS_MIGRATION_SQL)
+    setCopiedSD(true)
+    setTimeout(() => setCopiedSD(false), 2000)
+  }
+
+  const handleCopyAG = async () => {
+    await navigator.clipboard.writeText(ARCHIVE_GROUPS_MIGRATION_SQL)
+    setCopiedAG(true)
+    setTimeout(() => setCopiedAG(false), 2000)
   }
 
   const runBackfill = async () => {
@@ -2787,6 +3734,31 @@ function DatabaseTab() {
 
   return (
     <div className="max-w-3xl space-y-5">
+      {/* Quick navigation */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Migration Checklist — run in order</p>
+        <ol className="space-y-1">
+          {[
+            { id: 'db-migration-core',    label: 'Core Schema (main migration)' },
+            { id: 'db-migration-dist',    label: 'Distribution Rules' },
+            { id: 'db-migration-rpc',     label: 'Special Config Version RPC' },
+            { id: 'db-migration-sysdef',  label: 'System Defaults (is_system)' },
+            { id: 'db-migration-archive', label: 'Config Group Archive (hide/restore)' },
+          ].map((item, idx) => (
+            <li key={item.id} className="flex items-center gap-2 text-sm">
+              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-[10px] font-bold shrink-0">{idx + 1}</span>
+              <button
+                type="button"
+                onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="text-primary hover:underline text-left"
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </div>
+
       {/* Backfill Transaction IDs */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
         <div className="flex items-center gap-2">
@@ -2847,10 +3819,11 @@ function DatabaseTab() {
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+      <div id="db-migration-core" className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Terminal className="w-5 h-5 text-primary" />
           <h2 className="text-base font-semibold text-gray-900">Database Migration</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Step 1</span>
         </div>
         <p className="text-sm text-gray-500">
           Run the following SQL in your Supabase SQL editor to add the columns and tables required for new features.
@@ -2882,6 +3855,153 @@ function DatabaseTab() {
           </span>
         </div>
       </div>
+
+      {/* Distribution Rules Unification — Phase 1 */}
+      <div id="db-migration-dist" className="bg-white border border-amber-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-amber-600" />
+          <h2 className="text-base font-semibold text-gray-900">Distribution Rules Unification</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Step 2</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Run this migration to unify General and Custom Distribution Rules under a single versioned model.
+          Migrates existing general allocation configs into a General rule group per organisation.
+          Organisations with no general config receive a draft placeholder — a setup prompt will appear in the app until they lock a rule.
+          Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopyDR}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedDR ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {DISTRIBUTION_RULES_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run the <strong>main Database Migration above first</strong> if you have not already done so, then run this one.
+            After running, existing calculations and category ledger totals will remain identical — no data is changed, only grouped.
+          </span>
+        </div>
+      </div>
+
+      {/* Special Config Version RPC */}
+      <div id="db-migration-rpc" className="bg-white border border-violet-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-violet-600" />
+          <h2 className="text-base font-semibold text-gray-900">Special Config Version RPC</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">Step 3</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Creates the <code className="font-mono text-xs bg-gray-100 px-1 rounded">create_special_config_version</code> database function.
+          Required for creating new versions of custom distribution rules (including corrections to past versions).
+          Without this, saving a new version returns "Database migration required." Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopyRPC}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedRPC ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {SPECIAL_CONFIG_RPC_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-violet-50 border border-violet-200 px-4 py-3 text-sm text-violet-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run <strong>Steps 1 and 2 first</strong>. This step can be re-run safely any time — it uses <code className="font-mono text-xs">CREATE OR REPLACE</code>.
+          </span>
+        </div>
+      </div>
+
+      {/* System Defaults */}
+      <div id="db-migration-sysdef" className="bg-white border border-blue-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-blue-600" />
+          <h2 className="text-base font-semibold text-gray-900">System Defaults</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Step 4</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Adds <code className="font-mono text-xs bg-gray-100 px-1 rounded">is_system</code> flag to income types and categories.
+          Seeds a protected "General Donation" income type and marks the "General" category as system-protected for all organisations.
+          Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopySD}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedSD ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {SYSTEM_DEFAULTS_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run <strong>Step 2 (Distribution Rules) first</strong>, then run this one.
+            Existing income types and categories are not affected — only the new column and the seeded "General Donation" type are added.
+          </span>
+        </div>
+      </div>
+
+      {/* Archive Groups */}
+      <div id="db-migration-archive" className="bg-white border border-green-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-green-600" />
+          <h2 className="text-base font-semibold text-gray-900">Config Group Archive</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Step 5</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Adds <code className="font-mono text-xs bg-gray-100 px-1 rounded">is_archived</code> flag to custom config groups.
+          Allows hiding groups that have been used in records without deleting any history.
+          Archived groups can be restored at any time. Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopyAG}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedAG ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {ARCHIVE_GROUPS_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run <strong>Step 2 (Distribution Rules) first</strong>. This step can be run independently of Steps 3 and 4.
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
@@ -2901,9 +4021,10 @@ export default function SetupPage() {
   const [editLockedTarget,  setEditLockedTarget]  = useState<AllocationConfig | null>(null)
   const [deleteAllocTarget, setDeleteAllocTarget] = useState<AllocationConfig | null>(null)
   const [specialModalOpen,      setSpecialModalOpen]      = useState(false)
-  const [specialModalMode,      setSpecialModalMode]      = useState<'new_group' | 'new_version'>('new_group')
+  const [specialModalMode,      setSpecialModalMode]      = useState<'new_group' | 'new_version' | 'amend_version'>('new_group')
   const [selectedSpecialGroup,  setSelectedSpecialGroup]  = useState<SpecialConfigGroupWithVersions | null>(null)
   const [copyFromVersion,       setCopyFromVersion]       = useState<AllocationConfig | null>(null)
+  const [amendVersionRecord,    setAmendVersionRecord]    = useState<AllocationConfig | null>(null)
   const [specialRefetch,        setSpecialRefetch]        = useState(0)
   const [resetModalOpen,       setResetModalOpen]       = useState(false)
   const [incomeTypeModalOpen,    setIncomeTypeModalOpen]    = useState(false)
@@ -2932,13 +4053,7 @@ export default function SetupPage() {
   // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
   if (!canWrite()) return <Navigate to="/" replace />
 
-  const handleNewAlloc    = () => { setEditAllocRecord(null); setAllocModalOpen(true) }
-  const handleEditAlloc   = (c: AllocationConfig) => { setEditAllocRecord(c); setAllocModalOpen(true) }
   const handleAllocSuccess = () => { reloadAllocs() }
-
-  const handleLock        = (c: AllocationConfig) => setLockTarget(c)
-  const handleEditLocked  = (c: AllocationConfig) => setEditLockedTarget(c)
-  const handleDeleteAlloc = (c: AllocationConfig) => setDeleteAllocTarget(c)
 
   const confirmDeleteAlloc = async () => {
     if (!deleteAllocTarget) return
@@ -3004,6 +4119,15 @@ export default function SetupPage() {
     setSpecialModalMode('new_version')
     setSelectedSpecialGroup(group)
     setCopyFromVersion(copyFrom)
+    setAmendVersionRecord(null)
+    setSpecialModalOpen(true)
+  }
+
+  const handleAmendVersion = (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => {
+    setSpecialModalMode('amend_version')
+    setSelectedSpecialGroup(group)
+    setCopyFromVersion(null)
+    setAmendVersionRecord(version)
     setSpecialModalOpen(true)
   }
 
@@ -3072,12 +4196,12 @@ export default function SetupPage() {
           <div className="flex-1 min-w-0">
             {activeTab === 'General'        && <GeneralTab />}
             {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
-            {activeTab === 'Distribution Rules' && <AllocationTab onNew={handleNewAlloc} onEdit={handleEditAlloc} onLock={handleLock} onEditLocked={handleEditLocked} onDelete={handleDeleteAlloc} />}
-            {activeTab === 'Special Rules' && (
-              <SpecialConfigsTab
-                key={specialRefetch}
-                onNew={handleNewGroup}
+            {activeTab === 'Distribution Rules' && (
+              <DistributionRulesTab
+                onNewCustom={handleNewGroup}
                 onNewVersion={handleNewVersion}
+                onAmend={handleAmendVersion}
+                refetchKey={specialRefetch}
                 onRefetch={() => setSpecialRefetch(n => n + 1)}
               />
             )}
@@ -3241,6 +4365,7 @@ export default function SetupPage() {
         mode={specialModalMode}
         group={selectedSpecialGroup}
         copyFromVersion={copyFromVersion}
+        versionToAmend={amendVersionRecord}
       />
       <ResetDataModal
         open={resetModalOpen}

@@ -1,16 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, AlertTriangle, Link2, Unlink } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Plus, Trash2, AlertTriangle, Link2, Unlink, GitBranch } from 'lucide-react'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { InlineCategorySelect } from '../ui/InlineCategorySelect'
-import { supabase } from '../../lib/supabase'
 import { useCategories } from '../../hooks/useCategories'
 import type { AllocationConfig } from '../../store/allocationStore'
 import {
   createGroupWithFirstVersion,
   createNewVersion,
-  getImpactedTransactionCount,
-  recalculateTransactions,
+  createVersionWithSplit,
+  amendVersion,
+  detectVersionOverlap,
   type SpecialConfigGroupWithVersions,
+  type VersionOverlap,
 } from '../../hooks/useSpecialConfigGroups'
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
@@ -30,12 +31,13 @@ ALTER TABLE income_types
   ADD COLUMN IF NOT EXISTS special_config_group_id uuid;`
 
 interface Props {
-  open:             boolean
-  onClose:          () => void
-  onSaved:          (cfg?: AllocationConfig) => void
-  mode:             'new_group' | 'new_version'
-  group?:           SpecialConfigGroupWithVersions | null
-  copyFromVersion?: AllocationConfig | null
+  open:              boolean
+  onClose:           () => void
+  onSaved:           (cfg?: AllocationConfig) => void
+  mode:              'new_group' | 'new_version' | 'amend_version'
+  group?:            SpecialConfigGroupWithVersions | null
+  copyFromVersion?:  AllocationConfig | null
+  versionToAmend?:   AllocationConfig | null
 }
 
 interface RowDraft {
@@ -44,62 +46,85 @@ interface RowDraft {
   value:          string
 }
 
-type ImpactPhase = 'idle' | 'prompting' | 'reason' | 'recalculating' | 'done'
-
-export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, copyFromVersion }: Props) {
+export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, copyFromVersion, versionToAmend }: Props) {
   const { baseCurrencySymbol } = useOrgCurrency()
   const { categories, refetch: refetchCategories } = useCategories()
   const { options: incomeTypeOptions, reload: reloadIncomeTypes } = useIncomeTypeOptions()
 
   const [name,                 setName]                 = useState('')
   const [effectiveFrom,        setEffectiveFrom]        = useState('')
+  const [effectiveTo,          setEffectiveTo]          = useState('')
   const [allocType,            setAllocType]            = useState<'percentage' | 'amount'>('percentage')
   const [totalAmount,          setTotalAmount]          = useState('')
   const [rows,                 setRows]                 = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '' }])
   const [saving,               setSaving]               = useState(false)
   const [error,                setError]                = useState<string | null>(null)
   const [selectedIncomeTypeId, setSelectedIncomeTypeId] = useState<string>('')
-
-  const [impactPhase,    setImpactPhase]    = useState<ImpactPhase>('idle')
-  const [impactCount,    setImpactCount]    = useState(0)
-  const [recalcReason,   setRecalcReason]   = useState('')
-  const [savedGroupId,   setSavedGroupId]   = useState<string | null>(null)
-  const [savedVersionId, setSavedVersionId] = useState<string | null>(null)
-  const [savedRows,      setSavedRows]      = useState<AllocationConfig['rows']>([])
-  const [savedAllocType, setSavedAllocType] = useState<'percentage' | 'amount'>('percentage')
-  const [savedEffFrom,   setSavedEffFrom]   = useState<string>('')
-  const [savedEffTo,     setSavedEffTo]     = useState<string | null>(null)
-  const [recalcDone,     setRecalcDone]     = useState(0)
-  const [wasModified,    setWasModified]    = useState(false)
+  const [wasModified,          setWasModified]          = useState(false)
+  const [amendmentReason,      setAmendmentReason]      = useState('')
   const modalRef = useRef<ModalHandle>(null)
 
-  const isDirty = wasModified && impactPhase === 'idle' && !saving
+  const isDirty = wasModified && !saving
 
   const selectedOption = incomeTypeOptions.find(o => o.id === selectedIncomeTypeId) ?? null
+
+  const isAmend = mode === 'amend_version'
+
+  // Detect overlaps when effective dates change (new_version mode only)
+  const overlaps = useMemo((): VersionOverlap[] => {
+    if (mode !== 'new_version' || !group || !effectiveFrom) return []
+    return detectVersionOverlap(
+      group.versions,
+      effectiveFrom,
+      effectiveTo || null,
+    )
+  }, [mode, group, effectiveFrom, effectiveTo])
 
   useEffect(() => {
     if (!open) return
     reloadIncomeTypes()
     setError(null)
-    setImpactPhase('idle')
-    setRecalcReason('')
-    setSavedGroupId(null)
-    setSavedVersionId(null)
     setWasModified(false)
+    setAmendmentReason('')
 
     const today = new Date().toISOString().slice(0, 10)
 
     if (mode === 'new_group') {
       setName('')
       setEffectiveFrom(today)
+      setEffectiveTo('')
       setAllocType('percentage')
       setTotalAmount('')
       setRows([{ category_name: '', budget_portion: '', value: '' }])
       setSelectedIncomeTypeId('')
+    } else if (mode === 'amend_version') {
+      const src = versionToAmend
+      if (src) {
+        setEffectiveFrom(src.effective_from ?? today)
+        setEffectiveTo(src.effective_to ?? '')
+        setAllocType(src.allocation_type ?? 'percentage')
+        setTotalAmount(src.total_amount != null ? String(src.total_amount) : '')
+        setRows(
+          src.rows.length > 0
+            ? src.rows.map(r => ({
+                category_name:  r.category_name,
+                budget_portion: r.budget_portion === 'Percentage Allocation' ? 'Percentage' : (r.budget_portion ?? ''),
+                value: String(
+                  (src.allocation_type ?? 'percentage') === 'amount'
+                    ? (r.amount ?? '')
+                    : (r.percentage ?? '')
+                ),
+              }))
+            : [{ category_name: '', budget_portion: '', value: '' }]
+        )
+      }
     } else {
-      // new_version: pre-fill from copyFromVersion or group active version
+      // new_version: pre-fill rows from copyFromVersion or group active version
+      // Pre-fill dates from copyFromVersion only when it's a past version (has a closed effective_to in the past)
       const src = copyFromVersion ?? group?.active_version ?? null
-      setEffectiveFrom(today)
+      const isPastCopy = !!(copyFromVersion?.effective_to && copyFromVersion.effective_to < today)
+      setEffectiveFrom(isPastCopy ? (copyFromVersion!.effective_from ?? today) : today)
+      setEffectiveTo(isPastCopy ? (copyFromVersion!.effective_to ?? '') : '')
       if (src) {
         setAllocType(src.allocation_type ?? 'percentage')
         setTotalAmount(src.total_amount != null ? String(src.total_amount) : '')
@@ -122,7 +147,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         setRows([{ category_name: '', budget_portion: '', value: '' }])
       }
     }
-  }, [open, mode, group, copyFromVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, mode, group, copyFromVersion, versionToAmend]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addRow    = () => { setWasModified(true); setRows(prev => [...prev, { category_name: '', budget_portion: '', value: '' }]) }
   const removeRow = (i: number) => { setWasModified(true); setRows(prev => prev.filter((_, idx) => idx !== i)) }
@@ -150,6 +175,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     setError(null)
     if (mode === 'new_group' && !name.trim()) { setError('Name is required'); return }
     if (!effectiveFrom) { setError('Effective from date is required'); return }
+    if (isAmend && !amendmentReason.trim()) { setError('Amendment reason is required'); return }
     if (allocType === 'amount' && (!totalAmount || parseFloat(totalAmount) <= 0)) {
       setError('Total amount is required for amount-type configs'); return
     }
@@ -161,7 +187,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     try {
       if (mode === 'new_group') {
         const prevLinked = incomeTypeOptions.find(o => o.special_config_id != null && o.id === selectedIncomeTypeId)
-        const { groupId, config } = await createGroupWithFirstVersion({
+        const { config } = await createGroupWithFirstVersion({
           name:            name.trim(),
           allocation_type: allocType,
           total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
@@ -171,44 +197,41 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           income_type_id:  selectedIncomeTypeId || null,
           prev_income_type_id: prevLinked?.id ?? null,
         })
-        setSavedGroupId(groupId)
         onSaved(config)
+      } else if (isAmend) {
+        if (!versionToAmend) throw new Error('Version to amend is required')
+        await amendVersion({
+          original:         versionToAmend,
+          allocation_type:  allocType,
+          total_amount:     allocType === 'amount' ? parseFloat(totalAmount) : null,
+          rows:             dbRows,
+          effective_from:   effectiveFrom,
+          effective_to:     effectiveTo || null,
+          amendment_reason: amendmentReason.trim(),
+        })
+        onSaved()
       } else {
         if (!group) throw new Error('Group is required for new_version mode')
-        const vId = await createNewVersion({
-          group,
-          allocation_type: allocType,
-          total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
-          rows:            dbRows,
-          effective_from:  effectiveFrom,
-          status,
-        })
-        setSavedVersionId(vId)
-        setSavedRows(dbRows)
-        setSavedAllocType(allocType)
-        setSavedEffFrom(effectiveFrom)
-
-        const today = new Date().toISOString().slice(0, 10)
-        const isBackdated = effectiveFrom < today
-
-        if (isBackdated && status === 'locked') {
-          const covering = group.versions.find(v =>
-            v.effective_from != null &&
-            v.effective_from <= effectiveFrom &&
-            (v.effective_to == null || v.effective_to >= effectiveFrom)
-          )
-          const newEffTo = covering
-            ? subtractOneDay(effectiveFrom)
-            : null
-          setSavedEffTo(newEffTo)
-
-          const count = await getImpactedTransactionCount(group.id, effectiveFrom, newEffTo)
-          setImpactCount(count)
-          if (count > 0) {
-            setImpactPhase('prompting')
-            setSaving(false)
-            return
-          }
+        if (overlaps.length > 0) {
+          await createVersionWithSplit({
+            group,
+            allocation_type: allocType,
+            total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
+            rows:            dbRows,
+            effective_from:  effectiveFrom,
+            effective_to:    effectiveTo || null,
+            status,
+            overlaps,
+          })
+        } else {
+          await createNewVersion({
+            group,
+            allocation_type: allocType,
+            total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
+            rows:            dbRows,
+            effective_from:  effectiveFrom,
+            status,
+          })
         }
         onSaved()
       }
@@ -219,47 +242,11 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     }
   }
 
-  const handleKeepExisting = () => {
-    setImpactPhase('idle')
-    onSaved()
-  }
-
-  const handleRecalculate = () => {
-    setImpactPhase('reason')
-  }
-
-  const handleConfirmRecalc = async () => {
-    if (!savedVersionId || !savedGroupId || !group) return
-    setImpactPhase('recalculating')
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const userId = user?.id ?? ''
-      const count = await recalculateTransactions({
-        groupId:       group.id,
-        newVersionId:  savedVersionId,
-        effectiveFrom: savedEffFrom,
-        effectiveTo:   savedEffTo,
-        rows:          savedRows,
-        allocationType: savedAllocType,
-        reason:        recalcReason.trim() || 'Manual recalculation',
-        userId,
-      })
-      setRecalcDone(count)
-      setImpactPhase('done')
-    } catch (e: unknown) {
-      setError((e as { message?: string })?.message ?? 'Recalculation failed')
-      setImpactPhase('prompting')
-    }
-  }
-
-  const handleDoneAfterRecalc = () => {
-    setImpactPhase('idle')
-    onSaved()
-  }
-
   const title = mode === 'new_group'
     ? 'Create Special Rule'
-    : `New Version — ${group?.name ?? ''}`
+    : isAmend
+      ? `Amend Version — ${versionToAmend ? `v${versionToAmend.version_number}` : ''}`
+      : `New Version — ${group?.name ?? ''}`
 
   return (
     <Modal
@@ -269,9 +256,19 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
       title={title}
       size="max-w-xl"
       isDirty={isDirty}
-      disableClose={saving || impactPhase === 'recalculating'}
+      disableClose={saving}
     >
       <div className="space-y-4">
+
+        {/* Amendment warning banner */}
+        {isAmend && (
+          <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+            <GitBranch className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              You're editing an active distribution rule. Any records already using this rule will be recalculated with your changes. The original is automatically saved for audit purposes. To use different dates, close this and create a new version instead.
+            </span>
+          </div>
+        )}
 
         {/* Name (new_group only) */}
         {mode === 'new_group' && (
@@ -287,16 +284,70 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           </div>
         )}
 
-        {/* Effective From */}
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">Effective From *</label>
-          <input
-            type="date"
-            value={effectiveFrom}
-            onChange={e => { setEffectiveFrom(e.target.value); setWasModified(true) }}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-          />
+        {/* Effective From / To */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">Effective From *</label>
+            <input
+              type="date"
+              value={effectiveFrom}
+              readOnly={isAmend}
+              onChange={e => { if (!isAmend) { setEffectiveFrom(e.target.value); setWasModified(true) } }}
+              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${isAmend ? 'opacity-60 cursor-not-allowed' : ''}`}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">Effective To</label>
+            <input
+              type="date"
+              value={effectiveTo}
+              readOnly={isAmend}
+              onChange={e => { if (!isAmend) { setEffectiveTo(e.target.value); setWasModified(true) } }}
+              placeholder="open-ended"
+              className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${isAmend ? 'opacity-60 cursor-not-allowed' : ''}`}
+            />
+          </div>
         </div>
+
+        {/* Overlap warning (new_version only) */}
+        {mode === 'new_version' && overlaps.length > 0 && (
+          <div className="space-y-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              Your chosen dates overlap with existing versions — they will be adjusted automatically:
+            </div>
+            <ul className="mt-1 space-y-0.5 pl-5 list-disc">
+              {overlaps.map(ov => {
+                const isSource = ov.version.id === copyFromVersion?.id
+                const vFrom = ov.version.effective_from ?? ''
+                const vTo   = ov.version.effective_to ?? null
+                const fullyCovered =
+                  effectiveFrom <= vFrom &&
+                  (effectiveTo === '' || effectiveTo === null || (vTo != null && effectiveTo >= vTo))
+                let detail: string
+                if (isSource) {
+                  if (fullyCovered) {
+                    detail = 'the version being corrected — will be fully replaced by your new version'
+                  } else if (ov.wouldSplit) {
+                    detail = 'the version being corrected — will be split; portions outside your chosen dates remain under the old rule'
+                  } else {
+                    detail = 'the version being corrected — portions outside your chosen dates remain under the old rule'
+                  }
+                } else {
+                  const activeLabel = ov.version.effective_to == null ? ', currently active' : ''
+                  detail = ov.wouldSplit
+                    ? `currently active version${activeLabel} — will be split to make room for your new date range`
+                    : `will be trimmed to end just before your new version starts`
+                }
+                return (
+                  <li key={ov.version.id}>
+                    v{ov.version.version_number} ({ov.version.effective_from} → {ov.version.effective_to ?? 'open'}) — {detail}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
 
         {/* Type toggle */}
         <div className="space-y-1">
@@ -413,6 +464,20 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           </div>
         )}
 
+        {/* Amendment reason (amend_version only) */}
+        {isAmend && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">Amendment Reason *</label>
+            <textarea
+              value={amendmentReason}
+              onChange={e => { setAmendmentReason(e.target.value); setWasModified(true) }}
+              placeholder="Describe why this amendment is needed…"
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white resize-none"
+            />
+          </div>
+        )}
+
         {/* Linked Income Type (new_group only) */}
         {mode === 'new_group' && (
           <div className="border border-gray-100 rounded-lg p-4 space-y-3 bg-gray-50">
@@ -462,87 +527,6 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         )}
 
         {/* Impact prompt (backdated new_version) */}
-        {impactPhase === 'prompting' && (
-          <div className="border border-amber-200 rounded-lg p-4 space-y-3 bg-amber-50">
-            <div className="flex items-start gap-2 text-sm text-amber-800">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <p>
-                This version is backdated to <strong>{effectiveFrom}</strong>.{' '}
-                <strong>{impactCount}</strong> transaction{impactCount !== 1 ? 's are' : ' is'} currently using a
-                different config version for dates in this range.
-              </p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={handleKeepExisting}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Keep Existing (Future Only)
-              </button>
-              <button
-                type="button"
-                onClick={handleRecalculate}
-                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors"
-              >
-                Recalculate {impactCount} Transaction{impactCount !== 1 ? 's' : ''}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Reason input for recalculation */}
-        {impactPhase === 'reason' && (
-          <div className="border border-blue-200 rounded-lg p-4 space-y-3 bg-blue-50">
-            <p className="text-sm font-medium text-blue-900">Reason for recalculation</p>
-            <input
-              type="text"
-              value={recalcReason}
-              onChange={e => setRecalcReason(e.target.value)}
-              placeholder="e.g. Config correction for Easter series"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setImpactPhase('prompting')}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmRecalc}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-              >
-                Confirm Recalculation
-              </button>
-            </div>
-          </div>
-        )}
-
-        {impactPhase === 'recalculating' && (
-          <div className="flex items-center gap-3 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-            <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin shrink-0" />
-            Recalculating transactions...
-          </div>
-        )}
-
-        {impactPhase === 'done' && (
-          <div className="border border-green-200 rounded-lg p-4 bg-green-50 space-y-3">
-            <p className="text-sm text-green-800 font-medium">
-              Recalculated {recalcDone} transaction{recalcDone !== 1 ? 's' : ''} successfully.
-            </p>
-            <button
-              type="button"
-              onClick={handleDoneAfterRecalc}
-              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
-            >
-              Done
-            </button>
-          </div>
-        )}
-
         {/* Error */}
         {error && (() => {
           const isMigration = /is_special|allocation_type|total_amount|Could not find|config_group_id|effective_from/.test(error)
@@ -559,16 +543,16 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           )
         })()}
 
-        {/* Footer (hidden during impact flow) */}
-        {impactPhase === 'idle' && (
-          <div className="flex justify-end gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => modalRef.current?.requestClose()}
-              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
+        {/* Footer */}
+        <div className="flex justify-end gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => modalRef.current?.requestClose()}
+            className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          {!isAmend && (
             <button
               type="button"
               onClick={() => handleSave(false)}
@@ -578,36 +562,18 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
               {saving && <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
               {saving ? 'Saving...' : 'Save as Draft'}
             </button>
-            <button
-              type="button"
-              onClick={() => handleSave(true)}
-              disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60"
-            >
-              {saving && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {saving ? 'Saving...' : 'Save & Lock'}
-            </button>
-          </div>
-        )}
-
-        {(impactPhase === 'prompting' || impactPhase === 'reason') && (
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={() => modalRef.current?.requestClose()}
-              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Close
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            onClick={() => handleSave(true)}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60"
+          >
+            {saving && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {saving ? 'Saving...' : isAmend ? 'Save Amendment' : 'Save & Lock'}
+          </button>
+        </div>
       </div>
     </Modal>
   )
-}
-
-function subtractOneDay(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00Z')
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
 }

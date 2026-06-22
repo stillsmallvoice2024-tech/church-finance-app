@@ -15,11 +15,7 @@ import { classifyIncomeType } from '../../utils/classifyIncomeType'
 import { Modal } from '../ui/Modal'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
-import {
-  useAllocationStore,
-  getConfigForDate,
-  getSpecialConfigVersionForDate,
-} from '../../store/allocationStore'
+import { useAllocationStore } from '../../store/allocationStore'
 import { useAuthStore } from '../../store/authStore'
 import { useOrgStore } from '../../store/orgStore'
 import { useToast } from '../../store/toastStore'
@@ -364,8 +360,8 @@ export function ImportWizardModal({ open, onClose }: Props) {
   // ---- hooks ----
   const { banks } = useBanks()
   const { incomeTypes } = useIncomeTypes()
-  const configs     = useAllocationStore(s => s.configs)
-  const loaded      = useAllocationStore(s => s.loaded)
+  const configs      = useAllocationStore(s => s.configs)
+  const loaded       = useAllocationStore(s => s.loaded)
   const fetchConfigs = useAllocationStore(s => s.fetch)
   const { formatAmount } = useOrgCurrency()
   const toast = useToast()
@@ -387,7 +383,6 @@ export function ImportWizardModal({ open, onClose }: Props) {
   const [bankId, setBankId] = useState('')
   const [incomeTypeId, setIncomeTypeId] = useState('')
   const [configId, setConfigId] = useState('')
-  const [configAutoSet, setConfigAutoSet] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [dupRefs, setDupRefs] = useState<Set<string>>(new Set())
   const [dupLoading, setDupLoading] = useState(false)
@@ -398,13 +393,11 @@ export function ImportWizardModal({ open, onClose }: Props) {
   // ---- derived ----
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const selectedBank = nonFxBanks.find(b => b.id === bankId) ?? null
-  const lockedConfigs = configs.filter(c => c.status === 'locked' && !c.is_special)
+  const lockedConfigs = configs.filter(c => c.status === 'locked' && c.superseded_by_id == null)
   const inflows = wizardRows.filter(r => r.credit > 0)
   const outflows = wizardRows.filter(r => r.debit > 0)
   const totalCredit = inflows.reduce((s, r) => s + r.credit, 0)
   const totalDebit = outflows.reduce((s, r) => s + r.debit, 0)
-  const today = new Date().toISOString().slice(0, 10)
-
   const dateRange = useMemo(() => {
     if (wizardRows.length === 0) return { from: '', to: '' }
     const dates = wizardRows.map(r => r.date).filter(Boolean).sort()
@@ -433,7 +426,6 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setBankId('')
     setIncomeTypeId('')
     setConfigId('')
-    setConfigAutoSet(false)
     setSetupError(null)
     setDupRefs(new Set())
     setDupLoading(false)
@@ -454,30 +446,6 @@ export function ImportWizardModal({ open, onClose }: Props) {
     if (open && !loaded) fetchConfigs()
   }, [open, loaded, fetchConfigs])
 
-  // ---- auto-set config when income type changes ----
-  useEffect(() => {
-    if (!incomeTypeId) {
-      setConfigAutoSet(false)
-      return
-    }
-    const it = incomeTypes.find(t => t.id === incomeTypeId)
-    if (!it) return
-    if (it.special_config_id) {
-      setConfigId(it.special_config_id)
-      setConfigAutoSet(true)
-    } else if (it.special_config_group_id) {
-      const v = getSpecialConfigVersionForDate(configs, it.special_config_group_id, today)
-      if (v) {
-        setConfigId(v.id)
-        setConfigAutoSet(true)
-      } else {
-        setConfigAutoSet(false)
-      }
-    } else {
-      setConfigAutoSet(false)
-    }
-  }, [incomeTypeId, incomeTypes, configs, today])
-
   // ---- resetWizard (imperative) ----
   function resetWizard() {
     setStep('upload')
@@ -496,7 +464,6 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setBankId('')
     setIncomeTypeId('')
     setConfigId('')
-    setConfigAutoSet(false)
     setSetupError(null)
     setDupRefs(new Set())
     setDupLoading(false)
@@ -672,8 +639,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
     }
 
     const importTimestamp = new Date().toISOString()
-    const resolvedConfigId =
-      configId || getConfigForDate(lockedConfigs, today)?.id || null
+    const resolvedConfigId = configId || null  // manual override only
     const bankName = selectedBank?.name ?? ''
 
     const errors: string[] = []
@@ -707,13 +673,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
       if (incomeTypeId === '__auto__') {
         const matched = classifyIncomeType(row.description, '', incomeTypes)
         rowIncomeTypeId = matched?.id ?? null
-        if (matched?.special_config_id) {
-          rowConfigId = matched.special_config_id
-        } else if (matched?.special_config_group_id) {
-          rowConfigId = getSpecialConfigVersionForDate(configs, matched.special_config_group_id, row.date)?.id ?? null
-        } else {
-          rowConfigId = getConfigForDate(lockedConfigs, row.date)?.id ?? null
-        }
+        rowConfigId = null  // resolved at query time via buildVersionIndex
       } else {
         rowIncomeTypeId = incomeTypeId || null
         rowConfigId = resolvedConfigId
@@ -910,8 +870,6 @@ export function ImportWizardModal({ open, onClose }: Props) {
   // Render step: setup
   // ---------------------------------------------------------------------------
   function renderSetup() {
-    const selectedConfig = lockedConfigs.find(c => c.id === configId) ?? null
-
     return (
       <div className="flex flex-col gap-5">
         {/* Sheet selector — only shown for multi-sheet workbooks */}
@@ -1018,7 +976,6 @@ export function ImportWizardModal({ open, onClose }: Props) {
               setIncomeTypeId(e.target.value)
               if (!e.target.value || e.target.value === '__auto__') {
                 setConfigId('')
-                setConfigAutoSet(false)
               }
             }}
             className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -1052,22 +1009,16 @@ export function ImportWizardModal({ open, onClose }: Props) {
             value={configId}
             onChange={e => {
               setConfigId(e.target.value)
-              setConfigAutoSet(false)
             }}
             className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
-            <option value="">— No budget plan —</option>
+            <option value="">— Auto-resolve (date-based) —</option>
             {lockedConfigs.map(c => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.name} — {c.effective_from ?? c.start_date}
               </option>
             ))}
           </select>
-          {configAutoSet && selectedConfig && (
-            <p className="text-xs text-primary/80 dark:text-primary/70">
-              (auto-set from your income type)
-            </p>
-          )}
         </div>}
 
         {/* Error */}

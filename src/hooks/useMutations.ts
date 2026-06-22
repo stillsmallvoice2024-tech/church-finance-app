@@ -1276,3 +1276,39 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
 
   return { execute, loading }
 }
+
+// ── useSetInflowConfigOverride ─────────────────────────────────────────────────
+
+/**
+ * Sets or clears an explicit allocation_config_id override on an inflow
+ * transaction. Pass null to clear the override and resume auto-resolution.
+ */
+export function useSetInflowConfigOverride() {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (
+    transactionId: string,
+    configId:       string | null,
+  ): Promise<void> => {
+    setError(null)
+    setLoading(true)
+    try {
+      const { error: updErr } = await supabase
+        .from('inflow_transactions')
+        .update({ allocation_config_id: configId })
+        .eq('id', transactionId)
+      if (updErr) throw new Error(updErr.message)
+      useTransactionSyncStore.getState().bumpInflow()
+    } catch (err) {
+      const msg = extractMessage(err)
+      handleAuthError(err)
+      setError(msg)
+      throw new Error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { mutate, loading, error }
+}

@@ -12,6 +12,8 @@ function orgPayload(): { org_id: string } {
 export interface SpecialConfigGroupWithVersions {
   id:                        string
   name:                      string
+  is_default:                boolean
+  is_archived:               boolean
   created_at:                string
   versions:                  AllocationConfig[]
   active_version:            AllocationConfig | null
@@ -22,7 +24,8 @@ export interface SpecialConfigGroupWithVersions {
 export function useSpecialConfigGroups() {
   const orgId = useOrgStore((s) => s.orgId)
 
-  const [groups,  setGroups]  = useState<SpecialConfigGroupWithVersions[]>([])
+  const [groups,         setGroups]         = useState<SpecialConfigGroupWithVersions[]>([])
+  const [archivedGroups, setArchivedGroups] = useState<SpecialConfigGroupWithVersions[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
@@ -31,8 +34,9 @@ export function useSpecialConfigGroups() {
     setLoading(true); setError(null)
     const { data: groupRows, error: gErr } = await supabase
       .from('special_config_groups')
-      .select('id, name, created_at')
+      .select('id, name, is_default, is_archived, created_at')
       .eq('org_id', orgId)
+      .eq('is_default', false)   // General rule group is managed separately
       .order('created_at', { ascending: false })
     if (gErr) { setError(gErr.message); setLoading(false); return }
 
@@ -65,12 +69,15 @@ export function useSpecialConfigGroups() {
           v.status === 'locked' &&
           v.effective_from != null &&
           v.effective_from <= today &&
-          (v.effective_to == null || v.effective_to >= today)
+          (v.effective_to == null || v.effective_to >= today) &&
+          v.superseded_by_id == null
       ) ?? null
       const it = itMap.get(g.id as string) ?? null
       return {
         id:                      g.id as string,
         name:                    g.name as string,
+        is_default:              (g.is_default as boolean) ?? false,
+        is_archived:             (g.is_archived as boolean) ?? false,
         created_at:              g.created_at as string,
         versions:                gVersions,
         active_version:          active,
@@ -78,13 +85,14 @@ export function useSpecialConfigGroups() {
         linked_income_type_name: it?.name ?? null,
       }
     })
-    setGroups(built)
+    setGroups(built.filter(g => !g.is_archived))
+    setArchivedGroups(built.filter(g => g.is_archived))
     setLoading(false)
   }, [orgId])
 
   useEffect(() => { load() }, [load])
 
-  return { groups, loading, error, refetch: load }
+  return { groups, archivedGroups, loading, error, refetch: load }
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────────
@@ -160,6 +168,212 @@ export async function createNewVersion(params: {
   return data as string
 }
 
+// ── Date helpers ───────────────────────────────────────────────────────────────
+
+function addOneDay(date: string): string {
+  const d = new Date(date + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function subtractOneDay(date: string): string {
+  const d = new Date(date + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+// ── Overlap detection ───────────────────────────────────────────────────────────
+
+export interface VersionOverlap {
+  version:          AllocationConfig
+  overlapStart:     string
+  overlapEnd:       string | null
+  wouldSplit:       boolean
+  splitBeforeEnd:   string | null
+  splitAfterStart:  string | null
+}
+
+export function detectVersionOverlap(
+  versions:      AllocationConfig[],
+  newFrom:       string,
+  newTo:         string | null,
+  excludeId?:    string,
+): VersionOverlap[] {
+  const candidates = versions.filter(
+    v => v.status === 'locked' && v.superseded_by_id == null && v.id !== excludeId,
+  )
+  const overlaps: VersionOverlap[] = []
+  for (const v of candidates) {
+    if (v.effective_from == null) continue
+    const vFrom = v.effective_from
+    const vTo   = v.effective_to ?? null
+    // Check if ranges overlap
+    const newEnd  = newTo ?? '9999-12-31'
+    const existEnd = vTo ?? '9999-12-31'
+    if (newFrom > existEnd || vFrom > newEnd) continue
+    // Compute actual overlap
+    const overlapStart = newFrom > vFrom ? newFrom : vFrom
+    const overlapEnd   = newTo != null && vTo != null
+      ? (newTo < vTo ? newTo : vTo)
+      : (newTo ?? vTo)
+    const wouldSplit = vFrom < newFrom && (vTo == null || vTo > (newTo ?? vTo!))
+    overlaps.push({
+      version:         v,
+      overlapStart,
+      overlapEnd,
+      wouldSplit,
+      splitBeforeEnd:  vFrom < newFrom ? subtractOneDay(newFrom) : null,
+      splitAfterStart: newTo != null && (vTo == null || vTo > newTo) ? addOneDay(newTo) : null,
+    })
+  }
+  return overlaps
+}
+
+// ── Amendment mutation ──────────────────────────────────────────────────────────
+
+export async function amendVersion(params: {
+  original:        AllocationConfig
+  allocation_type: 'percentage' | 'amount'
+  total_amount?:   number | null
+  rows:            AllocationConfig['rows']
+  effective_from:  string
+  effective_to:    string | null
+  amendment_reason: string
+}): Promise<string> {
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) throw new Error('No active organisation.')
+
+  // Insert new version as amendment
+  const { data: newRow, error: insertErr } = await supabase
+    .from('allocation_configs')
+    .insert({
+      org_id:           orgId,
+      config_group_id:  params.original.config_group_id,
+      name:             params.original.name,
+      is_special:       params.original.is_special ?? true,
+      allocation_type:  params.allocation_type,
+      total_amount:     params.total_amount ?? null,
+      rows:             params.rows,
+      effective_from:   params.effective_from,
+      effective_to:     params.effective_to,
+      version_number:   (params.original.version_number ?? 1) + 1,
+      start_date:       params.effective_from,
+      status:           'locked',
+      change_type:      'amendment',
+      source_version_id: params.original.id,
+      amendment_reason: params.amendment_reason,
+    })
+    .select('id')
+    .single()
+  if (insertErr) throw new Error(insertErr.message)
+  const newId = (newRow as { id: string }).id
+
+  // Mark original as superseded
+  const { error: supErr } = await supabase
+    .from('allocation_configs')
+    .update({ superseded_by_id: newId, superseded_at: new Date().toISOString() })
+    .eq('id', params.original.id)
+  if (supErr) throw new Error(supErr.message)
+
+  return newId
+}
+
+// ── Create version with optional date-split ────────────────────────────────────
+
+export async function createVersionWithSplit(params: {
+  group:           SpecialConfigGroupWithVersions
+  allocation_type: 'percentage' | 'amount'
+  total_amount?:   number | null
+  rows:            AllocationConfig['rows']
+  effective_from:  string
+  effective_to:    string | null
+  status:          'draft' | 'locked'
+  overlaps:        VersionOverlap[]
+}): Promise<string> {
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) throw new Error('No active organisation.')
+
+  // For each overlapping version, cap/split it first
+  for (const ov of params.overlaps) {
+    const v = ov.version
+    if (ov.wouldSplit && ov.splitBeforeEnd && ov.splitAfterStart) {
+      // Cap the existing version at splitBeforeEnd
+      const { error: capErr } = await supabase
+        .from('allocation_configs')
+        .update({ effective_to: ov.splitBeforeEnd })
+        .eq('id', v.id)
+      if (capErr) throw new Error(capErr.message)
+
+      // Create the after-split fragment
+      const { error: splitErr } = await supabase
+        .from('allocation_configs')
+        .insert({
+          org_id:           orgId,
+          config_group_id:  v.config_group_id,
+          name:             v.name,
+          is_special:       v.is_special ?? true,
+          allocation_type:  v.allocation_type,
+          total_amount:     v.total_amount ?? null,
+          rows:             v.rows,
+          effective_from:   ov.splitAfterStart,
+          effective_to:     v.effective_to,
+          version_number:   (v.version_number ?? 1),
+          start_date:       ov.splitAfterStart,
+          status:           'locked',
+          change_type:      'date_split',
+          source_version_id: v.id,
+        })
+      if (splitErr) throw new Error(splitErr.message)
+    } else if (!ov.wouldSplit) {
+      // Trim the existing version to end before the new one starts
+      const { error: trimErr } = await supabase
+        .from('allocation_configs')
+        .update({ effective_to: subtractOneDay(params.effective_from) })
+        .eq('id', v.id)
+      if (trimErr) throw new Error(trimErr.message)
+    }
+  }
+
+  // Now create the new version
+  const { data, error } = await supabase.rpc('create_special_config_version', {
+    p_group_id:        params.group.id,
+    p_org_id:          orgId,
+    p_name:            params.group.name,
+    p_allocation_type: params.allocation_type,
+    p_total_amount:    params.total_amount ?? null,
+    p_rows:            params.rows,
+    p_effective_from:  params.effective_from,
+    p_status:          params.status,
+  })
+  if (error) throw new Error(error.message)
+  const newId = data as string
+
+  // Set effective_to and change_type
+  const { error: updateErr } = await supabase
+    .from('allocation_configs')
+    .update({ effective_to: params.effective_to, change_type: 'new_version' })
+    .eq('id', newId)
+  if (updateErr) throw new Error(updateErr.message)
+
+  return newId
+}
+
+export async function archiveGroup(groupId: string): Promise<void> {
+  const { error } = await supabase
+    .from('special_config_groups')
+    .update({ is_archived: true })
+    .eq('id', groupId)
+  if (error) throw new Error(error.message)
+}
+
+export async function restoreGroup(groupId: string): Promise<void> {
+  const { error } = await supabase
+    .from('special_config_groups')
+    .update({ is_archived: false })
+    .eq('id', groupId)
+  if (error) throw new Error(error.message)
+}
+
 export async function setGroupIncomeTypeLink(
   groupId:          string,
   incomeTypeId:     string | null,
@@ -181,123 +395,4 @@ export async function setGroupIncomeTypeLink(
   }
 }
 
-export async function getImpactedTransactionCount(
-  groupId:      string,
-  effectiveFrom: string,
-  effectiveTo:   string | null,
-  orgId?:        string,
-): Promise<number> {
-  const resolvedOrgId = orgId ?? useOrgStore.getState().orgId
-  const itQuery = supabase
-    .from('income_types')
-    .select('id')
-    .eq('special_config_group_id', groupId)
-  if (resolvedOrgId) itQuery.eq('org_id', resolvedOrgId)
-  const { data: itRows } = await itQuery
-  const itIds = (itRows ?? []).map((r: Record<string, unknown>) => r.id as string)
-  if (itIds.length === 0) return 0
-
-  let q = supabase
-    .from('inflow_transactions')
-    .select('id', { count: 'exact', head: true })
-    .in('income_type_id', itIds)
-    .gte('date', effectiveFrom)
-  if (resolvedOrgId) q = q.eq('org_id', resolvedOrgId)
-  if (effectiveTo) q = q.lte('date', effectiveTo)
-
-  const { count } = await q
-  return count ?? 0
-}
-
-export async function recalculateTransactions(params: {
-  groupId:       string
-  newVersionId:  string
-  effectiveFrom: string
-  effectiveTo:   string | null
-  rows:          AllocationConfig['rows']
-  allocationType: 'percentage' | 'amount'
-  reason:        string
-  userId:        string
-  orgId?:        string
-}): Promise<number> {
-  const { groupId, newVersionId, effectiveFrom, effectiveTo, reason, userId } = params
-  const resolvedOrgId = params.orgId ?? useOrgStore.getState().orgId
-  if (!resolvedOrgId) throw new Error('No active organisation.')
-
-  const itQuery = supabase
-    .from('income_types')
-    .select('id')
-    .eq('special_config_group_id', groupId)
-    .eq('org_id', resolvedOrgId)
-  const { data: itRows } = await itQuery
-  const itIds = (itRows ?? []).map((r: Record<string, unknown>) => r.id as string)
-  if (itIds.length === 0) return 0
-
-  let q = supabase
-    .from('inflow_transactions')
-    .select('id')
-    .in('income_type_id', itIds)
-    .eq('org_id', resolvedOrgId)
-    .gte('date', effectiveFrom)
-  if (effectiveTo) q = q.lte('date', effectiveTo)
-  const { data: txns } = await q
-  const ids = (txns ?? []).map((r: Record<string, unknown>) => r.id as string)
-  if (ids.length === 0) return 0
-
-  const { error: upErr } = await supabase
-    .from('inflow_transactions')
-    .update({ allocation_config_id: newVersionId })
-    .in('id', ids)
-  if (upErr) throw new Error(upErr.message)
-
-  const snapshots = ids.map(txId => ({
-    transaction_id:    txId,
-    config_version_id: newVersionId,
-    config_group_id:   groupId,
-    resolved_rows:     params.rows,
-    allocation_type:   params.allocationType,
-    is_recalculated:   true,
-    recalculated_at:   new Date().toISOString(),
-    org_id:            resolvedOrgId,
-  }))
-  for (let i = 0; i < snapshots.length; i += 100) {
-    const { error: snapErr } = await supabase
-      .from('transaction_allocation_snapshots')
-      .upsert(snapshots.slice(i, i + 100), { onConflict: 'transaction_id' })
-    if (snapErr) throw new Error(snapErr.message)
-  }
-
-  await supabase.from('recalculation_logs').insert({
-    config_group_id:   groupId,
-    config_version_id: newVersionId,
-    performed_by:      userId,
-    affected_count:    ids.length,
-    reason,
-    action_summary:    `Recalculated ${ids.length} transaction(s) for version effective ${effectiveFrom}`,
-    org_id:            resolvedOrgId,
-  })
-
-  return ids.length
-}
-
-// ── Snapshot ───────────────────────────────────────────────────────────────────
-
-export async function createTransactionSnapshot(
-  transactionId:  string,
-  configVersionId: string,
-  groupId:         string,
-  rows:            AllocationConfig['rows'],
-  allocationType:  string,
-): Promise<void> {
-  await supabase
-    .from('transaction_allocation_snapshots')
-    .upsert({
-      transaction_id:    transactionId,
-      config_version_id: configVersionId,
-      config_group_id:   groupId,
-      resolved_rows:     rows,
-      allocation_type:   allocationType,
-      is_recalculated:   false,
-    }, { onConflict: 'transaction_id' })
-}
 

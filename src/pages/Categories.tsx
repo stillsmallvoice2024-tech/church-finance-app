@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment, useMemo, useRef } from 'react'
-import { Plus, Pencil, Trash2, Layers, AlertCircle, Eye, EyeOff, FolderPlus, X, Check, Globe } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, AlertCircle, Eye, EyeOff, FolderPlus, X, Check, Globe, Lock } from 'lucide-react'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
@@ -904,8 +904,11 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
   return (
     <tr className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${cat.is_hidden ? 'opacity-50' : ''}`}>
       <td className="px-5 py-3 font-medium text-gray-800">
-        {cat.name}
-        {cat.is_hidden && <span className="ml-2 text-xs text-amber-500 font-semibold uppercase">hidden</span>}
+        <span className="flex items-center gap-2 flex-wrap">
+          {cat.name}
+          {cat.is_system && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>}
+          {cat.is_hidden && <span className="text-xs text-amber-500 font-semibold uppercase">hidden</span>}
+        </span>
       </td>
       <td className="px-5 py-3 text-gray-500 hidden sm:table-cell max-w-[200px]">
         <DescriptionCell id={cat.id} text={cat.description} tooltip={tooltip} setTooltip={setTooltip} />
@@ -946,10 +949,16 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
               <Pencil className="w-4 h-4" />
             </button>
           )}
-          <button onClick={() => onDelete(cat)} disabled={checking}
-            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors disabled:opacity-40" title="Delete" aria-label="Delete">
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {cat.is_system ? (
+            <span className="p-1.5 text-gray-300" title="System category — cannot be deleted">
+              <Lock className="w-4 h-4" />
+            </span>
+          ) : (
+            <button onClick={() => onDelete(cat)} disabled={checking}
+              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors disabled:opacity-40" title="Delete" aria-label="Delete">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </td>
     </tr>
