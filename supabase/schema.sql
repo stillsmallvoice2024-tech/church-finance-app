@@ -2029,8 +2029,8 @@ begin
     ) values (
       p_org_id, v_group_id, 'General Distribution Rule',
       v_org_date, v_org_date, null,
-      'locked', false, 'percentage',
-      '[{"category_name":"General","budget_portion":"Percentage","percentage":100}]'::jsonb,
+      'draft', false, 'percentage',
+      '[]'::jsonb,
       1
     );
   end if;

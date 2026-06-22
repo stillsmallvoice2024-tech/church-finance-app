@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Building2, Settings, CheckCircle2, ChevronRight, ChevronLeft, Loader2, AlertCircle } from 'lucide-react'
+import {
+  Building2, Settings, CheckCircle2, ChevronRight, ChevronLeft,
+  Loader2, AlertCircle, Percent, Plus, Trash2,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
 import { useCurrencies } from '../hooks/useCurrencies'
@@ -45,10 +48,16 @@ const inputCls =
   'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors bg-white'
 
 const STEPS = [
-  { n: 1, label: 'Organisation', Icon: Building2 },
-  { n: 2, label: 'Setup',        Icon: Settings   },
-  { n: 3, label: 'Ready',        Icon: CheckCircle2 },
+  { n: 1, label: 'Organisation', Icon: Building2   },
+  { n: 2, label: 'Setup',        Icon: Settings    },
+  { n: 3, label: 'Distribution', Icon: Percent     },
+  { n: 4, label: 'Ready',        Icon: CheckCircle2 },
 ]
+
+interface DistRow {
+  category_name: string
+  percentage:    number
+}
 
 export default function Onboarding() {
   const navigate      = useNavigate()
@@ -78,6 +87,9 @@ export default function Onboarding() {
   const [currency,   setCurrency]   = useState('')
   const [yearStart,  setYearStart]  = useState(1)
   const [timezone,   setTimezone]   = useState('Africa/Lagos')
+  const [distRows,   setDistRows]   = useState<DistRow[]>([
+    { category_name: 'General', percentage: 100 },
+  ])
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState<string | null>(null)
 
@@ -92,6 +104,17 @@ export default function Onboarding() {
   useEffect(() => {
     if (!currency && currencies.length > 0) setCurrency(currencies[0].code)
   }, [currencies]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const distTotal = distRows.reduce((s, r) => s + (r.percentage || 0), 0)
+
+  const addDistRow = () =>
+    setDistRows(prev => [...prev, { category_name: '', percentage: 0 }])
+
+  const removeDistRow = (i: number) =>
+    setDistRows(prev => prev.filter((_, idx) => idx !== i))
+
+  const updateDistRow = (i: number, field: keyof DistRow, value: string | number) =>
+    setDistRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
 
   // ── Step 1 → Step 2 ───────────────────────────────────────────────────────
   const handleNextStep1 = async () => {
@@ -133,13 +156,15 @@ export default function Onboarding() {
     setStep(2)
   }
 
-  // ── Step 3: Complete ──────────────────────────────────────────────────────
+  // ── Step 4: Complete ──────────────────────────────────────────────────────
   const handleComplete = async () => {
     setError(null)
     const id = localOrgId ?? storeOrgId
     if (!id) { setError('No organisation ID found — please refresh and try again.'); return }
 
     setLoading(true)
+
+    // 1. Complete onboarding — seeds General category, group (is_default=true) + draft config
     const { error: rpcErr } = await supabase.rpc('complete_org_onboarding', {
       p_org_id:            id,
       p_name:              name.trim(),
@@ -147,8 +172,47 @@ export default function Onboarding() {
       p_fiscal_year_start: yearStart,
       p_timezone:          timezone,
     })
+    if (rpcErr) { setLoading(false); setError(rpcErr.message); return }
+
+    // 2. Locate the General rule group seeded by the RPC
+    const { data: grpData, error: grpErr } = await supabase
+      .from('special_config_groups')
+      .select('id')
+      .eq('org_id', id)
+      .eq('is_default', true)
+      .maybeSingle()
+    if (grpErr || !grpData) {
+      setLoading(false)
+      setError(grpErr?.message ?? 'Could not find General rule group.')
+      return
+    }
+
+    // 3. Locate the draft config in that group
+    const { data: cfgData, error: cfgErr } = await supabase
+      .from('allocation_configs')
+      .select('id')
+      .eq('config_group_id', grpData.id)
+      .eq('status', 'draft')
+      .maybeSingle()
+    if (cfgErr || !cfgData) {
+      setLoading(false)
+      setError(cfgErr?.message ?? 'Could not find draft distribution rule.')
+      return
+    }
+
+    // 4. Lock it with the user-defined rows
+    const rows = distRows.map(r => ({
+      category_name:  r.category_name.trim(),
+      budget_portion: 'Percentage',
+      percentage:     r.percentage,
+    }))
+    const { error: updErr } = await supabase
+      .from('allocation_configs')
+      .update({ rows, status: 'locked' })
+      .eq('id', cfgData.id)
+
     setLoading(false)
-    if (rpcErr) { setError(rpcErr.message); return }
+    if (updErr) { setError(updErr.message); return }
 
     // Update store so OnboardingGuard stops redirecting before re-fetch completes
     useOrgStore.getState().setOrg({
@@ -165,6 +229,11 @@ export default function Onboarding() {
 
     navigate('/', { replace: true })
   }
+
+  const distValid =
+    distRows.length > 0 &&
+    distRows.every(r => r.category_name.trim() !== '') &&
+    distTotal === 100
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
@@ -204,7 +273,7 @@ export default function Onboarding() {
                 </span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className={`w-20 h-0.5 mx-1 mt-4 transition-colors ${
+                <div className={`w-14 h-0.5 mx-1 mt-4 transition-colors ${
                   step > s.n ? 'bg-primary' : 'bg-gray-200'
                 }`} />
               )}
@@ -322,8 +391,105 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* ── Step 3: Ready ──────────────────────────────────────────────── */}
+          {/* ── Step 3: General Distribution Rule ─────────────────────────── */}
           {step === 3 && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">General Distribution Rule</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Define how income is split across categories by default.
+                  This rule applies to any income type without a custom rule.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {/* Row headers */}
+                <div className="grid grid-cols-[1fr_6rem_2rem] gap-2 px-1">
+                  <span className="text-xs font-medium text-gray-500">Category</span>
+                  <span className="text-xs font-medium text-gray-500 text-right">Percentage</span>
+                  <span />
+                </div>
+
+                {/* Rows */}
+                {distRows.map((row, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_6rem_2rem] gap-2 items-center">
+                    <input
+                      type="text"
+                      value={row.category_name}
+                      onChange={e => updateDistRow(i, 'category_name', e.target.value)}
+                      placeholder="Category name"
+                      className={inputCls}
+                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={row.percentage}
+                        onChange={e => updateDistRow(i, 'percentage', Number(e.target.value) || 0)}
+                        className={`${inputCls} pr-7 text-right`}
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
+                    </div>
+                    <button
+                      onClick={() => removeDistRow(i)}
+                      disabled={distRows.length === 1}
+                      className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Total row */}
+                <div className="grid grid-cols-[1fr_6rem_2rem] gap-2 items-center pt-1 border-t border-gray-100">
+                  <span className="text-xs font-semibold text-gray-600 px-1">Total</span>
+                  <span className={`text-sm font-bold text-right pr-2 ${
+                    distTotal === 100 ? 'text-green-600' : 'text-red-500'
+                  }`}>
+                    {distTotal}%
+                  </span>
+                  <span />
+                </div>
+
+                {distTotal !== 100 && (
+                  <p className="text-xs text-red-500 px-1">
+                    Total must equal 100%. Currently {distTotal > 100 ? 'over' : 'under'} by {Math.abs(100 - distTotal)}%.
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={addDistRow}
+                className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-light font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add category
+              </button>
+
+              <div className="pt-1 flex justify-between">
+                <button
+                  onClick={() => { setError(null); setStep(2) }}
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Back
+                </button>
+                <button
+                  onClick={() => { setError(null); setStep(4) }}
+                  disabled={!distValid}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 4: Ready ──────────────────────────────────────────────── */}
+          {step === 4 && (
             <div className="space-y-5">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">You're all set!</h2>
@@ -342,6 +508,17 @@ export default function Onboarding() {
                     <span className="font-medium text-gray-900">{row.value}</span>
                   </div>
                 ))}
+                <div className="px-4 py-2.5 text-sm">
+                  <span className="text-gray-500">General Distribution Rule</span>
+                  <div className="mt-1.5 space-y-0.5">
+                    {distRows.map((r, i) => (
+                      <div key={i} className="flex justify-between text-xs text-gray-700">
+                        <span>{r.category_name}</span>
+                        <span className="font-medium">{r.percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-700">
@@ -351,7 +528,7 @@ export default function Onboarding() {
 
               <div className="pt-1 flex justify-between">
                 <button
-                  onClick={() => { setError(null); setStep(2) }}
+                  onClick={() => { setError(null); setStep(3) }}
                   className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
