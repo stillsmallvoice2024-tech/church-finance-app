@@ -2958,15 +2958,28 @@ ALTER TABLE public.categories
 
 NOTIFY pgrst, 'reload schema';
 
--- Seed "General Donation" system income type for existing orgs (idempotent)
+-- Mark existing "General Donation" rows as system-protected (no data overridden)
+UPDATE public.income_types
+SET is_system = true
+WHERE name = 'General Donation' AND (is_system = false OR is_system IS NULL);
+
+-- Insert "General Donation" only for orgs that don't have one yet
 DO $$
 DECLARE
   r RECORD;
 BEGIN
-  FOR r IN SELECT id FROM public.organizations LOOP
-    INSERT INTO public.income_types (org_id, name, color, is_system)
-    VALUES (r.id, 'General Donation', '#6b7280', true)
-    ON CONFLICT DO NOTHING;
+  FOR r IN
+    SELECT o.id FROM public.organizations o
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.income_types i
+      WHERE i.org_id = o.id AND i.name = 'General Donation'
+    )
+  LOOP
+    BEGIN
+      INSERT INTO public.income_types (org_id, name, color, is_system)
+      VALUES (r.id, 'General Donation', '#6b7280', true);
+    EXCEPTION WHEN OTHERS THEN NULL; -- skip locked/deleted orgs
+    END;
   END LOOP;
 END;
 $$;
@@ -3185,19 +3198,28 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
     </div>
   )
 
-  if (error && !/income_types|relation.*does not exist/i.test(error)) return (
+  if (error && !/relation.*does not exist|column.*does not exist|Could not find/i.test(error)) return (
     <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 max-w-2xl">
       <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
     </div>
   )
 
+  const isTableMissing  = !!error && /relation.*does not exist/i.test(error)
+  const isColumnMissing = !!error && /column.*does not exist|Could not find/i.test(error)
+
   return (
     <div className="max-w-2xl space-y-4">
       {/* Migration hint */}
-      {error && /income_types|relation.*does not exist/i.test(error) && (
+      {isTableMissing && (
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>The <code className="font-mono text-xs">income_types</code> table doesn't exist yet. Add an income type to see the migration SQL.</span>
+          <span>The <code className="font-mono text-xs">income_types</code> table doesn't exist yet — run the <strong>Core Schema</strong> migration in Setup → Database (Step 1).</span>
+        </div>
+      )}
+      {isColumnMissing && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>A required column is missing — run the <strong>System Defaults</strong> migration in Setup → Database (Step 4).</span>
         </div>
       )}
 
