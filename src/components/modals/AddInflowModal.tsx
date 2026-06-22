@@ -71,7 +71,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const { configs: allocConfigs, groups: allocGroups, fetch: fetchAllocConfigs } = useAllocationStore()
   useEffect(() => { fetchAllocConfigs() }, [fetchAllocConfigs])
-  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
+  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked' && c.superseded_by_id == null)
   const versionIndex  = useMemo(() => buildVersionIndex(allocConfigs, allocGroups), [allocConfigs, allocGroups])
 
   const { incomeTypes } = useIncomeTypes()

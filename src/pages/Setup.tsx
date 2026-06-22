@@ -410,9 +410,11 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
 
 function GeneralGroupPanel({
   onNewVersion,
+  onAmend,
   refetchKey,
 }: {
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   refetchKey:   number
 }) {
   const orgId = useOrgStore(s => s.orgId)
@@ -445,7 +447,8 @@ function GeneralGroupPanel({
         v.status === 'locked' &&
         v.effective_from != null &&
         v.effective_from <= today &&
-        (v.effective_to == null || v.effective_to >= today)
+        (v.effective_to == null || v.effective_to >= today) &&
+        v.superseded_by_id == null
       ) ?? null
 
       if (!cancelled) {
@@ -564,34 +567,65 @@ function GeneralGroupPanel({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {group.versions.map(v => (
-                  <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 font-medium text-gray-700">v{v.version_number}</td>
-                    <td className="px-4 py-2 text-gray-600">{v.effective_from ?? '—'}</td>
-                    <td className="px-4 py-2 text-gray-600">{v.effective_to ?? 'open'}</td>
-                    <td className="px-4 py-2">
-                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium ${
-                        v.status === 'locked'
-                          ? 'bg-green-50 text-green-700 border border-green-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        {v.status === 'locked' ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
-                        {v.status === 'locked' ? 'Locked' : 'Draft'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      {v.status === 'draft' && (
-                        <button
-                          onClick={() => handleDeleteVersion(v)}
-                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                          title="Delete draft"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {group.versions.map(v => {
+                  const isSuperseded = v.superseded_by_id != null
+                  return (
+                    <tr key={v.id} className={`hover:bg-gray-50 ${isSuperseded ? 'opacity-60' : ''}`}>
+                      <td className="px-4 py-2 font-medium text-gray-700">v{v.version_number}</td>
+                      <td className="px-4 py-2 text-gray-600">{v.effective_from ?? '—'}</td>
+                      <td className="px-4 py-2 text-gray-600">{v.effective_to ?? 'open'}</td>
+                      <td className="px-4 py-2">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium ${
+                            v.status === 'locked'
+                              ? 'bg-green-50 text-green-700 border border-green-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            {v.status === 'locked' ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                            {v.status === 'locked' ? 'Locked' : 'Draft'}
+                          </span>
+                          {v.change_type === 'amendment' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
+                              Amendment
+                            </span>
+                          )}
+                          {v.change_type === 'date_split' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
+                              Date split
+                            </span>
+                          )}
+                          {isSuperseded && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                              Superseded
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-1">
+                          {v.status === 'locked' && !isSuperseded && (
+                            <button
+                              onClick={() => onAmend(group!, v)}
+                              className="p-1 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
+                              title="Amend this version"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {v.status === 'draft' && (
+                            <button
+                              onClick={() => handleDeleteVersion(v)}
+                              className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                              title="Delete draft"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
@@ -606,11 +640,13 @@ function GeneralGroupPanel({
 function DistributionRulesTab({
   onNewCustom,
   onNewVersion,
+  onAmend,
   refetchKey,
   onRefetch,
 }: {
   onNewCustom:  () => void
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   refetchKey:   number
   onRefetch:    () => void
 }) {
@@ -622,7 +658,7 @@ function DistributionRulesTab({
           <h3 className="text-sm font-semibold text-gray-800">General Rule</h3>
           <p className="text-xs text-gray-500 mt-0.5">The fallback rule applied when an income type has no custom rule.</p>
         </div>
-        <GeneralGroupPanel onNewVersion={onNewVersion} refetchKey={refetchKey} />
+        <GeneralGroupPanel onNewVersion={onNewVersion} onAmend={onAmend} refetchKey={refetchKey} />
       </div>
 
       {/* Divider */}
@@ -646,6 +682,7 @@ function DistributionRulesTab({
           key={refetchKey}
           onNew={onNewCustom}
           onNewVersion={onNewVersion}
+          onAmend={onAmend}
           onRefetch={onRefetch}
           hideHeader
         />
@@ -656,9 +693,10 @@ function DistributionRulesTab({
 
 // ── Custom Rules tab ─────────────────────────────────────────────────────────────
 
-function SpecialConfigsTab({ onNew, onNewVersion, onRefetch, hideHeader = false }: {
+function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader = false }: {
   onNew:        () => void
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
+  onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   onRefetch:    () => void
   hideHeader?:  boolean
 }) {
@@ -811,17 +849,18 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch, hideHeader = false 
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
                             <th className="px-4 py-2 text-left text-gray-500 font-semibold">Type</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status</th>
+                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status / Lineage</th>
                             <th className="px-4 py-2 text-right text-gray-500 font-semibold">Rows</th>
-                            <th className="px-4 py-2 w-10" />
+                            <th className="px-4 py-2 w-20" />
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                           {g.versions.map(v => {
                             const vAmt = v.allocation_type === 'amount'
                             const vLocked = v.status === 'locked'
+                            const isSuperseded = v.superseded_by_id != null
                             return (
-                              <tr key={v.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
+                              <tr key={v.id} className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${isSuperseded ? 'opacity-60' : ''}`}>
                                 <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
                                 <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
                                 <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
@@ -833,22 +872,50 @@ function SpecialConfigsTab({ onNew, onNewVersion, onRefetch, hideHeader = false 
                                   </span>
                                 </td>
                                 <td className="px-4 py-2">
-                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
-                                    vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                                  }`}>
-                                    {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
-                                    {vLocked ? 'Locked' : 'Draft'}
-                                  </span>
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
+                                      vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                                    }`}>
+                                      {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                                      {vLocked ? 'Locked' : 'Draft'}
+                                    </span>
+                                    {v.change_type === 'amendment' && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
+                                        Amendment
+                                      </span>
+                                    )}
+                                    {v.change_type === 'date_split' && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
+                                        Date split
+                                      </span>
+                                    )}
+                                    {isSuperseded && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                        Superseded
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="px-4 py-2 text-right text-gray-500">{v.rows.length}</td>
                                 <td className="px-4 py-2">
-                                  <button
-                                    onClick={() => handleDeleteVersion(v)}
-                                    className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
-                                    title="Delete version"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    {vLocked && !isSuperseded && (
+                                      <button
+                                        onClick={() => onAmend(g, v)}
+                                        className="touch-target p-1 rounded text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                                        title="Amend this version"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteVersion(v)}
+                                      className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                                      title="Delete version"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             )
@@ -2583,6 +2650,22 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.complete_org_onboarding(uuid,text,text,int,text) TO authenticated;
 
+NOTIFY pgrst, 'reload schema';
+
+-- ── Distribution Rules — Phase 2: Supersede / Amendment / Date-split audit ────
+-- Add columns for version lineage and audit trail. Safe to re-run (idempotent).
+
+ALTER TABLE public.allocation_configs
+  ADD COLUMN IF NOT EXISTS superseded_by_id  uuid
+    REFERENCES public.allocation_configs(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS superseded_at     timestamptz,
+  ADD COLUMN IF NOT EXISTS change_type       text
+    CHECK (change_type IN ('initial','new_version','date_split','amendment'))
+    DEFAULT 'initial',
+  ADD COLUMN IF NOT EXISTS source_version_id uuid
+    REFERENCES public.allocation_configs(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS amendment_reason  text;
+
 NOTIFY pgrst, 'reload schema';`
 
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
@@ -3203,9 +3286,10 @@ export default function SetupPage() {
   const [editLockedTarget,  setEditLockedTarget]  = useState<AllocationConfig | null>(null)
   const [deleteAllocTarget, setDeleteAllocTarget] = useState<AllocationConfig | null>(null)
   const [specialModalOpen,      setSpecialModalOpen]      = useState(false)
-  const [specialModalMode,      setSpecialModalMode]      = useState<'new_group' | 'new_version'>('new_group')
+  const [specialModalMode,      setSpecialModalMode]      = useState<'new_group' | 'new_version' | 'amend_version'>('new_group')
   const [selectedSpecialGroup,  setSelectedSpecialGroup]  = useState<SpecialConfigGroupWithVersions | null>(null)
   const [copyFromVersion,       setCopyFromVersion]       = useState<AllocationConfig | null>(null)
+  const [amendVersionRecord,    setAmendVersionRecord]    = useState<AllocationConfig | null>(null)
   const [specialRefetch,        setSpecialRefetch]        = useState(0)
   const [resetModalOpen,       setResetModalOpen]       = useState(false)
   const [incomeTypeModalOpen,    setIncomeTypeModalOpen]    = useState(false)
@@ -3300,6 +3384,15 @@ export default function SetupPage() {
     setSpecialModalMode('new_version')
     setSelectedSpecialGroup(group)
     setCopyFromVersion(copyFrom)
+    setAmendVersionRecord(null)
+    setSpecialModalOpen(true)
+  }
+
+  const handleAmendVersion = (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => {
+    setSpecialModalMode('amend_version')
+    setSelectedSpecialGroup(group)
+    setCopyFromVersion(null)
+    setAmendVersionRecord(version)
     setSpecialModalOpen(true)
   }
 
@@ -3372,6 +3465,7 @@ export default function SetupPage() {
               <DistributionRulesTab
                 onNewCustom={handleNewGroup}
                 onNewVersion={handleNewVersion}
+                onAmend={handleAmendVersion}
                 refetchKey={specialRefetch}
                 onRefetch={() => setSpecialRefetch(n => n + 1)}
               />
@@ -3536,6 +3630,7 @@ export default function SetupPage() {
         mode={specialModalMode}
         group={selectedSpecialGroup}
         copyFromVersion={copyFromVersion}
+        versionToAmend={amendVersionRecord}
       />
       <ResetDataModal
         open={resetModalOpen}

@@ -305,13 +305,18 @@ create table public.allocation_configs (
   is_special       boolean     not null default false,
   allocation_type  text,
   total_amount     numeric(15,2),
-  config_group_id  uuid        references public.special_config_groups(id) on delete cascade,
-  effective_from   date,
-  effective_to     date,
-  version_number   integer     not null default 1,
-  org_id           uuid        not null default public.get_current_org_id()
-                   references public.organizations(id) on delete set null,
-  created_at       timestamptz default now()
+  config_group_id   uuid        references public.special_config_groups(id) on delete cascade,
+  effective_from    date,
+  effective_to      date,
+  version_number    integer     not null default 1,
+  superseded_by_id  uuid        references public.allocation_configs(id) on delete set null,
+  superseded_at     timestamptz,
+  change_type       text        check (change_type in ('initial','new_version','date_split','amendment')) default 'initial',
+  source_version_id uuid        references public.allocation_configs(id) on delete set null,
+  amendment_reason  text,
+  org_id            uuid        not null default public.get_current_org_id()
+                    references public.organizations(id) on delete set null,
+  created_at        timestamptz default now()
 );
 
 -- ── Income Types ──────────────────────────────────────────────────────────────

@@ -393,7 +393,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
   // ---- derived ----
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const selectedBank = nonFxBanks.find(b => b.id === bankId) ?? null
-  const lockedConfigs = configs.filter(c => c.status === 'locked')
+  const lockedConfigs = configs.filter(c => c.status === 'locked' && c.superseded_by_id == null)
   const inflows = wizardRows.filter(r => r.credit > 0)
   const outflows = wizardRows.filter(r => r.debit > 0)
   const totalCredit = inflows.reduce((s, r) => s + r.credit, 0)

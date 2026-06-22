@@ -12,19 +12,24 @@ export interface AllocationRow {
 }
 
 export interface AllocationConfig {
-  id:              string
-  name:            string
-  start_date:      string
-  status:          'draft' | 'locked'
-  is_special?:     boolean
+  id:               string
+  name:             string
+  start_date:       string
+  status:           'draft' | 'locked'
+  is_special?:      boolean
   allocation_type?: 'percentage' | 'amount'
-  total_amount?:   number
-  rows:            AllocationRow[]
-  created_at:      string
-  config_group_id?: string | null
-  effective_from?:  string | null
-  effective_to?:    string | null
-  version_number?:  number
+  total_amount?:    number
+  rows:             AllocationRow[]
+  created_at:       string
+  config_group_id?:  string | null
+  effective_from?:   string | null
+  effective_to?:     string | null
+  version_number?:   number
+  superseded_by_id?: string | null
+  superseded_at?:    string | null
+  change_type?:      'initial' | 'new_version' | 'date_split' | 'amendment' | null
+  source_version_id?: string | null
+  amendment_reason?:  string | null
 }
 
 export interface SpecialConfigGroup {
@@ -55,6 +60,7 @@ export function buildVersionIndex(
   const byGroup = new Map<string, AllocationConfig[]>()
   for (const c of configs) {
     if (!c.config_group_id || c.status !== 'locked' || c.effective_from == null) continue
+    if (c.superseded_by_id != null) continue
     const arr = byGroup.get(c.config_group_id) ?? []
     arr.push(c)
     byGroup.set(c.config_group_id, arr)
