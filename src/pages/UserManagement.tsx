@@ -809,7 +809,7 @@ export default function UserManagement() {
                         className={`appearance-none pr-6 pl-2.5 py-1.5 min-h-[32px] text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[m.role].pill} ${!canEditRole ? 'opacity-60' : ''}`}
                         aria-label={`Role for ${m.full_name || m.email}`}
                       >
-                        {isOwner() && <option value="owner">Owner</option>}
+                        {(isOwner() || m.role === 'owner') && <option value="owner">Owner</option>}
                         <option value="admin">Admin</option>
                         <option value="accountant">Accountant</option>
                         <option value="viewer">Viewer</option>
@@ -897,7 +897,7 @@ export default function UserManagement() {
                             className={`appearance-none pr-6 pl-2.5 py-1 text-xs rounded-full font-semibold border-0 outline-none cursor-pointer disabled:cursor-default ${ROLE_CONFIG[m.role].pill} ${!canEditRole ? 'opacity-60' : ''}`}
                             title={isSelf ? 'You cannot change your own role' : undefined}
                           >
-                            {isOwner() && <option value="owner">Owner</option>}
+                            {(isOwner() || m.role === 'owner') && <option value="owner">Owner</option>}
                             <option value="admin">Admin</option>
                             <option value="accountant">Accountant</option>
                             <option value="viewer">Viewer</option>
