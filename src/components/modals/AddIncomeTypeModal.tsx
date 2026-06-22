@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ModalHandle } from '../ui/Modal'
-import { Plus, Trash2, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, Copy } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
@@ -12,16 +12,19 @@ import {
 
 export const MIGRATION_SQL =
 `CREATE TABLE IF NOT EXISTS public.income_types (
-  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name              text NOT NULL,
-  description       text,
-  color             text NOT NULL DEFAULT '#6366f1',
-  special_config_id uuid REFERENCES public.allocation_configs(id) ON DELETE SET NULL,
-  created_at        timestamptz DEFAULT now()
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id                  uuid REFERENCES public.organizations(id) ON DELETE SET NULL,
+  name                    text NOT NULL,
+  description             text,
+  color                   text NOT NULL DEFAULT '#6366f1',
+  special_config_id       uuid REFERENCES public.allocation_configs(id) ON DELETE SET NULL,
+  special_config_group_id uuid REFERENCES public.special_config_groups(id) ON DELETE SET NULL,
+  created_at              timestamptz DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.income_type_rules (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id         uuid REFERENCES public.organizations(id) ON DELETE SET NULL,
   income_type_id uuid NOT NULL REFERENCES public.income_types(id) ON DELETE CASCADE,
   rule_type      text NOT NULL CHECK (rule_type IN ('keyword','stage_code')),
   rule_value     text NOT NULL,
@@ -32,15 +35,18 @@ ALTER TABLE public.inflow_transactions
   ADD COLUMN IF NOT EXISTS income_type_id uuid
     REFERENCES public.income_types(id) ON DELETE SET NULL;
 
--- RLS policies (required for authenticated users to read/write)
 ALTER TABLE public.income_types      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.income_type_rules ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "authenticated full access" ON public.income_types
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "authenticated full access" ON public.income_types
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "authenticated full access" ON public.income_type_rules
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);`
+DO $$ BEGIN
+  CREATE POLICY "authenticated full access" ON public.income_type_rules
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;`
 
 // ── Rule row type ──────────────────────────────────────────────────────────────
 
@@ -71,8 +77,15 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
   const [rules,          setRules]          = useState<RuleDraft[]>([{ rule_type: 'keyword', rule_value: '' }])
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState<string | null>(null)
+  const [copied,         setCopied]         = useState(false)
 
   const isMigrationError = !!error && /relation.*does not exist|does not exist/i.test(error)
+
+  const handleCopySql = async () => {
+    await navigator.clipboard.writeText(MIGRATION_SQL)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   // Dirty detection — compare to snapshot taken on open
   const initialRef      = useRef({ name: '', description: '', color: TYPE_PRESET_COLORS[0], specialConfigGroup: '' })
@@ -178,13 +191,33 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
       <div className="space-y-4">
 
         {/* Error / Migration hint */}
-        {error && (
+        {error && !isMigrationError && (
           <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              {isMigrationError
-                ? 'Income types aren\'t fully set up yet — please contact your administrator, then try again.'
-                : error}
+            <div className="flex-1">{error}</div>
+          </div>
+        )}
+        {isMigrationError && (
+          <div className="space-y-2">
+            <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>The <code className="font-mono">income_types</code> table doesn't exist yet. Run this SQL in your Supabase project, then try again.</span>
+            </div>
+            <div className="rounded-lg border border-gray-200 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="flex items-center gap-1 text-xs text-gray-300 hover:text-white transition-colors"
+                >
+                  <Copy className="w-3 h-3" />
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-3 overflow-x-auto whitespace-pre leading-relaxed max-h-48 overflow-y-auto">
+                {MIGRATION_SQL}
+              </pre>
             </div>
           </div>
         )}
