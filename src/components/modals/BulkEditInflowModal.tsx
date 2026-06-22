@@ -22,7 +22,7 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, allNonNormal = 
   const { categories }              = useCategories()
   const { incomeTypes }             = useIncomeTypes()
   const { configs: allocConfigs, fetch: fetchAllocConfigs, loaded: configsLoaded } = useAllocationStore()
-  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked')
+  const lockedConfigs = allocConfigs.filter(c => c.status === 'locked' && c.superseded_by_id == null)
 
   useEffect(() => { if (!configsLoaded) fetchAllocConfigs() }, [configsLoaded, fetchAllocConfigs])
 
@@ -147,6 +147,19 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, allNonNormal = 
             {txnType && allocConfigId && allocConfigId !== '__clear__' && (
               <p className="text-xs text-amber-600">Setting a transaction type will clear the distribution rule.</p>
             )}
+          </div>
+        )}
+
+        {lockedConfigs.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-500">Distribution Config Override</label>
+            <SearchableSelect
+              value={allocationConfigId}
+              onChange={setAllocationConfigId}
+              options={lockedConfigs.map(c => ({ value: c.id, label: c.name }))}
+              placeholder="— Keep existing —"
+              className={filterInputCls}
+            />
           </div>
         )}
 
