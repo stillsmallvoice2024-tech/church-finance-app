@@ -541,7 +541,7 @@ function ChangePasswordModal({
 
 export default function UserManagement() {
   const { user, profile } = useAuth()
-  const { isAdmin, isOwner, canTransferOwnership } = useRole()
+  const { isAdmin, isOwner, canTransferOwnership, role } = useRole()
   const { push: toast }   = useToastStore()
   const { orgId }         = useOrgStore()
 
@@ -721,7 +721,7 @@ export default function UserManagement() {
               )}
               <div className="text-sm text-gray-500">{user?.email}</div>
               <div className="mt-1">
-                <RolePill role={(profile?.role as UserRole) ?? 'viewer'} />
+                <RolePill role={role ?? 'viewer'} />
               </div>
             </div>
           </div>
@@ -823,7 +823,7 @@ export default function UserManagement() {
                     Registered {m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}
                     {' · '}Joined {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—'}
                   </p>
-                  {((canTransferOwnership() && !isSelf && m.role !== 'owner') || (!isSelf && isAdmin())) && (
+                  {((canTransferOwnership() && !isSelf && m.role !== 'owner') || (!isSelf && isAdmin() && !(m.role === 'owner' && !isOwner()))) && (
                     <div className="flex gap-2">
                       {canTransferOwnership() && !isSelf && m.role !== 'owner' && (
                         <button
@@ -833,7 +833,7 @@ export default function UserManagement() {
                           <Shield className="w-3.5 h-3.5" /> Make Owner
                         </button>
                       )}
-                      {!isSelf && isAdmin() && (
+                      {!isSelf && isAdmin() && !(m.role === 'owner' && !isOwner()) && (
                         <button
                           onClick={() => setRemoveId(m.id)}
                           className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 min-h-[40px] text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
@@ -933,7 +933,7 @@ export default function UserManagement() {
                               <Shield className="w-3.5 h-3.5" /> Make Owner
                             </button>
                           )}
-                          {!isSelf && isAdmin() && (
+                          {!isSelf && isAdmin() && !(m.role === 'owner' && !isOwner()) && (
                             <button
                               onClick={() => setRemoveId(m.id)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
