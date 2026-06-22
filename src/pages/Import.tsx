@@ -1049,7 +1049,7 @@ function ManualEntryForm() {
                   className={`${iCls} bg-white text-xs`}
                 >
                   <option value="">— Auto-resolve —</option>
-                  {configs.filter(c => c.status === 'locked').map(c => (
+                  {configs.filter(c => c.status === 'locked' && c.superseded_by_id == null).map(c => (
                     <option key={c.id} value={c.id}>{c.name} — {c.effective_from ?? c.start_date}</option>
                   ))}
                 </select>

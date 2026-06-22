@@ -40,7 +40,7 @@ const schema = z.object({
   recorded_at_date:           z.string().optional(),
   amount:                     z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   description:                z.string().optional(),
-  bank_name:                  z.string().optional(),
+  bank_name:                  z.string().min(1, 'Bank is required'),
   stage_code_1:               z.string().optional(),
   stage_code_2:               z.string().optional(),
   transaction_ref:            z.string().optional(),
@@ -386,7 +386,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         </Field>
 
         {/* Bank — FX banks excluded; FX transactions go through the FX module */}
-        <Field label="Bank" error={errors.bank_name?.message}>
+        <Field label="Bank *" error={errors.bank_name?.message}>
           <Controller name="bank_name" control={control} render={({ field }) => {
             const selectedIsFx = fxBanks.some(b => b.name === field.value)
             const bankOptions  = isEdit
@@ -396,7 +396,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
               <>
                 <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                   options={bankOptions}
-                  placeholder="— None —" className={inputCls(!!errors.bank_name)} />
+                  placeholder="— Select bank —" className={inputCls(!!errors.bank_name)} />
                 {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
                   <p className="flex items-center gap-1 text-xs text-amber-600 mt-0.5">
                     <ExternalLink className="w-3 h-3 shrink-0" />

@@ -38,7 +38,7 @@ const schema = z.object({
   created_at_date:         z.string().optional(),
   recorded_at_date:        z.string().optional(),
   amount_disbursed:        z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
-  bank_name:               z.string().optional(),
+  bank_name:               z.string().min(1, 'Bank is required'),
   description:             z.string().optional(),
   bank_description:        z.string().optional(),
   transaction_id:          z.string().optional(),
@@ -337,7 +337,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
             "More details" below — happy path stays short on phones (F2) */}
 
         {/* Bank Account — FX banks excluded in add mode; FX transactions go through the FX module */}
-        <Field label="Bank Account" error={errors.bank_name?.message}>
+        <Field label="Bank Account *" error={errors.bank_name?.message}>
           <Controller name="bank_name" control={control} render={({ field }) => {
             const selectedIsFx = fxBanks.some(b => b.name === field.value)
             const bankOptions  = isEdit
@@ -347,7 +347,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
               <>
                 <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                   options={bankOptions}
-                  placeholder="— Select bank (optional) —" className={inputCls(!!errors.bank_name)} />
+                  placeholder="— Select bank —" className={inputCls(!!errors.bank_name)} />
                 {(selectedIsFx || (!isEdit && fxBanks.length > 0)) && (
                   <p className="flex items-center gap-1 text-xs text-amber-600 mt-0.5">
                     <ExternalLink className="w-3 h-3 shrink-0" />
