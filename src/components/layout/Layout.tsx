@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { BottomTabBar } from './BottomTabBar'
 import { ToastContainer } from '../ui/Toast'
+import { UpdateBanner } from '../ui/UpdateBanner'
 import { FloatingCalculator } from '../ui/FloatingCalculator'
 import { TourEngine } from '../onboarding/TourEngine'
 import { SetupWizard } from '../onboarding/SetupWizard'
@@ -34,6 +35,7 @@ export function Layout() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
+      <UpdateBanner />
       {/* Skip to main content — visible on keyboard focus only */}
       <a
         href="#main-content"
