@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, TrendingUp, TrendingDown, Users } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, Trash2, Landmark, AlertCircle, Plus, Layers, Lock, LockOpen, FileEdit, Copy, Terminal, ShieldAlert, ChevronDown, Search, X, Globe, Settings2, TrendingUp, TrendingDown, Users, Info, Clock } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { useAccountingYearStore } from '../store/accountingYearStore'
@@ -406,6 +406,13 @@ function BanksTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const portionLabel = (p?: string): string => {
+  if (!p || p === 'Percentage' || p === 'Percentage Allocation') return 'Regular Funds'
+  return p
+}
+
 // ── General Distribution Rule panel ───────────────────────────────────────────
 
 function GeneralGroupPanel({
@@ -419,9 +426,14 @@ function GeneralGroupPanel({
 }) {
   const orgId = useOrgStore(s => s.orgId)
   const { baseCurrencySymbol } = useOrgCurrency()
-  const [group,    setGroup]    = useState<SpecialConfigGroupWithVersions | null>(null)
-  const [loading,  setLoading]  = useState(true)
-  const [expanded, setExpanded] = useState(false)
+  const [group,            setGroup]            = useState<SpecialConfigGroupWithVersions | null>(null)
+  const [loading,          setLoading]          = useState(true)
+  const [expanded,         setExpanded]         = useState(false)
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
+  const [pastInfoVersion,  setPastInfoVersion]  = useState<AllocationConfig | null>(null)
+
+  const toggleVersion = (id: string) =>
+    setExpandedVersions(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
 
   useEffect(() => {
     if (!orgId) return
@@ -487,8 +499,10 @@ function GeneralGroupPanel({
 
   const av    = group.active_version
   const isAmt = av?.allocation_type === 'amount'
+  const today = new Date().toISOString().slice(0, 10)
 
   return (
+    <>
     <div className="rounded-xl border-2 border-primary/20 bg-white overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-primary/5">
@@ -563,73 +577,125 @@ function GeneralGroupPanel({
                   <th className="px-4 py-2 text-left font-semibold text-gray-500">Effective From</th>
                   <th className="px-4 py-2 text-left font-semibold text-gray-500">Effective To</th>
                   <th className="px-4 py-2 text-left font-semibold text-gray-500">Status</th>
+                  <th className="px-4 py-2 w-8" />
                   <th className="px-4 py-2 w-12" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {group.versions.map(v => {
-                  const isSuperseded = v.superseded_by_id != null
-                  const isCurrent    = v.id === av?.id
+                  const isSuperseded     = v.superseded_by_id != null
+                  const isCurrent        = v.id === av?.id
+                  const isPast           = v.status === 'locked' && !!v.effective_to && v.effective_to < today && !isCurrent && !isSuperseded
+                  const isFuture         = v.status === 'locked' && !!v.effective_from && v.effective_from > today
+                  const isVersionExpanded = expandedVersions.has(v.id)
                   return (
-                    <tr key={v.id} className={`hover:bg-gray-50 ${isSuperseded ? 'opacity-60' : ''}`}>
-                      <td className="px-4 py-2 font-medium text-gray-700">v{v.version_number}</td>
-                      <td className="px-4 py-2 text-gray-600">{v.effective_from ?? '—'}</td>
-                      <td className="px-4 py-2 text-gray-600">{v.effective_to ?? 'open'}</td>
-                      <td className="px-4 py-2">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium ${
-                            v.status === 'locked'
-                              ? 'bg-green-50 text-green-700 border border-green-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                            {v.status === 'locked' ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
-                            {v.status === 'locked' ? 'Locked' : 'Draft'}
-                          </span>
-                          {isCurrent && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">
-                              Current
+                    <React.Fragment key={v.id}>
+                      <tr className={`hover:bg-gray-50 ${isSuperseded ? 'opacity-60' : ''}`}>
+                        <td className="px-4 py-2 font-medium text-gray-700">v{v.version_number}</td>
+                        <td className="px-4 py-2 text-gray-600">{v.effective_from ?? '—'}</td>
+                        <td className="px-4 py-2 text-gray-600">{v.effective_to ?? 'open'}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium ${
+                              v.status === 'locked'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {v.status === 'locked' ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                              {v.status === 'locked' ? 'Locked' : 'Draft'}
                             </span>
-                          )}
-                          {v.change_type === 'amendment' && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
-                              Amendment
-                            </span>
-                          )}
-                          {v.change_type === 'date_split' && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
-                              Date split
-                            </span>
-                          )}
-                          {isSuperseded && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
-                              Superseded
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-1">
-                          {v.status === 'locked' && !isSuperseded && (
+                            {isCurrent && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">Current</span>
+                            )}
+                            {isPast && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                <Clock className="w-2.5 h-2.5" />Past
+                              </span>
+                            )}
+                            {isFuture && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">Future</span>
+                            )}
+                            {v.change_type === 'amendment' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">Amendment</span>
+                            )}
+                            {v.change_type === 'date_split' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">Date split</span>
+                            )}
+                            {isSuperseded && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">Superseded</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          {v.rows.length > 0 && (
                             <button
-                              onClick={() => onAmend(group!, v)}
-                              className="p-1 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
-                              title="Amend this version"
+                              onClick={() => toggleVersion(v.id)}
+                              className="p-1 text-gray-400 hover:text-gray-700 rounded transition-colors"
+                              title={isVersionExpanded ? 'Hide breakdown' : 'Show breakdown'}
                             >
-                              <Pencil className="w-3.5 h-3.5" />
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isVersionExpanded ? 'rotate-180' : ''}`} />
                             </button>
                           )}
-                          {v.status === 'draft' && (
-                            <button
-                              onClick={() => handleDeleteVersion(v)}
-                              className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                              title="Delete draft"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-1">
+                            {isCurrent && (
+                              <button
+                                onClick={() => onAmend(group!, v)}
+                                className="p-1 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
+                                title="Amend this version"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {isPast && (
+                              <button
+                                onClick={() => setPastInfoVersion(v)}
+                                className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="About this past version"
+                              >
+                                <Info className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {v.status === 'draft' && (
+                              <button
+                                onClick={() => handleDeleteVersion(v)}
+                                className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                title="Delete draft"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {isVersionExpanded && v.rows.length > 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-6 pb-3 pt-0 bg-gray-50/60">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-gray-200">
+                                  <th className="py-1.5 text-left text-gray-500 font-medium">Category</th>
+                                  <th className="py-1.5 text-left text-gray-500 font-medium">Fund Type</th>
+                                  <th className="py-1.5 text-right text-gray-500 font-medium">Value</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {v.rows.map((r, i) => (
+                                  <tr key={i} className="border-b border-gray-100 last:border-0">
+                                    <td className="py-1 text-gray-700">{r.category_name}</td>
+                                    <td className="py-1 text-gray-500">{portionLabel(r.budget_portion)}</td>
+                                    <td className="py-1 text-right font-medium text-gray-700 tabular-nums">
+                                      {r.percentage != null ? `${r.percentage}%` : r.amount != null ? `${baseCurrencySymbol}${r.amount}` : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>
@@ -638,6 +704,38 @@ function GeneralGroupPanel({
         </div>
       )}
     </div>
+    {/* Past version info dialog */}
+    {pastInfoVersion && (
+      <Modal open onClose={() => setPastInfoVersion(null)} title="Historical Version">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            This rule covered{' '}
+            <strong>{pastInfoVersion.effective_from ?? '—'}</strong>
+            {' → '}
+            <strong>{pastInfoVersion.effective_to ?? 'open'}</strong>
+            {' '}and is no longer active.
+          </p>
+          <p className="text-sm text-gray-600">
+            To make corrections to how records from that period were distributed, create a new version with those same dates — the date-split system will handle any overlaps automatically.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setPastInfoVersion(null)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => { onNewVersion(group!, pastInfoVersion); setPastInfoVersion(null) }}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+            >
+              Create New Version
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
+    </>
   )
 }
 
@@ -708,9 +806,14 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
 }) {
   const { baseCurrencySymbol } = useOrgCurrency()
   const { groups, loading, error } = useSpecialConfigGroups()
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [expandedGroups,   setExpandedGroups]   = useState<Set<string>>(new Set())
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set())
+  const [pastInfoDialog,   setPastInfoDialog]   = useState<{ g: SpecialConfigGroupWithVersions; v: AllocationConfig } | null>(null)
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
+
+  const toggleVersionExpand = (id: string) =>
+    setExpandedVersions(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -847,94 +950,147 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                   <div className="border-t border-gray-100">
                     {g.versions.length === 0 ? (
                       <p className="px-4 py-3 text-xs text-gray-500">No versions yet.</p>
-                    ) : (
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Type</th>
-                            <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status / Lineage</th>
-                            <th className="px-4 py-2 text-right text-gray-500 font-semibold">Rows</th>
-                            <th className="px-4 py-2 w-20" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {g.versions.map(v => {
-                            const vAmt = v.allocation_type === 'amount'
-                            const vLocked = v.status === 'locked'
-                            const isSuperseded = v.superseded_by_id != null
-                            const isCurrent    = v.id === av?.id
-                            return (
-                              <tr key={v.id} className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${isSuperseded ? 'opacity-60' : ''}`}>
-                                <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
-                                <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
-                                <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
-                                <td className="px-4 py-2">
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                                    vAmt ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                                  }`}>
-                                    {vAmt ? 'Amount' : 'Pct'}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2">
-                                  <div className="flex flex-wrap items-center gap-1">
-                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
-                                      vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                                    }`}>
-                                      {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
-                                      {vLocked ? 'Locked' : 'Draft'}
-                                    </span>
-                                    {isCurrent && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">
-                                        Current
+                    ) : (() => {
+                      const today = new Date().toISOString().slice(0, 10)
+                      return (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Ver</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective From</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Effective To</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Type</th>
+                              <th className="px-4 py-2 text-left text-gray-500 font-semibold">Status / Lineage</th>
+                              <th className="px-4 py-2 w-8" />
+                              <th className="px-4 py-2 w-20" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {g.versions.map(v => {
+                              const vAmt             = v.allocation_type === 'amount'
+                              const vLocked          = v.status === 'locked'
+                              const isSuperseded     = v.superseded_by_id != null
+                              const isCurrent        = v.id === av?.id
+                              const isPast           = vLocked && !!v.effective_to && v.effective_to < today && !isCurrent && !isSuperseded
+                              const isFuture         = vLocked && !!v.effective_from && v.effective_from > today
+                              const isVersionExpanded = expandedVersions.has(v.id)
+                              return (
+                                <React.Fragment key={v.id}>
+                                  <tr className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${isSuperseded ? 'opacity-60' : ''}`}>
+                                    <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
+                                    <td className="px-4 py-2 text-gray-700">{v.effective_from ?? '—'}</td>
+                                    <td className="px-4 py-2 text-gray-500">{v.effective_to ?? <span className="text-gray-300">open</span>}</td>
+                                    <td className="px-4 py-2">
+                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                                        vAmt ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                                      }`}>
+                                        {vAmt ? 'Amount' : 'Pct'}
                                       </span>
-                                    )}
-                                    {v.change_type === 'amendment' && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
-                                        Amendment
-                                      </span>
-                                    )}
-                                    {v.change_type === 'date_split' && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
-                                        Date split
-                                      </span>
-                                    )}
-                                    {isSuperseded && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
-                                        Superseded
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-2 text-right text-gray-500">{v.rows.length}</td>
-                                <td className="px-4 py-2">
-                                  <div className="flex items-center justify-end gap-1">
-                                    {vLocked && !isSuperseded && (
-                                      <button
-                                        onClick={() => onAmend(g, v)}
-                                        className="touch-target p-1 rounded text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
-                                        title="Amend this version"
-                                      >
-                                        <Pencil className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={() => handleDeleteVersion(v)}
-                                      className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
-                                      title="Delete version"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    )}
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      <div className="flex flex-wrap items-center gap-1">
+                                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
+                                          vLocked ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                                        }`}>
+                                          {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
+                                          {vLocked ? 'Locked' : 'Draft'}
+                                        </span>
+                                        {isCurrent && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">Current</span>
+                                        )}
+                                        {isPast && (
+                                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                            <Clock className="w-2.5 h-2.5" />Past
+                                          </span>
+                                        )}
+                                        {isFuture && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">Future</span>
+                                        )}
+                                        {v.change_type === 'amendment' && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">Amendment</span>
+                                        )}
+                                        {v.change_type === 'date_split' && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">Date split</span>
+                                        )}
+                                        {isSuperseded && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">Superseded</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      {v.rows.length > 0 && (
+                                        <button
+                                          onClick={() => toggleVersionExpand(v.id)}
+                                          className="touch-target p-1 rounded text-gray-400 hover:text-gray-700 transition-colors"
+                                          title={isVersionExpanded ? 'Hide breakdown' : 'Show breakdown'}
+                                        >
+                                          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isVersionExpanded ? 'rotate-180' : ''}`} />
+                                        </button>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      <div className="flex items-center justify-end gap-1">
+                                        {isCurrent && (
+                                          <button
+                                            onClick={() => onAmend(g, v)}
+                                            className="touch-target p-1 rounded text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                                            title="Amend this version"
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        {isPast && (
+                                          <button
+                                            onClick={() => setPastInfoDialog({ g, v })}
+                                            className="touch-target p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                            title="About this past version"
+                                          >
+                                            <Info className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => handleDeleteVersion(v)}
+                                          className="touch-target p-1 rounded text-gray-300 hover:text-danger hover:bg-red-50 transition-colors"
+                                          title="Delete version"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {isVersionExpanded && v.rows.length > 0 && (
+                                    <tr>
+                                      <td colSpan={7} className="px-6 pb-3 pt-0 bg-gray-50/60">
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="border-b border-gray-200">
+                                              <th className="py-1.5 text-left text-gray-500 font-medium">Category</th>
+                                              <th className="py-1.5 text-left text-gray-500 font-medium">Fund Type</th>
+                                              <th className="py-1.5 text-right text-gray-500 font-medium">Value</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {v.rows.map((r, i) => (
+                                              <tr key={i} className="border-b border-gray-100 last:border-0">
+                                                <td className="py-1 text-gray-700">{r.category_name}</td>
+                                                <td className="py-1 text-gray-500">{portionLabel(r.budget_portion)}</td>
+                                                <td className="py-1 text-right font-medium text-gray-700 tabular-nums">
+                                                  {r.percentage != null ? `${r.percentage}%` : r.amount != null ? `${baseCurrencySymbol}${r.amount}` : '—'}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
@@ -949,6 +1105,36 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
           ? `${visible.length} of ${groups.length} groups`
           : `${groups.length} group${groups.length !== 1 ? 's' : ''}`}
       </p>
+      {pastInfoDialog && (
+        <Modal open onClose={() => setPastInfoDialog(null)} title="Historical Version">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              This rule covered{' '}
+              <strong>{pastInfoDialog.v.effective_from ?? '—'}</strong>
+              {' → '}
+              <strong>{pastInfoDialog.v.effective_to ?? 'open'}</strong>
+              {' '}and is no longer active.
+            </p>
+            <p className="text-sm text-gray-600">
+              To make corrections to how records from that period were distributed, create a new version with those same dates — the date-split system will handle any overlaps automatically.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setPastInfoDialog(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => { onNewVersion(pastInfoDialog.g, pastInfoDialog.v); setPastInfoDialog(null) }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+              >
+                Create New Version
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -2680,6 +2866,109 @@ ALTER TABLE public.allocation_configs
 
 NOTIFY pgrst, 'reload schema';`
 
+export const SYSTEM_DEFAULTS_MIGRATION_SQL =
+`-- ── System Defaults: is_system columns + protected seeds ────────────────────
+-- Adds is_system flag to income_types and categories.
+-- Marks the "General Donation" income type and "General" category as system-protected.
+-- Safe to re-run (idempotent).
+
+ALTER TABLE public.income_types
+  ADD COLUMN IF NOT EXISTS is_system boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.categories
+  ADD COLUMN IF NOT EXISTS is_system boolean NOT NULL DEFAULT false;
+
+NOTIFY pgrst, 'reload schema';
+
+-- Seed "General Donation" system income type for existing orgs (idempotent)
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN SELECT id FROM public.organizations LOOP
+    INSERT INTO public.income_types (org_id, name, color, is_system)
+    VALUES (r.id, 'General Donation', '#6b7280', true)
+    ON CONFLICT DO NOTHING;
+  END LOOP;
+END;
+$$;
+
+-- Mark "General" category as system-protected for all orgs (idempotent)
+UPDATE public.categories
+SET is_system = true
+WHERE name = 'General' AND is_default = true AND is_system = false;
+
+-- Update complete_org_onboarding() to seed General Donation for new orgs
+DROP FUNCTION IF EXISTS public.complete_org_onboarding(uuid, text, text, int, text);
+
+CREATE OR REPLACE FUNCTION public.complete_org_onboarding(
+  p_org_id            uuid,
+  p_name              text,
+  p_default_currency  text,
+  p_fiscal_year_start int  DEFAULT 1,
+  p_timezone          text DEFAULT 'Africa/Lagos'
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user_id  uuid := auth.uid();
+  v_group_id uuid;
+  v_org_date date;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.org_members
+    WHERE org_id = p_org_id AND user_id = v_user_id
+      AND role IN ('owner','admin') AND status = 'active'
+  ) THEN RAISE EXCEPTION 'Unauthorized: only org admins can complete onboarding'; END IF;
+
+  UPDATE public.organizations
+  SET name = trim(p_name), default_currency = p_default_currency,
+      fiscal_year_start = p_fiscal_year_start, timezone = p_timezone,
+      onboarding_complete = true, updated_at = now()
+  WHERE id = p_org_id;
+
+  SELECT created_at::date INTO v_org_date
+  FROM public.organizations WHERE id = p_org_id;
+
+  IF NOT EXISTS (SELECT 1 FROM public.income_types WHERE org_id = p_org_id LIMIT 1) THEN
+    INSERT INTO public.income_types (org_id, name, color, is_system) VALUES
+      (p_org_id,'General Donation','#6b7280',true);
+    INSERT INTO public.income_types (org_id, name, color) VALUES
+      (p_org_id,'Tithe','#6366f1'),(p_org_id,'Offering','#10b981'),
+      (p_org_id,'Donation','#f59e0b'),(p_org_id,'Special Giving','#ec4899'),
+      (p_org_id,'Thanksgiving','#3b82f6'),(p_org_id,'Project','#8b5cf6');
+  END IF;
+
+  INSERT INTO public.outflow_types (org_id, name, color, is_system, is_locked)
+  VALUES (p_org_id,'General','#64748b',true,true)
+  ON CONFLICT (org_id, name) DO NOTHING;
+
+  IF NOT EXISTS (SELECT 1 FROM public.categories WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.categories (org_id, name, is_default, is_system)
+    VALUES (p_org_id, 'General', true, true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.special_config_groups WHERE org_id = p_org_id AND is_default = true) THEN
+    INSERT INTO public.special_config_groups (org_id, name, is_default)
+    VALUES (p_org_id, 'General', true)
+    RETURNING id INTO v_group_id;
+
+    INSERT INTO public.allocation_configs (
+      org_id, config_group_id, name,
+      start_date, effective_from, effective_to,
+      status, is_special, allocation_type, rows, version_number
+    ) VALUES (
+      p_org_id, v_group_id, 'General Distribution Rule',
+      v_org_date, v_org_date, NULL,
+      'draft', false, 'percentage',
+      '[]'::jsonb,
+      1
+    );
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.complete_org_onboarding(uuid,text,text,int,text) TO authenticated;`
+
 // ── Income Types tab ───────────────────────────────────────────────────────────────────
 
 function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
@@ -2749,7 +3038,12 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                 <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
                   <div className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ backgroundColor: t.color }} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900">{t.name}</p>
+                      {t.is_system && (
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">System</span>
+                      )}
+                    </div>
                     {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
                     {t.rules.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
@@ -2769,9 +3063,15 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                     <button onClick={() => onEdit(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {t.is_system ? (
+                      <span className="p-1.5 text-gray-300" title="System type — cannot be deleted">
+                        <Lock className="w-4 h-4" />
+                      </span>
+                    ) : (
+                      <button onClick={() => onDelete(t)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -3034,8 +3334,9 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
 }
 
 function DatabaseTab() {
-  const [copied, setCopied] = useState(false)
+  const [copied,   setCopied]   = useState(false)
   const [copiedDR, setCopiedDR] = useState(false)
+  const [copiedSD, setCopiedSD] = useState(false)
   const { push: toast } = useToastStore()
 
   const [backfilling, setBackfilling] = useState(false)
@@ -3053,6 +3354,12 @@ function DatabaseTab() {
     await navigator.clipboard.writeText(DISTRIBUTION_RULES_MIGRATION_SQL)
     setCopiedDR(true)
     setTimeout(() => setCopiedDR(false), 2000)
+  }
+
+  const handleCopySD = async () => {
+    await navigator.clipboard.writeText(SYSTEM_DEFAULTS_MIGRATION_SQL)
+    setCopiedSD(true)
+    setTimeout(() => setCopiedSD(false), 2000)
   }
 
   const runBackfill = async () => {
@@ -3276,6 +3583,43 @@ function DatabaseTab() {
           <span>
             Run the <strong>main Database Migration above first</strong> if you have not already done so, then run this one.
             After running, existing calculations and category ledger totals will remain identical — no data is changed, only grouped.
+          </span>
+        </div>
+      </div>
+
+      {/* System Defaults */}
+      <div className="bg-white border border-blue-200 rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-blue-600" />
+          <h2 className="text-base font-semibold text-gray-900">System Defaults</h2>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Phase 3</span>
+        </div>
+        <p className="text-sm text-gray-500">
+          Adds <code className="font-mono text-xs bg-gray-100 px-1 rounded">is_system</code> flag to income types and categories.
+          Seeds a protected "General Donation" income type and marks the "General" category as system-protected for all organisations.
+          Safe to re-run.
+        </p>
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <span className="text-xs font-medium text-gray-400 font-mono">SQL</span>
+            <button
+              type="button"
+              onClick={handleCopySD}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedSD ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="text-xs font-mono text-gray-200 bg-gray-900 p-4 overflow-x-auto whitespace-pre leading-relaxed max-h-[500px] overflow-y-auto">
+            {SYSTEM_DEFAULTS_MIGRATION_SQL}
+          </pre>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Run the <strong>Distribution Rules Unification migration above first</strong>, then run this one.
+            Existing income types and categories are not affected — only the new column and the seeded "General Donation" type are added.
           </span>
         </div>
       </div>
