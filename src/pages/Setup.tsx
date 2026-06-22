@@ -3178,9 +3178,16 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
   onEdit:   (t: IncomeType) => void
   onDelete: (t: IncomeType) => void
 }) {
-  const { incomeTypes, loading, error } = useIncomeTypes()
+  const { incomeTypes, loading, error, refetch } = useIncomeTypes()
+  const orgId = useOrgStore(s => s.orgId)
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
+  const [promotingOverlap, setPromotingOverlap] = useState(false)
+
+  const dismissKey = orgId ? `it-overlap-dismissed-${orgId}` : null
+  const [overlapDismissed, setOverlapDismissed] = useState(
+    () => dismissKey ? localStorage.getItem(dismissKey) === '1' : false
+  )
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -3189,6 +3196,29 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
       : incomeTypes
     return applySetupSort(filtered, sort)
   }, [incomeTypes, search, sort])
+
+  const systemType = incomeTypes.find(t => t.is_system)
+  const shadowType = incomeTypes.find(t => !t.is_system && /^general/i.test(t.name))
+  const showOverlap = !!(systemType && shadowType && !overlapDismissed && !loading)
+
+  const handlePromoteShadow = async () => {
+    if (!shadowType || !systemType) return
+    setPromotingOverlap(true)
+    try {
+      const { error: e1 } = await supabase.from('income_types').update({ is_system: true }).eq('id', shadowType.id)
+      if (e1) throw new Error(e1.message)
+      const { error: e2 } = await supabase.from('income_types').update({ is_system: false }).eq('id', systemType.id)
+      if (e2) throw new Error(e2.message)
+      refetch()
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : String(e))
+    } finally { setPromotingOverlap(false) }
+  }
+
+  const handleDismissOverlap = () => {
+    if (dismissKey) localStorage.setItem(dismissKey, '1')
+    setOverlapDismissed(true)
+  }
 
   if (loading) return (
     <div className="max-w-2xl space-y-2">
@@ -3220,6 +3250,32 @@ function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
         <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>A required column is missing — run the <strong>System Defaults</strong> migration in Setup → Database (Step 4).</span>
+        </div>
+      )}
+
+      {showOverlap && (
+        <div className="flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+          <div className="flex-1 min-w-0 space-y-2">
+            <p className="text-sm text-amber-800">
+              <strong>"{shadowType!.name}"</strong> and the system <strong>"{systemType!.name}"</strong> may serve the same purpose. You can designate your existing type as the system type, or keep both.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handlePromoteShadow}
+                disabled={promotingOverlap}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-60"
+              >
+                {promotingOverlap ? 'Updating…' : `Make "${shadowType!.name}" the system type`}
+              </button>
+              <button
+                onClick={handleDismissOverlap}
+                className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors"
+              >
+                Keep both
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
