@@ -13,7 +13,7 @@ export function UpdateBanner() {
     >
       <span className="flex items-center gap-2">
         <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-        A new version of the app is available.
+        App updated — refresh to get the latest version.
       </span>
       <div className="flex items-center gap-2 shrink-0">
         <button
