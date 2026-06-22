@@ -34,54 +34,7 @@ export interface SpecialConfigGroup {
   created_at: string
 }
 
-// ── Legacy helpers (kept until Phase 9 cleanup) ───────────────────────────────
-
-export function getConfigForDate(
-  configs: AllocationConfig[],
-  date: string,
-): AllocationConfig | null {
-  const eligible = configs
-    .filter(c => c.status === 'locked' && !c.is_special && c.start_date <= date)
-    .sort((a, b) => b.start_date.localeCompare(a.start_date))
-  return eligible[0] ?? null
-}
-
-export function getSpecialConfigVersionForDate(
-  configs: AllocationConfig[],
-  groupId: string,
-  date: string,
-): AllocationConfig | null {
-  const eligible = configs
-    .filter(c =>
-      c.status === 'locked' &&
-      c.config_group_id === groupId &&
-      c.effective_from != null &&
-      c.effective_from <= date &&
-      (c.effective_to == null || c.effective_to >= date)
-    )
-    .sort((a, b) => b.effective_from!.localeCompare(a.effective_from!))
-  return eligible[0] ?? null
-}
-
-// ── Unified resolution helpers ────────────────────────────────────────────────
-
-/**
- * Resolves which locked config version applies to an income type on a date.
- * Uses the income type's linked group if present; falls back to the General
- * group (is_default=true) if the income type has no custom rule.
- *
- * @param groupId  - income_type.special_config_group_id (null = use General)
- */
-export function resolveConfigForDate(
-  configs: AllocationConfig[],
-  groups:  SpecialConfigGroup[],
-  groupId: string | null,
-  date:    string,
-): AllocationConfig | null {
-  const targetGroupId = groupId ?? groups.find(g => g.is_default)?.id ?? null
-  if (!targetGroupId) return null
-  return getSpecialConfigVersionForDate(configs, targetGroupId, date)
-}
+// ── Resolution helpers ────────────────────────────────────────────────────────
 
 /**
  * Builds an in-memory resolution index for batch processing many transactions.
@@ -140,9 +93,7 @@ interface AllocationState {
   reload:   () => Promise<void>
   /** Clear cached data — call on org switch or logout. */
   reset:    () => void
-  /** Legacy convenience wrapper (kept until Phase 9). */
-  forDate:  (date: string) => AllocationConfig | null
-  /** Unified resolution: resolves which config applies to a group+date. */
+  /** Resolves which config applies to a group+date (builds index per call). */
   resolve:  (groupId: string | null, date: string) => AllocationConfig | null
 }
 
@@ -189,7 +140,5 @@ export const useAllocationStore = create<AllocationState>((set, get) => ({
 
   reset: () => set({ configs: [], groups: [], loading: false, error: null, loaded: false }),
 
-  forDate: (date) => getConfigForDate(get().configs, date),
-
-  resolve: (groupId, date) => resolveConfigForDate(get().configs, get().groups, groupId, date),
+  resolve: (groupId, date) => buildVersionIndex(get().configs, get().groups).resolve(groupId, date),
 }))

@@ -28,7 +28,6 @@ import {
   useDeleteAllocationConfig,
 } from '../hooks/useMutations'
 import { Modal } from '../components/ui/Modal'
-import { formatDate } from '../utils/formatters'
 import { friendlyError } from '../utils/friendlyError'
 import { supabase } from '../lib/supabase'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
@@ -113,15 +112,6 @@ const BANK_SORT_OPTS: SortOpt[] = [
   { value: 'name|desc',       label: 'Name Z→A' },
   { value: 'created_at|desc', label: 'Newest' },
   { value: 'created_at|asc',  label: 'Oldest' },
-]
-
-const ALLOC_SORT_OPTS: SortOpt[] = [
-  { value: 'name|asc',        label: 'Name A→Z' },
-  { value: 'name|desc',       label: 'Name Z→A' },
-  { value: 'start_date|desc', label: 'Effective date newest' },
-  { value: 'start_date|asc',  label: 'Effective date oldest' },
-  { value: 'created_at|desc', label: 'Created newest' },
-  { value: 'created_at|asc',  label: 'Created oldest' },
 ]
 
 const SPECIAL_SORT_OPTS: SortOpt[] = [

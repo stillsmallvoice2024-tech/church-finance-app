@@ -28,18 +28,21 @@ export default function PercentageAllocations() {
   usePageTitle('Distribution Rules')
   const { baseCurrencySymbol } = useOrgCurrency()
 
-  const { configs, loading, error, fetch } = useAllocationStore()
+  const { configs, groups, loading, error, fetch } = useAllocationStore()
   const [selectedId, setSelectedId] = useState<string>('')
   const pcaState = useDataViewState({ storageKey: 'pca', defaultSortKey: 'category_name', defaultSortDir: 'asc' })
 
   useEffect(() => { fetch() }, [fetch])
 
+  const effectiveDate = (c: { effective_from?: string | null; start_date: string }) =>
+    c.effective_from ?? c.start_date
+
   // Sort newest-first; default to the first one
-  const sorted = [...configs].sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const sorted = [...configs].sort((a, b) => effectiveDate(b).localeCompare(effectiveDate(a)))
   const config  = selectedId ? configs.find(c => c.id === selectedId) ?? sorted[0] : sorted[0]
 
   const today  = new Date().toISOString().slice(0, 10)
-  const active = sorted.find(c => c.start_date <= today && c.status === 'locked')
+  const active = sorted.find(c => effectiveDate(c) <= today && c.status === 'locked')
 
   const total   = config?.rows.reduce((s, r) => s + Number(r.percentage), 0) ?? 0
   const balanced = Math.abs(100 - total) < 0.01
@@ -134,12 +137,16 @@ export default function PercentageAllocations() {
               onChange={e => setSelectedId(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
             >
-              {sorted.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} — effective {formatDate(c.start_date)}
-                  {c.status === 'locked' ? ' ✓' : ' (draft)'}
-                </option>
-              ))}
+              {sorted.map(c => {
+                const grp = groups.find(g => g.id === c.config_group_id)
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} — {formatDate(effectiveDate(c))}
+                    {grp && !grp.is_default ? ` [${grp.name}]` : ''}
+                    {c.status === 'locked' ? ' ✓' : ' (draft)'}
+                  </option>
+                )
+              })}
             </select>
 
             {active && config?.id === active.id && (
@@ -183,10 +190,16 @@ export default function PercentageAllocations() {
               />
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-500 flex items-center justify-between">
-                <span className="font-semibold">
+                <span className="font-semibold flex items-center gap-2">
                   {config.name}
+                  {(() => {
+                    const grp = groups.find(g => g.id === config.config_group_id)
+                    return grp && !grp.is_default
+                      ? <span className="font-normal text-primary/70">{grp.name}</span>
+                      : null
+                  })()}
                 </span>
-                <span>Effective {formatDate(config.start_date)}</span>
+                <span>Effective {formatDate(effectiveDate(config))}</span>
               </div>
               <table className="w-full text-sm table-sticky-col">
                 <thead>

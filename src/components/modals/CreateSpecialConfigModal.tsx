@@ -2,14 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, AlertTriangle, Link2, Unlink } from 'lucide-react'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { InlineCategorySelect } from '../ui/InlineCategorySelect'
-import { supabase } from '../../lib/supabase'
 import { useCategories } from '../../hooks/useCategories'
 import type { AllocationConfig } from '../../store/allocationStore'
 import {
   createGroupWithFirstVersion,
   createNewVersion,
-  getImpactedTransactionCount,
-  recalculateTransactions,
   type SpecialConfigGroupWithVersions,
 } from '../../hooks/useSpecialConfigGroups'
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
@@ -44,8 +41,6 @@ interface RowDraft {
   value:          string
 }
 
-type ImpactPhase = 'idle' | 'prompting' | 'reason' | 'recalculating' | 'done'
-
 export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, copyFromVersion }: Props) {
   const { baseCurrencySymbol } = useOrgCurrency()
   const { categories, refetch: refetchCategories } = useCategories()
@@ -59,21 +54,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
   const [saving,               setSaving]               = useState(false)
   const [error,                setError]                = useState<string | null>(null)
   const [selectedIncomeTypeId, setSelectedIncomeTypeId] = useState<string>('')
-
-  const [impactPhase,    setImpactPhase]    = useState<ImpactPhase>('idle')
-  const [impactCount,    setImpactCount]    = useState(0)
-  const [recalcReason,   setRecalcReason]   = useState('')
-  const [savedGroupId,   setSavedGroupId]   = useState<string | null>(null)
-  const [savedVersionId, setSavedVersionId] = useState<string | null>(null)
-  const [savedRows,      setSavedRows]      = useState<AllocationConfig['rows']>([])
-  const [savedAllocType, setSavedAllocType] = useState<'percentage' | 'amount'>('percentage')
-  const [savedEffFrom,   setSavedEffFrom]   = useState<string>('')
-  const [savedEffTo,     setSavedEffTo]     = useState<string | null>(null)
-  const [recalcDone,     setRecalcDone]     = useState(0)
-  const [wasModified,    setWasModified]    = useState(false)
+  const [wasModified,          setWasModified]          = useState(false)
   const modalRef = useRef<ModalHandle>(null)
 
-  const isDirty = wasModified && impactPhase === 'idle' && !saving
+  const isDirty = wasModified && !saving
 
   const selectedOption = incomeTypeOptions.find(o => o.id === selectedIncomeTypeId) ?? null
 
@@ -81,10 +65,6 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     if (!open) return
     reloadIncomeTypes()
     setError(null)
-    setImpactPhase('idle')
-    setRecalcReason('')
-    setSavedGroupId(null)
-    setSavedVersionId(null)
     setWasModified(false)
 
     const today = new Date().toISOString().slice(0, 10)
@@ -161,7 +141,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     try {
       if (mode === 'new_group') {
         const prevLinked = incomeTypeOptions.find(o => o.special_config_id != null && o.id === selectedIncomeTypeId)
-        const { groupId, config } = await createGroupWithFirstVersion({
+        const { config } = await createGroupWithFirstVersion({
           name:            name.trim(),
           allocation_type: allocType,
           total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
@@ -171,11 +151,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           income_type_id:  selectedIncomeTypeId || null,
           prev_income_type_id: prevLinked?.id ?? null,
         })
-        setSavedGroupId(groupId)
         onSaved(config)
       } else {
         if (!group) throw new Error('Group is required for new_version mode')
-        const vId = await createNewVersion({
+        await createNewVersion({
           group,
           allocation_type: allocType,
           total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
@@ -183,33 +162,6 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           effective_from:  effectiveFrom,
           status,
         })
-        setSavedVersionId(vId)
-        setSavedRows(dbRows)
-        setSavedAllocType(allocType)
-        setSavedEffFrom(effectiveFrom)
-
-        const today = new Date().toISOString().slice(0, 10)
-        const isBackdated = effectiveFrom < today
-
-        if (isBackdated && status === 'locked') {
-          const covering = group.versions.find(v =>
-            v.effective_from != null &&
-            v.effective_from <= effectiveFrom &&
-            (v.effective_to == null || v.effective_to >= effectiveFrom)
-          )
-          const newEffTo = covering
-            ? subtractOneDay(effectiveFrom)
-            : null
-          setSavedEffTo(newEffTo)
-
-          const count = await getImpactedTransactionCount(group.id, effectiveFrom, newEffTo)
-          setImpactCount(count)
-          if (count > 0) {
-            setImpactPhase('prompting')
-            setSaving(false)
-            return
-          }
-        }
         onSaved()
       }
     } catch (e: unknown) {
@@ -217,44 +169,6 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     } finally {
       setSaving(false)
     }
-  }
-
-  const handleKeepExisting = () => {
-    setImpactPhase('idle')
-    onSaved()
-  }
-
-  const handleRecalculate = () => {
-    setImpactPhase('reason')
-  }
-
-  const handleConfirmRecalc = async () => {
-    if (!savedVersionId || !savedGroupId || !group) return
-    setImpactPhase('recalculating')
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const userId = user?.id ?? ''
-      const count = await recalculateTransactions({
-        groupId:       group.id,
-        newVersionId:  savedVersionId,
-        effectiveFrom: savedEffFrom,
-        effectiveTo:   savedEffTo,
-        rows:          savedRows,
-        allocationType: savedAllocType,
-        reason:        recalcReason.trim() || 'Manual recalculation',
-        userId,
-      })
-      setRecalcDone(count)
-      setImpactPhase('done')
-    } catch (e: unknown) {
-      setError((e as { message?: string })?.message ?? 'Recalculation failed')
-      setImpactPhase('prompting')
-    }
-  }
-
-  const handleDoneAfterRecalc = () => {
-    setImpactPhase('idle')
-    onSaved()
   }
 
   const title = mode === 'new_group'
@@ -269,7 +183,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
       title={title}
       size="max-w-xl"
       isDirty={isDirty}
-      disableClose={saving || impactPhase === 'recalculating'}
+      disableClose={saving}
     >
       <div className="space-y-4">
 
@@ -462,87 +376,6 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         )}
 
         {/* Impact prompt (backdated new_version) */}
-        {impactPhase === 'prompting' && (
-          <div className="border border-amber-200 rounded-lg p-4 space-y-3 bg-amber-50">
-            <div className="flex items-start gap-2 text-sm text-amber-800">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <p>
-                This version is backdated to <strong>{effectiveFrom}</strong>.{' '}
-                <strong>{impactCount}</strong> transaction{impactCount !== 1 ? 's are' : ' is'} currently using a
-                different config version for dates in this range.
-              </p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={handleKeepExisting}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Keep Existing (Future Only)
-              </button>
-              <button
-                type="button"
-                onClick={handleRecalculate}
-                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors"
-              >
-                Recalculate {impactCount} Transaction{impactCount !== 1 ? 's' : ''}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Reason input for recalculation */}
-        {impactPhase === 'reason' && (
-          <div className="border border-blue-200 rounded-lg p-4 space-y-3 bg-blue-50">
-            <p className="text-sm font-medium text-blue-900">Reason for recalculation</p>
-            <input
-              type="text"
-              value={recalcReason}
-              onChange={e => setRecalcReason(e.target.value)}
-              placeholder="e.g. Config correction for Easter series"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setImpactPhase('prompting')}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmRecalc}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-              >
-                Confirm Recalculation
-              </button>
-            </div>
-          </div>
-        )}
-
-        {impactPhase === 'recalculating' && (
-          <div className="flex items-center gap-3 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-            <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin shrink-0" />
-            Recalculating transactions...
-          </div>
-        )}
-
-        {impactPhase === 'done' && (
-          <div className="border border-green-200 rounded-lg p-4 bg-green-50 space-y-3">
-            <p className="text-sm text-green-800 font-medium">
-              Recalculated {recalcDone} transaction{recalcDone !== 1 ? 's' : ''} successfully.
-            </p>
-            <button
-              type="button"
-              onClick={handleDoneAfterRecalc}
-              className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
-            >
-              Done
-            </button>
-          </div>
-        )}
-
         {/* Error */}
         {error && (() => {
           const isMigration = /is_special|allocation_type|total_amount|Could not find|config_group_id|effective_from/.test(error)
@@ -559,55 +392,35 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           )
         })()}
 
-        {/* Footer (hidden during impact flow) */}
-        {impactPhase === 'idle' && (
-          <div className="flex justify-end gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => modalRef.current?.requestClose()}
-              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSave(false)}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60"
-            >
-              {saving && <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
-              {saving ? 'Saving...' : 'Save as Draft'}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSave(true)}
-              disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60"
-            >
-              {saving && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {saving ? 'Saving...' : 'Save & Lock'}
-            </button>
-          </div>
-        )}
-
-        {(impactPhase === 'prompting' || impactPhase === 'reason') && (
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={() => modalRef.current?.requestClose()}
-              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Close
-            </button>
-          </div>
-        )}
+        {/* Footer */}
+        <div className="flex justify-end gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => modalRef.current?.requestClose()}
+            className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSave(false)}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60"
+          >
+            {saving && <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
+            {saving ? 'Saving...' : 'Save as Draft'}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSave(true)}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60"
+          >
+            {saving && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {saving ? 'Saving...' : 'Save & Lock'}
+          </button>
+        </div>
       </div>
     </Modal>
   )
-}
-
-function subtractOneDay(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00Z')
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
 }

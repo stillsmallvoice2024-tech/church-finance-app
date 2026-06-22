@@ -41,51 +41,15 @@ export function resolveDefaultIncomeType(
 }
 
 /**
- * Returns the allocation config ID for an income type.
- * Checks special_config_id first, then special_config_group_id via resolveGroupConfig,
- * then falls back to generalConfigId.
- */
-export function resolveConfigForIncomeType(
-  incomeType: IncomeType | null | undefined,
-  generalConfigId: string | null,
-  resolveGroupConfig?: (groupId: string) => string | null,
-): string | null {
-  if (incomeType?.special_config_id) return incomeType.special_config_id
-  if (incomeType?.special_config_group_id && resolveGroupConfig) {
-    const groupConfigId = resolveGroupConfig(incomeType.special_config_group_id)
-    if (groupConfigId) return groupConfigId
-  }
-  return generalConfigId
-}
-
-/**
  * Returns the final allocation config ID for a row.
- *
- * Strict precedence:
- *   1. isManualOverride=true  → allocationConfigId (falls back to generalConfigId when blank)
- *   2. incomeType.special_config_id (direct linked config)
- *      — skipped for the "General" catch-all type (zero rules), which always
- *        maps to generalConfigId regardless of any accidentally-set special_config_id
- *   3. incomeType.special_config_group_id → resolveGroupConfig(groupId) when provided
- *   4. generalConfigId (date-based general config)
+ * Only returns a value when the user has explicitly overridden the config.
+ * Otherwise returns null — resolution happens at query time via buildVersionIndex.
  */
 export function getFinalConfig(
   rowState: RowResolverState,
-  generalConfigId: string | null,
-  resolveGroupConfig?: (groupId: string) => string | null,
 ): string | null {
   if (rowState.isManualOverride) {
-    return rowState.allocationConfigId || generalConfigId
+    return rowState.allocationConfigId || null
   }
-  // The catch-all "General" type (no rules) always uses the general config
-  const isCatchAll = rowState.incomeType !== null && rowState.incomeType.rules.length === 0
-  if (isCatchAll) return generalConfigId
-  if (rowState.incomeType?.special_config_id) {
-    return rowState.incomeType.special_config_id
-  }
-  if (rowState.incomeType?.special_config_group_id && resolveGroupConfig) {
-    const groupConfigId = resolveGroupConfig(rowState.incomeType.special_config_group_id)
-    if (groupConfigId) return groupConfigId
-  }
-  return generalConfigId
+  return null
 }

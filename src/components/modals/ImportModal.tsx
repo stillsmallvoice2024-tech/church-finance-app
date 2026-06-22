@@ -12,7 +12,7 @@ import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useOrgStore } from '../../store/orgStore'
-import { useAllocationStore, getConfigForDate, getSpecialConfigVersionForDate } from '../../store/allocationStore'
+import { useAllocationStore, buildVersionIndex } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
@@ -310,7 +310,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
   const preview = sheet?.rows.slice(0, 5) ?? []
 
   // Allocation configs — load once so Step 4 and runImport can use them
-  const { configs: allocConfigs, fetch: fetchAllocConfigs, reload: reloadAllocConfigs, loaded: allocLoaded } = useAllocationStore()
+  const { configs: allocConfigs, groups: allocGroups, fetch: fetchAllocConfigs, reload: reloadAllocConfigs, loaded: allocLoaded } = useAllocationStore()
   // Refresh configs every time the modal opens; fall back to lazy-load if already loaded
   useEffect(() => {
     if (open) reloadAllocConfigs()
@@ -401,22 +401,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
   const [applyIncomeType,   setApplyIncomeType]   = useState('')
   const [applyOutflowType,  setApplyOutflowType]  = useState('')
 
-  // When the user picks an income type in the Apply bar, auto-derive its linked config
-  // so both fields stay in sync without requiring a separate manual selection.
+  // Income type selection no longer auto-sets config — resolution is query-time via buildVersionIndex.
+  // Resetting applyInflowConfig here ensures stale overrides don't persist across type changes.
   useEffect(() => {
     if (!applyIncomeType) return
-    const it = incomeTypes.find(t => t.id === applyIncomeType)
-    if (!it) return
-    if (it.rules.length === 0) {
-      setApplyInflowConfig('__general__')
-    } else if (it.special_config_id) {
-      setApplyInflowConfig(it.special_config_id)
-    } else if (it.special_config_group_id) {
-      const today = new Date().toISOString().slice(0, 10)
-      const v = getSpecialConfigVersionForDate(allocConfigs, it.special_config_group_id, today)
-      if (v) setApplyInflowConfig(v.id)
-    }
-  }, [applyIncomeType, incomeTypes, allocConfigs])
+    setApplyInflowConfig('')
+  }, [applyIncomeType])
 
   // Per-row income type overrides (rowIndex → incomeTypeId)
   const [rowIncomeTypes,     setRowIncomeTypes]     = useState<Record<number, string>>({})
@@ -487,6 +477,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
   // appearing as separate options in the dropdown.
   const applyBarSpecialConfigs = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10)
+    const idx = buildVersionIndex(allocConfigs, allocGroups)
     const seenGroups = new Set<string>()
     const result: typeof allocConfigs = []
     for (const c of specialConfigs) {
@@ -494,12 +485,12 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
         result.push(c)
       } else if (!seenGroups.has(c.config_group_id)) {
         seenGroups.add(c.config_group_id)
-        const active = getSpecialConfigVersionForDate(allocConfigs, c.config_group_id, today)
+        const active = idx.resolve(c.config_group_id, today)
         if (active) result.push(active)
       }
     }
     return result
-  }, [specialConfigs, allocConfigs])
+  }, [specialConfigs, allocConfigs, allocGroups])
   const [createConfigOpen, setCreateConfigOpen] = useState(false)
 
  // Auto-derive the latest transaction date when a bank_statement import completes
@@ -1110,8 +1101,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
     const errors: string[] = []
     try {
 
-    const { configs: latestConfigs } = useAllocationStore.getState()
-
     // Dup skip set — built from pre-import stage only (skipTxnIds passed from Import.tsx)
     const allSkipIds = new Set(skipTxnIds ? [...skipTxnIds].map(normalizeId) : [])
     let fallbackIdCount = 0
@@ -1154,7 +1143,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
         const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
                          ? normalizeId(String(raw[refIdx])) || null : null
 
-        const cfg = getConfigForDate(latestConfigs, date)
         const rowTxnType = rowTxnTypes[ri] ?? ''
         const origId  = rowOrigTxnIds[ri] ?? ''
 
@@ -1173,11 +1161,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
               allocationConfigId:  rowConfigs[ri] ?? '',
               isManualOverride:    rowManualOverrides[ri] ?? false,
             }
-            const resolvedId = getFinalConfig(
-              rowState,
-              cfg?.id ?? null,
-              (groupId) => getSpecialConfigVersionForDate(latestConfigs, groupId, date)?.id ?? null,
-            )
+            const resolvedId = getFinalConfig(rowState)
             if (resolvedId) row.allocation_config_id = resolvedId
           }
           if (internalBank) row.bank_name = internalBank.name
@@ -1208,7 +1192,6 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref ? `${ref}${chargeTag}` : ref }
           if (userId) row.created_by = userId
           row.org_id = orgId
-          if (!txnType && cfg) row.allocation_config_id = cfg.id
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_id) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
@@ -2207,11 +2190,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
                           allocationConfigId: rowConfigs[ri] ?? '',
                           isManualOverride:   rowManualOverrides[ri] ?? false,
                         }
-                        const displaySelId = getFinalConfig(
-                          rowState,
-                          '',
-                          (groupId) => getSpecialConfigVersionForDate(allocConfigs, groupId, date || new Date().toISOString().slice(0, 10))?.id ?? null,
-                        ) ?? ''
+                        const displaySelId = getFinalConfig(rowState) ?? ''
                         return { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId }
                       }
 
