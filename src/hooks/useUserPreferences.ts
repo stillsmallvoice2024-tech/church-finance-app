@@ -6,6 +6,7 @@ import {
   DEFAULT_USER_PREFERENCES,
   type UserPreferences,
 } from '../types/onboarding'
+import { ALL_TOURS } from '../onboarding/tours'
 
 const prefKey = (userId: string, orgId: string) =>
   `user-prefs-${userId}-${orgId}`
@@ -62,12 +63,33 @@ export function useUserPreferences() {
       if (cancelled) return
 
       if (!error && data?.preferences) {
+        const raw = data.preferences as Partial<UserPreferences>
+
+        // Legacy DB rows predate the first_visit_pages field — the key is simply
+        // absent from the stored JSONB. Pre-populate with all tour page IDs so
+        // returning users are never shown tours they've already encountered.
+        const isLegacyRow = !('first_visit_pages' in raw)
         const merged: UserPreferences = {
           ...DEFAULT_USER_PREFERENCES,
-          ...(data.preferences as Partial<UserPreferences>),
+          ...raw,
+          first_visit_pages: isLegacyRow
+            ? ALL_TOURS.map(t => t.pageId)
+            : (raw.first_visit_pages ?? []),
         }
         setPrefs(merged)
         writeLocalPrefs(key!, merged)
+
+        if (isLegacyRow) {
+          supabase
+            .from('user_preferences')
+            .upsert(
+              { user_id: user!.id, org_id: orgId!, preferences: merged, updated_at: new Date().toISOString() },
+              { onConflict: 'user_id,org_id' },
+            )
+            .then(({ error: e }) => {
+              if (e) console.error('[useUserPreferences] legacy migration failed:', e)
+            })
+        }
       }
 
       setLoading(false)
