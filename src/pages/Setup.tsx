@@ -569,6 +569,7 @@ function GeneralGroupPanel({
               <tbody className="divide-y divide-gray-50">
                 {group.versions.map(v => {
                   const isSuperseded = v.superseded_by_id != null
+                  const isCurrent    = v.id === av?.id
                   return (
                     <tr key={v.id} className={`hover:bg-gray-50 ${isSuperseded ? 'opacity-60' : ''}`}>
                       <td className="px-4 py-2 font-medium text-gray-700">v{v.version_number}</td>
@@ -584,6 +585,11 @@ function GeneralGroupPanel({
                             {v.status === 'locked' ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
                             {v.status === 'locked' ? 'Locked' : 'Draft'}
                           </span>
+                          {isCurrent && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">
+                              Current
+                            </span>
+                          )}
                           {v.change_type === 'amendment' && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
                               Amendment
@@ -859,6 +865,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                             const vAmt = v.allocation_type === 'amount'
                             const vLocked = v.status === 'locked'
                             const isSuperseded = v.superseded_by_id != null
+                            const isCurrent    = v.id === av?.id
                             return (
                               <tr key={v.id} className={`hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${isSuperseded ? 'opacity-60' : ''}`}>
                                 <td className="px-4 py-2 font-mono text-gray-600">v{v.version_number ?? '—'}</td>
@@ -879,6 +886,11 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                                       {vLocked ? <Lock className="w-2.5 h-2.5" /> : <FileEdit className="w-2.5 h-2.5" />}
                                       {vLocked ? 'Locked' : 'Draft'}
                                     </span>
+                                    {isCurrent && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-300">
+                                        Current
+                                      </span>
+                                    )}
                                     {v.change_type === 'amendment' && (
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
                                         Amendment

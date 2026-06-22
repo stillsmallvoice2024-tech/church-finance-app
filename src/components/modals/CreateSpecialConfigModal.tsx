@@ -263,7 +263,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
             <GitBranch className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <span>
-              This creates an amendment that supersedes the original version. The original will be marked superseded and preserved for audit history. Dates are locked to the original version's period.
+              You're editing an active distribution rule. Any records already using this rule will be recalculated with your changes. The original is automatically saved for audit purposes. To use different dates, close this and create a new version instead.
             </span>
           </div>
         )}
