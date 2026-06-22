@@ -119,10 +119,12 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         )
       }
     } else {
-      // new_version: pre-fill from copyFromVersion or group active version
+      // new_version: pre-fill rows from copyFromVersion or group active version
+      // Pre-fill dates from copyFromVersion only when it's a past version (has a closed effective_to in the past)
       const src = copyFromVersion ?? group?.active_version ?? null
-      setEffectiveFrom(today)
-      setEffectiveTo('')
+      const isPastCopy = !!(copyFromVersion?.effective_to && copyFromVersion.effective_to < today)
+      setEffectiveFrom(isPastCopy ? (copyFromVersion!.effective_from ?? today) : today)
+      setEffectiveTo(isPastCopy ? (copyFromVersion!.effective_to ?? '') : '')
       if (src) {
         setAllocType(src.allocation_type ?? 'percentage')
         setTotalAmount(src.total_amount != null ? String(src.total_amount) : '')
@@ -312,15 +314,37 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           <div className="space-y-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
             <div className="flex items-center gap-1.5 font-semibold">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-              Date overlap detected — affected versions will be split or trimmed:
+              Your chosen dates overlap with existing versions — they will be adjusted automatically:
             </div>
             <ul className="mt-1 space-y-0.5 pl-5 list-disc">
-              {overlaps.map(ov => (
-                <li key={ov.version.id}>
-                  v{ov.version.version_number} ({ov.version.effective_from} → {ov.version.effective_to ?? 'open'})
-                  {ov.wouldSplit ? ' — will be split into before/after segments' : ' — will be trimmed'}
-                </li>
-              ))}
+              {overlaps.map(ov => {
+                const isSource = ov.version.id === copyFromVersion?.id
+                const vFrom = ov.version.effective_from ?? ''
+                const vTo   = ov.version.effective_to ?? null
+                const fullyCovered =
+                  effectiveFrom <= vFrom &&
+                  (effectiveTo === '' || effectiveTo === null || (vTo != null && effectiveTo >= vTo))
+                let detail: string
+                if (isSource) {
+                  if (fullyCovered) {
+                    detail = 'the version being corrected — will be fully replaced by your new version'
+                  } else if (ov.wouldSplit) {
+                    detail = 'the version being corrected — will be split; portions outside your chosen dates remain under the old rule'
+                  } else {
+                    detail = 'the version being corrected — portions outside your chosen dates remain under the old rule'
+                  }
+                } else {
+                  const activeLabel = ov.version.effective_to == null ? ', currently active' : ''
+                  detail = ov.wouldSplit
+                    ? `currently active version${activeLabel} — will be split to make room for your new date range`
+                    : `will be trimmed to end just before your new version starts`
+                }
+                return (
+                  <li key={ov.version.id}>
+                    v{ov.version.version_number} ({ov.version.effective_from} → {ov.version.effective_to ?? 'open'}) — {detail}
+                  </li>
+                )
+              })}
             </ul>
           </div>
         )}
