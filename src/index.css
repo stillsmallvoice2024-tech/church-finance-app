@@ -190,6 +190,9 @@ html.dark .bg-indigo-50  { background-color: rgba(79,70,229,0.12)   !important; 
 html.dark .bg-slate-50   { background-color: rgba(255,255,255,0.04) !important; }
 html.dark .bg-purple-50  { background-color: rgba(147,51,234,0.12)  !important; }
 
+/* Settings page section-header banner (mint teal → dark teal tint) */
+html.dark .bg-\[#E6F4F1\] { background-color: rgba(13,148,136,0.18) !important; }
+
 /* ── Sticky table column ── */
 html.dark .table-sticky-col thead th:first-child { background: #0c0c0e; }
 html.dark .table-sticky-col tbody td:first-child  { background: #141416; }
