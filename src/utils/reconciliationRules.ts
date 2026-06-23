@@ -247,23 +247,15 @@ const balanceMismatchRule: ReconciliationRule = {
   name: 'Balance Mismatch',
   description: 'Difference between computed book balance and the reference statement balance',
   async run(orgId) {
-    const [banksRes, inflowRes, outflowRes, depositsRes, transfersRes, refRes] = await Promise.all([
+    const [banksRes, inflowRes, outflowRes, refRes] = await Promise.all([
       supabase.from('banks').select('id, name, starting_balance').eq('org_id', orgId),
       allRows(supabase
         .from('inflow_transactions')
-        .select('bank_name, amount, transaction_type, offset_role')
+        .select('bank_name, amount, transaction_type')
         .eq('org_id', orgId)),
       allRows(supabase
         .from('outflow_transactions')
-        .select('bank_name, amount_disbursed, transaction_type, offset_role, is_pending_deduction')
-        .eq('org_id', orgId)),
-      allRows(supabase
-        .from('bank_deposits')
-        .select('bank_name, amount')
-        .eq('org_id', orgId)),
-      allRows(supabase
-        .from('intrabank_transfers')
-        .select('from_bank_name, to_bank_name, amount')
+        .select('bank_name, amount_disbursed')
         .eq('org_id', orgId)),
       // bank_statement_balances may not exist — catch gracefully via empty data
       supabase
@@ -289,24 +281,14 @@ const balanceMismatchRule: ReconciliationRule = {
       bookBalance.set(bank.name, Number(bank.starting_balance ?? 0))
     }
     for (const t of inflowRes.data) {
-      const r = t as { bank_name: string | null; amount: number; transaction_type: string | null; offset_role: string | null }
-      if (!r.bank_name || r.offset_role === 'offset' || r.transaction_type === 'balance_brought_forward') continue
+      const r = t as { bank_name: string | null; amount: number; transaction_type: string | null }
+      if (!r.bank_name || r.transaction_type === 'balance_brought_forward') continue
       bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) + Number(r.amount))
     }
     for (const t of outflowRes.data) {
-      const r = t as { bank_name: string | null; amount_disbursed: number; offset_role: string | null; is_pending_deduction: boolean }
-      if (!r.bank_name || r.offset_role === 'offset' || r.is_pending_deduction) continue
-      bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) - Number(r.amount_disbursed))
-    }
-    for (const t of depositsRes.data) {
-      const r = t as { bank_name: string | null; amount: number }
+      const r = t as { bank_name: string | null; amount_disbursed: number }
       if (!r.bank_name) continue
-      bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) + Number(r.amount))
-    }
-    for (const t of transfersRes.data) {
-      const r = t as { from_bank_name: string; to_bank_name: string; amount: number }
-      bookBalance.set(r.from_bank_name, (bookBalance.get(r.from_bank_name) ?? 0) - Number(r.amount))
-      bookBalance.set(r.to_bank_name, (bookBalance.get(r.to_bank_name) ?? 0) + Number(r.amount))
+      bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) - Number(r.amount_disbursed))
     }
 
     const issues: ReconciliationIssue[] = []
@@ -420,23 +402,15 @@ const negativeBalanceRule: ReconciliationRule = {
   name: 'Negative Balance',
   description: 'Bank accounts with a negative computed book balance',
   async run(orgId) {
-    const [banksRes, inflowRes, outflowRes, depositsRes, transfersRes] = await Promise.all([
+    const [banksRes, inflowRes, outflowRes] = await Promise.all([
       supabase.from('banks').select('name, starting_balance').eq('org_id', orgId),
       allRows(supabase
         .from('inflow_transactions')
-        .select('bank_name, amount, transaction_type, offset_role')
+        .select('bank_name, amount, transaction_type')
         .eq('org_id', orgId)),
       allRows(supabase
         .from('outflow_transactions')
-        .select('bank_name, amount_disbursed, offset_role')
-        .eq('org_id', orgId)),
-      allRows(supabase
-        .from('bank_deposits')
-        .select('bank_name, amount')
-        .eq('org_id', orgId)),
-      allRows(supabase
-        .from('intrabank_transfers')
-        .select('from_bank_name, to_bank_name, amount')
+        .select('bank_name, amount_disbursed')
         .eq('org_id', orgId)),
     ])
 
@@ -448,24 +422,14 @@ const negativeBalanceRule: ReconciliationRule = {
       bookBalance.set(bank.name, Number(bank.starting_balance ?? 0))
     }
     for (const t of inflowRes.data) {
-      const r = t as { bank_name: string | null; amount: number; transaction_type: string | null; offset_role: string | null }
-      if (!r.bank_name || r.offset_role === 'offset' || r.transaction_type === 'balance_brought_forward') continue
+      const r = t as { bank_name: string | null; amount: number; transaction_type: string | null }
+      if (!r.bank_name || r.transaction_type === 'balance_brought_forward') continue
       bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) + Number(r.amount))
     }
     for (const t of outflowRes.data) {
-      const r = t as { bank_name: string | null; amount_disbursed: number; offset_role: string | null }
-      if (!r.bank_name || r.offset_role === 'offset') continue
-      bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) - Number(r.amount_disbursed))
-    }
-    for (const t of depositsRes.data) {
-      const r = t as { bank_name: string | null; amount: number }
+      const r = t as { bank_name: string | null; amount_disbursed: number }
       if (!r.bank_name) continue
-      bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) + Number(r.amount))
-    }
-    for (const t of transfersRes.data) {
-      const r = t as { from_bank_name: string; to_bank_name: string; amount: number }
-      bookBalance.set(r.from_bank_name, (bookBalance.get(r.from_bank_name) ?? 0) - Number(r.amount))
-      bookBalance.set(r.to_bank_name, (bookBalance.get(r.to_bank_name) ?? 0) + Number(r.amount))
+      bookBalance.set(r.bank_name, (bookBalance.get(r.bank_name) ?? 0) - Number(r.amount_disbursed))
     }
 
     const issues: ReconciliationIssue[] = []
