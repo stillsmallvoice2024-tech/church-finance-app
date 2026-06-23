@@ -196,8 +196,10 @@ function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
       action = { label: 'View Deposits', href: '/bank-movement?tab=deposits', icon: Landmark }
     } else if (txnType === 'intrabank_transfer') {
       action = { label: 'View Transfers', href: '/bank-movement?tab=transfers', icon: ArrowRightLeft }
+    } else if (txnType === 'refund') {
+      action = { label: 'View Refunds', href: '/refunds', icon: FileSearch }
     } else {
-      // reversal, refund, or other offset types
+      // reversal or other offset types
       action = { label: 'View Reversals', href: '/reversals', icon: FileSearch }
     }
   } else {
