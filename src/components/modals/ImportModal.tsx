@@ -233,12 +233,14 @@ function StepDots({ step }: { step: number }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
-  open:            boolean
-  onClose:         () => void
-  skipTxnIds?:     Set<string>
-  bank?:           { id: string; name: string } | null
-  preloadedFile?:  File | null
-  onPdfFile?:      (file: File) => void
+  open:              boolean
+  onClose:           () => void
+  skipTxnIds?:       Set<string>
+  skipTxnBankName?:  string
+  bank?:             { id: string; name: string } | null
+  preloadedFile?:    File | null
+  onPdfFile?:        (file: File) => void
+  onSuccess?:        () => void
 }
 
 interface ImportResult {
@@ -258,9 +260,10 @@ interface ImportTemplate {
 
 const TEMPLATES_KEY = 'church-import-templates'
 
-export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, onPdfFile }: Props) {
+export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, preloadedFile, onPdfFile, onSuccess }: Props) {
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const inputRef = useRef<HTMLInputElement>(null)
+  const importCompletedRef = useRef(false)
   const { user } = useAuthStore.getState()
 
   // Step state
@@ -574,6 +577,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
     if (sentinelPushedRef.current) {
       sentinelPushedRef.current = false
       history.replaceState({}, '')
+    }
+    if (importCompletedRef.current) {
+      importCompletedRef.current = false
+      onSuccess?.()
     }
     reset()
     onClose()
@@ -1017,8 +1024,10 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
         (outflowRes.data ?? []).map(r => normalizeId(r.transaction_id ?? '')).filter(Boolean)
       )
 
-      // Merge in skipTxnIds from Import.tsx pre-stage (when user chose "Skip Duplicates")
-      if (skipTxnIds) {
+      // Merge in skipTxnIds from Import.tsx pre-stage (when user chose "Skip Duplicates").
+      // Only apply if the pre-stage was scoped to the same bank — prevents cross-bank
+      // contamination when "Import Another" is used with a different bank.
+      if (skipTxnIds && (!skipTxnBankName || skipTxnBankName === bankName)) {
         for (const id of skipTxnIds) {
           const normalized = normalizeId(id)
           existingInflowRefs.add(normalized)
@@ -1054,7 +1063,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
     } finally {
       setDupCheckLoading(false)
     }
-  }, [sheet, config, targetTable, mapping, dateFormat, internalBank, skipTxnIds,
+  }, [sheet, config, targetTable, mapping, dateFormat, internalBank, skipTxnIds, skipTxnBankName,
       categories, categoryOutflowMaps, outflowTypeOptions])
 
   const proceedToImport = useCallback(() => {
@@ -1318,6 +1327,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
         useTransactionSyncStore.getState().bumpOutflow()
       }
 
+      importCompletedRef.current = true
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
 
       // Auto-detect closing balance from the mapped balance column and save silently.
@@ -1494,6 +1504,7 @@ export function ImportModal({ open, onClose, skipTxnIds, bank, preloadedFile, on
         setProgress(Math.round(((i + batch.length) / newFxRows.length) * 100))
       }
 
+      importCompletedRef.current = true
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
     }
     } catch (e: unknown) {
