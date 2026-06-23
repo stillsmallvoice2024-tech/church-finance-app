@@ -240,6 +240,7 @@ interface Props {
   bank?:             { id: string; name: string } | null
   preloadedFile?:    File | null
   onPdfFile?:        (file: File) => void
+  onSuccess?:        () => void
 }
 
 interface ImportResult {
@@ -259,9 +260,10 @@ interface ImportTemplate {
 
 const TEMPLATES_KEY = 'church-import-templates'
 
-export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, preloadedFile, onPdfFile }: Props) {
+export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, preloadedFile, onPdfFile, onSuccess }: Props) {
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
   const inputRef = useRef<HTMLInputElement>(null)
+  const importCompletedRef = useRef(false)
   const { user } = useAuthStore.getState()
 
   // Step state
@@ -575,6 +577,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     if (sentinelPushedRef.current) {
       sentinelPushedRef.current = false
       history.replaceState({}, '')
+    }
+    if (importCompletedRef.current) {
+      importCompletedRef.current = false
+      onSuccess?.()
     }
     reset()
     onClose()
@@ -1321,6 +1327,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         useTransactionSyncStore.getState().bumpOutflow()
       }
 
+      importCompletedRef.current = true
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
 
       // Auto-detect closing balance from the mapped balance column and save silently.
@@ -1497,6 +1504,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         setProgress(Math.round(((i + batch.length) / newFxRows.length) * 100))
       }
 
+      importCompletedRef.current = true
       setResult({ imported, skipped, errors, fallbackIdCount, collisions })
     }
     } catch (e: unknown) {

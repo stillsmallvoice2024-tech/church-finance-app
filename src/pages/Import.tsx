@@ -570,6 +570,7 @@ export default function Import() {
         bank={selectedBankId ? (banks.find(b => b.id === selectedBankId) ?? null) : null}
         preloadedFile={selectedFile}
         onPdfFile={file => { setImportOpen(false); setPdfToConvert(file) }}
+        onSuccess={reset}
       />
 
       {/* PDF converter overlay — intercepts PDF drops before the import wizard */}
