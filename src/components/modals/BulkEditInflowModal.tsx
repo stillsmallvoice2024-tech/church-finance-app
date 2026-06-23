@@ -154,8 +154,8 @@ export function BulkEditInflowModal({ open, onClose, ids, banks, allNonNormal = 
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-500">Distribution Config Override</label>
             <SearchableSelect
-              value={allocationConfigId}
-              onChange={setAllocationConfigId}
+              value={allocConfigId}
+              onChange={setAllocConfigId}
               options={lockedConfigs.map(c => ({ value: c.id, label: c.name }))}
               placeholder="— Keep existing —"
               className={filterInputCls}
