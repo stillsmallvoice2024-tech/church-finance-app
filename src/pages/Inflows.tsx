@@ -644,7 +644,7 @@ export default function Inflows() {
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[240px]" onClick={e => e.stopPropagation()}>
+                        <td className="px-4 py-3 text-sm text-gray-800 max-w-[400px]" onClick={e => e.stopPropagation()}>
                           <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
                         </td>
                         <AmountCell value={Number(row.amount)} mode="inflow" />
