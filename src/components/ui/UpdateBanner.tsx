@@ -7,29 +7,32 @@ export function UpdateBanner() {
 
   return (
     <div
-      className="flex items-center justify-between gap-3 bg-primary dark:bg-primary-dm px-4 py-2 text-white text-sm shrink-0"
+      className="relative bg-primary dark:bg-primary-dm px-4 py-2 text-white text-sm shrink-0"
       role="status"
       aria-live="polite"
     >
-      <span className="flex items-center gap-2">
-        <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-        App updated — refresh to get the latest version.
-      </span>
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Centred content — pr-8 leaves room so dismiss button never overlaps text */}
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 pr-8">
+        <span className="flex items-center gap-2 text-center">
+          <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+          App updated — refresh to get the latest version.
+        </span>
         <button
           onClick={() => window.location.reload()}
-          className="px-3 py-0.5 bg-white/20 hover:bg-white/30 rounded text-white font-medium transition-colors text-xs"
+          className="px-3 py-0.5 bg-white/20 hover:bg-white/30 rounded font-medium transition-colors text-xs whitespace-nowrap"
         >
           Refresh now
         </button>
-        <button
-          onClick={dismiss}
-          className="p-1 rounded hover:bg-white/20 transition-colors"
-          aria-label="Dismiss"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
+
+      {/* Dismiss — absolutely positioned so it never disrupts centred layout */}
+      <button
+        onClick={dismiss}
+        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/20 transition-colors"
+        aria-label="Dismiss"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   )
 }
