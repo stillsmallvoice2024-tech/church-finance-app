@@ -994,24 +994,24 @@ export function ImportWizardModal({ open, onClose }: Props) {
           </select>
           {incomeTypeId === '__auto__' && (
             <p className="text-xs text-primary/80 dark:text-primary/70">
-              The budget plan selector is hidden in mixed mode — each matched income type carries its own linked budget plan, applied automatically per row.
-              Rows with no keyword match import without an income type or budget plan.
+              The distribution rule selector is hidden in mixed mode — each matched income type carries its own linked distribution rule, applied automatically per row.
+              Rows with no keyword match import without an income type or distribution rule.
               Outflow rows are marked as pending deductions.
             </p>
           )}
         </div>
 
-        {/* Budget plan — hidden in auto-detect mode */}
+        {/* Distribution rule — hidden in auto-detect mode */}
         {incomeTypeId !== '__auto__' && <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            Budget Plan
+            Distribution Rule
           </label>
           <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
             {!incomeTypeId
-              ? 'Budget plans can be set based on the income type selected above, or assigned individually on the Inflows/Outflows pages after import.'
+              ? 'Distribution rules can be set based on the income type selected above, or assigned individually on the Inflows/Outflows pages after import.'
               : hasLinkedGroup
-              ? `Auto-assigned — this income type is linked to ${linkedGroupName}; the correct budget plan will be applied to the transactions. You can override below if needed. You can also edit the budget plan on individual transactions in the Inflow/Outflow pages after import.`
-              : 'No budget plan is linked to this income type. Select one below to apply it to all transactions, or assign individually after import on the Inflows page.'}
+              ? `Auto-assigned — this income type is linked to ${linkedGroupName}; the correct distribution rule will be applied to the transactions. You can override below if needed. You can also edit the distribution rule on individual transactions in the Inflow/Outflow pages after import.`
+              : 'No distribution rule is linked to this income type. Select one below to apply it to all transactions, or assign individually after import on the Inflows page.'}
           </p>
           <select
             value={configId}
@@ -1020,7 +1020,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
           >
             <option value="">
               {hasLinkedGroup && linkedGroupName
-                ? `— Use linked plan: ${linkedGroupName} (auto by date) —`
+                ? `— Use linked rule: ${linkedGroupName} (auto by date) —`
                 : '— Auto-resolve (date-based) —'}
             </option>
             {lockedConfigs.map(c => (
@@ -1090,7 +1090,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
                 ],
                 ...(incomeTypeId !== '__auto__'
                   ? [[
-                      'Budget plan',
+                      'Distribution rule',
                       selectedConfig
                         ? `${selectedConfig.name} (override)`
                         : selectedIncomeType?.special_config_group_id
@@ -1120,9 +1120,8 @@ export function ImportWizardModal({ open, onClose }: Props) {
           <div className="flex gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-700/50 dark:bg-blue-900/20 p-3">
             <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
             <p className="text-sm text-blue-700 dark:text-blue-300">
-              Each inflow row is matched to an income type via your keyword rules, with its linked budget plan applied automatically — that&apos;s why the budget plan selector isn&apos;t shown.
-              Rows with no keyword match import without an income type or budget plan; assign them on the Inflows page.
-              Outflow rows import as pending deductions — resolve them on the Upcoming Deductions page.
+              Each inflow row is matched to an income type via your keyword rules, with its linked distribution rule applied automatically.
+              Rows with no keyword match import without an income type or distribution rule; assign them on the Inflows page.
             </p>
           </div>
         )}
@@ -1223,8 +1222,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
               />
             </svg>
             <p className="text-sm text-blue-800 dark:text-blue-300">
-              Payments (money going out) will be recorded without a category
-              assignment. You can assign them later.
+              Payments (money going out) will be recorded as pending deductions without a category assignment. Resolve them on the Upcoming Deductions page by assigning the appropriate categories and fund types.
             </p>
           </div>
         )}
