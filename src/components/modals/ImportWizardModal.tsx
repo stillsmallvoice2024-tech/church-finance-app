@@ -721,6 +721,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
         description: row.description,
         bank_name: bankName,
         transaction_id: transactionId,
+        is_pending_deduction: true,
         org_id: currentOrgId,
         created_by: user.id,
         recorded_at: importTimestamp,
@@ -993,8 +994,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
           </select>
           {incomeTypeId === '__auto__' && (
             <p className="text-xs text-primary/80 dark:text-primary/70">
-              Each row will be matched to a category based on its description text using your keyword rules.
-              Rows with no match will be imported without a category.
+              The budget plan selector is hidden in mixed mode — each matched income type carries its own linked budget plan, applied automatically per row.
+              Rows with no keyword match import without an income type or budget plan.
+              Outflow rows are marked as pending deductions.
             </p>
           )}
         </div>
@@ -1118,9 +1120,9 @@ export function ImportWizardModal({ open, onClose }: Props) {
           <div className="flex gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-700/50 dark:bg-blue-900/20 p-3">
             <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
             <p className="text-sm text-blue-700 dark:text-blue-300">
-              Each income row will be matched to an income type using your keyword rules.
-              Any linked distribution rules will be applied automatically per row.
-              Rows with no match are imported without a type or distribution rule.
+              Each inflow row is matched to an income type via your keyword rules, with its linked budget plan applied automatically — that&apos;s why the budget plan selector isn&apos;t shown.
+              Rows with no keyword match import without an income type or budget plan; assign them on the Inflows page.
+              Outflow rows import as pending deductions — resolve them on the Upcoming Deductions page.
             </p>
           </div>
         )}
