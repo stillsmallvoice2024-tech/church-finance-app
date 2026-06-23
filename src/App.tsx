@@ -42,6 +42,7 @@ import ReconciliationCenter from './pages/ReconciliationCenter'
 import ResetPassword        from './pages/ResetPassword'
 import AcceptInvite         from './pages/AcceptInvite'
 import Tutorial             from './pages/Tutorial'
+import HealthCentre        from './pages/HealthCentre'
 
 // ── Route-level role guards ────────────────────────────────────────────────────
 // These run inside AuthGuard (loading=false, user set) so canWrite/isAdmin resolve correctly.
@@ -150,6 +151,7 @@ export default function App() {
             <Route element={<AdminOnlyGuard />}>
               <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
               <Route path="change-log" element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
+              <Route path="health-centre" element={<ErrorBoundary><HealthCentre /></ErrorBoundary>} />
             </Route>
             <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
             <Route path="percentage-allocation" element={<ErrorBoundary><PercentageAllocation /></ErrorBoundary>} />

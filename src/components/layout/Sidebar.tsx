@@ -7,7 +7,7 @@ import {
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
-  ChevronDown, X, HelpCircle,
+  ChevronDown, X, HelpCircle, Scale,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
@@ -88,6 +88,14 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Reports',          path: '/reports',          icon: BarChart3    },
       { label: 'Financial Report', path: '/financial-report', icon: FileText     },
       { label: 'Custom Reports',   path: '/dynamic-reports',  icon: NotebookPen  },
+    ],
+  },
+  {
+    id: 'health',
+    label: 'Health Centre',
+    defaultOpen: false,
+    items: [
+      { label: 'Balance Sheet', path: '/health-centre', icon: Scale, adminOnly: true },
     ],
   },
   {
