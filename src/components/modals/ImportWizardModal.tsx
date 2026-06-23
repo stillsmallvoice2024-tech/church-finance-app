@@ -870,6 +870,11 @@ export function ImportWizardModal({ open, onClose }: Props) {
   // Render step: setup
   // ---------------------------------------------------------------------------
   function renderSetup() {
+    const selIncType = incomeTypeId && incomeTypeId !== '__auto__'
+      ? (incomeTypes.find(t => t.id === incomeTypeId) ?? null)
+      : null
+    const hasLinkedGroup = !!selIncType?.special_config_group_id
+    const linkedGroupName = selIncType?.special_config_group_name ?? null
     return (
       <div className="flex flex-col gap-5">
         {/* Sheet selector — only shown for multi-sheet workbooks */}
@@ -974,9 +979,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
             value={incomeTypeId}
             onChange={e => {
               setIncomeTypeId(e.target.value)
-              if (!e.target.value || e.target.value === '__auto__') {
-                setConfigId('')
-              }
+              setConfigId('')
             }}
             className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
@@ -999,20 +1002,25 @@ export function ImportWizardModal({ open, onClose }: Props) {
         {/* Budget plan — hidden in auto-detect mode */}
         {incomeTypeId !== '__auto__' && <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            Budget Plan{' '}
-            <span className="font-normal text-gray-400">(optional)</span>
+            Budget Plan
           </label>
           <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
-            Which budget plan should be applied to income?
+            {!incomeTypeId
+              ? 'Budget plans can be set based on the income type selected above, or assigned individually on the Inflows/Outflows pages after import.'
+              : hasLinkedGroup
+              ? `Auto-assigned — this income type is linked to ${linkedGroupName}; the correct budget plan will be applied to the transactions. You can override below if needed. You can also edit the budget plan on individual transactions in the Inflow/Outflow pages after import.`
+              : 'No budget plan is linked to this income type. Select one below to apply it to all transactions, or assign individually after import on the Inflows page.'}
           </p>
           <select
             value={configId}
-            onChange={e => {
-              setConfigId(e.target.value)
-            }}
+            onChange={e => setConfigId(e.target.value)}
             className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
-            <option value="">— Auto-resolve (date-based) —</option>
+            <option value="">
+              {hasLinkedGroup && linkedGroupName
+                ? `— Use linked plan: ${linkedGroupName} (auto by date) —`
+                : '— Auto-resolve (date-based) —'}
+            </option>
             {lockedConfigs.map(c => (
               <option key={c.id} value={c.id}>
                 {c.name} — {c.effective_from ?? c.start_date}
@@ -1078,7 +1086,16 @@ export function ImportWizardModal({ open, onClose }: Props) {
                   'Income type',
                   incomeTypeId === '__auto__' ? 'Auto-detect (mixed)' : (selectedIncomeType?.name ?? '—'),
                 ],
-                ...(incomeTypeId !== '__auto__' ? [['Budget plan', selectedConfig?.name ?? 'None']] : []),
+                ...(incomeTypeId !== '__auto__'
+                  ? [[
+                      'Budget plan',
+                      selectedConfig
+                        ? `${selectedConfig.name} (override)`
+                        : selectedIncomeType?.special_config_group_id
+                          ? `Auto from ${selectedIncomeType.special_config_group_name ?? 'linked group'}`
+                          : 'Auto-resolve (date-based)',
+                    ]]
+                  : []),
               ] as [string, string][]
             ).map(([label, value]) => (
               <div
