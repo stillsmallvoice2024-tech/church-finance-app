@@ -1,4 +1,4 @@
-import { useState, useId, useCallback, useEffect, useRef } from 'react'
+import { useState, useId, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -38,6 +38,7 @@ import {
   Layers,
   Pin,
   PinOff,
+  AlertTriangle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -1120,6 +1121,33 @@ export default function FinancialReport() {
     }
   }
 
+  // ── Find unmapped income types ────────────────────────────────────────────
+
+  const getMappedIncomeTypeIds = useCallback((): Set<string> => {
+    const mapped = new Set<string>()
+    for (const table of tables) {
+      for (const group of table.groups) {
+        for (const child of group.children) {
+          if (child.kind === 'item' && child.data.rowType === 'inflow_type' && child.data.incomeTypeId) {
+            mapped.add(child.data.incomeTypeId)
+          } else if (child.kind === 'subgroup') {
+            for (const item of child.data.items) {
+              if (item.rowType === 'inflow_type' && item.incomeTypeId) {
+                mapped.add(item.incomeTypeId)
+              }
+            }
+          }
+        }
+      }
+    }
+    return mapped
+  }, [tables])
+
+  const unmappedIncomeTypes = useMemo(() => {
+    const mapped = getMappedIncomeTypeIds()
+    return incomeTypes.filter(it => !mapped.has(it.id))
+  }, [incomeTypes, getMappedIncomeTypeIds])
+
   // ── Table mutations ───────────────────────────────────────────────────────
 
   const addTable = () => {
@@ -1822,6 +1850,19 @@ export default function FinancialReport() {
 
         {/* Right: layout builder */}
         <div className="lg:col-span-2 space-y-4">
+          {unmappedIncomeTypes.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3">
+              <div className="flex gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Income types not in template</p>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                    {unmappedIncomeTypes.map(it => it.name).join(', ')} {unmappedIncomeTypes.length === 1 ? 'is' : 'are'} not included. Consider adding {unmappedIncomeTypes.length === 1 ? 'it' : 'them'} to avoid missing data.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {tables.length === 0 ? (
             <div className="rounded-xl border border-dashed border-gray-300 dark:border-white/[0.10] p-8 text-center text-gray-400">
               <p className="text-sm">No tables yet.</p>
