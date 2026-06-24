@@ -42,14 +42,30 @@ export function resolveDefaultIncomeType(
 
 /**
  * Returns the final allocation config ID for a row.
- * Only returns a value when the user has explicitly overridden the config.
- * Otherwise returns null — resolution happens at query time via buildVersionIndex.
+ *
+ * Precedence (highest first):
+ * 1. isManualOverride → allocationConfigId (falls back to generalConfigId when blank)
+ * 2. Catch-all income type (zero rules) → generalConfigId
+ * 3. incomeType.special_config_id (direct linked config)
+ * 4. incomeType.special_config_group_id → resolveGroupConfig(groupId)
+ * 5. generalConfigId
  */
 export function getFinalConfig(
   rowState: RowResolverState,
+  generalConfigId?: string | null,
+  resolveGroupConfig?: (groupId: string) => string | null,
 ): string | null {
   if (rowState.isManualOverride) {
-    return rowState.allocationConfigId || null
+    return rowState.allocationConfigId || generalConfigId || null
   }
-  return null
+  const it = rowState.incomeType
+  if (!it) return generalConfigId ?? null
+  // Catch-all income type (zero rules) always uses general config
+  if (it.rules.length === 0) return generalConfigId ?? null
+  if (it.special_config_id) return it.special_config_id
+  if (it.special_config_group_id && resolveGroupConfig) {
+    const resolved = resolveGroupConfig(it.special_config_group_id)
+    if (resolved) return resolved
+  }
+  return generalConfigId ?? null
 }
