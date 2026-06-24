@@ -496,6 +496,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   }, [specialConfigs, allocConfigs, allocGroups])
   const [createConfigOpen, setCreateConfigOpen] = useState(false)
 
+  // Version index for date-based config resolution — used in Step 4 display and runImport
+  const vIdx = useMemo(
+    () => buildVersionIndex(allocConfigs, allocGroups),
+    [allocConfigs, allocGroups],
+  )
+
  // Auto-derive the latest transaction date when a bank_statement import completes
   useEffect(() => {
     if (!result || targetTable !== 'bank_statement' || !sheet || !processedRows) return
@@ -1136,6 +1142,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
       // Rows pre-merged and description-normalized at proceedToRowConfig; fall back defensively
       const mergedRows = processedRows ?? (sheet.rows as unknown[][]).map(r => [...r])
+      const importVIdx = buildVersionIndex(allocConfigs, allocGroups)
 
       for (let ri = 0; ri < mergedRows.length; ri++) {
         const raw  = mergedRows[ri]
@@ -1170,7 +1177,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               allocationConfigId:  rowConfigs[ri] ?? '',
               isManualOverride:    rowManualOverrides[ri] ?? false,
             }
-            const resolvedId = getFinalConfig(rowState)
+            const generalCfgId = importVIdx.resolve(null, date)?.id ?? null
+            const resolvedId = getFinalConfig(
+              rowState,
+              generalCfgId,
+              (gId) => importVIdx.resolve(gId, date)?.id ?? null,
+            )
             if (resolvedId) row.allocation_config_id = resolvedId
           }
           if (internalBank) row.bank_name = internalBank.name
@@ -1518,6 +1530,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       rowConfigs, rowManualOverrides, rowStageCodes, rowTxnTypes, rowOrigTxnIds, rowOutflowTypes,
       internalBank,
       rowIncomeTypes, incomeTypes,
+      allocConfigs, allocGroups,
       duplicateRis, precomputedInflowIds, precomputedOutflowIds])
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -2201,7 +2214,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           allocationConfigId: rowConfigs[ri] ?? '',
                           isManualOverride:   rowManualOverrides[ri] ?? false,
                         }
-                        const displaySelId = getFinalConfig(rowState) ?? ''
+                        const generalConfigId = vIdx.resolve(null, date)?.id ?? null
+                        const displaySelId = getFinalConfig(
+                          rowState,
+                          generalConfigId,
+                          (gId) => vIdx.resolve(gId, date)?.id ?? null,
+                        ) ?? ''
                         return { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId }
                       }
 

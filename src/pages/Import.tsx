@@ -739,8 +739,14 @@ function ManualEntryForm() {
   const doSaveInflow = async (pregenRef?: string) => {
     setSaving(true)
     try {
+      const selIncomeType = incomeTypeId ? (incomeTypes.find(t => t.id === incomeTypeId) ?? null) : null
+      const inflowVIdx = buildVersionIndex(configs, allocGroups)
+      const inflowDate = v('date') || new Date().toISOString().slice(0, 10)
+      const generalCfgId = inflowVIdx.resolve(null, inflowDate)?.id ?? null
       const effectiveConfigId: string | undefined = txnType ? undefined : (getFinalConfig(
-        { incomeType: null, allocationConfigId: configOverride, isManualOverride: !!configOverride } satisfies RowResolverState,
+        { incomeType: selIncomeType, allocationConfigId: configOverride, isManualOverride: !!configOverride },
+        generalCfgId,
+        (gId) => inflowVIdx.resolve(gId, inflowDate)?.id ?? null,
       ) ?? undefined)
       const selectedBank = banks.find(b => b.id === v('bank_id'))
       let input: AddInflowInput = {
