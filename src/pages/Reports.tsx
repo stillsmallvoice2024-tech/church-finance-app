@@ -17,6 +17,7 @@ import { useOrgStore } from '../store/orgStore'
 import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
+import { useOpeningBalanceTotal } from '../hooks/useOpeningBalanceTotal'
 
 type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'departments' | 'fx' | 'audit'
 
@@ -56,6 +57,22 @@ function Skeleton() {
         <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />
       ))}
     </div>
+  )
+}
+
+// Footnote clarifying that Reports Net (inflows − outflows) excludes the bank
+// opening balance that the Dashboard's Net Balance includes. Self-hides when
+// there is no opening balance to report.
+function OpeningBalanceFootnote() {
+  const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
+  const { total, loading } = useOpeningBalanceTotal()
+  if (loading || total <= 0) return null
+  return (
+    <p className="px-5 py-3 text-xs text-gray-500 border-t border-gray-100">
+      Net is inflows − outflows and <span className="font-medium">excludes the opening
+      balance of {sym}{fmtAmt(total, formatLocale)}</span>. The Dashboard&apos;s Net
+      Balance includes this opening balance.
+    </p>
   )
 }
 
@@ -207,6 +224,7 @@ function AnnualSummaryPanel() {
           </table>
         </div>
       )}
+      {!loading && rows.length > 0 && <OpeningBalanceFootnote />}
     </ReportSection>
   )
 }
@@ -351,6 +369,7 @@ function MonthlyBreakdownPanel() {
           </table>
         </div>
       )}
+      {!loading && <OpeningBalanceFootnote />}
     </ReportSection>
   )
 }
