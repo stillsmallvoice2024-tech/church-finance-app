@@ -118,7 +118,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
         .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd)
-        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)'),
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)'),
 
       // 2. All outflow disbursed amounts for the year
       supabase
@@ -199,7 +199,9 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     const openingIn = (openingBalRes.data ?? []).reduce(
       (s, r) => s + Number((r as { starting_balance: number | null }).starting_balance ?? 0), 0,
     )
-    const totalIn   = inflows.reduce((s, r)  => s + Number(r.amount),          0) + openingIn
+    // Opening balance is intentionally NOT added here — it belongs to Net Balance only.
+    // Total Inflows must reflect actual period inflows so it visibly increases on import.
+    const totalIn   = inflows.reduce((s, r)  => s + Number(r.amount),          0)
     const totalOut  = outflows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
     const fxBals    = latestFXBalances(
       (fxRes.data ?? []) as { currency: string; running_balance: number }[],
@@ -225,7 +227,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     monthlyTotals,
     totalInflow,
     totalOutflow,
-    netBalance: totalInflow - totalOutflow,
+    netBalance: totalInflow + openingBalanceTotal - totalOutflow,
     openingBalanceTotal,
     fxBalances,
     recentTransactions: recentTxns,
