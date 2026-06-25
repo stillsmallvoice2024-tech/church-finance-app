@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { normalizeNarration } from '../utils/normalizeNarration'
 import { useOrgStore } from '../store/orgStore'
+import { fetchAllRows } from '../utils/fetchAllRows'
 
 // ── Output types ───────────────────────────────────────────────────────────────
 
@@ -112,30 +113,30 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     // ── Fire all queries in parallel ───────────────────────────────────────────
     const [inflowRes, outflowRes, fxRes, recentRes, openingBalRes] = await Promise.all([
       // 1. All inflow amounts for the year (minimal columns for aggregation)
-      supabase
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('date, amount, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd)
-        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)'),
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)')),
 
       // 2. All outflow disbursed amounts for the year
-      supabase
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('date, amount_disbursed, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte('date', yearStart)
         .lte('date', yearEnd)
-        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)'),
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')),
 
       // 3. All FX transactions for latest-balance extraction
-      supabase
+      fetchAllRows(() => supabase
         .from('fx_transactions')
         .select('currency, running_balance')
         .eq('org_id', orgId)
         .order('date',       { ascending: false })
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })),
 
       // 4. Recent 10 inflow transactions for the activity feed
       supabase

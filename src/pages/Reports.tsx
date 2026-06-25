@@ -18,6 +18,7 @@ import { HelpButton }       from '../components/onboarding/HelpButton'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { useOpeningBalanceTotal } from '../hooks/useOpeningBalanceTotal'
+import { fetchAllRows } from '../utils/fetchAllRows'
 
 type ReportTab = 'annual' | 'monthly' | 'income_types' | 'outflow_types' | 'departments' | 'fx' | 'audit'
 
@@ -134,14 +135,14 @@ function AnnualSummaryPanel() {
     const y = activeYear.toString()
 
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions')
+      fetchAllRows(() => supabase.from('inflow_transactions')
         .select('date, amount, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
-        .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
-      supabase.from('outflow_transactions')
+        .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`)),
+      fetchAllRows(() => supabase.from('outflow_transactions')
         .select('date, amount_disbursed, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
-        .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`),
+        .gte('date', `${y}-01-01`).lte('date', `${y}-12-31`)),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -251,18 +252,18 @@ function MonthlyBreakdownPanel() {
 
     const y = year.toString()
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('date, amount, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
         .gte('date', `${y}-01-01`)
-        .lte('date', `${y}-12-31`),
-      supabase
+        .lte('date', `${y}-12-31`)),
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('date, amount_disbursed, offset_role, root_transaction_table, transaction_type')
         .eq('org_id', orgId)
         .gte('date', `${y}-01-01`)
-        .lte('date', `${y}-12-31`),
+        .lte('date', `${y}-12-31`)),
     ])
 
     if (inflowRes.error || outflowRes.error) {
@@ -488,20 +489,20 @@ function IncomeTypeBreakdownPanel() {
     const { lo, queryHi, col } = filter.range
 
     const [inflowRes, outOffsetRes] = await Promise.all([
-      supabase
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('id, amount, income_type_id, transaction_type, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte(col, lo)
-        .lte(col, queryHi),
-      supabase
+        .lte(col, queryHi)),
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('amount_disbursed')
         .eq('org_id', orgId)
         .eq('offset_role', 'offset')
         .eq('root_transaction_table', 'outflow_transactions')
         .gte(col, lo)
-        .lte(col, queryHi),
+        .lte(col, queryHi)),
     ])
 
     if (inflowRes.error || outOffsetRes.error) {
@@ -719,20 +720,20 @@ function OutflowTypeBreakdownPanel() {
     const { lo, queryHi, col } = filter.range
 
     const [outflowRes, inOffsetRes] = await Promise.all([
-      supabase
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('id, amount_disbursed, outflow_type_id, transaction_type, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte(col, lo)
-        .lte(col, queryHi),
-      supabase
+        .lte(col, queryHi)),
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('amount')
         .eq('org_id', orgId)
         .eq('offset_role', 'offset')
         .eq('root_transaction_table', 'inflow_transactions')
         .gte(col, lo)
-        .lte(col, queryHi),
+        .lte(col, queryHi)),
     ])
 
     if (outflowRes.error || inOffsetRes.error) {
@@ -969,11 +970,11 @@ function DepartmentBreakdownPanel() {
     setLoading(true); setError(null)
     const { lo, queryHi, col } = filter.range
 
-    const { data, error: err } = await supabase
+    const { data, error: err } = await fetchAllRows(() => supabase
       .from('outflow_transactions')
       .select('amount_disbursed, department_id')
       .gte(col, lo)
-      .lte(col, queryHi)
+      .lte(col, queryHi))
 
     if (err) { setError(err.message); setLoading(false); return }
 
