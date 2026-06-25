@@ -2019,14 +2019,24 @@ begin
     values (p_org_id, 'General', true);
   end if;
 
-  -- Seed General rule group + default locked version (100% → General category)
-  if not exists (
-    select 1 from public.special_config_groups where org_id = p_org_id and is_default = true
-  ) then
+  -- Get or create the General rule group (decoupled from draft-config creation)
+  select id into v_group_id
+  from public.special_config_groups
+  where org_id = p_org_id and is_default = true
+  limit 1;
+
+  if v_group_id is null then
     insert into public.special_config_groups (org_id, name, is_default)
     values (p_org_id, 'General', true)
     returning id into v_group_id;
+  end if;
 
+  -- Ensure a draft config exists in the group, independently of whether the group
+  -- was just created or already existed.
+  if not exists (
+    select 1 from public.allocation_configs
+    where config_group_id = v_group_id and status = 'draft'
+  ) then
     insert into public.allocation_configs (
       org_id, config_group_id, name,
       start_date, effective_from, effective_to,
