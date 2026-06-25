@@ -342,9 +342,6 @@ export default function Dashboard() {
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.totalInflow, baseCurrencyCode)}
-                note={stats.openingBalanceTotal > 0
-                  ? `Includes ${formatCurrencyCompact(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
-                  : undefined}
                 href="/inflows"
               />
               <StatCard
@@ -359,6 +356,9 @@ export default function Dashboard() {
                 title="Net Balance"
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.netBalance, baseCurrencyCode)}
+                note={stats.openingBalanceTotal > 0
+                  ? `Includes ${formatCurrency(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
+                  : undefined}
                 href="/bank-ledger"
               />
               <StatCard
@@ -557,6 +557,7 @@ export default function Dashboard() {
       <ImportModal
         open={showImport}
         onClose={() => setShowImport(false)}
+        onSuccess={() => stats.refetch()}
       />
     </>
   )
