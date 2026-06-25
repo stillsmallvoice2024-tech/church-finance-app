@@ -187,16 +187,35 @@ export default function Onboarding() {
       return
     }
 
-    // 3. Locate the draft config in that group
+    // 3. Locate a usable config in that group — prefer draft; fall back to locked.
+    //    A locked config with non-empty rows means a previous onboarding run already
+    //    completed successfully, so we can skip straight to navigation.
     const { data: cfgData, error: cfgErr } = await supabase
       .from('allocation_configs')
-      .select('id')
+      .select('id, status, rows')
       .eq('config_group_id', grpData.id)
-      .eq('status', 'draft')
+      .in('status', ['draft', 'locked'])
+      .order('status', { ascending: true })  // 'draft' sorts before 'locked'
+      .limit(1)
       .maybeSingle()
     if (cfgErr || !cfgData) {
       setLoading(false)
-      setError(cfgErr?.message ?? 'Could not find draft distribution rule.')
+      setError(cfgErr?.message ?? 'Could not find distribution rule. Please refresh and try again.')
+      return
+    }
+
+    // Already complete: a previous run locked the config with rows
+    if (cfgData.status === 'locked' && Array.isArray(cfgData.rows) && (cfgData.rows as unknown[]).length > 0) {
+      useOrgStore.getState().setOrg({
+        org_id:              id,
+        org_name:            name.trim(),
+        role:                (storeOrgRole ?? 'owner') as UserRole,
+        onboarding_complete: true,
+        default_currency:    currency,
+      })
+      useOrgStore.getState().setOnboardingComplete(true)
+      window.dispatchEvent(new Event('focus'))
+      navigate('/', { replace: true })
       return
     }
 
