@@ -219,7 +219,27 @@ export default function Onboarding() {
       return
     }
 
-    // 4. Lock it with the user-defined rows
+    // 4. Compute a safe effective_from that won't conflict with existing locked configs.
+    //    The unique index idx_alloc_configs_group_effrom_unique covers (config_group_id,
+    //    effective_from) where status = 'locked', so we must pick a date not already taken.
+    const { data: latestLocked } = await supabase
+      .from('allocation_configs')
+      .select('effective_from')
+      .eq('config_group_id', grpData.id)
+      .eq('status', 'locked')
+      .order('effective_from', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const today = new Date().toISOString().split('T')[0]
+    let safeEffectiveFrom = today
+    if (latestLocked?.effective_from) {
+      const dayAfter = new Date(new Date(latestLocked.effective_from).getTime() + 86_400_000)
+        .toISOString().split('T')[0]
+      if (dayAfter > today) safeEffectiveFrom = dayAfter
+    }
+
+    // 5. Lock it with the user-defined rows and a conflict-free effective_from
     const rows = distRows.map(r => ({
       category_name:  r.category_name.trim(),
       budget_portion: 'Percentage',
@@ -227,7 +247,7 @@ export default function Onboarding() {
     }))
     const { error: updErr } = await supabase
       .from('allocation_configs')
-      .update({ rows, status: 'locked' })
+      .update({ rows, status: 'locked', effective_from: safeEffectiveFrom, start_date: safeEffectiveFrom })
       .eq('id', cfgData.id)
 
     setLoading(false)
