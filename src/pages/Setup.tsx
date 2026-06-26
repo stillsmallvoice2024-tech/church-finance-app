@@ -3601,8 +3601,8 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
-// @ts-ignore — developer reference only; remove in PR #304
-function _DatabaseTab() {
+// @ts-expect-error — developer reference only; remove in PR #304
+function DatabaseTab() {
   const [copied,      setCopied]      = useState(false)
   const [copiedDR,    setCopiedDR]    = useState(false)
   const [copiedRPC,   setCopiedRPC]   = useState(false)
