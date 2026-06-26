@@ -1062,6 +1062,7 @@ export default function FinancialReport() {
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [activeId,      setActiveId]      = useState<string | null>(null)
   const [tplMenuOpen,   setTplMenuOpen]   = useState(false)
+  const [hideZeroRows,  setHideZeroRows]  = useState(false)
   const pinnedAutoLoadedRef = useRef(false)
 
   const { balances, operationalBalances, loading, refetch } = useReportEngine(reportDate, reportBasis)
@@ -1120,6 +1121,14 @@ export default function FinancialReport() {
       push('Failed to delete template', 'error')
     }
   }
+
+  // ── Row visibility helper ────────────────────────────────────────────────
+
+  const shouldDisplayRow = useCallback((item: ReportItem, balances: Map<string, ReportCategoryBalance>, opBalances: OperationalBalanceMap): boolean => {
+    if (!hideZeroRows) return true
+    const val = getItemBalance(item, balances, opBalances)
+    return val !== 0
+  }, [hideZeroRows])
 
   // ── Find unmapped income types ────────────────────────────────────────────
 
@@ -1730,6 +1739,7 @@ export default function FinancialReport() {
                         if (child.kind === 'item') {
                           const item = child.data
                           if (!item.visible) return null
+                          if (!shouldDisplayRow(item, balances, operationalBalances)) return null
                           const val = getItemBalance(item, balances, operationalBalances)
                           return (
                             <tr key={item.id} className="border-b border-gray-100 dark:border-white/[0.06] hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
@@ -1740,7 +1750,7 @@ export default function FinancialReport() {
                         } else {
                           const sg = child.data
                           if (!sg.visible) return null
-                          const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, operationalBalances), 0)
+                          const sgTotal = sg.items.filter(i => i.visible && shouldDisplayRow(i, balances, operationalBalances)).reduce((s, i) => s + getItemBalance(i, balances, operationalBalances), 0)
                           return (
                             <>
                               <tr key={`sgh-${sg.id}`} className="bg-gray-50/80 dark:bg-[#141416]/40">
@@ -1748,7 +1758,7 @@ export default function FinancialReport() {
                                   {sg.label}
                                 </td>
                               </tr>
-                              {sg.items.filter(i => i.visible).map(item => {
+                              {sg.items.filter(i => i.visible && shouldDisplayRow(i, balances, operationalBalances)).map(item => {
                                 const val = getItemBalance(item, balances, operationalBalances)
                                 return (
                                   <tr key={item.id} className="border-b border-gray-100 dark:border-white/[0.07]">
@@ -2107,11 +2117,24 @@ export default function FinancialReport() {
             </button>
           )}
 
+          {/* Hide zero rows toggle */}
+          {!editMode && tables.length > 0 && (
+            <label className="flex items-center gap-2 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer">
+              <input
+                type="checkbox"
+                checked={hideZeroRows}
+                onChange={e => setHideZeroRows(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-primary cursor-pointer"
+              />
+              <span>Hide zero rows</span>
+            </label>
+          )}
+
           {/* Export PDF */}
           {!editMode && tables.length > 0 && (
             <button
               type="button"
-              onClick={() => exportReportPDF(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale)}
+              onClick={() => exportReportPDF(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale, hideZeroRows)}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <Download className="w-3.5 h-3.5" />
@@ -2123,7 +2146,7 @@ export default function FinancialReport() {
           {!editMode && tables.length > 0 && (
             <button
               type="button"
-              onClick={() => exportReportExcel(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale)}
+              onClick={() => exportReportExcel(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale, hideZeroRows)}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />

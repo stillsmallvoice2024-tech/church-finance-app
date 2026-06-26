@@ -127,6 +127,7 @@ export function exportReportPDF(
   opBalances: OperationalBalanceMap = new Map(),
   currencySymbol = '₦',
   numberLocale = 'en-NG',
+  hideZeroRows = false,
 ): void {
   const fmt = makeFmt(numberLocale)
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -179,16 +180,18 @@ export function exportReportPDF(
         if (child.kind === 'item') {
           if (!child.data.visible) continue
           const val = getItemBalance(child.data, balances, opBalances)
+          if (hideZeroRows && val === 0) continue
           tableBody.push([child.data.displayLabel, `${currencySymbol}${fmt(val)}`])
         } else {
           const sg = child.data
           if (!sg.visible) continue
+          const visibleItems = sg.items.filter(i => i.visible && (!hideZeroRows || getItemBalance(i, balances, opBalances) !== 0))
+          if (visibleItems.length === 0) continue
           tableBody.push([
             { content: `  ${sg.label}`, styles: { fontStyle: 'italic', fillColor: [245, 245, 245] as [number, number, number] } },
             { content: '', styles: { fillColor: [245, 245, 245] as [number, number, number] } },
           ])
-          for (const item of sg.items) {
-            if (!item.visible) continue
+          for (const item of visibleItems) {
             const val = getItemBalance(item, balances, opBalances)
             tableBody.push([`    ${item.displayLabel}`, `${currencySymbol}${fmt(val)}`])
           }
@@ -220,13 +223,24 @@ export function exportReportPDF(
       startY,
       head: [['Account / Description', 'Amount']],
       body: tableBody,
-      headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold' },
+      headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold', textColor: [255, 255, 255] },
       columnStyles: {
-        0: { cellWidth: 130 },
-        1: { cellWidth: 50, halign: 'right' },
+        0: { cellWidth: 110, halign: 'left', textColor: [0, 0, 0], overflow: 'linebreak' },
+        1: { cellWidth: 45, halign: 'right', textColor: [0, 0, 0], overflow: 'linebreak' },
       },
-      styles: { fontSize: 9, cellPadding: 2.5 },
+      styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak', valign: 'middle' },
       margin: { left: 14, right: 14 },
+      didDrawCell: (data) => {
+        // Ensure dark text on light backgrounds for readability
+        const cell = data.cell
+        const { textColor } = cell.styles as unknown as { textColor?: number[] }
+        if (!textColor || (textColor[0] === 255 && textColor[1] === 255 && textColor[2] === 255)) {
+          const fillColor = cell.styles.fillColor as unknown as number[] | undefined
+          if (fillColor && (fillColor[0] > 100 || fillColor[1] > 100 || fillColor[2] > 100)) {
+            cell.styles.textColor = [0, 0, 0]
+          }
+        }
+      },
     })
 
     startY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
@@ -267,6 +281,7 @@ export function exportReportExcel(
   opBalances: OperationalBalanceMap = new Map(),
   currencySymbol = '₦',
   _numberLocale = 'en-NG',
+  hideZeroRows = false,
 ): void {
   const wb = XLSX.utils.book_new()
 
@@ -295,13 +310,16 @@ export function exportReportExcel(
       for (const child of group.children) {
         if (child.kind === 'item') {
           if (!child.data.visible) continue
-          rows.push([`  ${child.data.displayLabel}`, getItemBalance(child.data, balances, opBalances)])
+          const val = getItemBalance(child.data, balances, opBalances)
+          if (hideZeroRows && val === 0) continue
+          rows.push([`  ${child.data.displayLabel}`, val])
         } else {
           const sg = child.data
           if (!sg.visible) continue
+          const visibleItems = sg.items.filter(i => i.visible && (!hideZeroRows || getItemBalance(i, balances, opBalances) !== 0))
+          if (visibleItems.length === 0) continue
           rows.push([`  ${sg.label}`, ''])
-          for (const item of sg.items) {
-            if (!item.visible) continue
+          for (const item of visibleItems) {
             rows.push([`    ${item.displayLabel}`, getItemBalance(item, balances, opBalances)])
           }
           const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
