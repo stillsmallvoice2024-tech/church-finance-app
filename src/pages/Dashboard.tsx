@@ -6,9 +6,9 @@ import {
   Legend, ResponsiveContainer,
 } from 'recharts'
 import {
-  TrendingUp, TrendingDown, Layers,
+  TrendingUp,
   PlusCircle, MinusCircle, FileSpreadsheet,
-  RefreshCw, AlertCircle, Wallet, ShieldCheck, ShieldAlert, ShieldX,
+  RefreshCw, AlertCircle, ShieldCheck, ShieldAlert, ShieldX,
 } from 'lucide-react'
 import { format } from 'date-fns'
 

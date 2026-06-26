@@ -38,6 +38,6 @@ export async function renderPageToBase64(
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas 2D context unavailable')
 
-  await page.render({ canvasContext: ctx, viewport }).promise
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise
   return canvas.toDataURL('image/png').split(',')[1]
 }

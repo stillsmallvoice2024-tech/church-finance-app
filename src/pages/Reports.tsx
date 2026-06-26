@@ -776,7 +776,7 @@ function OutflowTypeBreakdownPanel() {
     }
 
     // Inflow same-table offsets flip into the outflow column as "Income reversals"
-    const reversals = (inOffsetRes.data ?? []).reduce(
+    const reversals = (inOffsetRes.data ?? []).reduce<{ amount: number; count: number }>(
       (acc, r) => ({ amount: acc.amount + Number(r.amount || 0), count: acc.count + 1 }),
       { amount: 0, count: 0 },
     )
