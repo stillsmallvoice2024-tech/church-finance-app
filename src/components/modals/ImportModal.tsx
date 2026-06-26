@@ -1111,6 +1111,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setResult(null)
 
     const userId = user?.id ?? null
+    // One id for the whole import run — stamped on every inserted row so the
+    // audit trigger can group the resulting record_created entries in the
+    // Activity Log. Inflows and outflows from one run share this id (grouping
+    // is per-table, so they surface as two groups).
+    const importBatchId = crypto.randomUUID()
     let imported = 0
     let skipped  = 0
     const errors: string[] = []
@@ -1167,6 +1172,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
           row.org_id = orgId
+          row.import_batch_id = importBatchId
           // Non-Normal transactions skip income type and allocation entirely
           if (!txnType) {
             const effIncomeTypeId = rowIncomeTypes[ri]
@@ -1213,6 +1219,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref ? `${ref}${chargeTag}` : ref }
           if (userId) row.created_by = userId
           row.org_id = orgId
+          row.import_batch_id = importBatchId
           if (internalBank) row.bank_name = internalBank.name
           if (!row.transaction_id) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
@@ -1282,6 +1289,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           'UPDATE inflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
           'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\n' +
           'UPDATE outflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
+          "NOTIFY pgrst, 'reload schema';",
+        import_batch_id:
+          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS import_batch_id uuid;\n' +
+          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS import_batch_id uuid;\n' +
+          'ALTER TABLE fx_transactions      ADD COLUMN IF NOT EXISTS import_batch_id uuid;\n' +
           "NOTIFY pgrst, 'reload schema';",
       }
       const missingColMsg = (col: string) => {
@@ -1480,6 +1492,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
         if (userId) row.created_by = userId
         row.org_id = orgId
+        row.import_batch_id = importBatchId
         if (internalBank) row.bank_name = internalBank.name
         fxRows.push(row)
       }

@@ -38,6 +38,7 @@ import RefundTransactions   from './pages/RefundTransactions'
 import ReversalTransactions from './pages/ReversalTransactions'
 import Receipts             from './pages/Receipts'
 import ChangeLog            from './pages/ChangeLog'
+import Audit               from './pages/Audit'
 import ReconciliationCenter from './pages/ReconciliationCenter'
 import ResetPassword        from './pages/ResetPassword'
 import AcceptInvite         from './pages/AcceptInvite'
@@ -55,6 +56,12 @@ function CanWriteGuard() {
 function AdminOnlyGuard() {
   const { isAdmin } = useRole()
   if (!isAdmin()) return <Navigate to="/" replace />
+  return <Outlet />
+}
+
+function AuditGuard() {
+  const { canAudit } = useRole()
+  if (!canAudit()) return <Navigate to="/" replace />
   return <Outlet />
 }
 
@@ -145,6 +152,10 @@ export default function App() {
             <Route element={<CanWriteGuard />}>
               <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
               <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
+            </Route>
+            {/* Audit route: finance users + auditor role */}
+            <Route element={<AuditGuard />}>
+              <Route path="audit" element={<ErrorBoundary><Audit /></ErrorBoundary>} />
             </Route>
             {/* Admin-only routes */}
             <Route element={<AdminOnlyGuard />}>

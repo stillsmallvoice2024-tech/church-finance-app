@@ -1,13 +1,10 @@
-import { useState, useEffect } from 'react'
-import { ClipboardList, AlertCircle, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
+import { ClipboardList, AlertCircle, RefreshCw, Plus, Trash2, FileStack, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }               from '../components/ui/Card'
 import { PaginationBar }      from '../components/ui/PaginationBar'
 import { DataControlsBar }    from '../components/ui/DataControlsBar'
 import { SortableHeader }     from '../components/ui/SortableHeader'
-import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
-import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
-import { useFieldChanges }    from '../hooks/useFieldChanges'
-import type { FieldChangeEntry } from '../hooks/useFieldChanges'
+import { useActivityLog, type ActivityLogEntry, type ActivityEventType } from '../hooks/useActivityLog'
 import { usePageTitle }       from '../hooks/usePageTitle'
 import { useDataViewState }   from '../hooks/useDataViewState'
 import { exportCSV }          from '../utils/csvExport'
@@ -31,16 +28,20 @@ const TABLE_LABELS: Record<string, string> = {
   project_entries:      'Project Entries',
 }
 
-const CL_COLUMNS: TableColumnDef<FieldChangeEntry>[] = [
-  { key: 'changed_at', label: 'Timestamp', sortType: 'date', primary: true, noSearch: true },
-  { key: 'field_name', label: 'Field',     sortType: 'text', primary: true, accessor: e => e.field_name },
-  { key: 'table_name', label: 'Table',     sortType: 'text', primary: true, accessor: e => TABLE_LABELS[e.table_name] ?? e.table_name },
+const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: '',               label: 'All events'        },
+  { value: 'field_change',   label: 'Edits only'        },
+  { value: 'record_created', label: 'Created records'   },
+  { value: 'record_deleted', label: 'Deleted records'   },
+]
+
+const CL_COLUMNS: TableColumnDef<ActivityLogEntry>[] = [
+  { key: 'event_at',   label: 'Timestamp', sortType: 'date', primary: true, noSearch: true },
+  { key: 'field_name', label: 'Field',     sortType: 'text', primary: true, accessor: e => e.field_name ?? '' },
+  { key: 'table_name', label: 'Table',     sortType: 'text', primary: true, accessor: e => TABLE_LABELS[e.table_name ?? ''] ?? (e.table_name ?? '') },
   { key: 'old_value',  label: 'Old Value',                   accessor: e => e.old_value ?? '' },
   { key: 'new_value',  label: 'New Value',                   accessor: e => e.new_value ?? '' },
 ]
-
-const CL_SORT_COLS = new Set(['changed_at', 'field_name', 'table_name'])
-const CL_SEARCH_COLS = new Set(['field_name', 'table_name', 'old_value', 'new_value'])
 
 function fmtTs(ts: string, locale: string) {
   return new Date(ts).toLocaleString(locale, {
@@ -49,23 +50,60 @@ function fmtTs(ts: string, locale: string) {
   })
 }
 
+// Extract a short human-readable summary from a snapshot JSONB blob
+function snapshotSummary(data: Record<string, unknown> | null): string {
+  if (!data) return '—'
+  const parts: string[] = []
+  if (data.date)        parts.push(String(data.date))
+  if (data.amount)      parts.push(`amt:${data.amount}`)
+  if (data.amount_disbursed) parts.push(`amt:${data.amount_disbursed}`)
+  if (data.description) parts.push(String(data.description).slice(0, 40))
+  if (data.name)        parts.push(String(data.name).slice(0, 40))
+  return parts.join(' · ') || '—'
+}
+
+// Event type badge for INSERT/DELETE rows
+function EventBadge({ type }: { type: ActivityEventType }) {
+  if (type === 'record_created') return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
+      <Plus className="w-2.5 h-2.5" />Created
+    </span>
+  )
+  if (type === 'record_deleted') return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+      <Trash2 className="w-2.5 h-2.5" />Deleted
+    </span>
+  )
+  return null
+}
+
+// Badge for a collapsed import batch (N records created in one import)
+function BatchBadge({ count }: { count: number }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+      <FileStack className="w-2.5 h-2.5" />Import ×{count}
+    </span>
+  )
+}
+
 export default function ChangeLog() {
   usePageTitle('Activity History')
   const { formatLocale } = useOrgCurrency()
 
-  const [tableFilter, setTableFilter] = useState('')
-  const [dateFrom,    setDateFrom]    = useState('')
-  const [dateTo,      setDateTo]      = useState('')
-  const [datePreset,  setDatePreset]  = useState<DatePreset | null>(null)
+  const [tableFilter,     setTableFilter]     = useState('')
+  const [eventTypeFilter, setEventTypeFilter] = useState('')
+  const [dateFrom,        setDateFrom]        = useState('')
+  const [dateTo,          setDateTo]          = useState('')
+  const [datePreset,      setDatePreset]      = useState<DatePreset | null>(null)
 
   const clState = useDataViewState({
     storageKey:      'cl',
-    defaultSortKey:  'changed_at',
+    defaultSortKey:  'event_at',
     defaultSortDir:  'desc',
     defaultPageSize: 50,
   })
 
-  useEffect(() => { clState.setPage(0) }, [tableFilter, dateFrom, dateTo, clState.setPage])
+  useEffect(() => { clState.setPage(0) }, [tableFilter, eventTypeFilter, dateFrom, dateTo, clState.setPage])
 
   const [debouncedSearch, setDebouncedSearch] = useState('')
   useEffect(() => {
@@ -73,81 +111,88 @@ export default function ChangeLog() {
     return () => clearTimeout(t)
   }, [clState.search])
 
-  const { entries, count, loading, error, refetch } = useFieldChanges({
+  const eventTypes = eventTypeFilter
+    ? [eventTypeFilter as ActivityEventType]
+    : undefined
+
+  const { entries, count, loading, error, refetch, fetchBatchDetails } = useActivityLog({
     tableName:    tableFilter || undefined,
     dateFrom:     dateFrom    || undefined,
     dateTo:       dateTo      || undefined,
+    eventTypes,
     page:         clState.page,
     pageSize:     clState.pageSize,
     search:       debouncedSearch || undefined,
     searchCol:    clState.searchCol,
-    sortColumn:   clState.advancedSort.length === 0 ? clState.sortKey : undefined,
-    sortAscending: clState.advancedSort.length === 0 ? (clState.sortDir === 'asc') : undefined,
-    advancedSort: clState.advancedSort.length > 0 ? clState.advancedSort : undefined,
+    sortAscending: clState.sortDir === 'asc',
   })
 
-  const displayed = entries
+  // Expanded import batches: id → loaded detail rows (or 'loading')
+  const [expanded, setExpanded] = useState<Record<string, ActivityLogEntry[] | 'loading'>>({})
 
-  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
+  const toggleBatch = useCallback(async (e: ActivityLogEntry) => {
+    if (!e.import_batch_id) return
+    const isOpen = e.id in expanded
+    if (isOpen) {
+      setExpanded(prev => { const next = { ...prev }; delete next[e.id]; return next })
+      return
+    }
+    setExpanded(prev => ({ ...prev, [e.id]: 'loading' }))
+    const rows = await fetchBatchDetails(e.import_batch_id, e.table_name)
+    setExpanded(prev => ({ ...prev, [e.id]: rows }))
+  }, [expanded, fetchBatchDetails])
 
-  if (error) return (
+  // Collapse all expansions whenever the underlying page/filters change
+  useEffect(() => { setExpanded({}) }, [clState.page, tableFilter, eventTypeFilter, dateFrom, dateTo, debouncedSearch, clState.sortDir])
+
+  const isMigrationError = !!error && /activity_log_view|does not exist/i.test(error)
+
+  if (error && !isMigrationError) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
       <AlertCircle className="w-10 h-10 text-danger" />
-      <p className="font-semibold text-gray-800">Failed to load change log</p>
+      <p className="font-semibold text-gray-800">Failed to load activity log</p>
       <p className="text-sm text-gray-500">{error}</p>
-      <p className="text-xs text-gray-500 max-w-md">
-        If this is a new installation, run the following SQL in Supabase:
-      </p>
-      <pre className="bg-gray-900 text-green-300 text-xs rounded-lg px-4 py-3 text-left max-w-2xl overflow-x-auto">{`-- Run the full schema.sql or apply migrations in order.
--- field_changes is written by server-side DB triggers only.
--- See supabase/migrations/20260605000001_server_side_audit_triggers.sql`}</pre>
-      <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
+      <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light">
         <RefreshCw className="w-4 h-4" /> Retry
       </button>
     </div>
   )
 
-  const CL_CSV_HEADERS = ['Timestamp', 'User', 'Table', 'Record ID', 'Field', 'Old Value', 'New Value']
-  const clCsvRow = (e: FieldChangeEntry) => [
-    fmtTs(e.changed_at, formatLocale),
-    e.profiles?.full_name ?? e.profiles?.email ?? e.user_id ?? '—',
-    TABLE_LABELS[e.table_name] ?? e.table_name,
-    e.record_id, e.field_name, e.old_value ?? '', e.new_value ?? '',
+  const CL_CSV_HEADERS = ['Timestamp', 'User', 'Event', 'Table', 'Record ID', 'Field', 'Old Value', 'New Value']
+  const clCsvRow = (e: ActivityLogEntry) => [
+    fmtTs(e.event_at, formatLocale),
+    e.user_full_name ?? e.user_email ?? e.user_id ?? '—',
+    e.event_type,
+    TABLE_LABELS[e.table_name ?? ''] ?? (e.table_name ?? '—'),
+    e.record_id ?? '—',
+    e.field_name ?? '—',
+    e.old_value ?? '',
+    e.new_value ?? '',
   ]
-  const CL_CSV_FILE = `change-log-${new Date().toISOString().slice(0, 10)}.csv`
+  const CL_CSV_FILE = `activity-log-${new Date().toISOString().slice(0, 10)}.csv`
 
   const handleExportView = () => {
-    exportCSV(CL_CSV_FILE, CL_CSV_HEADERS, displayed.map(clCsvRow))
+    exportCSV(CL_CSV_FILE, CL_CSV_HEADERS, entries.map(clCsvRow))
   }
 
   const handleExportAll = async () => {
+    // Export up to 10k rows from the view with current filters
     let query = supabase
-      .from('field_changes')
-      .select(`id, user_id, table_name, record_id, field_name, old_value, new_value, changed_at, profiles:user_id ( full_name, email )`)
+      .from('activity_log_view')
+      .select('*')
       .limit(10000)
-    const adv = clState.advancedSort
-    if (adv.length > 0) {
-      for (const l of adv) {
-        if (CL_SORT_COLS.has(l.key)) query = query.order(l.key, { ascending: l.dir === 'asc' })
-      }
-    } else if (CL_SORT_COLS.has(clState.sortKey)) {
-      query = query.order(clState.sortKey, { ascending: clState.sortDir === 'asc' })
-    } else {
-      query = query.order('changed_at', { ascending: false })
-    }
-    if (tableFilter) query = query.eq('table_name', tableFilter)
-    if (dateFrom)    query = query.gte('changed_at', dateFrom)
-    if (dateTo)      query = query.lte('changed_at', dateTo + 'T23:59:59')
+      .order('event_at', { ascending: clState.sortDir === 'asc' })
+    if (tableFilter)      query = query.eq('table_name', tableFilter)
+    if (dateFrom)         query = query.gte('event_at', dateFrom)
+    if (dateTo)           query = query.lte('event_at', dateTo + 'T23:59:59')
+    if (eventTypes?.length) query = query.in('event_type', eventTypes)
     if (debouncedSearch) {
-      if (!clState.searchCol || clState.searchCol === 'all') {
-        query = query.or(`field_name.ilike.%${debouncedSearch}%,table_name.ilike.%${debouncedSearch}%,old_value.ilike.%${debouncedSearch}%,new_value.ilike.%${debouncedSearch}%`)
-      } else if (CL_SEARCH_COLS.has(clState.searchCol)) {
-        query = query.ilike(clState.searchCol, `%${debouncedSearch}%`)
-      }
+      const s = debouncedSearch.replace(/[%_\\()\[\],{}]/g, '')
+      query = query.or(`field_name.ilike.%${s}%,table_name.ilike.%${s}%,old_value.ilike.%${s}%,new_value.ilike.%${s}%`)
     }
     const { data: rows } = await query
     if (!rows) return
-    exportCSV(CL_CSV_FILE, CL_CSV_HEADERS, (rows as unknown as FieldChangeEntry[]).map(clCsvRow))
+    exportCSV(CL_CSV_FILE, CL_CSV_HEADERS, (rows as unknown as ActivityLogEntry[]).map(clCsvRow))
   }
 
   return (
@@ -157,7 +202,7 @@ export default function ChangeLog() {
           <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 flex items-center gap-2">
             <ClipboardList className="w-6 h-6 text-primary" /> Activity History
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Per-field record of every edit made</p>
+          <p className="text-sm text-gray-500 mt-0.5">Field edits, record creations and deletions</p>
         </div>
         <ExportDropdown
           onExportView={handleExportView}
@@ -165,6 +210,16 @@ export default function ChangeLog() {
           disabled={entries.length === 0}
         />
       </div>
+
+      {isMigrationError && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            The <code className="font-mono text-xs">activity_log_view</code> is missing.
+            Run the Audit Feature migration SQL from <strong>Internal Audit → database setup</strong> to enable unified event tracking.
+          </span>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>
@@ -175,6 +230,12 @@ export default function ChangeLog() {
             onCustom={() => setDatePreset('custom')}
           />
           <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">Event Type</label>
+              <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={filterInputCls}>
+                {EVENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">Table</label>
               <select value={tableFilter} onChange={e => setTableFilter(e.target.value)} className={filterInputCls}>
@@ -192,9 +253,9 @@ export default function ChangeLog() {
               <label className="text-xs font-medium text-gray-500">To</label>
               <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
             </div>
-            {(tableFilter || dateFrom || dateTo || datePreset) && (
+            {(tableFilter || eventTypeFilter || dateFrom || dateTo || datePreset) && (
               <button
-                onClick={() => { setTableFilter(''); setDateFrom(''); setDateTo(''); setDatePreset(null) }}
+                onClick={() => { setTableFilter(''); setEventTypeFilter(''); setDateFrom(''); setDateTo(''); setDatePreset(null) }}
                 className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Clear
@@ -204,13 +265,12 @@ export default function ChangeLog() {
         </div>
       </Card>
 
-      {/* Sort / Search / Page-size controls */}
       <DataControlsBar
         columns={CL_COLUMNS}
         sortKey={clState.sortKey}
         sortDir={clState.sortDir}
         onSort={clState.setSort}
-        defaultSortKey="changed_at"
+        defaultSortKey="event_at"
         defaultSortDir="desc"
         view={clState.view}
         onViewChange={clState.setView}
@@ -225,136 +285,255 @@ export default function ChangeLog() {
         pageSizeOptions={[25, 50, 100, 200]}
       />
 
-      {/* Table / Cards */}
       <Card padding={false}>
         {clState.view === 'cards' ? (
           <div className="p-3 space-y-2">
-            {loading && displayed.length === 0 ? (
+            {loading && entries.length === 0 ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-24 rounded-xl bg-gray-100 animate-pulse" />
               ))
-            ) : displayed.length === 0 ? (
-              <EmptyState icon={ClipboardList} title="No field changes recorded yet." compact />
+            ) : entries.length === 0 ? (
+              <EmptyState icon={ClipboardList} title="No activity recorded yet." compact />
             ) : (
-              displayed.map(e => (
-                <div key={e.id} className="rounded-xl border border-gray-100 bg-white px-3 py-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 break-words">{e.field_name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {TABLE_LABELS[e.table_name] ?? e.table_name}
-                        <span className="text-gray-400 font-mono"> · {e.record_id.slice(0, 8)}…</span>
-                      </p>
+              entries.map(e => {
+                const isEdit    = e.event_type === 'field_change'
+                const isCreated = e.event_type === 'record_created'
+                const isDeleted = e.event_type === 'record_deleted'
+                const isGroup   = e.group_count > 1 && !!e.import_batch_id
+
+                if (isGroup) {
+                  const detail = expanded[e.id]
+                  const isOpen = e.id in expanded
+                  return (
+                    <div key={e.id} className="rounded-xl border bg-emerald-50/40 border-emerald-100">
+                      <button
+                        type="button"
+                        onClick={() => toggleBatch(e)}
+                        className="w-full flex items-start justify-between gap-2 px-3 py-3 text-left"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+                            <BatchBadge count={e.group_count} />
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {e.group_count} records imported · {TABLE_LABELS[e.table_name ?? ''] ?? e.table_name}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">{e.user_full_name ?? e.user_email ?? 'Unknown user'}</p>
+                        </div>
+                        <p className="text-xs text-gray-500 whitespace-nowrap shrink-0">{fmtTs(e.event_at, formatLocale)}</p>
+                      </button>
+                      {isOpen && (
+                        <div className="px-3 pb-3 space-y-1">
+                          {detail === 'loading' && <p className="text-xs text-gray-400 pl-5">Loading records…</p>}
+                          {Array.isArray(detail) && detail.length === 0 && <p className="text-xs text-gray-400 pl-5">No records found for this batch.</p>}
+                          {Array.isArray(detail) && detail.map(d => (
+                            <div key={d.id} className="rounded-lg bg-white/70 border border-emerald-100 px-2.5 py-1.5 ml-5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-green-800">{snapshotSummary(d.snapshot_data)}</span>
+                                <span className="text-[10px] text-gray-400 whitespace-nowrap shrink-0">{fmtTs(d.event_at, formatLocale)}</span>
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-mono break-all">{d.record_id ?? '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-500 whitespace-nowrap shrink-0">{fmtTs(e.changed_at, formatLocale)}</p>
+                  )
+                }
+
+                return (
+                  <div
+                    key={e.id}
+                    className={`rounded-xl border px-3 py-3 space-y-2 ${
+                      isCreated ? 'bg-green-50/50 border-green-100'
+                      : isDeleted ? 'bg-red-50/50 border-red-100'
+                      : 'bg-white border-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        {isEdit ? (
+                          <p className="text-sm font-medium text-gray-800 break-words">{e.field_name}</p>
+                        ) : (
+                          <EventBadge type={e.event_type} />
+                        )}
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {TABLE_LABELS[e.table_name ?? ''] ?? e.table_name}
+                          <span className="text-gray-400 font-mono"> · {(e.record_id ?? '').slice(0, 8)}…</span>
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500 whitespace-nowrap shrink-0">{fmtTs(e.event_at, formatLocale)}</p>
+                    </div>
+                    {isEdit ? (
+                      <div className="space-y-1">
+                        <div className="rounded-lg bg-red-50/70 border border-red-100 px-2.5 py-1.5">
+                          <p className="text-xs uppercase tracking-wide text-red-400">Old</p>
+                          <p className="text-sm text-red-700 break-words">{e.old_value ?? '—'}</p>
+                        </div>
+                        <div className="rounded-lg bg-green-50/70 border border-green-100 px-2.5 py-1.5">
+                          <p className="text-xs uppercase tracking-wide text-green-500">New</p>
+                          <p className="text-sm text-green-800 break-words">{e.new_value ?? '—'}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`rounded-lg px-2.5 py-1.5 text-xs ${isCreated ? 'bg-green-50 border border-green-100 text-green-800' : 'bg-red-50 border border-red-100 text-red-800'}`}>
+                        {snapshotSummary(e.snapshot_data)}
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      {e.user_full_name ?? e.user_email ?? 'Unknown user'}
+                    </p>
                   </div>
-                  {/* Stacked old → new diff — no panning to compare */}
-                  <div className="space-y-1">
-                    <div className="rounded-lg bg-red-50/70 border border-red-100 px-2.5 py-1.5">
-                      <p className="text-xs uppercase tracking-wide text-red-400">Old</p>
-                      <p className="text-sm text-red-700 break-words">{e.old_value ?? '—'}</p>
-                    </div>
-                    <div className="rounded-lg bg-green-50/70 border border-green-100 px-2.5 py-1.5">
-                      <p className="text-xs uppercase tracking-wide text-green-500">New</p>
-                      <p className="text-sm text-green-800 break-words">{e.new_value ?? '—'}</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    {e.profiles?.full_name ?? e.profiles?.email ?? 'Unknown user'}
-                  </p>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         ) : (
-        <div className="overflow-x-auto scroll-x-fade">
-          <table className="min-w-full table-sticky-col">
-            <thead>
-              <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
-                <SortableHeader
-                  field={{ key: 'changed_at', label: 'Timestamp', type: 'date' } satisfies SortField}
-                  activeSortKey={clState.sortKey}
-                  activeSortDir={clState.sortDir}
-                  onSort={clState.setSort}
-                  className="text-left text-xs font-semibold whitespace-nowrap"
-                />
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  User
-                </th>
-                <SortableHeader
-                  field={{ key: 'table_name', label: 'Table', type: 'text' } satisfies SortField}
-                  activeSortKey={clState.sortKey}
-                  activeSortDir={clState.sortDir}
-                  onSort={clState.setSort}
-                  className="text-left text-xs font-semibold whitespace-nowrap"
-                />
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  Record ID
-                </th>
-                <SortableHeader
-                  field={{ key: 'field_name', label: 'Field', type: 'text' } satisfies SortField}
-                  activeSortKey={clState.sortKey}
-                  activeSortDir={clState.sortDir}
-                  onSort={clState.setSort}
-                  className="text-left text-xs font-semibold whitespace-nowrap"
-                />
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  Old Value
-                </th>
-                <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  New Value
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black/[0.05]">
-              {loading && displayed.length === 0 ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="h-4 bg-gray-200 rounded animate-pulse" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : displayed.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState icon={ClipboardList} title="No field changes recorded yet." compact />
-                  </td>
+          <div className="overflow-x-auto scroll-x-fade">
+            <table className="min-w-full table-sticky-col">
+              <thead>
+                <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
+                  <SortableHeader
+                    field={{ key: 'event_at', label: 'Timestamp', type: 'date' } satisfies SortField}
+                    activeSortKey={clState.sortKey}
+                    activeSortDir={clState.sortDir}
+                    onSort={clState.setSort}
+                    className="text-left text-xs font-semibold whitespace-nowrap"
+                  />
+                  <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">User</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Event</th>
+                  <SortableHeader
+                    field={{ key: 'table_name', label: 'Table', type: 'text' } satisfies SortField}
+                    activeSortKey={clState.sortKey}
+                    activeSortDir={clState.sortDir}
+                    onSort={clState.setSort}
+                    className="text-left text-xs font-semibold whitespace-nowrap"
+                  />
+                  <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Record ID</th>
+                  <SortableHeader
+                    field={{ key: 'field_name', label: 'Field / Summary', type: 'text' } satisfies SortField}
+                    activeSortKey={clState.sortKey}
+                    activeSortDir={clState.sortDir}
+                    onSort={clState.setSort}
+                    className="text-left text-xs font-semibold whitespace-nowrap"
+                  />
+                  <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Old Value</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">New Value</th>
                 </tr>
-              ) : (
-                displayed.map(e => (
-                  <tr key={e.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.changed_at, formatLocale)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                      {e.profiles?.full_name ?? e.profiles?.email ?? <span className="text-gray-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                      {TABLE_LABELS[e.table_name] ?? e.table_name}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 font-mono max-w-[120px] truncate" title={e.record_id}>
-                      {e.record_id.slice(0, 8)}…
-                    </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-800">{e.field_name}</td>
-                    <td className="px-4 py-3 text-sm max-w-[160px]">
-                      {e.old_value == null
-                        ? <span className="text-gray-300">—</span>
-                        : <DescriptionCell id={`old-${e.id}`} text={e.old_value} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-red-600" />
-                      }
-                    </td>
-                    <td className="px-4 py-3 text-sm max-w-[160px]">
-                      {e.new_value == null
-                        ? <span className="text-gray-300">—</span>
-                        : <DescriptionCell id={`new-${e.id}`} text={e.new_value} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-green-700" />
-                      }
+              </thead>
+              <tbody className="divide-y divide-black/[0.05]">
+                {loading && entries.length === 0 ? (
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i}>
+                      {Array.from({ length: 8 }).map((_, j) => (
+                        <td key={j} className="px-4 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : entries.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>
+                      <EmptyState icon={ClipboardList} title="No activity recorded yet." compact />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  entries.map(e => {
+                    const isEdit    = e.event_type === 'field_change'
+                    const isCreated = e.event_type === 'record_created'
+                    const isGroup   = e.group_count > 1 && !!e.import_batch_id
+                    const rowCls    = isCreated
+                      ? 'bg-green-50/30 hover:bg-green-50/60'
+                      : e.event_type === 'record_deleted'
+                      ? 'bg-red-50/30 hover:bg-red-50/60'
+                      : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.03]'
+
+                    if (isGroup) {
+                      const detail = expanded[e.id]
+                      const isOpen = e.id in expanded
+                      return (
+                        <Fragment key={e.id}>
+                          <tr className={`${rowCls} transition-colors cursor-pointer`} onClick={() => toggleBatch(e)}>
+                            <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.event_at, formatLocale)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                              {e.user_full_name ?? e.user_email ?? <span className="text-gray-400">—</span>}
+                            </td>
+                            <td className="px-4 py-3"><BatchBadge count={e.group_count} /></td>
+                            <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                              {TABLE_LABELS[e.table_name ?? ''] ?? e.table_name}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-400">—</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-700" colSpan={3}>
+                              <span className="inline-flex items-center gap-1.5">
+                                {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+                                {e.group_count} records imported in one batch
+                                <span className="text-gray-400 font-normal">· {isOpen ? 'hide' : 'click to expand'}</span>
+                              </span>
+                            </td>
+                          </tr>
+                          {isOpen && detail === 'loading' && (
+                            <tr><td colSpan={8} className="px-8 py-3 text-xs text-gray-400">Loading records…</td></tr>
+                          )}
+                          {isOpen && Array.isArray(detail) && detail.length === 0 && (
+                            <tr><td colSpan={8} className="px-8 py-3 text-xs text-gray-400">No records found for this batch.</td></tr>
+                          )}
+                          {isOpen && Array.isArray(detail) && detail.map(d => (
+                            <tr key={d.id} className="bg-green-50/10">
+                              <td className="px-4 py-2 pl-8 text-xs text-gray-400 whitespace-nowrap">{fmtTs(d.event_at, formatLocale)}</td>
+                              <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{d.user_full_name ?? d.user_email ?? '—'}</td>
+                              <td className="px-4 py-2"><EventBadge type="record_created" /></td>
+                              <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{TABLE_LABELS[d.table_name ?? ''] ?? d.table_name}</td>
+                              <td className="px-4 py-2 text-xs text-gray-400 font-mono max-w-[160px] break-all">{d.record_id ?? '—'}</td>
+                              <td className="px-4 py-2 text-xs text-gray-500 italic" colSpan={3}>{snapshotSummary(d.snapshot_data)}</td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      )
+                    }
+
+                    return (
+                      <tr key={e.id} className={`${rowCls} transition-colors`}>
+                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.event_at, formatLocale)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                          {e.user_full_name ?? e.user_email ?? <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEdit
+                            ? <span className="text-xs font-medium text-amber-700 px-1.5 py-0.5 rounded-full bg-amber-50">Edit</span>
+                            : <EventBadge type={e.event_type} />
+                          }
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                          {TABLE_LABELS[e.table_name ?? ''] ?? e.table_name}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500 font-mono max-w-[160px] break-all">
+                          {e.record_id ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-800 max-w-[160px]">
+                          {isEdit
+                            ? (e.field_name ?? '—')
+                            : <span className="text-xs text-gray-500 italic">{snapshotSummary(e.snapshot_data)}</span>
+                          }
+                        </td>
+                        <td className="px-4 py-3 text-sm max-w-[200px] break-words">
+                          {isEdit && (e.old_value != null
+                            ? <span className="text-red-600">{e.old_value}</span>
+                            : <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm max-w-[200px] break-words">
+                          {isEdit && (e.new_value != null
+                            ? <span className="text-green-700">{e.new_value}</span>
+                            : <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
         <PaginationBar
           variant="full"
@@ -364,7 +543,6 @@ export default function ChangeLog() {
           onPageChange={clState.setPage}
         />
       </Card>
-      <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
 }

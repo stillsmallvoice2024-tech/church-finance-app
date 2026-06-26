@@ -48,6 +48,7 @@ const ROLE_CONFIG: Record<UserRole, { label: string; pill: string }> = {
   owner:      { label: 'Owner',      pill: 'bg-purple-600 text-white'      },
   admin:      { label: 'Admin',      pill: 'bg-primary text-white'         },
   accountant: { label: 'Accountant', pill: 'bg-amber-100 text-amber-700'   },
+  auditor:    { label: 'Auditor',    pill: 'bg-teal-100 text-teal-700'     },
   viewer:     { label: 'Viewer',     pill: 'bg-gray-100 text-gray-500'     },
 }
 
@@ -69,7 +70,7 @@ function initials(name: string) {
 
 const inviteSchema = z.object({
   email: z.string().email('Enter a valid email'),
-  role:  z.enum(['admin', 'accountant', 'viewer'] as const),
+  role:  z.enum(['admin', 'accountant', 'auditor', 'viewer'] as const),
 })
 type InviteForm = z.infer<typeof inviteSchema>
 
@@ -273,6 +274,7 @@ function InviteUserModal({
             >
               <option value="admin">Admin — full access except ownership transfer</option>
               <option value="accountant">Accountant — can add and edit records</option>
+              <option value="auditor">Auditor — read ledger + tag audit findings only</option>
               <option value="viewer">Viewer — read-only access</option>
             </select>
             <p className="text-xs text-gray-500">Owner role can only be assigned via Transfer Ownership after the user joins.</p>
@@ -673,6 +675,7 @@ export default function UserManagement() {
   const ownerCount      = members.filter(m => m.role === 'owner').length
   const adminCount      = members.filter(m => m.role === 'admin').length
   const accountantCount = members.filter(m => m.role === 'accountant').length
+  const auditorCount    = members.filter(m => m.role === 'auditor').length
 
   // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
   if (!isAdmin()) return <Navigate to="/" replace />
@@ -743,12 +746,13 @@ export default function UserManagement() {
       </div>
 
       {/* ── Stats ─────────────────────────────────────────────────────────── */}
-      <div data-tour="role-info" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div data-tour="role-info" className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         {[
           { label: 'Total Members', value: totalCount,      icon: <Users  className="w-5 h-5 text-primary" />,       tip: undefined },
           { label: 'Owners',        value: ownerCount,      icon: <Shield className="w-5 h-5 text-purple-600" />,    tip: 'Full control including ownership transfer. There can only be one owner at a time.' },
           { label: 'Admins',        value: adminCount,      icon: <Shield className="w-5 h-5 text-primary" />,       tip: 'Full access to all data, settings, and team management. Cannot transfer ownership.' },
           { label: 'Accountants',   value: accountantCount, icon: <User   className="w-5 h-5 text-amber-500" />,     tip: 'Can import statements and edit transactions. Cannot manage team members or settings.' },
+          { label: 'Auditors',      value: auditorCount,    icon: <User   className="w-5 h-5 text-teal-600" />,      tip: 'Read-only access to all records. Can tag audit findings. Cannot add or edit transactions.' },
         ].map(({ label, value, icon, tip }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
             <div className="p-2 bg-gray-50 rounded-lg">{icon}</div>
@@ -812,6 +816,7 @@ export default function UserManagement() {
                         {(isOwner() || m.role === 'owner') && <option value="owner">Owner</option>}
                         <option value="admin">Admin</option>
                         <option value="accountant">Accountant</option>
+                        <option value="auditor">Auditor</option>
                         <option value="viewer">Viewer</option>
                       </select>
                       {canEditRole && (

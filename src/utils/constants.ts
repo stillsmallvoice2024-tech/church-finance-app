@@ -4,6 +4,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   owner: 'Owner',
   admin: 'Admin',
   accountant: 'Accountant',
+  auditor: 'Auditor',
   viewer: 'Viewer',
 }
 
@@ -11,6 +12,7 @@ export const ROLE_BADGE_CLASSES: Record<UserRole, string> = {
   owner: 'bg-purple-100 text-purple-700',
   admin: 'bg-primary-100 text-primary',
   accountant: 'bg-accent-light text-accent',
+  auditor: 'bg-teal-100 text-teal-700',
   viewer: 'bg-gray-100 text-gray-600',
 }
 

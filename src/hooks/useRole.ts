@@ -18,12 +18,14 @@ export function useRole() {
 
   const isOwnerOrAdmin = role === 'owner' || role === 'admin'
   const isFinanceUser  = isOwnerOrAdmin || role === 'accountant'
+  const isAuditorRole  = role === 'auditor'
 
   return {
     role,
     isOwner:               (): boolean => resolved && role === 'owner',
     isAdmin:               (): boolean => resolved && isOwnerOrAdmin,
     isAccountant:          (): boolean => resolved && role === 'accountant',
+    isAuditor:             (): boolean => resolved && isAuditorRole,
     isViewer:              (): boolean => resolved && role === 'viewer',
     isReadOnly:            (): boolean => resolved && role === 'viewer',
     canWrite:              (): boolean => resolved && isFinanceUser,
@@ -33,5 +35,6 @@ export function useRole() {
     canManageConfigs:      (): boolean => resolved && isOwnerOrAdmin,
     canManageMembers:      (): boolean => resolved && isOwnerOrAdmin,
     canTransferOwnership:  (): boolean => resolved && role === 'owner',
+    canAudit:              (): boolean => resolved && (isOwnerOrAdmin || isAuditorRole),
   }
 }
