@@ -358,7 +358,7 @@ describe('useReceipts storage org isolation', () => {
       code.indexOf('const fetch = useCallback'),
       code.indexOf('const upload = useCallback'),
     )
-    expect(fetchSection).toContain("q.eq('org_id', orgId)")
+    expect(fetchSection).toContain(".eq('org_id', orgId)")
   })
 })
 

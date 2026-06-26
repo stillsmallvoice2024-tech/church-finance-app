@@ -468,6 +468,7 @@ function GeneralGroupPanel({
           id:                      grp.id as string,
           name:                    grp.name as string,
           is_default:              true,
+          is_archived:             false,
           created_at:              grp.created_at as string,
           versions:                (versions ?? []) as AllocationConfig[],
           active_version:          active as AllocationConfig | null,
@@ -3600,7 +3601,8 @@ function DepartmentsTab({ onAdd, onEdit, onDelete }: {
   )
 }
 
-function DatabaseTab() {
+// @ts-ignore — developer reference only; remove in PR #304
+function _DatabaseTab() {
   const [copied,      setCopied]      = useState(false)
   const [copiedDR,    setCopiedDR]    = useState(false)
   const [copiedRPC,   setCopiedRPC]   = useState(false)
@@ -4039,7 +4041,7 @@ export default function SetupPage() {
   const [editDepartment,         setEditDepartment]         = useState<Department | null>(null)
   const [deleteDepartmentTarget, setDeleteDepartmentTarget] = useState<Department | null>(null)
   const [departmentRefetch,      setDepartmentRefetch]      = useState(0)
-  const [devToolsOpen,         setDevToolsOpen]         = useState(false)
+
   const { configs, reload: reloadAllocs } = useAllocationStore()
 
   const { push: toast } = useToastStore()

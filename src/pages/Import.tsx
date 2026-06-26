@@ -21,7 +21,7 @@ import { useAddInflow, useAddOutflow, AddInflowInput, AddOutflowInput } from '..
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
-import { getFinalConfig, type RowResolverState } from '../utils/configResolver'
+import { getFinalConfig } from '../utils/configResolver'
 import { friendlyError } from '../utils/friendlyError'
 import { formatCurrency } from '../utils/currency'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
