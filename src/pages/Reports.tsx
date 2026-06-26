@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Printer, Download, AlertCircle, FileText, FilePlus, BarChart2, ChevronRight, ChevronDown, ChevronUp, CalendarDays, TrendingUp, TrendingDown, Users, Globe, ShieldAlert } from 'lucide-react'
+import { Printer, Download, AlertCircle, FileText, FilePlus, BarChart2, ChevronRight, ChevronDown, ChevronUp, CalendarDays, TrendingUp, TrendingDown, Users, Globe, ClipboardList } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useRole } from '../hooks/useRole'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useFXTransactions } from '../hooks/useFX'
-import { useAuditLog } from '../hooks/useAuditLog'
+import { useAuditSessions } from '../hooks/useAuditSessions'
 import { exportCSV } from '../utils/csvExport'
 import { useAccountingYearStore } from '../store/accountingYearStore'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
@@ -29,7 +29,7 @@ const REPORT_TAB_CARDS: { id: ReportTab; Icon: React.ComponentType<{ className?:
   { id: 'outflow_types', Icon: TrendingDown, label: 'Outflow Types' },
   { id: 'departments',   Icon: Users,        label: 'Departments'   },
   { id: 'fx',            Icon: Globe,        label: 'FX Holdings'   },
-  { id: 'audit',         Icon: ShieldAlert,  label: 'Audit Log'     },
+  { id: 'audit',         Icon: ClipboardList, label: 'Audit Sessions' },
 ]
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -1388,72 +1388,81 @@ function FXHoldingsPanel() {
   )
 }
 
-// ── Audit Log ─────────────────────────────────────────────────────────────────
+// ── Audit Sessions ─────────────────────────────────────────────────────────────
 
-function AuditLogPanel() {
-  const { entries, loading, error } = useAuditLog(500)
+function AuditSessionsPanel() {
+  const { sessions, loading, error } = useAuditSessions()
 
   const handleExport = () =>
     exportCSV(
-      'audit_log',
-      ['Timestamp', 'User', 'Email', 'Action', 'Table', 'Record ID'],
-      entries.map(e => [
-        e.created_at,
-        e.profiles?.full_name ?? '—',
-        e.profiles?.email ?? '—',
-        e.action,
-        e.table_name ?? '—',
-        e.record_id ?? '—',
+      'audit_sessions',
+      ['Period Start', 'Period End', 'Auditor', 'Status', 'Created'],
+      sessions.map(s => [
+        s.period_start,
+        s.period_end,
+        s.profiles?.full_name ?? '—',
+        s.status,
+        new Date(s.created_at).toLocaleDateString(),
       ]),
     )
 
   return (
-    <ReportSection title="Audit Log (last 500 events)" onExport={handleExport}>
+    <ReportSection
+      title="Audit Sessions"
+      onExport={sessions.length > 0 ? handleExport : undefined}
+      extra={
+        <Link
+          to="/audit"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+        >
+          Open Audit Workspace
+        </Link>
+      }
+    >
       {error   && <ErrBox msg={error} />}
       {loading && <Skeleton />}
-      {!loading && entries.length === 0 && <EmptyState />}
-      {!loading && entries.length > 0 && (
+      {!loading && sessions.length === 0 && (
+        <div className="py-16 text-center space-y-3">
+          <p className="text-sm text-gray-400">No audit sessions yet.</p>
+          <Link to="/audit" className="text-xs text-primary hover:underline">
+            Start an audit session →
+          </Link>
+        </div>
+      )}
+      {!loading && sessions.length > 0 && (
         <div className="overflow-x-auto scroll-x-fade">
           <table className="w-full text-sm table-sticky-col">
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                <th className="px-5 py-3 text-left font-medium">Timestamp</th>
-                <th className="px-5 py-3 text-left font-medium">User</th>
-                <th className="px-5 py-3 text-left font-medium">Action</th>
-                <th className="px-5 py-3 text-left font-medium">Table</th>
-                <th className="px-5 py-3 text-left font-medium">Record ID</th>
+                <th className="px-5 py-3 text-left font-medium">Period</th>
+                <th className="px-5 py-3 text-left font-medium">Auditor</th>
+                <th className="px-5 py-3 text-left font-medium">Status</th>
+                <th className="px-5 py-3 text-left font-medium">Created</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {entries.map(e => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
-                    {new Date(e.created_at).toLocaleString()}
+              {sessions.map(s => (
+                <tr key={s.id} className="hover:bg-gray-50">
+                  <td className="px-5 py-3 font-medium text-gray-800">
+                    {s.period_start} → {s.period_end}
                   </td>
                   <td className="px-5 py-3">
-                    <div className="font-medium text-gray-800">
-                      {e.profiles?.full_name ?? 'System'}
-                    </div>
-                    <div className="text-xs text-gray-500">{e.profiles?.email ?? '—'}</div>
+                    <div className="font-medium text-gray-800">{s.profiles?.full_name ?? '—'}</div>
+                    <div className="text-xs text-gray-500">{s.profiles?.email ?? ''}</div>
                   </td>
                   <td className="px-5 py-3">
                     <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        e.action === 'INSERT'
-                          ? 'bg-green-50 text-success'
-                          : e.action === 'DELETE'
-                          ? 'bg-red-50 text-danger'
-                          : 'bg-yellow-50 text-amber-600'
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        s.status === 'complete'
+                          ? 'bg-green-50 text-green-700'
+                          : 'bg-amber-50 text-amber-700'
                       }`}
                     >
-                      {e.action}
+                      {s.status === 'complete' ? 'Complete' : 'Draft'}
                     </span>
                   </td>
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500">
-                    {e.table_name ?? '—'}
-                  </td>
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500 max-w-[160px] truncate">
-                    {e.record_id ?? '—'}
+                  <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    {new Date(s.created_at).toLocaleDateString()}
                   </td>
                 </tr>
               ))}
@@ -1469,12 +1478,12 @@ function AuditLogPanel() {
 
 export default function Reports() {
   const [tab, setTab] = useState<ReportTab>('annual')
-  const { isAdmin }   = useRole()
+  const { isAdmin, canWrite } = useRole()
 
   usePageTitle('Reports')
   useFirstVisitTour('reports')
 
-  const visibleTabCards = REPORT_TAB_CARDS.filter(c => c.id !== 'audit' || isAdmin())
+  const visibleTabCards = REPORT_TAB_CARDS.filter(c => c.id !== 'audit' || canWrite())
 
   return (
     <div className="space-y-5">
@@ -1600,7 +1609,7 @@ export default function Reports() {
           {tab === 'outflow_types' && <OutflowTypeBreakdownPanel />}
           {tab === 'departments'   && <DepartmentBreakdownPanel />}
           {tab === 'fx'            && <FXHoldingsPanel />}
-          {tab === 'audit'         && isAdmin() && <AuditLogPanel />}
+          {tab === 'audit'         && canWrite() && <AuditSessionsPanel />}
         </div>
       </div>
     </div>

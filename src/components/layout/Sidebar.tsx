@@ -6,7 +6,7 @@ import {
   Hourglass, RotateCcw, Undo2,
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
-  SlidersHorizontal, Settings, Users, ClipboardList,
+  SlidersHorizontal, Settings, Users, ClipboardList, ClipboardCheck,
   ChevronDown, X, HelpCircle,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
@@ -65,6 +65,7 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Refunds',             path: '/refunds',            icon: RotateCcw },
       { label: 'Reversals',           path: '/reversals',          icon: Undo2     },
       { label: 'Reconciliation',      path: '/reconciliation',     icon: ShieldCheck },
+      { label: 'Internal Audit',      path: '/audit',              icon: ClipboardCheck, canWriteOnly: true },
     ],
   },
   {
