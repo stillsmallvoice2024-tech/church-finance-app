@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { ClipboardList, AlertCircle, RefreshCw, Plus, Trash2 } from 'lucide-react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
+import { ClipboardList, AlertCircle, RefreshCw, Plus, Trash2, FileStack, ChevronRight, ChevronDown } from 'lucide-react'
 import { Card }               from '../components/ui/Card'
 import { PaginationBar }      from '../components/ui/PaginationBar'
 import { DataControlsBar }    from '../components/ui/DataControlsBar'
@@ -77,6 +77,15 @@ function EventBadge({ type }: { type: ActivityEventType }) {
   return null
 }
 
+// Badge for a collapsed import batch (N records created in one import)
+function BatchBadge({ count }: { count: number }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+      <FileStack className="w-2.5 h-2.5" />Import ×{count}
+    </span>
+  )
+}
+
 export default function ChangeLog() {
   usePageTitle('Activity History')
   const { formatLocale } = useOrgCurrency()
@@ -106,7 +115,7 @@ export default function ChangeLog() {
     ? [eventTypeFilter as ActivityEventType]
     : undefined
 
-  const { entries, count, loading, error, refetch } = useActivityLog({
+  const { entries, count, loading, error, refetch, fetchBatchDetails } = useActivityLog({
     tableName:    tableFilter || undefined,
     dateFrom:     dateFrom    || undefined,
     dateTo:       dateTo      || undefined,
@@ -117,6 +126,24 @@ export default function ChangeLog() {
     searchCol:    clState.searchCol,
     sortAscending: clState.sortDir === 'asc',
   })
+
+  // Expanded import batches: id → loaded detail rows (or 'loading')
+  const [expanded, setExpanded] = useState<Record<string, ActivityLogEntry[] | 'loading'>>({})
+
+  const toggleBatch = useCallback(async (e: ActivityLogEntry) => {
+    if (!e.import_batch_id) return
+    const isOpen = e.id in expanded
+    if (isOpen) {
+      setExpanded(prev => { const next = { ...prev }; delete next[e.id]; return next })
+      return
+    }
+    setExpanded(prev => ({ ...prev, [e.id]: 'loading' }))
+    const rows = await fetchBatchDetails(e.import_batch_id, e.table_name)
+    setExpanded(prev => ({ ...prev, [e.id]: rows }))
+  }, [expanded, fetchBatchDetails])
+
+  // Collapse all expansions whenever the underlying page/filters change
+  useEffect(() => { setExpanded({}) }, [clState.page, tableFilter, eventTypeFilter, dateFrom, dateTo, debouncedSearch, clState.sortDir])
 
   const isMigrationError = !!error && /activity_log_view|does not exist/i.test(error)
 
@@ -272,6 +299,49 @@ export default function ChangeLog() {
                 const isEdit    = e.event_type === 'field_change'
                 const isCreated = e.event_type === 'record_created'
                 const isDeleted = e.event_type === 'record_deleted'
+                const isGroup   = e.group_count > 1 && !!e.import_batch_id
+
+                if (isGroup) {
+                  const detail = expanded[e.id]
+                  const isOpen = e.id in expanded
+                  return (
+                    <div key={e.id} className="rounded-xl border bg-emerald-50/40 border-emerald-100">
+                      <button
+                        type="button"
+                        onClick={() => toggleBatch(e)}
+                        className="w-full flex items-start justify-between gap-2 px-3 py-3 text-left"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+                            <BatchBadge count={e.group_count} />
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {e.group_count} records imported · {TABLE_LABELS[e.table_name ?? ''] ?? e.table_name}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">{e.user_full_name ?? e.user_email ?? 'Unknown user'}</p>
+                        </div>
+                        <p className="text-xs text-gray-500 whitespace-nowrap shrink-0">{fmtTs(e.event_at, formatLocale)}</p>
+                      </button>
+                      {isOpen && (
+                        <div className="px-3 pb-3 space-y-1">
+                          {detail === 'loading' && <p className="text-xs text-gray-400 pl-5">Loading records…</p>}
+                          {Array.isArray(detail) && detail.length === 0 && <p className="text-xs text-gray-400 pl-5">No records found for this batch.</p>}
+                          {Array.isArray(detail) && detail.map(d => (
+                            <div key={d.id} className="rounded-lg bg-white/70 border border-emerald-100 px-2.5 py-1.5 ml-5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-green-800">{snapshotSummary(d.snapshot_data)}</span>
+                                <span className="text-[10px] text-gray-400 whitespace-nowrap shrink-0">{fmtTs(d.event_at, formatLocale)}</span>
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-mono break-all">{d.record_id ?? '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
                 return (
                   <div
                     key={e.id}
@@ -371,11 +441,56 @@ export default function ChangeLog() {
                   entries.map(e => {
                     const isEdit    = e.event_type === 'field_change'
                     const isCreated = e.event_type === 'record_created'
+                    const isGroup   = e.group_count > 1 && !!e.import_batch_id
                     const rowCls    = isCreated
                       ? 'bg-green-50/30 hover:bg-green-50/60'
                       : e.event_type === 'record_deleted'
                       ? 'bg-red-50/30 hover:bg-red-50/60'
                       : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.03]'
+
+                    if (isGroup) {
+                      const detail = expanded[e.id]
+                      const isOpen = e.id in expanded
+                      return (
+                        <Fragment key={e.id}>
+                          <tr className={`${rowCls} transition-colors cursor-pointer`} onClick={() => toggleBatch(e)}>
+                            <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.event_at, formatLocale)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                              {e.user_full_name ?? e.user_email ?? <span className="text-gray-400">—</span>}
+                            </td>
+                            <td className="px-4 py-3"><BatchBadge count={e.group_count} /></td>
+                            <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                              {TABLE_LABELS[e.table_name ?? ''] ?? e.table_name}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-400">—</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-700" colSpan={3}>
+                              <span className="inline-flex items-center gap-1.5">
+                                {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-400" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400" />}
+                                {e.group_count} records imported in one batch
+                                <span className="text-gray-400 font-normal">· {isOpen ? 'hide' : 'click to expand'}</span>
+                              </span>
+                            </td>
+                          </tr>
+                          {isOpen && detail === 'loading' && (
+                            <tr><td colSpan={8} className="px-8 py-3 text-xs text-gray-400">Loading records…</td></tr>
+                          )}
+                          {isOpen && Array.isArray(detail) && detail.length === 0 && (
+                            <tr><td colSpan={8} className="px-8 py-3 text-xs text-gray-400">No records found for this batch.</td></tr>
+                          )}
+                          {isOpen && Array.isArray(detail) && detail.map(d => (
+                            <tr key={d.id} className="bg-green-50/10">
+                              <td className="px-4 py-2 pl-8 text-xs text-gray-400 whitespace-nowrap">{fmtTs(d.event_at, formatLocale)}</td>
+                              <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{d.user_full_name ?? d.user_email ?? '—'}</td>
+                              <td className="px-4 py-2"><EventBadge type="record_created" /></td>
+                              <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{TABLE_LABELS[d.table_name ?? ''] ?? d.table_name}</td>
+                              <td className="px-4 py-2 text-xs text-gray-400 font-mono max-w-[160px] break-all">{d.record_id ?? '—'}</td>
+                              <td className="px-4 py-2 text-xs text-gray-500 italic" colSpan={3}>{snapshotSummary(d.snapshot_data)}</td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      )
+                    }
+
                     return (
                       <tr key={e.id} className={`${rowCls} transition-colors`}>
                         <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtTs(e.event_at, formatLocale)}</td>

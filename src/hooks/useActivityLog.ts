@@ -5,20 +5,23 @@ import { useOrgStore } from '../store/orgStore'
 export type ActivityEventType = 'field_change' | 'record_created' | 'record_deleted'
 
 export interface ActivityLogEntry {
-  id:             string
-  event_type:     ActivityEventType
-  user_id:        string | null
-  org_id:         string
-  table_name:     string | null
-  record_id:      string | null
-  event_at:       string
-  field_name:     string | null
-  old_value:      string | null
-  new_value:      string | null
-  action:         string | null
-  snapshot_data:  Record<string, unknown> | null
-  user_full_name: string | null
-  user_email:     string | null
+  id:              string
+  event_type:      ActivityEventType
+  user_id:         string | null
+  org_id:          string
+  table_name:      string | null
+  record_id:       string | null
+  event_at:        string
+  field_name:      string | null
+  old_value:       string | null
+  new_value:       string | null
+  action:          string | null
+  snapshot_data:   Record<string, unknown> | null
+  user_full_name:  string | null
+  user_email:      string | null
+  import_batch_id: string | null
+  // > 1 marks a collapsed import batch (one row standing in for N created rows)
+  group_count:     number
 }
 
 export interface UseActivityLogOptions {
@@ -53,7 +56,7 @@ export function useActivityLog(opts: UseActivityLogOptions = {}) {
     setError(null)
 
     let query = supabase
-      .from('activity_log_view')
+      .from('activity_log_view_grouped')
       .select('*', { count: 'exact' })
       .eq('org_id', orgId)
       .order('event_at', { ascending: sortAscending })
@@ -88,5 +91,24 @@ export function useActivityLog(opts: UseActivityLogOptions = {}) {
 
   useEffect(() => { fetch() }, [fetch])
 
-  return { entries, count, loading, error, refetch: fetch }
+  // Expand a collapsed import batch into its individual record_created rows.
+  // Reads the raw (ungrouped) view filtered to the batch + table.
+  const fetchBatchDetails = useCallback(
+    async (importBatchId: string, tableName: string | null): Promise<ActivityLogEntry[]> => {
+      if (!orgId) return []
+      let q = supabase
+        .from('activity_log_view')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('import_batch_id', importBatchId)
+        .eq('event_type', 'record_created')
+        .order('event_at', { ascending: true })
+      if (tableName) q = q.eq('table_name', tableName)
+      const { data } = await q
+      return (data ?? []) as unknown as ActivityLogEntry[]
+    },
+    [orgId],
+  )
+
+  return { entries, count, loading, error, refetch: fetch, fetchBatchDetails }
 }
