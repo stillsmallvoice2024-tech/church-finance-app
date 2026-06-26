@@ -35,6 +35,6 @@ export function useRole() {
     canManageConfigs:      (): boolean => resolved && isOwnerOrAdmin,
     canManageMembers:      (): boolean => resolved && isOwnerOrAdmin,
     canTransferOwnership:  (): boolean => resolved && role === 'owner',
-    canAudit:              (): boolean => resolved && (isFinanceUser || isAuditorRole),
+    canAudit:              (): boolean => resolved && (isOwnerOrAdmin || isAuditorRole),
   }
 }
