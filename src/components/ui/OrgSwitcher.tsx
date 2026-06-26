@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { Building2, ChevronDown, Check, Loader2, Plus } from 'lucide-react'
+import { Building2, ChevronDown, Check, Loader2, Plus, LogIn } from 'lucide-react'
 import { useOrgStore, type OrgMembership } from '../../store/orgStore'
 import { useOrgSwitch } from '../../hooks/useAuth'
 import { CreateOrgModal } from './CreateOrgModal'
+import { JoinOrgModal } from './JoinOrgModal'
 import { ROLE_LABELS } from '../../utils/constants'
 
 export function OrgSwitcher() {
@@ -14,6 +15,7 @@ export function OrgSwitcher() {
 
   const [open,           setOpen]           = useState(false)
   const [createOrgOpen,  setCreateOrgOpen]  = useState(false)
+  const [joinOrgOpen,    setJoinOrgOpen]    = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -47,10 +49,18 @@ export function OrgSwitcher() {
                 <Plus className="w-3.5 h-3.5" />
                 New Organisation
               </button>
+              <button
+                onClick={() => { setOpen(false); setJoinOrgOpen(true) }}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                Join an Organisation
+              </button>
             </div>
           )}
         </div>
         <CreateOrgModal open={createOrgOpen} onClose={() => setCreateOrgOpen(false)} />
+        <JoinOrgModal   open={joinOrgOpen}   onClose={() => setJoinOrgOpen(false)} />
       </>
     )
   }
@@ -114,11 +124,19 @@ export function OrgSwitcher() {
               <Plus className="w-3.5 h-3.5" />
               New Organisation
             </button>
+            <button
+              onClick={() => { setOpen(false); setJoinOrgOpen(true) }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Join an Organisation
+            </button>
           </div>
         </div>
       )}
       </div>
       <CreateOrgModal open={createOrgOpen} onClose={() => setCreateOrgOpen(false)} />
+      <JoinOrgModal   open={joinOrgOpen}   onClose={() => setJoinOrgOpen(false)} />
     </>
   )
 }

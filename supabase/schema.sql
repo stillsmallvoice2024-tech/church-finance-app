@@ -649,6 +649,21 @@ create table public.invitations (
   created_at  timestamptz default now()
 );
 
+create table public.join_codes (
+  id         uuid        primary key default gen_random_uuid(),
+  org_id     uuid        not null references public.organizations(id) on delete cascade,
+  code       text        not null,
+  role       text        not null default 'viewer'
+             check (role in ('admin', 'accountant', 'viewer')),
+  created_by uuid        references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  used_by    uuid        references public.profiles(id) on delete set null,
+  used_at    timestamptz,
+  status     text        not null default 'active'
+             check (status in ('active', 'used', 'revoked')),
+  constraint join_codes_code_unique unique (code)
+);
+
 create table public.invitation_emails (
   id            uuid        primary key default gen_random_uuid(),
   invitation_id uuid        not null references public.invitations(id) on delete cascade,
@@ -877,6 +892,7 @@ alter table public.bank_deposits                  enable row level security;
 alter table public.intrabank_transfers            enable row level security;
 alter table public.receipts                       enable row level security;
 alter table public.invitations                    enable row level security;
+alter table public.join_codes                     enable row level security;
 alter table public.invitation_emails              enable row level security;
 alter table public.audit_log                      enable row level security;
 alter table public.field_changes                  enable row level security;
@@ -1234,6 +1250,11 @@ create policy "invitations_update" on public.invitations
 create policy "invitations_delete" on public.invitations
   for delete using (public.is_org_admin(org_id));
 
+-- ── join_codes ─────────────────────────────────────────────────────────────────
+create policy "join_codes_admin_all" on public.join_codes
+  using (public.is_org_admin(org_id))
+  with check (public.is_org_admin(org_id));
+
 -- ── invitation_emails ──────────────────────────────────────────────────────────
 -- Service role (edge function) bypasses RLS for INSERT.
 
@@ -1537,6 +1558,9 @@ create index if not exists idx_special_projects_org    on public.special_project
 create index if not exists idx_project_entries_org     on public.project_entries(org_id);
 create index if not exists idx_receipts_org            on public.receipts(org_id);
 create index if not exists idx_invitations_org         on public.invitations(org_id);
+create index if not exists idx_join_codes_org          on public.join_codes(org_id);
+create index if not exists idx_join_codes_code         on public.join_codes(code);
+create index if not exists idx_join_codes_status       on public.join_codes(org_id, status);
 create index if not exists idx_report_templates_org    on public.report_templates(org_id);
 create index if not exists idx_special_config_groups_org on public.special_config_groups(org_id);
 create index if not exists idx_tas_org                 on public.transaction_allocation_snapshots(org_id);
@@ -1962,6 +1986,107 @@ end;
 $$;
 
 grant execute on function public.create_organization(text) to authenticated;
+
+-- ── create_join_code ──────────────────────────────────────────────────────────
+create or replace function public.create_join_code(
+  p_org_id uuid,
+  p_role   text
+)
+returns text
+language plpgsql security definer
+as $$
+declare
+  v_code     text;
+  v_attempts int := 0;
+begin
+  if not public.is_org_admin(p_org_id) then
+    raise exception 'Unauthorized';
+  end if;
+  if p_role not in ('admin', 'accountant', 'viewer') then
+    raise exception 'Invalid role';
+  end if;
+  loop
+    v_code := upper(substring(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+    begin
+      insert into public.join_codes (org_id, code, role, created_by)
+      values (p_org_id, v_code, p_role, auth.uid());
+      exit;
+    exception when unique_violation then
+      v_attempts := v_attempts + 1;
+      if v_attempts >= 5 then
+        raise exception 'Failed to generate unique join code — please try again';
+      end if;
+    end;
+  end loop;
+  return v_code;
+end;
+$$;
+
+grant execute on function public.create_join_code(uuid, text) to authenticated;
+
+-- ── use_join_code ─────────────────────────────────────────────────────────────
+create or replace function public.use_join_code(p_code text)
+returns jsonb
+language plpgsql security definer
+as $$
+declare
+  v_jc  public.join_codes;
+  v_org record;
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then raise exception 'Unauthorized'; end if;
+
+  select * into v_jc
+  from   public.join_codes
+  where  code   = upper(trim(p_code))
+    and  status = 'active'
+  for update;
+
+  if not found then raise exception 'Invalid or expired join code'; end if;
+
+  select id, name into v_org
+  from   public.organizations
+  where  id = v_jc.org_id and status = 'active';
+
+  if not found then raise exception 'The organisation for this code is no longer active'; end if;
+
+  if exists (
+    select 1 from public.org_members
+    where org_id = v_jc.org_id and user_id = v_uid and status = 'active'
+  ) then
+    raise exception 'You are already a member of this organisation';
+  end if;
+
+  begin
+    insert into public.profiles (id, email)
+    select v_uid, email from auth.users where id = v_uid
+    on conflict (id) do nothing;
+  exception when others then
+    raise warning '[use_join_code] profile ensure failed user=% err=%', v_uid, sqlerrm;
+  end;
+
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_jc.org_id, v_uid, v_jc.role, 'active')
+  on conflict (org_id, user_id) do update
+    set role = excluded.role, status = 'active';
+
+  begin
+    update public.profiles set role = v_jc.role, updated_at = now() where id = v_uid;
+  exception when others then
+    raise warning '[use_join_code] profiles.role sync failed user=% err=%', v_uid, sqlerrm;
+  end;
+
+  update public.join_codes
+    set status  = 'used',
+        used_by = v_uid,
+        used_at = now()
+  where id = v_jc.id;
+
+  return jsonb_build_object('org_id', v_org.id, 'org_name', v_org.name, 'role', v_jc.role);
+end;
+$$;
+
+grant execute on function public.use_join_code(text) to authenticated;
 
 create or replace function public.complete_org_onboarding(
   p_org_id            uuid,
@@ -2427,6 +2552,7 @@ begin
   delete from public.ledger_entries                    where org_id = p_org_id;
   delete from public.accounts                          where org_id = p_org_id;
   delete from public.invitations                       where org_id = p_org_id;
+  delete from public.join_codes                        where org_id = p_org_id;
   delete from public.org_deletion_backups              where org_id = p_org_id;
 
   -- audit_log.org_id has ON DELETE SET NULL — FK cascade nullifies org_id

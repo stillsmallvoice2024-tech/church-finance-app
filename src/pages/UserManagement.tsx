@@ -5,6 +5,7 @@ import { z } from 'zod'
 import {
   UserPlus, Shield, Users, User,
   ChevronDown, Pencil, XCircle, MailOpen, Eye, EyeOff, KeyRound, Trash2,
+  Clock, Copy, Hash,
 } from 'lucide-react'
 import { Modal }           from '../components/ui/Modal'
 import { focusFirstInvalid } from '../components/ui/FormField'
@@ -40,6 +41,23 @@ interface OrgMember {
   username:   string | null
   created_at: string   // profiles.created_at (registration date)
   updated_at: string
+}
+
+interface PendingInvitation {
+  id:         string
+  email:      string
+  role:       string
+  token:      string
+  created_at: string
+  expires_at: string
+}
+
+interface JoinCode {
+  id:         string
+  code:       string
+  role:       string
+  created_at: string
+  status:     string
 }
 
 // ── Role display config ────────────────────────────────────────────────────────
@@ -559,6 +577,21 @@ export default function UserManagement() {
   const [removing,         setRemoving]         = useState(false)
   const [transferring,     setTransferring]     = useState(false)
   const [deleteOrgOpen,    setDeleteOrgOpen]    = useState(false)
+
+  // Pending invitations
+  const [invitations,    setInvitations]    = useState<PendingInvitation[]>([])
+  const [loadingInvites, setLoadingInvites] = useState(false)
+  const [revokingInvId,  setRevokingInvId]  = useState<string | null>(null)
+  const [copiedInvId,    setCopiedInvId]    = useState<string | null>(null)
+
+  // Join codes
+  const [joinCodes,      setJoinCodes]      = useState<JoinCode[]>([])
+  const [loadingCodes,   setLoadingCodes]   = useState(false)
+  const [generatingCode, setGeneratingCode] = useState(false)
+  const [newCodeRole,    setNewCodeRole]    = useState<'admin' | 'accountant' | 'viewer'>('viewer')
+  const [revokingCodeId, setRevokingCodeId] = useState<string | null>(null)
+  const [copiedCodeId,   setCopiedCodeId]   = useState<string | null>(null)
+
   const [currentProfile,   setCurrentProfile]   = useState({
     full_name: profile?.full_name ?? '',
     username:  profile?.username  ?? null as string | null,
@@ -614,6 +647,37 @@ export default function UserManagement() {
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
+  const fetchInvitations = useCallback(async () => {
+    if (!orgId) return
+    setLoadingInvites(true)
+    const { data } = await supabase
+      .from('invitations')
+      .select('id, email, role, token, created_at, expires_at')
+      .eq('org_id', orgId)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+    setInvitations((data ?? []) as PendingInvitation[])
+    setLoadingInvites(false)
+  }, [orgId])
+
+  useEffect(() => { fetchInvitations() }, [fetchInvitations])
+
+  const fetchJoinCodes = useCallback(async () => {
+    if (!orgId) return
+    setLoadingCodes(true)
+    const { data } = await supabase
+      .from('join_codes')
+      .select('id, code, role, created_at, status')
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+    setJoinCodes((data ?? []) as JoinCode[])
+    setLoadingCodes(false)
+  }, [orgId])
+
+  useEffect(() => { fetchJoinCodes() }, [fetchJoinCodes])
+
   // Uses update_org_member_role RPC — enforces min-owner constraint and caller permissions.
   const handleRoleChange = async (memberId: string, newRole: UserRole) => {
     setSavingId(memberId)
@@ -659,6 +723,68 @@ export default function UserManagement() {
       setTransferTarget(null)
       fetchUsers()
     }
+  }
+
+  const handleRevokeInvite = async (id: string) => {
+    setRevokingInvId(id)
+    const { error } = await supabase
+      .from('invitations')
+      .update({ status: 'expired' })
+      .eq('id', id)
+      .eq('status', 'pending')
+    setRevokingInvId(null)
+    if (error) {
+      toast(friendlyError(error), 'error')
+    } else {
+      toast('Invitation revoked.', 'success')
+      setInvitations(prev => prev.filter(i => i.id !== id))
+    }
+  }
+
+  const handleCopyInviteLink = (inv: PendingInvitation) => {
+    const url = `${window.location.origin}/invite/${inv.token}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedInvId(inv.id)
+      setTimeout(() => setCopiedInvId(null), 2000)
+    })
+  }
+
+  const handleGenerateCode = async () => {
+    if (!orgId) return
+    setGeneratingCode(true)
+    const { error } = await supabase.rpc('create_join_code', {
+      p_org_id: orgId,
+      p_role:   newCodeRole,
+    })
+    setGeneratingCode(false)
+    if (error) {
+      toast(friendlyError(error), 'error')
+    } else {
+      toast('Join code generated.', 'success')
+      fetchJoinCodes()
+    }
+  }
+
+  const handleRevokeCode = async (id: string) => {
+    setRevokingCodeId(id)
+    const { error } = await supabase
+      .from('join_codes')
+      .update({ status: 'revoked' })
+      .eq('id', id)
+    setRevokingCodeId(null)
+    if (error) {
+      toast(friendlyError(error), 'error')
+    } else {
+      toast('Join code revoked.', 'success')
+      setJoinCodes(prev => prev.filter(c => c.id !== id))
+    }
+  }
+
+  const handleCopyCode = (jc: JoinCode) => {
+    navigator.clipboard.writeText(jc.code).then(() => {
+      setCopiedCodeId(jc.id)
+      setTimeout(() => setCopiedCodeId(null), 2000)
+    })
   }
 
   const removeTarget   = members.find(m => m.id === removeId)
@@ -952,6 +1078,147 @@ export default function UserManagement() {
             </table>
           </div>
           </>
+        )}
+      </div>
+
+      {/* ── Pending Invitations ───────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MailOpen className="w-4 h-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-700">Pending Invitations</h2>
+            {invitations.length > 0 && (
+              <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full">
+                {invitations.length}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {loadingInvites ? (
+          <div className="space-y-2 p-4">
+            {[1, 2].map(i => <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />)}
+          </div>
+        ) : invitations.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-gray-400 text-center">No pending invitations.</p>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {invitations.map(inv => (
+              <div key={inv.id} className="px-5 py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{inv.email}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_CONFIG[inv.role as keyof typeof ROLE_CONFIG]?.pill ?? 'bg-gray-100 text-gray-500'}`}>
+                      {inv.role}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                      <Clock className="w-3 h-3" />
+                      Expires {new Date(inv.expires_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleCopyInviteLink(inv)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    {copiedInvId === inv.id ? 'Copied!' : 'Copy Link'}
+                  </button>
+                  <button
+                    onClick={() => handleRevokeInvite(inv.id)}
+                    disabled={revokingInvId === inv.id}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-500 border border-red-100 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    {revokingInvId === inv.id
+                      ? <span className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                      : <XCircle className="w-3.5 h-3.5" />
+                    }
+                    Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Join Codes ────────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Hash className="w-4 h-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-700">Join Codes</h2>
+            <HelpTooltip content="One-time-use codes any user can enter from their account to join this organisation." placement="top" />
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={newCodeRole}
+              onChange={e => setNewCodeRole(e.target.value as typeof newCodeRole)}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+            >
+              <option value="admin">Admin</option>
+              <option value="accountant">Accountant</option>
+              <option value="viewer">Viewer</option>
+            </select>
+            <button
+              onClick={handleGenerateCode}
+              disabled={generatingCode}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-white rounded-lg hover:bg-primary-light disabled:opacity-60 transition-colors"
+            >
+              {generatingCode
+                ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <KeyRound className="w-3.5 h-3.5" />
+              }
+              Generate Code
+            </button>
+          </div>
+        </div>
+
+        {loadingCodes ? (
+          <div className="space-y-2 p-4">
+            {[1, 2].map(i => <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />)}
+          </div>
+        ) : joinCodes.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-gray-400 text-center">No active join codes. Generate one above to share with users.</p>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {joinCodes.map(jc => (
+              <div key={jc.id} className="px-5 py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                <div className="flex-1 min-w-0 flex items-center gap-3">
+                  <span className="font-mono text-lg font-bold tracking-widest text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 select-all">
+                    {jc.code}
+                  </span>
+                  <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_CONFIG[jc.role as keyof typeof ROLE_CONFIG]?.pill ?? 'bg-gray-100 text-gray-500'}`}>
+                    {jc.role}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-gray-400 hidden sm:inline">
+                    Created {new Date(jc.created_at).toLocaleDateString()}
+                  </span>
+                  <button
+                    onClick={() => handleCopyCode(jc)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    {copiedCodeId === jc.id ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    onClick={() => handleRevokeCode(jc.id)}
+                    disabled={revokingCodeId === jc.id}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-500 border border-red-100 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    {revokingCodeId === jc.id
+                      ? <span className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                      : <XCircle className="w-3.5 h-3.5" />
+                    }
+                    Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
