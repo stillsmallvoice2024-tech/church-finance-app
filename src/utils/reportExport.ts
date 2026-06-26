@@ -226,7 +226,7 @@ export function exportReportPDF(
       headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold', textColor: [255, 255, 255] },
       columnStyles: {
         0: { cellWidth: 110, halign: 'left', textColor: [0, 0, 0], overflow: 'linebreak' },
-        1: { cellWidth: 45, halign: 'right', textColor: [0, 0, 0], overflow: 'linebreak' },
+        1: { cellWidth: 45, halign: 'right', textColor: [0, 0, 0] },
       },
       styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak', valign: 'middle' },
       margin: { left: 14, right: 14 },
