@@ -252,24 +252,18 @@ export function exportReportPDF(
       startY,
       head: [['Account / Description', `Amount (${headerToken})`]],
       body: tableBody,
+      // headStyles keeps the header white on blue. Body text is dark via
+      // bodyStyles; the coloured total rows set white at the cell level (which
+      // outranks bodyStyles). textColor is deliberately NOT set in columnStyles
+      // because columnStyles would override both head and cell styles.
       headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold', textColor: [255, 255, 255] },
+      bodyStyles: { textColor: [0, 0, 0] },
       columnStyles: {
-        0: { cellWidth: 110, halign: 'left', textColor: [0, 0, 0], overflow: 'linebreak' },
-        1: { cellWidth: 45, halign: 'right', textColor: [0, 0, 0] },
+        0: { cellWidth: 110, halign: 'left', overflow: 'linebreak' },
+        1: { cellWidth: 45, halign: 'right' },
       },
       styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak', valign: 'middle' },
       margin: { left: 14, right: 14 },
-      didDrawCell: (data) => {
-        // Ensure dark text on light backgrounds for readability
-        const cell = data.cell
-        const { textColor } = cell.styles as unknown as { textColor?: number[] }
-        if (!textColor || (textColor[0] === 255 && textColor[1] === 255 && textColor[2] === 255)) {
-          const fillColor = cell.styles.fillColor as unknown as number[] | undefined
-          if (fillColor && (fillColor[0] > 100 || fillColor[1] > 100 || fillColor[2] > 100)) {
-            cell.styles.textColor = [0, 0, 0]
-          }
-        }
-      },
     })
 
     startY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
