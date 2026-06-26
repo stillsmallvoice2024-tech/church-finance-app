@@ -395,8 +395,8 @@ export default function ChangeLog() {
                         <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                           {TABLE_LABELS[e.table_name ?? ''] ?? e.table_name}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-500 font-mono max-w-[120px] truncate" title={e.record_id ?? ''}>
-                          {(e.record_id ?? '').slice(0, 8)}…
+                        <td className="px-4 py-3 text-xs text-gray-500 font-mono max-w-[160px] break-all">
+                          {e.record_id ?? '—'}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800 max-w-[160px]">
                           {isEdit
