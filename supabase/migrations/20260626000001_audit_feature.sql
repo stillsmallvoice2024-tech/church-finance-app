@@ -95,7 +95,7 @@ WITH (security_invoker = true) AS
     al.user_id,
     al.org_id,
     al.table_name,
-    al.record_id,
+    al.record_id::text       AS record_id,
     al.created_at            AS event_at,
     NULL::text               AS field_name,
     NULL::text               AS old_value,

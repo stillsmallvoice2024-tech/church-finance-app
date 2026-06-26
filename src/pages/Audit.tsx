@@ -79,7 +79,7 @@ CREATE OR REPLACE VIEW public.activity_log_view WITH (security_invoker = true) A
   UNION ALL
   SELECT al.id,
     CASE al.action WHEN 'INSERT' THEN 'record_created' ELSE 'record_deleted' END,
-    al.user_id, al.org_id, al.table_name, al.record_id, al.created_at,
+    al.user_id, al.org_id, al.table_name, al.record_id::text, al.created_at,
     NULL::text, NULL::text, NULL::text, al.action,
     COALESCE(al.new_data, al.old_data)::jsonb,
     p.full_name, p.email
