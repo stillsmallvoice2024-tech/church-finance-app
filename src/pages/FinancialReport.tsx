@@ -1045,7 +1045,7 @@ function CategoryPicker({
 
 export default function FinancialReport() {
   usePageTitle('Financial Report')
-  const { baseCurrencySymbol, formatLocale } = useOrgCurrency()
+  const { baseCurrencySymbol, baseCurrencyCode, formatLocale } = useOrgCurrency()
 
   const { push } = useToastStore()
   const { categories } = useCategories()
@@ -2142,7 +2142,7 @@ export default function FinancialReport() {
           {!editMode && tables.length > 0 && (
             <button
               type="button"
-              onClick={() => exportReportPDF(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale, hideZeroRows)}
+              onClick={() => exportReportPDF(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale, hideZeroRows, baseCurrencyCode)}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <Download className="w-3.5 h-3.5" />
@@ -2154,7 +2154,7 @@ export default function FinancialReport() {
           {!editMode && tables.length > 0 && (
             <button
               type="button"
-              onClick={() => exportReportExcel(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale, hideZeroRows)}
+              onClick={() => exportReportExcel(currentLayout, balances, reportDate, undefined, operationalBalances, baseCurrencySymbol, formatLocale, hideZeroRows, baseCurrencyCode)}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-white/[0.10] px-3 py-1.5 bg-white dark:bg-[#141416] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />

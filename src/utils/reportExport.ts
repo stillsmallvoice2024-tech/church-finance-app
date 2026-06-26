@@ -20,6 +20,32 @@ function makeFmt(locale: string) {
   return (n: number) => nf.format(n)
 }
 
+// jsPDF's standard fonts render the Latin-1 range (U+0020-U+00FF) plus a few
+// cp1252 glyphs - notably the euro sign. Currency symbols outside that set
+// (naira, rupee, won, baht, ...) corrupt the ENTIRE PDF string, so for those we
+// print the ISO currency code instead. Excel uses the same token so both
+// exports stay consistent.
+const PDF_SAFE_EXTRA = new Set(['\u20AC'])
+
+function isRenderableSymbol(sym: string): boolean {
+  for (const ch of sym) {
+    if (ch.charCodeAt(0) <= 0xff) continue
+    if (PDF_SAFE_EXTRA.has(ch)) continue
+    return false
+  }
+  return true
+}
+
+/** Token shown inside "Amount (...)" headers: symbol when renderable, else ISO code. */
+function currencyToken(symbol: string, code: string): string {
+  return isRenderableSymbol(symbol) ? symbol : code
+}
+
+/** Prefix printed before an amount: symbol when renderable, else "CODE ". */
+function moneyPrefix(symbol: string, code: string): string {
+  return isRenderableSymbol(symbol) ? symbol : `${code} `
+}
+
 function getCategoryBalance(
   bal: ReportCategoryBalance | undefined,
   portion: ReportPortion,
@@ -128,8 +154,11 @@ export function exportReportPDF(
   currencySymbol = '₦',
   numberLocale = 'en-NG',
   hideZeroRows = false,
+  currencyCode = 'NGN',
 ): void {
   const fmt = makeFmt(numberLocale)
+  const pdfSym = moneyPrefix(currencySymbol, currencyCode)
+  const headerToken = currencyToken(currencySymbol, currencyCode)
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
@@ -181,7 +210,7 @@ export function exportReportPDF(
           if (!child.data.visible) continue
           const val = getItemBalance(child.data, balances, opBalances)
           if (hideZeroRows && val === 0) continue
-          tableBody.push([child.data.displayLabel, `${currencySymbol}${fmt(val)}`])
+          tableBody.push([child.data.displayLabel, `${pdfSym}${fmt(val)}`])
         } else {
           const sg = child.data
           if (!sg.visible) continue
@@ -193,12 +222,12 @@ export function exportReportPDF(
           ])
           for (const item of visibleItems) {
             const val = getItemBalance(item, balances, opBalances)
-            tableBody.push([`    ${item.displayLabel}`, `${currencySymbol}${fmt(val)}`])
+            tableBody.push([`    ${item.displayLabel}`, `${pdfSym}${fmt(val)}`])
           }
           const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
           tableBody.push([
             { content: `  ${sg.label} Sub-Total`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
-            { content: `${currencySymbol}${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
+            { content: `${pdfSym}${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
           ])
         }
       }
@@ -206,7 +235,7 @@ export function exportReportPDF(
       const groupTotal = computeGroupTotal(group, balances, opBalances)
       tableBody.push([
         { content: `${group.label} Sub-Total`, styles: { fontStyle: 'bold' } },
-        { content: `${currencySymbol}${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
+        { content: `${pdfSym}${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
       ])
       tableBody.push([{ content: '', styles: { cellPadding: 1 } }, ''])
     }
@@ -216,12 +245,12 @@ export function exportReportPDF(
     const totalLabel = tables.length > 1 ? `${table.title} TOTAL` : 'GRAND TOTAL'
     tableBody.push([
       { content: totalLabel, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
-      { content: `${currencySymbol}${fmt(tableTotal)}`, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
+      { content: `${pdfSym}${fmt(tableTotal)}`, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
     ])
 
     autoTable(doc, {
       startY,
-      head: [['Account / Description', 'Amount']],
+      head: [['Account / Description', `Amount (${headerToken})`]],
       body: tableBody,
       headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold', textColor: [255, 255, 255] },
       columnStyles: {
@@ -260,7 +289,7 @@ export function exportReportPDF(
       startY,
       body: [[
         { content: 'COMBINED GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10 } },
-        { content: `${currencySymbol}${fmt(combinedTotal)}`, styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10, halign: 'right' } },
+        { content: `${pdfSym}${fmt(combinedTotal)}`, styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10, halign: 'right' } },
       ]],
       columnStyles: { 0: { cellWidth: 130 }, 1: { cellWidth: 50, halign: 'right' } },
       styles: { fontSize: 9, cellPadding: 2.5 },
@@ -292,25 +321,32 @@ export function exportReportExcel(
   currencySymbol = '₦',
   _numberLocale = 'en-NG',
   hideZeroRows = false,
+  currencyCode = 'NGN',
 ): void {
   const wb = XLSX.utils.book_new()
+  // Use the same symbol-or-ISO-code token as the PDF export for consistency.
+  const headerToken = currencyToken(currencySymbol, currencyCode)
 
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
     day: '2-digit', month: 'long', year: 'numeric',
   })
 
   const tables = normaliseTables(layout)
+  const visibleTables = tables.filter(t => t.visible)
 
-  for (let ti = 0; ti < tables.length; ti++) {
-    const table = tables[ti]
-    if (!table.visible) continue
+  // Single worksheet: all tables stacked vertically, separated by a title
+  // heading and a blank spacer row, instead of one sheet per table.
+  const rows: (string | number)[][] = []
+  rows.push([orgName])
+  rows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
+  rows.push([])
 
-    const rows: (string | number)[][] = []
-    rows.push([orgName])
-    rows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
-    if (tables.length > 1) rows.push([table.title.toUpperCase()])
-    rows.push([])
-    rows.push(['Account / Description', `Amount (${currencySymbol})`])
+  for (let ti = 0; ti < visibleTables.length; ti++) {
+    const table = visibleTables[ti]
+
+    // Table heading (only meaningful when there is more than one table)
+    if (visibleTables.length > 1) rows.push([table.title.toUpperCase()])
+    rows.push(['Account / Description', `Amount (${headerToken})`])
 
     for (const group of table.groups) {
       if (!group.visible) continue
@@ -342,44 +378,38 @@ export function exportReportExcel(
     }
 
     const tableTotal = computeTableTotal(table, balances, opBalances)
-    const totalLabel = tables.length > 1 ? `${table.title} TOTAL` : 'GRAND TOTAL'
+    const totalLabel = visibleTables.length > 1 ? `${table.title} TOTAL` : 'GRAND TOTAL'
     rows.push([totalLabel, tableTotal])
 
-    const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ wch: 50 }, { wch: 20 }]
-
-    const sheetName = tables.length > 1 ? table.title.slice(0, 31) : 'Report'
-    XLSX.utils.book_append_sheet(wb, ws, sheetName)
-  }
-
-  // Combined grand total sheet (only when >1 table and at least one opted in)
-  const combinedTbls = tables.filter(t => t.visible && (t.include_in_combined_total ?? true))
-  if (tables.filter(t => t.visible).length > 1 && combinedTbls.length > 0) {
-    const summaryRows: (string | number)[][] = []
-    summaryRows.push([orgName])
-    summaryRows.push([`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`])
-    summaryRows.push([])
-    summaryRows.push(['Table', `Total (${currencySymbol})`])
-    for (const t of combinedTbls) {
-      summaryRows.push([t.title, computeTableTotal(t, balances, opBalances)])
+    // Spacer between consecutive tables
+    if (ti < visibleTables.length - 1) {
+      rows.push([])
+      rows.push([])
     }
-    summaryRows.push([])
-    summaryRows.push(['COMBINED GRAND TOTAL', combinedTbls.reduce((s, t) => s + computeTableTotal(t, balances, opBalances), 0)])
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
-    wsSummary['!cols'] = [{ wch: 50 }, { wch: 20 }]
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
   }
 
-  // Add note sheet if rows were hidden
-  if (hideZeroRows) {
-    const noteRows: string[][] = [
-      ['Note'],
-      ['Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.'],
-    ]
-    const wsNote = XLSX.utils.aoa_to_sheet(noteRows)
-    wsNote['!cols'] = [{ wch: 80 }]
-    XLSX.utils.book_append_sheet(wb, wsNote, 'Note')
+  // Combined grand total section (only when >1 table and at least one opted in)
+  const combinedTbls = visibleTables.filter(t => t.include_in_combined_total ?? true)
+  if (visibleTables.length > 1 && combinedTbls.length > 0) {
+    rows.push([])
+    rows.push([])
+    rows.push(['SUMMARY', ''])
+    rows.push(['Table', `Total (${headerToken})`])
+    for (const t of combinedTbls) {
+      rows.push([t.title, computeTableTotal(t, balances, opBalances)])
+    }
+    rows.push(['COMBINED GRAND TOTAL', combinedTbls.reduce((s, t) => s + computeTableTotal(t, balances, opBalances), 0)])
   }
+
+  // Note at the bottom of the same sheet when rows were hidden
+  if (hideZeroRows) {
+    rows.push([])
+    rows.push(['Note: Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.'])
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  ws['!cols'] = [{ wch: 50 }, { wch: 20 }]
+  XLSX.utils.book_append_sheet(wb, ws, 'Report')
 
   XLSX.writeFile(wb, `Financial_Report_${reportDate}.xlsx`)
 }
