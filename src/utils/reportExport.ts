@@ -145,6 +145,25 @@ export function normaliseTables(layout: ReportLayout): ReportTable[] {
 
 type Cell = string | { content: string; styles: object }
 
+type RGB = [number, number, number]
+
+// Clariva brand palette (see brand.md). Centralised so every PDF export shares
+// one source of truth.
+const BRAND: Record<string, RGB> = {
+  tealAnchor:  [13, 115, 119],   // #0D7377 — primary structural bands
+  tealBright:  [20, 160, 133],   // #14A085 — secondary accent
+  deepNavy:    [26, 44, 66],     // #1A2C42 — trust / body text / headline totals
+  goldHonour:  [200, 155, 60],   // #C89B3C — sparing accent (rules, premium)
+  tealMist:    [230, 244, 241],  // #E6F4F1 — group-header tint
+  slate:       [74, 85, 104],    // #4A5568 — secondary text / notes
+  silverCloud: [247, 249, 250],  // #F7F9FA — subgroup / alt-row tint
+  white:       [255, 255, 255],
+}
+
+// A4 portrait is 210mm wide; the report table is this wide. Side margins are
+// derived from these so the table sits centred on the page.
+const PDF_TABLE_WIDTH = 155 // 110 (description) + 45 (amount)
+
 export function exportReportPDF(
   layout: ReportLayout,
   balances: Map<string, ReportCategoryBalance>,
@@ -161,19 +180,30 @@ export function exportReportPDF(
   const headerToken = currencyToken(currencySymbol, currencyCode)
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
+  const pageWidth  = doc.internal.pageSize.getWidth()
+  const sideMargin = (pageWidth - PDF_TABLE_WIDTH) / 2
+  const centerX    = pageWidth / 2
+
   const dateLabel = new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
     day: '2-digit', month: 'long', year: 'numeric',
   })
 
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text(orgName, 105, 18, { align: 'center' })
+  doc.setTextColor(...BRAND.deepNavy)
+  doc.text(orgName, centerX, 18, { align: 'center' })
   doc.setFontSize(11)
   doc.setFont('helvetica', 'normal')
-  doc.text(`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`, 105, 25, { align: 'center' })
+  doc.setTextColor(...BRAND.slate)
+  doc.text(`BREAKDOWN OF FINANCIAL REPORT – ${dateLabel.toUpperCase()}`, centerX, 25, { align: 'center' })
+
+  // Thin gold accent rule under the header
+  doc.setDrawColor(...BRAND.goldHonour)
+  doc.setLineWidth(0.6)
+  doc.line(sideMargin, 28.5, pageWidth - sideMargin, 28.5)
 
   const tables = normaliseTables(layout)
-  let startY = 32
+  let startY = 33
 
   for (let ti = 0; ti < tables.length; ti++) {
     const table = tables[ti]
@@ -188,12 +218,12 @@ export function exportReportPDF(
           content: table.title.toUpperCase(),
           styles: {
             fontStyle: 'bold',
-            fillColor: [30, 58, 138] as [number, number, number],
-            textColor: [255, 255, 255] as [number, number, number],
+            fillColor: BRAND.deepNavy,
+            textColor: BRAND.white,
             fontSize: 10,
           },
         },
-        { content: '', styles: { fillColor: [30, 58, 138] as [number, number, number] } },
+        { content: '', styles: { fillColor: BRAND.deepNavy } },
       ])
     }
 
@@ -201,8 +231,8 @@ export function exportReportPDF(
       if (!group.visible) continue
 
       tableBody.push([
-        { content: group.label, styles: { fontStyle: 'bold', fillColor: [230, 230, 230] as [number, number, number] } },
-        { content: '', styles: { fillColor: [230, 230, 230] as [number, number, number] } },
+        { content: group.label, styles: { fontStyle: 'bold', fillColor: BRAND.tealMist, textColor: BRAND.deepNavy } },
+        { content: '', styles: { fillColor: BRAND.tealMist } },
       ])
 
       for (const child of group.children) {
@@ -217,8 +247,8 @@ export function exportReportPDF(
           const visibleItems = sg.items.filter(i => i.visible && (!hideZeroRows || getItemBalance(i, balances, opBalances) !== 0))
           if (visibleItems.length === 0) continue
           tableBody.push([
-            { content: `  ${sg.label}`, styles: { fontStyle: 'italic', fillColor: [245, 245, 245] as [number, number, number] } },
-            { content: '', styles: { fillColor: [245, 245, 245] as [number, number, number] } },
+            { content: `  ${sg.label}`, styles: { fontStyle: 'italic', fillColor: BRAND.silverCloud, textColor: BRAND.slate } },
+            { content: '', styles: { fillColor: BRAND.silverCloud } },
           ])
           for (const item of visibleItems) {
             const val = getItemBalance(item, balances, opBalances)
@@ -226,16 +256,16 @@ export function exportReportPDF(
           }
           const sgTotal = sg.items.filter(i => i.visible).reduce((s, i) => s + getItemBalance(i, balances, opBalances), 0)
           tableBody.push([
-            { content: `  ${sg.label} Sub-Total`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
-            { content: `${pdfSym}${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] as [number, number, number] } },
+            { content: `  ${sg.label} Sub-Total`, styles: { fontStyle: 'bold', fillColor: BRAND.silverCloud, textColor: BRAND.deepNavy } },
+            { content: `${pdfSym}${fmt(sgTotal)}`, styles: { fontStyle: 'bold', fillColor: BRAND.silverCloud, textColor: BRAND.deepNavy } },
           ])
         }
       }
 
       const groupTotal = computeGroupTotal(group, balances, opBalances)
       tableBody.push([
-        { content: `${group.label} Sub-Total`, styles: { fontStyle: 'bold' } },
-        { content: `${pdfSym}${fmt(groupTotal)}`, styles: { fontStyle: 'bold' } },
+        { content: `${group.label} Sub-Total`, styles: { fontStyle: 'bold', textColor: BRAND.deepNavy } },
+        { content: `${pdfSym}${fmt(groupTotal)}`, styles: { fontStyle: 'bold', textColor: BRAND.deepNavy } },
       ])
       tableBody.push([{ content: '', styles: { cellPadding: 1 } }, ''])
     }
@@ -244,26 +274,26 @@ export function exportReportPDF(
     const tableTotal = computeTableTotal(table, balances, opBalances)
     const totalLabel = tables.length > 1 ? `${table.title} TOTAL` : 'GRAND TOTAL'
     tableBody.push([
-      { content: totalLabel, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
-      { content: `${pdfSym}${fmt(tableTotal)}`, styles: { fontStyle: 'bold', fillColor: [30, 58, 138] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] } },
+      { content: totalLabel, styles: { fontStyle: 'bold', fillColor: BRAND.tealAnchor, textColor: BRAND.white } },
+      { content: `${pdfSym}${fmt(tableTotal)}`, styles: { fontStyle: 'bold', fillColor: BRAND.tealAnchor, textColor: BRAND.white } },
     ])
 
     autoTable(doc, {
       startY,
       head: [['Account / Description', `Amount (${headerToken})`]],
       body: tableBody,
-      // headStyles keeps the header white on blue. Body text is dark via
-      // bodyStyles; the coloured total rows set white at the cell level (which
-      // outranks bodyStyles). textColor is deliberately NOT set in columnStyles
-      // because columnStyles would override both head and cell styles.
-      headStyles: { fillColor: [30, 58, 138], fontStyle: 'bold', textColor: [255, 255, 255] },
-      bodyStyles: { textColor: [0, 0, 0] },
+      // headStyles keeps the header white on Teal Anchor. Body text is Deep Navy
+      // via bodyStyles; the coloured total rows set white at the cell level
+      // (which outranks bodyStyles). textColor is deliberately NOT set in
+      // columnStyles, which would override both head and cell styles.
+      headStyles: { fillColor: BRAND.tealAnchor, fontStyle: 'bold', textColor: BRAND.white },
+      bodyStyles: { textColor: BRAND.deepNavy },
       columnStyles: {
         0: { cellWidth: 110, halign: 'left', overflow: 'linebreak' },
         1: { cellWidth: 45, halign: 'right' },
       },
       styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak', valign: 'middle' },
-      margin: { left: 14, right: 14 },
+      margin: { left: sideMargin, right: sideMargin },
     })
 
     startY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
@@ -282,12 +312,13 @@ export function exportReportPDF(
     autoTable(doc, {
       startY,
       body: [[
-        { content: 'COMBINED GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10 } },
-        { content: `${pdfSym}${fmt(combinedTotal)}`, styles: { fontStyle: 'bold', fillColor: [15, 23, 42] as [number, number, number], textColor: [255, 255, 255] as [number, number, number], fontSize: 10, halign: 'right' } },
+        { content: 'COMBINED GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: BRAND.deepNavy, textColor: BRAND.white, fontSize: 10 } },
+        { content: `${pdfSym}${fmt(combinedTotal)}`, styles: { fontStyle: 'bold', fillColor: BRAND.deepNavy, textColor: BRAND.white, fontSize: 10, halign: 'right' } },
       ]],
-      columnStyles: { 0: { cellWidth: 130 }, 1: { cellWidth: 50, halign: 'right' } },
-      styles: { fontSize: 9, cellPadding: 2.5 },
-      margin: { left: 14, right: 14 },
+      // Gold border to mark the headline figure (premium / honour accent).
+      columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 45, halign: 'right' } },
+      styles: { fontSize: 9, cellPadding: 2.5, lineColor: BRAND.goldHonour, lineWidth: 0.5 },
+      margin: { left: sideMargin, right: sideMargin },
     })
   }
 
@@ -297,8 +328,8 @@ export function exportReportPDF(
     const currentY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? startY
     const noteY = Math.min(currentY + 12, pageHeight - 15)
     doc.setFontSize(8)
-    doc.setTextColor(100, 100, 100)
-    doc.text('Note: Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.', 14, noteY, { maxWidth: 182 })
+    doc.setTextColor(...BRAND.slate)
+    doc.text('Note: Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.', sideMargin, noteY, { maxWidth: PDF_TABLE_WIDTH })
   }
 
   doc.save(`Financial_Report_${reportDate}.pdf`)
