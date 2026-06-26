@@ -30,18 +30,14 @@ export default function ResetPassword() {
   const [done,       setDone]       = useState(false)
   const [hasSession, setHasSession] = useState(false)
 
-  // Supabase appends the recovery token in the URL hash; the SDK processes it
-  // on page load and fires a PASSWORD_RECOVERY event. We listen for that event
-  // to confirm we have a valid recovery session before showing the form.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setHasSession(true)
+      } else if (event === 'INITIAL_SESSION' && session) {
+        // URL token was processed before listener registered — session already exists
+        setHasSession(true)
       }
-    })
-    // Also check if we already have a session (handles page refresh after recovery link)
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setHasSession(true)
     })
     return () => subscription.unsubscribe()
   }, [])
