@@ -4,8 +4,6 @@ import { Card }               from '../components/ui/Card'
 import { PaginationBar }      from '../components/ui/PaginationBar'
 import { DataControlsBar }    from '../components/ui/DataControlsBar'
 import { SortableHeader }     from '../components/ui/SortableHeader'
-import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
-import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { useActivityLog, type ActivityLogEntry, type ActivityEventType } from '../hooks/useActivityLog'
 import { usePageTitle }       from '../hooks/usePageTitle'
 import { useDataViewState }   from '../hooks/useDataViewState'
@@ -119,8 +117,6 @@ export default function ChangeLog() {
     searchCol:    clState.searchCol,
     sortAscending: clState.sortDir === 'asc',
   })
-
-  const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   const isMigrationError = !!error && /activity_log_view|does not exist/i.test(error)
 
@@ -404,15 +400,15 @@ export default function ChangeLog() {
                             : <span className="text-xs text-gray-500 italic">{snapshotSummary(e.snapshot_data)}</span>
                           }
                         </td>
-                        <td className="px-4 py-3 text-sm max-w-[160px]">
+                        <td className="px-4 py-3 text-sm max-w-[200px] break-words">
                           {isEdit && (e.old_value != null
-                            ? <DescriptionCell id={`old-${e.id}`} text={e.old_value} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-red-600" />
+                            ? <span className="text-red-600">{e.old_value}</span>
                             : <span className="text-gray-300">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm max-w-[160px]">
+                        <td className="px-4 py-3 text-sm max-w-[200px] break-words">
                           {isEdit && (e.new_value != null
-                            ? <DescriptionCell id={`new-${e.id}`} text={e.new_value} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-green-700" />
+                            ? <span className="text-green-700">{e.new_value}</span>
                             : <span className="text-gray-300">—</span>
                           )}
                         </td>
@@ -432,7 +428,6 @@ export default function ChangeLog() {
           onPageChange={clState.setPage}
         />
       </Card>
-      <DescriptionTooltip tooltip={descTooltip} />
     </div>
   )
 }
