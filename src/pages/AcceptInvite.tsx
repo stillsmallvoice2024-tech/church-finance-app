@@ -47,6 +47,7 @@ export default function AcceptInvite() {
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState<string | null>(null)
   const [done,      setDone]      = useState(false)
+  const [doneFlow,  setDoneFlow]  = useState<'register' | 'signin' | 'loggedin'>('register')
 
   useEffect(() => {
     if (!token) {
@@ -103,7 +104,8 @@ export default function AcceptInvite() {
     // returning no user (when email confirmation is required for existing accounts).
     const alreadyRegistered =
       (signUpErr && /already.*(registered|exists)|user.*exist/i.test(signUpErr.message)) ||
-      (!signUpErr && !signUpData.user)
+      (!signUpErr && !signUpData.user) ||
+      (!signUpErr && (signUpData.user?.identities?.length ?? 1) === 0)
 
     if (alreadyRegistered) {
       setLoading(false)
@@ -153,6 +155,7 @@ export default function AcceptInvite() {
     }
 
     setLoading(false)
+    setDoneFlow('register')
     setDone(true)
     setTimeout(() => navigate('/', { replace: true }), 3000)
   }
@@ -199,6 +202,7 @@ export default function AcceptInvite() {
     // Refresh session so useAuth re-fetches org memberships including the new org.
     await supabase.auth.refreshSession()
     setLoading(false)
+    setDoneFlow('signin')
     setDone(true)
     setTimeout(() => navigate('/', { replace: true }), 3000)
   }
@@ -231,6 +235,7 @@ export default function AcceptInvite() {
     // Refresh session so useAuth re-fetches org memberships including the new org.
     await supabase.auth.refreshSession()
     setLoading(false)
+    setDoneFlow('loggedin')
     setDone(true)
     setTimeout(() => navigate('/', { replace: true }), 2000)
   }
@@ -272,7 +277,9 @@ export default function AcceptInvite() {
           ) : done ? (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <CheckCircle2 className="w-10 h-10 text-success" />
-              <p className="text-sm font-medium text-gray-700">Account created!</p>
+              <p className="text-sm font-medium text-gray-700">
+                {doneFlow === 'register' ? 'Account created!' : 'Invitation accepted!'}
+              </p>
               <p className="text-xs text-gray-500">
                 {invitation?.email && `Signed in as ${invitation.email}. `}
                 Redirecting to the dashboard…
@@ -464,6 +471,13 @@ export default function AcceptInvite() {
                   {loading ? 'Creating account…' : 'Create account'}
                 </button>
               </form>
+
+              <button
+                onClick={() => { setFlow('signin'); setError(null) }}
+                className="mt-3 w-full text-xs text-gray-500 hover:text-gray-600 hover:underline"
+              >
+                Already have an account? Sign in instead
+              </button>
             </>
           )}
         </div>
