@@ -188,10 +188,11 @@ function NewSessionModal({ onClose, onCreate }: {
 
 // ── Transaction Row in workspace ──────────────────────────────────────────────
 
-function TxnRow({ txn, finding, sessionComplete, onMark, sym, formatLocale }: {
+function TxnRow({ txn, finding, sessionComplete, readOnly, onMark, sym, formatLocale }: {
   txn:             AuditTxn
   finding:         ReturnType<typeof useAuditFindings>['findingMap'] extends Map<string, infer V> ? V | undefined : never
   sessionComplete: boolean
+  readOnly:        boolean
   onMark:          (entityType: string, entityId: string, type: FindingType, note?: string) => Promise<void>
   sym:             string
   formatLocale:    string
@@ -269,7 +270,7 @@ function TxnRow({ txn, finding, sessionComplete, onMark, sym, formatLocale }: {
             )}
           </div>
 
-          {!sessionComplete && (
+          {!sessionComplete && !readOnly && (
             <>
               {/* Note input */}
               <textarea
@@ -348,7 +349,8 @@ function AuditWorkspace({ session, onBack, onComplete, onReopen }: {
   const orgId = useOrgStore(s => s.orgId)
   const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const { push: toast } = useToastStore()
-  const { isAdmin } = useRole()
+  const { isAuditor } = useRole()
+  const canWrite = isAuditor()
 
   const [txns,    setTxns]    = useState<AuditTxn[]>([])
   const [loading, setLoading] = useState(true)
@@ -502,7 +504,7 @@ function AuditWorkspace({ session, onBack, onComplete, onReopen }: {
             {session.notes && ` · ${session.notes}`}
           </p>
         </div>
-        {session.status === 'draft' ? (
+        {canWrite && session.status === 'draft' && (
           <button
             onClick={handleComplete}
             disabled={completing}
@@ -511,13 +513,17 @@ function AuditWorkspace({ session, onBack, onComplete, onReopen }: {
             <CheckCheck className="w-4 h-4" />
             {completing ? 'Completing…' : 'Complete Session'}
           </button>
-        ) : isAdmin() && (
+        )}
+        {canWrite && session.status === 'complete' && (
           <button
             onClick={onReopen}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 shrink-0"
           >
             <RotateCcw className="w-4 h-4" /> Reopen
           </button>
+        )}
+        {!canWrite && (
+          <span className="text-xs text-gray-400 italic shrink-0">View only</span>
         )}
       </div>
 
@@ -572,6 +578,7 @@ function AuditWorkspace({ session, onBack, onComplete, onReopen }: {
                 txn={txn}
                 finding={findingMap.get(`${txn.txType}:${txn.id}`)}
                 sessionComplete={session.status === 'complete'}
+                readOnly={!canWrite}
                 onMark={handleMark}
                 sym={sym}
                 formatLocale={formatLocale}
@@ -586,10 +593,12 @@ function AuditWorkspace({ session, onBack, onComplete, onReopen }: {
 
 // ── Sessions List ─────────────────────────────────────────────────────────────
 
-function SessionsList({ sessions, loading, error, onNew, onOpen, onComplete, onReopen, onDelete }: {
+function SessionsList({ sessions, loading, error, canManage, canDelete, onNew, onOpen, onComplete, onReopen, onDelete }: {
   sessions:   AuditSession[]
   loading:    boolean
   error:      string | null
+  canManage:  boolean
+  canDelete:  boolean
   onNew:      () => void
   onOpen:     (s: AuditSession) => void
   onComplete: (id: string) => Promise<void>
@@ -651,7 +660,7 @@ function SessionsList({ sessions, loading, error, onNew, onOpen, onComplete, onR
           icon={ClipboardCheck}
           title="No audit sessions yet."
           description="Create a session to start vouching transactions against source documents."
-          action={{ label: 'New Session', onClick: onNew }}
+          action={canManage ? { label: 'New Session', onClick: onNew } : undefined}
         />
       </Card>
     )
@@ -681,7 +690,7 @@ function SessionsList({ sessions, loading, error, onNew, onOpen, onComplete, onR
             >
               <ClipboardCheck className="w-3.5 h-3.5" /> Open
             </button>
-            {s.status === 'draft' && (
+            {canManage && s.status === 'draft' && (
               <button
                 onClick={() => onComplete(s.id)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50"
@@ -689,7 +698,7 @@ function SessionsList({ sessions, loading, error, onNew, onOpen, onComplete, onR
                 <CheckCheck className="w-3.5 h-3.5" /> Complete
               </button>
             )}
-            {s.status === 'complete' && (
+            {canManage && s.status === 'complete' && (
               <button
                 onClick={() => onReopen(s.id)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
@@ -697,13 +706,15 @@ function SessionsList({ sessions, loading, error, onNew, onOpen, onComplete, onR
                 <RotateCcw className="w-3.5 h-3.5" /> Reopen
               </button>
             )}
-            <button
-              onClick={() => onDelete(s.id)}
-              className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
-              title="Delete session"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {canDelete && (
+              <button
+                onClick={() => onDelete(s.id)}
+                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                title="Delete session"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       ))}
@@ -716,6 +727,9 @@ function SessionsList({ sessions, loading, error, onNew, onOpen, onComplete, onR
 export default function Audit() {
   usePageTitle('Internal Audit')
   const { push: toast } = useToastStore()
+  const { isAuditor, isAdmin } = useRole()
+  const canManageSessions = isAuditor()
+  const canDeleteSessions = isAdmin()
   const { sessions, loading, error, create, complete, reopen, remove } = useAuditSessions()
 
   const [showNew,          setShowNew]          = useState(false)
@@ -774,7 +788,7 @@ export default function Audit() {
             {activeSession ? 'Vouch transactions against source documents' : 'Manage audit sessions and review findings'}
           </p>
         </div>
-        {!activeSession && (
+        {!activeSession && canManageSessions && (
           <button
             onClick={() => setShowNew(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light"
@@ -796,6 +810,8 @@ export default function Audit() {
           sessions={sessions}
           loading={loading}
           error={error}
+          canManage={canManageSessions}
+          canDelete={canDeleteSessions}
           onNew={() => setShowNew(true)}
           onOpen={setActiveSession}
           onComplete={id => handleComplete(id)}
