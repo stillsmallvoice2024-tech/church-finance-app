@@ -1478,12 +1478,12 @@ function AuditSessionsPanel() {
 
 export default function Reports() {
   const [tab, setTab] = useState<ReportTab>('annual')
-  const { isAdmin, canWrite } = useRole()
+  const { isAdmin, canWrite, canAudit } = useRole()
 
   usePageTitle('Reports')
   useFirstVisitTour('reports')
 
-  const visibleTabCards = REPORT_TAB_CARDS.filter(c => c.id !== 'audit' || canWrite())
+  const visibleTabCards = REPORT_TAB_CARDS.filter(c => c.id !== 'audit' || canAudit())
 
   return (
     <div className="space-y-5">
@@ -1609,7 +1609,7 @@ export default function Reports() {
           {tab === 'outflow_types' && <OutflowTypeBreakdownPanel />}
           {tab === 'departments'   && <DepartmentBreakdownPanel />}
           {tab === 'fx'            && <FXHoldingsPanel />}
-          {tab === 'audit'         && canWrite() && <AuditSessionsPanel />}
+          {tab === 'audit'         && canAudit() && <AuditSessionsPanel />}
         </div>
       </div>
     </div>

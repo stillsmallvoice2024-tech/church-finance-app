@@ -1,4 +1,4 @@
-export type UserRole   = 'owner' | 'admin' | 'accountant' | 'viewer'
+export type UserRole   = 'owner' | 'admin' | 'accountant' | 'auditor' | 'viewer'
 export type OrgStatus  = 'active' | 'pending_deletion'
 
 export interface UserProfile {

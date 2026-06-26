@@ -59,6 +59,12 @@ function AdminOnlyGuard() {
   return <Outlet />
 }
 
+function AuditGuard() {
+  const { canAudit } = useRole()
+  if (!canAudit()) return <Navigate to="/" replace />
+  return <Outlet />
+}
+
 // Redirects to /onboarding when the active org has not completed onboarding.
 // Runs inside AuthGuard (loading=false, org resolved).
 function OnboardingGuard() {
@@ -146,6 +152,9 @@ export default function App() {
             <Route element={<CanWriteGuard />}>
               <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
               <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
+            </Route>
+            {/* Audit route: finance users + auditor role */}
+            <Route element={<AuditGuard />}>
               <Route path="audit" element={<ErrorBoundary><Audit /></ErrorBoundary>} />
             </Route>
             {/* Admin-only routes */}

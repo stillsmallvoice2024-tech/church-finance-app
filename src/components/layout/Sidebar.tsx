@@ -23,6 +23,7 @@ interface NavItem {
   icon: React.ElementType
   adminOnly?: boolean
   canWriteOnly?: boolean
+  auditAccess?: boolean  // visible to canWrite users and auditors
 }
 
 interface NavGroupDef {
@@ -65,7 +66,7 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Refunds',             path: '/refunds',            icon: RotateCcw },
       { label: 'Reversals',           path: '/reversals',          icon: Undo2     },
       { label: 'Reconciliation',      path: '/reconciliation',     icon: ShieldCheck },
-      { label: 'Internal Audit',      path: '/audit',              icon: ClipboardCheck, canWriteOnly: true },
+      { label: 'Internal Audit',      path: '/audit',              icon: ClipboardCheck, auditAccess: true },
     ],
   },
   {
@@ -142,9 +143,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const { isAdmin, canWrite } = useRole()
+  const { isAdmin, canWrite, canAudit } = useRole()
   const showAdmin = isAdmin()
   const showWrite = canWrite()
+  const showAudit = canAudit()
   const activeYear = useAccountingYearStore(s => s.year)
   const { openState, toggle } = useGroupOpenState()
   const orgName = useOrgStore(s => s.orgName)
@@ -213,7 +215,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           {NAV_GROUPS.map(group => {
             const visibleItems = group.items.filter(item =>
               (!item.adminOnly || showAdmin) &&
-              (!item.canWriteOnly || showWrite)
+              (!item.canWriteOnly || showWrite) &&
+              (!item.auditAccess || showAudit)
             )
 
             if (visibleItems.length === 0) return null
