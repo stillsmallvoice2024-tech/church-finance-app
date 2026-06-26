@@ -268,6 +268,16 @@ export function exportReportPDF(
     })
   }
 
+  // Add note if rows were hidden
+  if (hideZeroRows) {
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const currentY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? startY
+    const noteY = Math.min(currentY + 12, pageHeight - 15)
+    doc.setFontSize(8)
+    doc.setTextColor(100, 100, 100)
+    doc.text('Note: Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.', 14, noteY, { maxWidth: 182 })
+  }
+
   doc.save(`Financial_Report_${reportDate}.pdf`)
 }
 
@@ -358,6 +368,17 @@ export function exportReportExcel(
     const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
     wsSummary['!cols'] = [{ wch: 50 }, { wch: 20 }]
     XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
+  }
+
+  // Add note sheet if rows were hidden
+  if (hideZeroRows) {
+    const noteRows: string[][] = [
+      ['Note'],
+      ['Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.'],
+    ]
+    const wsNote = XLSX.utils.aoa_to_sheet(noteRows)
+    wsNote['!cols'] = [{ wch: 80 }]
+    XLSX.utils.book_append_sheet(wb, wsNote, 'Note')
   }
 
   XLSX.writeFile(wb, `Financial_Report_${reportDate}.xlsx`)

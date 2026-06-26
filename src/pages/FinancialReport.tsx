@@ -1809,6 +1809,14 @@ export default function FinancialReport() {
             <span className="font-mono text-lg text-primary">{baseCurrencySymbol}{fmt(grandTotal, formatLocale)}</span>
           </div>
         )}
+
+        {hideZeroRows && (
+          <div className="px-6 py-3 rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.06]">
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              <strong>Note:</strong> Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.
+            </p>
+          </div>
+        )}
       </div>
     )
   }
