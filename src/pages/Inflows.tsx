@@ -48,6 +48,7 @@ import { TransactionStory } from '../components/ui/TransactionStory'
 import { inflowDetailItems } from '../utils/rowDetailItems'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { MobileFab } from '../components/ui/MobileFab'
+import { ReceiptBadge } from '../components/ui/ReceiptBadge'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -520,6 +521,7 @@ export default function Inflows() {
                       <p className="text-sm font-mono font-bold tabular-nums text-success">{formatCurrency(Number(row.amount), baseCurrencyCode)}</p>
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
+                      <ReceiptBadge entityType="inflow" entityId={row.id} />
                       {canWrite() && !isProtected && (
                         <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                           <Pencil className="w-3.5 h-3.5" />
@@ -650,6 +652,7 @@ export default function Inflows() {
                         <AmountCell value={Number(row.amount)} mode="inflow" />
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
+                            <ReceiptBadge entityType="inflow" entityId={row.id} />
                             {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
                               <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                                 <Pencil className="w-4 h-4" />
