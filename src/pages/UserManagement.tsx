@@ -140,14 +140,20 @@ function InviteUserModal({
     setLoading(true)
     const { orgId } = useOrgStore.getState()
 
+    if (!orgId) {
+      toast({ type: 'error', message: 'Cannot send invite: no active organisation. Please refresh and try again.' })
+      setLoading(false)
+      return
+    }
+
     // Check for an existing pending invite for this email+org to avoid duplicates.
-    let existingQuery = supabase
+    const existingQuery = supabase
       .from('invitations')
       .select('id, token')
       .eq('email', values.email)
       .eq('status', 'pending')
+      .eq('org_id', orgId)
       .gt('expires_at', new Date().toISOString())
-    if (orgId) existingQuery = existingQuery.eq('org_id', orgId)
     const { data: existing } = await existingQuery.maybeSingle()
 
     if (existing) {
@@ -171,7 +177,7 @@ function InviteUserModal({
         status:     'pending',
         token,
         expires_at: expiresAt,
-        ...(orgId ? { org_id: orgId } : {}),
+        org_id: orgId,
       })
       .select('id')
       .single()
