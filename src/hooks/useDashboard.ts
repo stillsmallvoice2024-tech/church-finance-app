@@ -143,6 +143,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
         .from('inflow_transactions')
         .select('id, date, description, amount, stage_code_1')
         .eq('org_id', orgId)
+        .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)')
         .order('date', { ascending: false })
         .limit(10),
 

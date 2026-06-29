@@ -96,6 +96,7 @@ export default function Dashboard() {
   const { theme } = useThemeStore()
   const isDark = theme === 'dark'
   const year        = useAccountingYearStore(s => s.year)
+  const orgId       = useOrgStore(s => s.orgId)
   const storedTz    = useOrgStore(s => s.timezone)
   const orgTimezone = getOrgTimezone(storedTz, baseCurrencyCode)
   const stats  = useDashboardStats(year)
@@ -123,17 +124,23 @@ export default function Dashboard() {
 
   // ── Real-time subscription ─────────────────────────────────────────────────
   useEffect(() => {
+    if (!orgId) return
     const channel = supabase
-      .channel('dashboard:live')
+      .channel(`dashboard:live:${orgId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'inflow_transactions' },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'inflow_transactions',
+          filter: `org_id=eq.${orgId}`,
+        },
         () => { stats.refetch() },
       )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [stats.refetch])
+  }, [stats.refetch, orgId])
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const chartData = useMemo(
@@ -342,6 +349,7 @@ export default function Dashboard() {
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.totalInflow, baseCurrencyCode)}
+                note="Organisation total"
                 href="/inflows"
               />
               <StatCard
@@ -349,6 +357,7 @@ export default function Dashboard() {
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.totalOutflow, baseCurrencyCode)}
+                note="Organisation total"
                 href="/outflows"
               />
               <StatCard
@@ -357,8 +366,8 @@ export default function Dashboard() {
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.netBalance, baseCurrencyCode)}
                 note={stats.openingBalanceTotal > 0
-                  ? `Includes ${formatCurrency(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
-                  : undefined}
+                  ? `Organisation total · Includes ${formatCurrency(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
+                  : 'Organisation total'}
                 href="/bank-ledger"
               />
               <StatCard
