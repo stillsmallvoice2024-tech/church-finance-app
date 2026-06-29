@@ -135,6 +135,8 @@ export interface PaginatedResult<T> {
   data: T[]
   count: number          // total matching rows (for pagination UI)
   unmappedCount?: number
+  filteredTotal?: number        // sum of amount across all filtered rows (not just current page)
+  filteredOffsetTotal?: number  // subset of filteredTotal where offset_role = 'offset'
   loading: boolean
   error: string | null
   refetch: () => void
@@ -167,6 +169,8 @@ export function useInflowTransactions(
   const [data, setData] = useState<InflowTransaction[]>([])
   const [count, setCount] = useState(0)
   const [unmappedCount, setUnmappedCount] = useState(0)
+  const [filteredTotal, setFilteredTotal] = useState(0)
+  const [filteredOffsetTotal, setFilteredOffsetTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -233,7 +237,33 @@ export function useInflowTransactions(
       }
     }
 
-    const [{ data: rows, count: total, error: err }, { count: unmappedTotal }] = await Promise.all([query, cq])
+    // Aggregate query: sum of amount across all filtered rows (no range limit).
+    // Mirrors dashboard logic: exclude bank_deposit, intrabank_transfer, balance_brought_forward
+    // so the card total is comparable to the dashboard stat when the same date range is applied.
+    let aq = supabase
+      .from('inflow_transactions')
+      .select('amount, offset_role, root_transaction_table')
+      .eq('org_id', orgId)
+      .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)')
+      .limit(100000)
+    if (dateFrom)  aq = aq.gte('date', dateFrom)
+    if (dateTo)    aq = aq.lte('date', dateTo)
+    if (stageCode) aq = aq.eq('stage_code_1', stageCode)
+    if (search) {
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
+      if (!searchCol || searchCol === 'all') {
+        aq = aq.or(`description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_ref.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
+      } else if (INFLOW_SEARCH_COLS.has(searchCol)) {
+        aq = aq.ilike(searchCol, `%${safeSearch}%`)
+      }
+    }
+    if (unmappedOnly) aq = aq.or(INFLOW_UNMAPPED_OR)
+
+    const [
+      { data: rows, count: total, error: err },
+      { count: unmappedTotal },
+      { data: aggRows },
+    ] = await Promise.all([query, cq, aq])
 
     if (err) {
       setError(err.message)
@@ -241,13 +271,22 @@ export function useInflowTransactions(
       setData((rows ?? []) as InflowTransaction[])
       setCount(total ?? 0)
       setUnmappedCount(unmappedTotal ?? 0)
+      // Only count same-table offsets (root in inflow_transactions) — mirrors dashboard flipping logic
+      type AggRow = { amount: number; offset_role: string | null; root_transaction_table: string | null }
+      const agg = (aggRows ?? []) as AggRow[]
+      setFilteredTotal(agg.reduce((s, r) => s + Number(r.amount), 0))
+      setFilteredOffsetTotal(
+        agg
+          .filter(r => r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions')
+          .reduce((s, r) => s + Number(r.amount), 0)
+      )
     }
     setLoading(false)
   }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort, unmappedOnly])
 
   useEffect(() => { fetch() }, [fetch])
 
-  return { data, count, unmappedCount, loading, error, refetch: fetch }
+  return { data, count, unmappedCount, filteredTotal, filteredOffsetTotal, loading, error, refetch: fetch }
 }
 
 // ── useOutflowTransactions ─────────────────────────────────────────────────────
@@ -265,6 +304,8 @@ export function useOutflowTransactions(
   const [data, setData] = useState<OutflowTransaction[]>([])
   const [count, setCount] = useState(0)
   const [unmappedCount, setUnmappedCount] = useState(0)
+  const [filteredTotal, setFilteredTotal] = useState(0)
+  const [filteredOffsetTotal, setFilteredOffsetTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -339,7 +380,36 @@ export function useOutflowTransactions(
       }
     }
 
-    const [{ data: rows, count: total, error: err }, { count: unmappedTotal }] = await Promise.all([query, cq])
+    // Aggregate query: sum of amount_disbursed across all filtered rows (no range limit).
+    // Mirrors dashboard logic: exclude bank_deposit, intrabank_transfer so the card
+    // total is comparable to the dashboard stat when the same date range is applied.
+    let aq = supabase
+      .from('outflow_transactions')
+      .select('amount_disbursed, offset_role, root_transaction_table')
+      .eq('org_id', orgId)
+      .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
+      .limit(100000)
+    if (dateFrom)      aq = aq.gte('date', dateFrom)
+    if (dateTo)        aq = aq.lte('date', dateTo)
+    if (stageCode)     aq = aq.eq('stage_code_1', stageCode)
+    if (outflowTypeId) aq = aq.eq('outflow_type_id', outflowTypeId)
+    if (search) {
+      const safeSearch = search.replace(/[%_\\()\[\],{}]/g, '')
+      if (!searchCol || searchCol === 'all') {
+        aq = aq.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%,bank_name.ilike.%${safeSearch}%,transaction_id.ilike.%${safeSearch}%,stage_code_1.ilike.%${safeSearch}%,transaction_type.ilike.%${safeSearch}%`)
+      } else if (searchCol === 'description') {
+        aq = aq.or(`description.ilike.%${safeSearch}%,bank_description.ilike.%${safeSearch}%`)
+      } else if (OUTFLOW_SEARCH_COLS.has(searchCol)) {
+        aq = aq.ilike(searchCol, `%${safeSearch}%`)
+      }
+    }
+    if (unmappedOnly) aq = aq.or(OUTFLOW_UNMAPPED_OR)
+
+    const [
+      { data: rows, count: total, error: err },
+      { count: unmappedTotal },
+      { data: aggRows },
+    ] = await Promise.all([query, cq, aq])
 
     if (err) {
       setError(err.message)
@@ -362,13 +432,22 @@ export function useOutflowTransactions(
       )
       setCount(total ?? 0)
       setUnmappedCount(unmappedTotal ?? 0)
+      // Only count same-table offsets (root in outflow_transactions) — mirrors dashboard flipping logic
+      type AggRow = { amount_disbursed: number; offset_role: string | null; root_transaction_table: string | null }
+      const agg = (aggRows ?? []) as AggRow[]
+      setFilteredTotal(agg.reduce((s, r) => s + Number(r.amount_disbursed), 0))
+      setFilteredOffsetTotal(
+        agg
+          .filter(r => r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions')
+          .reduce((s, r) => s + Number(r.amount_disbursed), 0)
+      )
     }
     setLoading(false)
   }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort, unmappedOnly])
 
   useEffect(() => { fetch() }, [fetch])
 
-  return { data, count, unmappedCount, loading, error, refetch: fetch }
+  return { data, count, unmappedCount, filteredTotal, filteredOffsetTotal, loading, error, refetch: fetch }
 }
 
 // ── useIntraFlows ──────────────────────────────────────────────────────────────

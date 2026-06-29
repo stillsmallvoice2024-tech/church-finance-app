@@ -242,6 +242,10 @@ export default function BankLedger() {
   const totalOutflow = dateFiltered.reduce((s, r) => s + r.outflow, 0)
   const netBalance   = dateFiltered[dateFiltered.length - 1]?.balance ?? 0
 
+  // Offset subtotals (from linked inflow/outflow data on each row)
+  const offsetInflowTotal  = dateFiltered.filter(r => r.inflowData?.offset_role  === 'offset').reduce((s, r) => s + r.inflow,  0)
+  const offsetOutflowTotal = dateFiltered.filter(r => r.outflowData?.offset_role === 'offset').reduce((s, r) => s + r.outflow, 0)
+
   const selectedBankObj  = banks.find(b => b.id === selectedBank)
   const selectedBankName = selectedBankObj?.name ?? ''
   const displayCurrency  = selectedBankObj?.currency ?? baseCurrencyCode
@@ -322,11 +326,32 @@ export default function BankLedger() {
       {selectedBank && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { label: 'Total Inflows',  value: formatCurrency(totalInflow, displayCurrency),  color: 'text-green-700', tip: undefined },
-            { label: 'Total Outflows', value: formatCurrency(totalOutflow, displayCurrency), color: 'text-red-700',   tip: undefined },
-            { label: 'Net Balance',    value: formatCurrency(netBalance, displayCurrency),   color: netBalance >= 0 ? 'text-green-700' : 'text-red-700',
-              tip: 'Running balance at the end of the selected period (opening balance plus all inflows minus all outflows). Matches the balance shown on the last row of the ledger table.' },
-          ].map(({ label, value, color, tip }) => (
+            {
+              label:   'Total Inflows',
+              value:   formatCurrency(offsetInflowTotal > 0 ? totalInflow - offsetInflowTotal : totalInflow, displayCurrency),
+              color:   'text-green-700',
+              tip:     undefined as string | undefined,
+              subtext: offsetInflowTotal > 0
+                ? `Total ${formatCurrency(totalInflow, displayCurrency)} incl. ${formatCurrency(offsetInflowTotal, displayCurrency)} offset`
+                : undefined as string | undefined,
+            },
+            {
+              label:   'Total Outflows',
+              value:   formatCurrency(offsetOutflowTotal > 0 ? totalOutflow - offsetOutflowTotal : totalOutflow, displayCurrency),
+              color:   'text-red-700',
+              tip:     undefined as string | undefined,
+              subtext: offsetOutflowTotal > 0
+                ? `Total ${formatCurrency(totalOutflow, displayCurrency)} less ${formatCurrency(offsetOutflowTotal, displayCurrency)} offset`
+                : undefined as string | undefined,
+            },
+            {
+              label:   'Net Balance',
+              value:   formatCurrency(netBalance, displayCurrency),
+              color:   netBalance >= 0 ? 'text-green-700' : 'text-red-700',
+              tip:     'Running balance at the end of the selected period (opening balance plus all inflows minus all outflows). Matches the balance shown on the last row of the ledger table.',
+              subtext: undefined as string | undefined,
+            },
+          ].map(({ label, value, color, tip, subtext }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
               <div className="flex items-center gap-1 mb-1">
                 <p className="text-xs text-gray-500 truncate">{label}</p>
@@ -335,6 +360,9 @@ export default function BankLedger() {
               {loading
                 ? <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4" />
                 : <p className={`text-base font-bold tabular-nums ${color}`}>{value}</p>}
+              {!loading && subtext && (
+                <p className="mt-0.5 text-[11px] text-gray-400 leading-snug">{subtext}</p>
+              )}
             </div>
           ))}
         </div>
