@@ -409,12 +409,12 @@ function DepositsPanel() {
           <div className="h-8 bg-gray-200 rounded animate-pulse w-2/3" />
         ) : (
           <p className="text-2xl font-bold tabular-nums text-gray-900">
-            {formatCurrencyCompact(totalDeposits, baseCurrencyCode)}
+            {formatCurrencyCompact(offsetDeposits > 0 ? totalDeposits - offsetDeposits : totalDeposits, baseCurrencyCode)}
           </p>
         )}
         {!loading && offsetDeposits > 0 && (
           <p className="mt-1 text-xs text-gray-400">
-            Total includes {formatCurrencyCompact(offsetDeposits, baseCurrencyCode)} from offset entries
+            Total {formatCurrencyCompact(totalDeposits, baseCurrencyCode)} incl. {formatCurrencyCompact(offsetDeposits, baseCurrencyCode)} offset
           </p>
         )}
       </div>

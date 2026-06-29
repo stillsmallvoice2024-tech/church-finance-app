@@ -22,8 +22,9 @@ export function FilteredTotalCard({
     mode === 'outflow' ? 'text-danger'  :
     'text-gray-900'
 
-  const hasOffset      = offsetAmount > 0
-  const effectiveAmt   = amount - offsetAmount
+  const hasOffset    = offsetAmount > 0
+  const effectiveAmt = amount - offsetAmount
+  const displayAmt   = hasOffset ? effectiveAmt : amount
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4 min-w-0">
@@ -32,19 +33,17 @@ export function FilteredTotalCard({
         <div className="h-8 bg-gray-200 rounded animate-pulse w-2/3" />
       ) : (
         <p className={`text-2xl font-bold tabular-nums ${valueCls}`}>
-          {formatCurrencyCompact(amount, currencyCode)}
+          {formatCurrencyCompact(displayAmt, currencyCode)}
         </p>
       )}
       {!loading && hasOffset && mode === 'inflow' && (
         <p className="mt-1 text-xs text-gray-400">
-          Total includes {formatCurrencyCompact(offsetAmount, currencyCode)} from offset entries
+          Total {formatCurrencyCompact(amount, currencyCode)} incl. {formatCurrencyCompact(offsetAmount, currencyCode)} offset
         </p>
       )}
       {!loading && hasOffset && mode === 'outflow' && (
         <p className="mt-1 text-xs text-gray-400">
-          Less {formatCurrencyCompact(offsetAmount, currencyCode)} offset
-          {' · '}
-          {formatCurrencyCompact(effectiveAmt, currencyCode)} effective
+          Total {formatCurrencyCompact(amount, currencyCode)} less {formatCurrencyCompact(offsetAmount, currencyCode)} offset
         </p>
       )}
     </div>

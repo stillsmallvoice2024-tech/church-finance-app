@@ -328,20 +328,20 @@ export default function BankLedger() {
           {[
             {
               label:   'Total Inflows',
-              value:   formatCurrency(totalInflow, displayCurrency),
+              value:   formatCurrency(offsetInflowTotal > 0 ? totalInflow - offsetInflowTotal : totalInflow, displayCurrency),
               color:   'text-green-700',
               tip:     undefined as string | undefined,
               subtext: offsetInflowTotal > 0
-                ? `Total includes ${formatCurrency(offsetInflowTotal, displayCurrency)} from offset entries`
+                ? `Total ${formatCurrency(totalInflow, displayCurrency)} incl. ${formatCurrency(offsetInflowTotal, displayCurrency)} offset`
                 : undefined as string | undefined,
             },
             {
               label:   'Total Outflows',
-              value:   formatCurrency(totalOutflow, displayCurrency),
+              value:   formatCurrency(offsetOutflowTotal > 0 ? totalOutflow - offsetOutflowTotal : totalOutflow, displayCurrency),
               color:   'text-red-700',
               tip:     undefined as string | undefined,
               subtext: offsetOutflowTotal > 0
-                ? `Less ${formatCurrency(offsetOutflowTotal, displayCurrency)} offset · ${formatCurrency(totalOutflow - offsetOutflowTotal, displayCurrency)} effective`
+                ? `Total ${formatCurrency(totalOutflow, displayCurrency)} less ${formatCurrency(offsetOutflowTotal, displayCurrency)} offset`
                 : undefined as string | undefined,
             },
             {
