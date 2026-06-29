@@ -349,6 +349,7 @@ export default function Dashboard() {
                 title={`Total Inflows (${year})`}
                 value={<AnimatedStat value={stats.totalInflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.totalInflow, baseCurrencyCode)}
+                note="Organisation total"
                 href="/inflows"
               />
               <StatCard
@@ -356,6 +357,7 @@ export default function Dashboard() {
                 title={`Total Outflows (${year})`}
                 value={<AnimatedStat value={stats.totalOutflow} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.totalOutflow, baseCurrencyCode)}
+                note="Organisation total"
                 href="/outflows"
               />
               <StatCard
@@ -364,8 +366,8 @@ export default function Dashboard() {
                 value={<AnimatedStat value={stats.netBalance} format={v => formatCurrencyCompact(v, baseCurrencyCode)} />}
                 subValue={formatCurrency(stats.netBalance, baseCurrencyCode)}
                 note={stats.openingBalanceTotal > 0
-                  ? `Includes ${formatCurrency(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
-                  : undefined}
+                  ? `Organisation total · Includes ${formatCurrency(stats.openingBalanceTotal, baseCurrencyCode)} opening balance`
+                  : 'Organisation total'}
                 href="/bank-ledger"
               />
               <StatCard
