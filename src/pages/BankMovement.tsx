@@ -22,7 +22,7 @@ import { useRole }      from '../hooks/useRole'
 import { useToastStore } from '../store/toastStore'
 import { useOrgStore }   from '../store/orgStore'
 import { supabase }      from '../lib/supabase'
-import { formatDate, formatCurrency } from '../utils/formatters'
+import { formatDate, formatCurrency, formatCurrencyCompact } from '../utils/formatters'
 import { useDescriptionExpand } from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { filterInputCls } from '../components/ui/FormField'
@@ -280,6 +280,10 @@ function DepositsPanel() {
     return sortedRows.slice(start, start + bdState.pageSize)
   }, [sortedRows, bdState.page, bdState.pageSize])
 
+  // Totals from date+bank filtered rows (before search/sort)
+  const totalDeposits  = dateFiltered.reduce((s, r) => s + r.amount, 0)
+  const offsetDeposits = dateFiltered.filter(r => r.offset_role === 'offset').reduce((s, r) => s + r.amount, 0)
+
   const handleLinkRoot = (row: DepositRow) => {
     if (row.source === 'inflow' && row.inflowData) setEditInflow(row.inflowData)
     else if (row.source === 'outflow' && row.outflowData) setEditOutflow(row.outflowData)
@@ -397,6 +401,23 @@ function DepositsPanel() {
           </div>
         </div>
       </Card>
+
+      {/* Total deposits card */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4 min-w-0">
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Total Deposits</p>
+        {loading ? (
+          <div className="h-8 bg-gray-200 rounded animate-pulse w-2/3" />
+        ) : (
+          <p className="text-2xl font-bold tabular-nums text-gray-900">
+            {formatCurrencyCompact(totalDeposits, baseCurrencyCode)}
+          </p>
+        )}
+        {!loading && offsetDeposits > 0 && (
+          <p className="mt-1 text-xs text-gray-400">
+            Total includes {formatCurrencyCompact(offsetDeposits, baseCurrencyCode)} from offset entries
+          </p>
+        )}
+      </div>
 
       {/* Summary strip */}
       {(() => {

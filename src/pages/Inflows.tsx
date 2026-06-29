@@ -44,6 +44,7 @@ import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { RowDetailPanel } from '../components/ui/RowDetailPanel'
+import { FilteredTotalCard } from '../components/ui/FilteredTotalCard'
 import { TransactionStory } from '../components/ui/TransactionStory'
 import { inflowDetailItems } from '../utils/rowDetailItems'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -164,7 +165,7 @@ export default function Inflows() {
   // Data controls state
   const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
-  const { data, count, unmappedCount = 0, loading, error, refetch } = useInflowTransactions({
+  const { data, count, unmappedCount = 0, filteredTotal = 0, filteredOffsetTotal = 0, loading, error, refetch } = useInflowTransactions({
     dateFrom:     dateFrom  || undefined,
     dateTo:       dateTo    || undefined,
     search:       debouncedSearch || undefined,
@@ -385,6 +386,16 @@ export default function Inflows() {
             </div>
           </div>
         </Card>
+
+        {/* Filtered total card */}
+        <FilteredTotalCard
+          label="Total Inflows"
+          amount={filteredTotal}
+          offsetAmount={filteredOffsetTotal}
+          mode="inflow"
+          currencyCode={baseCurrencyCode}
+          loading={loading}
+        />
 
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />

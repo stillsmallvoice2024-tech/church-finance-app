@@ -41,6 +41,7 @@ import { PageEmptyState } from '../components/onboarding/PageEmptyState'
 import { AmountCell } from '../components/ui/AmountCell'
 import { filterInputCls } from '../components/ui/FormField'
 import { OutflowRowDetail } from '../components/ui/OutflowRowDetail'
+import { FilteredTotalCard } from '../components/ui/FilteredTotalCard'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { HelpButton }       from '../components/onboarding/HelpButton'
@@ -167,7 +168,7 @@ export default function Outflows() {
   // Data controls state
   const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE, persistSort: false })
 
-  const { data, count, unmappedCount = 0, loading, error, refetch } = useOutflowTransactions({
+  const { data, count, unmappedCount = 0, filteredTotal = 0, filteredOffsetTotal = 0, loading, error, refetch } = useOutflowTransactions({
     dateFrom:       dateFrom          || undefined,
     dateTo:         dateTo            || undefined,
     stageCode:      stageCode         || undefined,
@@ -401,6 +402,16 @@ export default function Outflows() {
             </div>
           </div>
         </Card>
+
+        {/* Filtered total card */}
+        <FilteredTotalCard
+          label="Total Outflows"
+          amount={filteredTotal}
+          offsetAmount={filteredOffsetTotal}
+          mode="outflow"
+          currencyCode={baseCurrencyCode}
+          loading={loading}
+        />
 
         {/* Summary strip */}
         <SummaryStrip total={total} effectiveTotal={effectiveTotal} hasOffsets={hasOffsets} count={count} largest={largest} average={average} loading={loading} />
