@@ -237,11 +237,14 @@ export function useInflowTransactions(
       }
     }
 
-    // Aggregate query: sum of amount across all filtered rows (no range limit)
+    // Aggregate query: sum of amount across all filtered rows (no range limit).
+    // Mirrors dashboard logic: exclude bank_deposit, intrabank_transfer, balance_brought_forward
+    // so the card total is comparable to the dashboard stat when the same date range is applied.
     let aq = supabase
       .from('inflow_transactions')
-      .select('amount, offset_role')
+      .select('amount, offset_role, root_transaction_table')
       .eq('org_id', orgId)
+      .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)')
       .limit(100000)
     if (dateFrom)  aq = aq.gte('date', dateFrom)
     if (dateTo)    aq = aq.lte('date', dateTo)
@@ -268,10 +271,15 @@ export function useInflowTransactions(
       setData((rows ?? []) as InflowTransaction[])
       setCount(total ?? 0)
       setUnmappedCount(unmappedTotal ?? 0)
-      type AggRow = { amount: number; offset_role: string | null }
+      // Only count same-table offsets (root in inflow_transactions) — mirrors dashboard flipping logic
+      type AggRow = { amount: number; offset_role: string | null; root_transaction_table: string | null }
       const agg = (aggRows ?? []) as AggRow[]
       setFilteredTotal(agg.reduce((s, r) => s + Number(r.amount), 0))
-      setFilteredOffsetTotal(agg.filter(r => r.offset_role === 'offset').reduce((s, r) => s + Number(r.amount), 0))
+      setFilteredOffsetTotal(
+        agg
+          .filter(r => r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions')
+          .reduce((s, r) => s + Number(r.amount), 0)
+      )
     }
     setLoading(false)
   }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort, unmappedOnly])
@@ -372,11 +380,14 @@ export function useOutflowTransactions(
       }
     }
 
-    // Aggregate query: sum of amount_disbursed across all filtered rows (no range limit)
+    // Aggregate query: sum of amount_disbursed across all filtered rows (no range limit).
+    // Mirrors dashboard logic: exclude bank_deposit, intrabank_transfer so the card
+    // total is comparable to the dashboard stat when the same date range is applied.
     let aq = supabase
       .from('outflow_transactions')
-      .select('amount_disbursed, offset_role')
+      .select('amount_disbursed, offset_role, root_transaction_table')
       .eq('org_id', orgId)
+      .or('transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)')
       .limit(100000)
     if (dateFrom)      aq = aq.gte('date', dateFrom)
     if (dateTo)        aq = aq.lte('date', dateTo)
@@ -421,10 +432,15 @@ export function useOutflowTransactions(
       )
       setCount(total ?? 0)
       setUnmappedCount(unmappedTotal ?? 0)
-      type AggRow = { amount_disbursed: number; offset_role: string | null }
+      // Only count same-table offsets (root in outflow_transactions) — mirrors dashboard flipping logic
+      type AggRow = { amount_disbursed: number; offset_role: string | null; root_transaction_table: string | null }
       const agg = (aggRows ?? []) as AggRow[]
       setFilteredTotal(agg.reduce((s, r) => s + Number(r.amount_disbursed), 0))
-      setFilteredOffsetTotal(agg.filter(r => r.offset_role === 'offset').reduce((s, r) => s + Number(r.amount_disbursed), 0))
+      setFilteredOffsetTotal(
+        agg
+          .filter(r => r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions')
+          .reduce((s, r) => s + Number(r.amount_disbursed), 0)
+      )
     }
     setLoading(false)
   }, [orgId, dateFrom, dateTo, stageCode, search, searchCol, pendingOnly, outflowTypeId, page, pageSize, fetchAll, sortColumn, sortAscending, advancedSort, unmappedOnly])
