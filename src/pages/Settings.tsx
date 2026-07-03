@@ -148,12 +148,8 @@ export default function Settings() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div data-tour="page-header" className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Settings</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage your account and preferences</p>
-        </div>
+      {/* Title is shown once by the Settings shell; this div keeps the tour anchor + help button. */}
+      <div data-tour="page-header" className="flex items-start justify-end gap-3">
         <HelpButton tourId="settingsTour" size="sm" />
       </div>
 

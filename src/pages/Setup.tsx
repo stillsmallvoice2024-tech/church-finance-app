@@ -35,7 +35,7 @@ const TABS = ['Account & Preferences', 'General', 'Banks', 'Distribution Rules',
 type Tab = typeof TABS[number]
 
 const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
-  { tab: 'Account & Preferences', Icon: UserCog,   label: 'Account & Preferences' },
+  { tab: 'Account & Preferences', Icon: UserCog,   label: 'My Account' },
   { tab: 'General',            Icon: Settings2,    label: 'General'      },
   { tab: 'Banks',              Icon: Landmark,     label: 'Banks'        },
   { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution Rules' },
