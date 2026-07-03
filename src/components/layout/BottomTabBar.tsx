@@ -7,7 +7,7 @@ import {
   Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
   BarChart3, FileText, NotebookPen,
   SlidersHorizontal, Settings, Users, ClipboardList,
-  MoreHorizontal, X,
+  MoreHorizontal, X, Scale,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
@@ -81,6 +81,12 @@ const DRAWER_SECTIONS: DrawerSection[] = [
       { label: 'Reports',          path: '/reports',          icon: BarChart3 },
       { label: 'Financial Report', path: '/financial-report', icon: FileText  },
       { label: 'Custom Reports',   path: '/dynamic-reports',  icon: NotebookPen },
+    ],
+  },
+  {
+    label: 'Health Centre',
+    items: [
+      { label: 'Balance Sheet', path: '/health-centre', icon: Scale, adminOnly: true },
     ],
   },
   {
