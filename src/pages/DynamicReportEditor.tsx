@@ -1830,7 +1830,7 @@ export default function DynamicReportEditor() {
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
         <p className="text-sm text-gray-500">Report not found.</p>
-        <button onClick={() => navigate('/dynamic-reports')} className="mt-4 text-sm text-primary hover:underline">
+        <button onClick={() => navigate('/reports?tab=custom')} className="mt-4 text-sm text-primary hover:underline">
           Back to reports
         </button>
       </div>
@@ -1842,7 +1842,7 @@ export default function DynamicReportEditor() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <button
-          onClick={() => navigate('/dynamic-reports')}
+          onClick={() => navigate('/reports?tab=custom')}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors self-start"
         >
           <ArrowLeft className="w-4 h-4" />
