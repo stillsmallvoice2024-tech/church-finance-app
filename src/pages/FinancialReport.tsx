@@ -1044,7 +1044,7 @@ function CategoryPicker({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function FinancialReport() {
-  usePageTitle('Financial Report')
+  usePageTitle('Board Report')
   const { baseCurrencySymbol, baseCurrencyCode, formatLocale } = useOrgCurrency()
 
   const { push } = useToastStore()
@@ -1697,7 +1697,7 @@ export default function FinancialReport() {
         {/* Report header */}
         <div className="rounded-xl border border-primary/20 overflow-hidden">
           <div className="bg-primary px-6 py-4 text-white text-center">
-            <h2 className="text-base font-bold uppercase tracking-wide">Breakdown of Financial Report</h2>
+            <h2 className="text-base font-bold uppercase tracking-wide">Breakdown of Board Report</h2>
             <p className="text-sm opacity-80 mt-0.5">
               {new Date(reportDate + 'T12:00:00').toLocaleDateString('en-GB', {
                 weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
@@ -1994,7 +1994,7 @@ export default function FinancialReport() {
             <FileText className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Financial Report</h1>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Board Report</h1>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Multi-table report builder · {reportBasis === 'transaction_date' ? 'Transaction Date basis' : 'Recorded Date basis'}
             </p>

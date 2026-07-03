@@ -5,7 +5,7 @@ import { CentreTabs, useCentreTab, type CentreTabDef } from '../components/ui/Ce
 
 const TABS: CentreTabDef[] = [
   { id: 'standard',  label: 'Standard Reports' },
-  { id: 'financial', label: 'Financial Report' },
+  { id: 'financial', label: 'Board Report' },
   { id: 'custom',    label: 'Custom Reports' },
 ]
 

@@ -1514,7 +1514,7 @@ export default function Reports() {
           },
           {
             icon:  FileText,
-            label: 'Financial Report Builder',
+            label: 'Board Report Builder',
             desc:  'Build custom multi-table reports with drag-and-drop layout',
             href:  '/reports?tab=financial',
             active: false,

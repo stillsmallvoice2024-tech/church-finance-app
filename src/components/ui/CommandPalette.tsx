@@ -23,7 +23,7 @@ const NAV_ENTRIES: NavEntry[] = [
   { label: 'Outflows',             sub: 'Expenses & payments',     href: '/outflows',              icon: ArrowUpCircle    },
   { label: 'Import',               sub: 'Upload bank statements',  href: '/import',                icon: FileSpreadsheet, writeOnly: true },
   { label: 'Reports',              sub: 'Financial summaries',     href: '/reports',               icon: BarChart2        },
-  { label: 'Financial Report',     sub: 'Custom report builder',   href: '/reports?tab=financial',      icon: FileText         },
+  { label: 'Board Report',         sub: 'Multi-table balance builder', href: '/reports?tab=financial',  icon: FileText         },
   { label: 'Dynamic Reports',      sub: 'Live-updating reports',   href: '/reports?tab=custom',       icon: FilePlus         },
   { label: 'Bank Ledger',          sub: 'Transactions by account', href: '/bank-ledger',           icon: Landmark         },
   { label: 'Bank Deposits',        sub: 'Cash deposits',           href: '/bank-deposits',         icon: Building2        },
