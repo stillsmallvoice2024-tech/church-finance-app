@@ -3,6 +3,17 @@ import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
 import type { DynamicReport, DynamicReportBlock, DynamicReportSnapshot, SnapshotData } from '../types'
 
+// True when an RPC failed because the function isn't installed on this DB
+// (migration not yet applied), so callers can fall back to a legacy path.
+// PGRST202 = PostgREST "function not found"; 42883 = Postgres undefined_function.
+function isMissingFunction(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false
+  if (err.code === 'PGRST202' || err.code === '42883') return true
+  const m = (err.message ?? '').toLowerCase()
+  return m.includes('could not find the function') ||
+    (m.includes('save_dynamic_report_blocks') && m.includes('does not exist'))
+}
+
 export function useDynamicReports() {
   const orgId = useOrgStore((s) => s.orgId)
 
@@ -126,6 +137,22 @@ export function useSaveDynamicReportBlocks() {
   ): Promise<string | null> => {
     setLoading(true)
     setError(null)
+
+    // Preferred path: replace all blocks in a single transaction so a mid-save
+    // failure can never leave the report with its old blocks deleted and the
+    // new ones lost.
+    const { error: rpcErr } = await supabase.rpc('save_dynamic_report_blocks', {
+      p_report_id: reportId,
+      p_blocks:    blocks.map(b => ({ block_type: b.block_type, config_json: b.config_json })),
+    })
+
+    if (!rpcErr) { setLoading(false); return null }
+
+    // Fallback for databases where the RPC migration hasn't been applied yet:
+    // fall back to the legacy delete-then-insert. Any other RPC error is real.
+    if (!isMissingFunction(rpcErr)) {
+      setError(rpcErr.message); setLoading(false); return rpcErr.message
+    }
 
     const { error: delErr } = await supabase
       .from('dynamic_report_blocks')
