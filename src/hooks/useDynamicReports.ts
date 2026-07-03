@@ -55,7 +55,8 @@ export function useUpdateDynamicReport() {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 
-  const mutate = useCallback(async (id: string, title: string): Promise<boolean> => {
+  // Returns null on success, or the DB error message on failure.
+  const mutate = useCallback(async (id: string, title: string): Promise<string | null> => {
     setLoading(true)
     setError(null)
     const { error: err } = await supabase
@@ -63,8 +64,8 @@ export function useUpdateDynamicReport() {
       .update({ title, updated_at: new Date().toISOString() })
       .eq('id', id)
     setLoading(false)
-    if (err) { setError(err.message); return false }
-    return true
+    if (err) { setError(err.message); return err.message }
+    return null
   }, [])
 
   return { mutate, loading, error }
@@ -118,10 +119,11 @@ export function useSaveDynamicReportBlocks() {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 
+  // Returns null on success, or the DB error message on failure.
   const mutate = useCallback(async (
     reportId: string,
     blocks: Array<{ block_type: string; position: number; config_json: Record<string, unknown> }>,
-  ): Promise<boolean> => {
+  ): Promise<string | null> => {
     setLoading(true)
     setError(null)
 
@@ -130,7 +132,7 @@ export function useSaveDynamicReportBlocks() {
       .delete()
       .eq('report_id', reportId)
 
-    if (delErr) { setError(delErr.message); setLoading(false); return false }
+    if (delErr) { setError(delErr.message); setLoading(false); return delErr.message }
 
     if (blocks.length > 0) {
       const rows = blocks.map((b, i) => ({
@@ -140,11 +142,11 @@ export function useSaveDynamicReportBlocks() {
         config_json: b.config_json,
       }))
       const { error: insErr } = await supabase.from('dynamic_report_blocks').insert(rows)
-      if (insErr) { setError(insErr.message); setLoading(false); return false }
+      if (insErr) { setError(insErr.message); setLoading(false); return insErr.message }
     }
 
     setLoading(false)
-    return true
+    return null
   }, [])
 
   return { mutate, loading, error }

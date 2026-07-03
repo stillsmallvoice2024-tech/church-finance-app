@@ -1612,7 +1612,7 @@ export default function DynamicReportEditor() {
 
   const { blocks: savedBlocks, loading: blocksLoading } = useDynamicReportBlocks(id ?? null)
   const { mutate: updateTitle }  = useUpdateDynamicReport()
-  const { mutate: saveBlocks, loading: saving, error: saveError } = useSaveDynamicReportBlocks()
+  const { mutate: saveBlocks, loading: saving } = useSaveDynamicReportBlocks()
   const { snapshots, refetch: refetchSnapshots } = useReportSnapshots(id ?? null)
   const { mutate: saveSnapshot, loading: savingSnapshot } = useSaveSnapshot()
   const { mutate: deleteSnapshot } = useDeleteSnapshot()
@@ -1795,7 +1795,9 @@ export default function DynamicReportEditor() {
   const handleSave = useCallback(async () => {
     if (!id) return
     const trimmedTitle = title.trim() || 'Untitled Report'
-    const [, blocksOk] = await Promise.all([
+    // Both mutations return null on success or the real DB error message on
+    // failure — surfaced directly so a save failure is diagnosable, not generic.
+    const [titleErr, blocksErr] = await Promise.all([
       updateTitle(id, trimmedTitle),
       saveBlocks(id, blocks.map((b, i) => ({
         block_type:  b.block_type,
@@ -1803,16 +1805,17 @@ export default function DynamicReportEditor() {
         config_json: b.config_json,
       }))),
     ])
-    if (blocksOk) {
+    const err = blocksErr ?? titleErr
+    if (!err) {
       setTitle(trimmedTitle)
       setIsDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
       pushToast('Report saved', 'success')
     } else {
-      pushToast(saveError ?? 'Failed to save report', 'error')
+      pushToast(`Couldn't save report: ${err}`, 'error')
     }
-  }, [id, title, blocks, updateTitle, saveBlocks, saveError, pushToast])
+  }, [id, title, blocks, updateTitle, saveBlocks, pushToast])
 
   const loading = reportsLoading || blocksLoading
 
