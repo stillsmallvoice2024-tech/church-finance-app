@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import { Trash2, Landmark, Layers, LockOpen, Copy, ShieldAlert, Globe, Settings2, TrendingUp, TrendingDown, Users } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Trash2, Landmark, Layers, LockOpen, Copy, ShieldAlert, Globe, Settings2, TrendingUp, TrendingDown, Users, UserCog } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { type DbBank } from '../hooks/useBanks'
@@ -22,6 +22,7 @@ import { deleteDepartment, type Department } from '../hooks/useDepartments'
 import { useLockAllocationConfig, useUnlockAllocationConfig, useDeleteAllocationConfig } from '../hooks/useMutations'
 import { Modal } from '../components/ui/Modal'
 import { friendlyError } from '../utils/friendlyError'
+import Settings from './Settings'
 import { GeneralTab } from './setup/GeneralTab'
 import { BanksTab } from './setup/BanksTab'
 import { DistributionRulesTab } from './setup/DistributionRulesTab'
@@ -30,10 +31,11 @@ import { IncomeTypesTab } from './setup/IncomeTypesTab'
 import { OutflowTypesTab } from './setup/OutflowTypesTab'
 import { DepartmentsTab } from './setup/DepartmentsTab'
 
-const TABS = ['General', 'Banks', 'Distribution Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
+const TABS = ['Account & Preferences', 'General', 'Banks', 'Distribution Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
 type Tab = typeof TABS[number]
 
 const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
+  { tab: 'Account & Preferences', Icon: UserCog,   label: 'Account & Preferences' },
   { tab: 'General',            Icon: Settings2,    label: 'General'      },
   { tab: 'Banks',              Icon: Landmark,     label: 'Banks'        },
   { tab: 'Distribution Rules', Icon: Layers,       label: 'Distribution Rules' },
@@ -43,11 +45,40 @@ const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: stri
   { tab: 'Currencies',         Icon: Globe,        label: 'Currencies'   },
 ]
 
+// URL slug per tab, so old deep links and redirects land on the right section.
+const TAB_SLUGS: Record<Tab, string> = {
+  'Account & Preferences': 'account',
+  'General':               'general',
+  'Banks':                 'banks',
+  'Distribution Rules':    'distribution-rules',
+  'Income Types':          'income-types',
+  'Outflow Types':         'outflow-types',
+  'Departments':           'departments',
+  'Currencies':            'currencies',
+}
+const SLUG_TO_TAB: Record<string, Tab> = Object.fromEntries(
+  Object.entries(TAB_SLUGS).map(([tab, slug]) => [slug, tab as Tab]),
+)
+SLUG_TO_TAB['setup'] = 'General' // legacy /settings?tab=setup links
+
 // ── Page ──────────────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
   const { canWrite } = useRole()
-  const [activeTab,      setActiveTab]      = useState<Tab>('General')
+  const write = canWrite()
+
+  // Viewers see only Account & Preferences; finance tabs need write access
+  // (same rule the old CanWriteGuard enforced on /setup).
+  const visibleCards = write ? TAB_CARDS : TAB_CARDS.filter(c => c.tab === 'Account & Preferences')
+
+  // Active tab lives in ?tab= so redirects and onboarding links can deep-link.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = SLUG_TO_TAB[searchParams.get('tab') ?? '']
+  const activeTab: Tab = requestedTab && visibleCards.some(c => c.tab === requestedTab)
+    ? requestedTab
+    : 'Account & Preferences'
+  const setActiveTab = (tab: Tab) =>
+    setSearchParams(tab === 'Account & Preferences' ? {} : { tab: TAB_SLUGS[tab] }, { replace: true })
   const [bankModalOpen,  setBankModalOpen]  = useState(false)
   const [editBankRecord, setEditBankRecord] = useState<DbBank | null>(null)
   const [bankRefetch,    setBankRefetch]    = useState(0)
@@ -85,10 +116,7 @@ export default function SetupPage() {
   const { mutate: unlockConfig, loading: unlocking } = useUnlockAllocationConfig()
   const { mutate: deleteAllocConfig               } = useDeleteAllocationConfig()
 
-  usePageTitle('Setup')
-
-  // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
-  if (!canWrite()) return <Navigate to="/" replace />
+  usePageTitle('Settings')
 
   const handleAllocSuccess = () => { reloadAllocs() }
 
@@ -189,13 +217,14 @@ export default function SetupPage() {
     <>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Setup</h1>
-          <p className="text-sm text-gray-500 mt-1">Configure your organisation finance settings</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-500 mt-1">Account preferences and organisation finance configuration</p>
         </div>
 
         {/* Mobile: icon + label card grid */}
+        {visibleCards.length > 1 && (
         <div className="grid grid-cols-4 gap-2 md:hidden">
-          {TAB_CARDS.map(({ tab, Icon, label }) => (
+          {visibleCards.map(({ tab, Icon, label }) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -210,11 +239,13 @@ export default function SetupPage() {
             </button>
           ))}
         </div>
+        )}
 
         {/* Desktop: sidebar nav + content */}
         <div className="flex gap-7 items-start">
+          {visibleCards.length > 1 && (
           <nav className="hidden md:flex flex-col w-48 shrink-0 gap-0.5">
-            {TAB_CARDS.map(({ tab, Icon, label }) => (
+            {visibleCards.map(({ tab, Icon, label }) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -229,8 +260,10 @@ export default function SetupPage() {
               </button>
             ))}
           </nav>
+          )}
 
           <div className="flex-1 min-w-0">
+            {activeTab === 'Account & Preferences' && <Settings />}
             {activeTab === 'General'        && <GeneralTab />}
             {activeTab === 'Banks'          && <BanksTab key={bankRefetch} onAdd={handleAddBank} onEdit={handleEditBank} onDelete={handleDeleteBank} />}
             {activeTab === 'Distribution Rules' && (
@@ -270,10 +303,8 @@ export default function SetupPage() {
           </div>
         </div>
 
-        {/* Developer Tools — hidden from UI; code kept in DatabaseTab for developer reference.
-             See archive/devtools-removal branch (PR #304) for full clean-up when ready. */}
-
-        {/* Danger Zone */}
+        {/* Danger Zone — write roles only; hidden on the personal Account tab */}
+        {write && activeTab !== 'Account & Preferences' && (
         <div className="border border-red-200 rounded-xl p-5 space-y-3 bg-red-50/40">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
@@ -289,6 +320,7 @@ export default function SetupPage() {
             <Trash2 className="w-4 h-4" /> Reset All Data
           </button>
         </div>
+        )}
       </div>
 
       <AllocationConfigModal

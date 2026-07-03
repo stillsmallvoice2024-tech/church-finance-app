@@ -20,7 +20,7 @@ import ForeignCurrency from './pages/ForeignCurrency'
 import IntraFlow from './pages/IntraFlow'
 import ReportCentre from './pages/ReportCentre'
 import DynamicReportEditor from './pages/DynamicReportEditor'
-import SettingsCentre from './pages/SettingsCentre'
+import SettingsPage from './pages/Setup'
 import UserManagement from './pages/UserManagement'
 import Import from './pages/Import'
 import Adjustments from './pages/Adjustments'
@@ -132,9 +132,9 @@ export default function App() {
             <Route path="financial-report" element={<Navigate to="/reports?tab=financial" replace />} />
             <Route path="dynamic-reports" element={<Navigate to="/reports?tab=custom" replace />} />
             <Route path="dynamic-reports/:id" element={<ErrorBoundary><DynamicReportEditor /></ErrorBoundary>} />
-            {/* Settings Centre — /setup redirects into its Finance Setup tab (role-gated inside) */}
-            <Route path="settings" element={<ErrorBoundary><SettingsCentre /></ErrorBoundary>} />
-            <Route path="setup" element={<Navigate to="/settings?tab=setup" replace />} />
+            {/* Unified Settings — /setup redirects into the finance General tab (role-gated inside) */}
+            <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+            <Route path="setup" element={<Navigate to="/settings?tab=general" replace />} />
             {/* Viewer-blocked routes: admin + accountant only */}
             <Route element={<CanWriteGuard />}>
               <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />

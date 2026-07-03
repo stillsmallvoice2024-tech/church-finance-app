@@ -39,7 +39,7 @@ const NAV_ENTRIES: NavEntry[] = [
   { label: 'Refunds',              href: '/adjustments?tab=refunds',               icon: RefreshCcw               },
   { label: 'Reversals',            href: '/adjustments?tab=reversals',             icon: RotateCcw                },
   { label: 'Receipts',             href: '/receipts',              icon: Receipt                  },
-  { label: 'Setup',                sub: 'Org configuration',       href: '/settings?tab=setup',                 icon: Settings, writeOnly: true },
+  { label: 'Setup',                sub: 'Org configuration',       href: '/settings?tab=general',                 icon: Settings, writeOnly: true },
   { label: 'Settings',             href: '/settings',              icon: Settings                 },
   { label: 'Users',                sub: 'Manage team members',     href: '/users',                 icon: Users, adminOnly: true },
   { label: 'Change Log',           sub: 'Audit history',           href: '/change-log',            icon: FileText, adminOnly: true },
