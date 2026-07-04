@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import {
   TrendingDown, Pencil, Trash2, PlusCircle,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown, AlertTriangle,
+  ArrowRight, ArrowLeft, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react'
+import { BarChart, Bar, XAxis, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
 import { Card }                    from '../components/ui/Card'
 import { DeleteDialog }            from '../components/ui/DeleteDialog'
 import { BulkActionBar }           from '../components/ui/BulkActionBar'
@@ -32,7 +34,11 @@ import { useOrgStore }             from '../store/orgStore'
 import { fetchAllPaginated, EXPORT_MAX } from '../utils/paginatedExport'
 import { ExportDropdown }          from '../components/ui/ExportDropdown'
 import { useCategories }           from '../hooks/useCategories'
-import { useOutflowTypes }         from '../hooks/useOutflowTypes'
+import { useOutflowTypes, type OutflowType } from '../hooks/useOutflowTypes'
+import { useDetailLevel } from '../hooks/useDetailLevel'
+import { SimpleShell } from '../components/ui/SimpleShell'
+import { useCountUp } from '../hooks/useCountUp'
+import { useOutflowSummary } from '../hooks/useOutflowSummary'
 import { useYearRange }            from '../hooks/useYearRange'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
@@ -151,7 +157,8 @@ export default function Outflows() {
   // Filters
   const [dateFrom,          setDateFrom]          = useState(yearStart)
   const [dateTo,            setDateTo]            = useState(yearEnd)
-  const [datePreset,        setDatePreset]        = useState<DatePreset | null>(null)
+  // Default to the full accounting year — 'ytd' so the "This Year" chip is active.
+  const [datePreset,        setDatePreset]        = useState<DatePreset | null>('ytd')
   const [stageCode,         setStageCode]         = useState('')
   const [outflowTypeFilter, setOutflowTypeFilter] = useState('')
   const [searchInput,       setSearchInput]       = useState('')
@@ -167,19 +174,23 @@ export default function Outflows() {
   // Data controls state
   const outState = useDataViewState({ storageKey: 'out', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE, persistSort: false })
 
+  // Progressive disclosure: Simple opens with just the latest outflows.
+  const { setLevel: setDetail, isSimple } = useDetailLevel('outflows')
+  const SIMPLE_LIMIT = 10
+
   const { data, count, unmappedCount = 0, loading, error, refetch } = useOutflowTransactions({
     dateFrom:       dateFrom          || undefined,
     dateTo:         dateTo            || undefined,
-    stageCode:      stageCode         || undefined,
-    outflowTypeId:  outflowTypeFilter || undefined,
-    search:         debouncedSearch   || undefined,
+    stageCode:      isSimple ? undefined : (stageCode || undefined),
+    outflowTypeId:  isSimple ? undefined : (outflowTypeFilter || undefined),
+    search:         isSimple ? undefined : (debouncedSearch || undefined),
     searchCol:      outState.searchCol,
-    page,
-    pageSize:       outState.pageSize,
-    sortColumn:     outState.advancedSort.length === 0 ? outState.sortKey : undefined,
-    sortAscending:  outState.advancedSort.length === 0 ? (outState.sortDir === 'asc') : undefined,
-    advancedSort:   outState.advancedSort.length > 0 ? outState.advancedSort : undefined,
-    unmappedOnly:   showUnmappedOnly,
+    page:           isSimple ? 0 : page,
+    pageSize:       isSimple ? SIMPLE_LIMIT : outState.pageSize,
+    sortColumn:     isSimple ? 'recorded_at' : (outState.advancedSort.length === 0 ? outState.sortKey : undefined),
+    sortAscending:  isSimple ? false : (outState.advancedSort.length === 0 ? (outState.sortDir === 'asc') : undefined),
+    advancedSort:   isSimple ? undefined : (outState.advancedSort.length > 0 ? outState.advancedSort : undefined),
+    unmappedOnly:   isSimple ? false : showUnmappedOnly,
   })
 
   const displayed = data
@@ -357,13 +368,16 @@ export default function Outflows() {
           </div>
         </div>
 
+        {!isSimple && (
         <PageHelpBanner storageKey="help-dismissed-outflows" title="Outflow Transactions">
           Disbursements and payments are imported from bank statements — bulk data should come through
           the <strong>Import</strong> page. Use <strong>Add Outflow</strong> for one-off manual entries only.
           Filter by date, category, or bank and export the current view at any time.
         </PageHelpBanner>
+        )}
 
         {/* Filter bar */}
+        {!isSimple && (
         <Card data-tour="data-controls">
           <div className="space-y-3">
             <DatePresetBar
@@ -401,9 +415,43 @@ export default function Outflows() {
             </div>
           </div>
         </Card>
+        )}
 
-        {/* Summary strip */}
-        <SummaryStrip total={total} effectiveTotal={effectiveTotal} hasOffsets={hasOffsets} count={count} largest={largest} average={average} loading={loading} />
+        {/* Summary strip — full view only (Simple has its own hero total) */}
+        {!isSimple && (
+          <SummaryStrip total={total} effectiveTotal={effectiveTotal} hasOffsets={hasOffsets} count={count} largest={largest} average={average} loading={loading} />
+        )}
+
+        {/* ── Simple view: interactive summary + reveal ────────────────────── */}
+        {isSimple && (
+          <SimpleOutflowView
+            rows={displayed}
+            recentLoading={loading}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            datePreset={datePreset}
+            unmappedCount={unmappedCount}
+            outflowTypes={outflowTypes}
+            baseCurrencyCode={baseCurrencyCode}
+            onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
+            onViewAll={() => setDetail('full')}
+            onDrillMonth={(from, to) => { setDatePreset('custom'); setDateFrom(from); setDateTo(to); setDetail('full') }}
+            onDrillUnmapped={() => { setShowUnmappedOnly(true); setDetail('full') }}
+          />
+        )}
+
+        {/* ── Full view: dense controls + list ─────────────────────────────── */}
+        {!isSimple && <>
+
+        {/* Quiet collapse back to the summary view */}
+        <button
+          type="button"
+          onClick={() => setDetail('simple')}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Show summary
+        </button>
 
         {/* Data controls bar */}
         <DataControlsBar
@@ -734,6 +782,8 @@ export default function Outflows() {
             variant="full"
           />
         </Card>}
+
+        </>}
       </div>
 
       <AddOutflowModal
@@ -779,6 +829,234 @@ export default function Outflows() {
       {canWrite() && <MobileFab icon={PlusCircle} label="Add Outflow" onClick={() => { setEditRecord(null); setModalOpen(true) }} />}
       <DescriptionTooltip tooltip={descTooltip} />
     </>
+  )
+}
+
+// ── Simple view ──────────────────────────────────────────────────────────────
+// Lean by default: hero total + quick ranges + recent activity + reveal, with a
+// "More insights" peel (trend, monthly chart, outflow-type breakdown, nudge).
+
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function monthLabel(ym: string): string {
+  const m = Number(ym.slice(5, 7))
+  return MONTH_ABBR[m - 1] ?? ym
+}
+function monthRange(ym: string): { from: string; to: string } {
+  const y = Number(ym.slice(0, 4)); const m = Number(ym.slice(5, 7))
+  const last = new Date(y, m, 0).getDate()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return { from: `${ym}-01`, to: `${ym}-${pad(last)}` }
+}
+function periodLabel(preset: DatePreset | null): string {
+  switch (preset) {
+    case 'this_month': return 'this month'
+    case 'last_month': return 'last month'
+    case 'custom':     return 'selected dates'
+    default:           return 'this year'
+  }
+}
+const UNCLASSIFIED_COLOR = '#94a3b8'
+
+interface SimpleOutflowViewProps {
+  rows: OutflowTransaction[]
+  recentLoading: boolean
+  dateFrom: string
+  dateTo: string
+  datePreset: DatePreset | null
+  unmappedCount: number
+  outflowTypes: OutflowType[]
+  baseCurrencyCode: string
+  onPreset: (preset: DatePreset, from: string, to: string) => void
+  onViewAll: () => void
+  onDrillMonth: (from: string, to: string) => void
+  onDrillUnmapped: () => void
+}
+
+function SimpleOutflowView({
+  rows, recentLoading, dateFrom, dateTo, datePreset, unmappedCount, outflowTypes,
+  baseCurrencyCode, onPreset, onViewAll, onDrillMonth, onDrillUnmapped,
+}: SimpleOutflowViewProps) {
+  const summary       = useOutflowSummary(dateFrom, dateTo)
+  const animatedTotal = useCountUp(summary.total)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const delta = summary.prevTotal && summary.prevTotal > 0
+    ? ((summary.total - summary.prevTotal) / summary.prevTotal) * 100
+    : null
+
+  const typeMeta = (id: string | null): { name: string; color: string } => {
+    if (!id) return { name: 'Unclassified', color: UNCLASSIFIED_COLOR }
+    const t = outflowTypes.find(x => x.id === id)
+    return { name: t?.name ?? 'Unknown', color: t?.color ?? UNCLASSIFIED_COLOR }
+  }
+
+  const topTypes  = summary.byType.slice(0, 5)
+  const chartData = summary.monthly.map(p => ({ ...p, label: monthLabel(p.month) }))
+  const recent    = rows.slice(0, 8)
+
+  const hero = (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+      <p className="text-xs font-medium text-gray-500">Total outflows {periodLabel(datePreset)}</p>
+      <p className="text-3xl font-extrabold tabular-nums text-gray-900 mt-1">
+        {formatCurrency(animatedTotal, baseCurrencyCode)}
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        {summary.count.toLocaleString()} transaction{summary.count !== 1 ? 's' : ''}
+      </p>
+    </div>
+  )
+
+  const insightsPanel = (
+    <div className="space-y-4">
+      {/* Trend vs previous period */}
+      {delta !== null && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 flex items-center gap-2">
+          <span className={`inline-flex items-center gap-0.5 text-lg font-bold ${delta >= 0 ? 'text-danger' : 'text-success'}`}>
+            {delta >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+            {Math.abs(delta).toFixed(0)}%
+          </span>
+          <span className="text-sm text-gray-500">vs the previous {periodLabel(datePreset).replace('this ', '').replace('last ', '')}</span>
+        </div>
+      )}
+
+      {/* Monthly trend — tap a bar to drill */}
+      {!summary.loading && chartData.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-500">Monthly outflows</p>
+            <p className="text-[11px] text-gray-400">Tap a month to open it</p>
+          </div>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <RTooltip
+                cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Outflow']}
+                labelFormatter={() => ''}
+              />
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
+                onClick={(d: { month?: string; payload?: { month?: string } }) => {
+                  const ym = d?.month ?? d?.payload?.month
+                  if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
+                }}>
+                {chartData.map(d => <Cell key={d.month} fill="#DC2626" />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Outflow-type breakdown — tap to drill */}
+      {!summary.loading && topTypes.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold text-gray-500 mb-3">Top outflow types</p>
+          <div className="flex flex-wrap gap-2">
+            {topTypes.map(slice => {
+              const { name, color } = typeMeta(slice.outflowTypeId)
+              const pct = summary.total > 0 ? (slice.amount / summary.total) * 100 : 0
+              return (
+                <button
+                  key={slice.outflowTypeId ?? 'none'}
+                  type="button"
+                  onClick={onViewAll}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 pl-2 pr-3 py-1.5 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-xs font-medium text-gray-700">{name}</span>
+                  <span className="text-xs font-semibold text-gray-400 tabular-nums">{pct.toFixed(0)}%</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Attention nudge */}
+      {unmappedCount > 0 && (
+        <button
+          type="button"
+          onClick={onDrillUnmapped}
+          className="w-full flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            <p className="text-sm text-amber-800">
+              <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not yet assigned a category or fund type
+            </p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-amber-600 shrink-0" />
+        </button>
+      )}
+    </div>
+  )
+
+  const recentList = (
+    <div>
+      {recentLoading && recent.length === 0 ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-14 rounded-xl border border-gray-100 bg-white animate-pulse" />
+          ))}
+        </div>
+      ) : recent.length === 0 ? (
+        <PageEmptyState pageId="outflows" compact />
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">
+          {recent.map(row => {
+            const expanded = expandedId === row.id
+            return (
+              <div key={row.id}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : row.id)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <div className="min-w-0 flex items-center gap-2">
+                    <ChevronDown className={`w-4 h-4 text-gray-300 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 truncate">{row.display_description || row.description || '—'}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {formatDate(row.date)}{row.bank_name ? ` · ${row.bank_name}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-mono font-bold tabular-nums text-danger shrink-0">
+                    {formatCurrency(Number(row.amount_disbursed), baseCurrencyCode)}
+                  </p>
+                </button>
+                {expanded && (
+                  <div className="px-4 pb-3 pt-0 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pl-10">
+                    {row.outflow_type_name && <span>Type: <span className="font-medium text-gray-600">{row.outflow_type_name}</span></span>}
+                    {row.stage_code_1 && <span>Category: <span className="font-medium text-gray-600">{row.stage_code_1}</span></span>}
+                    {row.transaction_id && <span>Txn ID: <span className="font-medium text-gray-600">{row.transaction_id}</span></span>}
+                    {row.remarks && <span className="w-full text-gray-400">{row.remarks}</span>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <SimpleShell
+      pageId="outflows"
+      hero={hero}
+      ranges={
+        <DatePresetBar
+          activePreset={datePreset}
+          onPreset={onPreset}
+          onCustom={() => { /* custom handled in full view */ }}
+          hideCustom
+        />
+      }
+      bodyTitle="Recent outflows"
+      insights={insightsPanel}
+      body={recentList}
+      onViewAll={onViewAll}
+    />
   )
 }
 
