@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
-import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw, ArrowLeft } from 'lucide-react'
+import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
-import { useDetailLevel } from '../hooks/useDetailLevel'
 import { SimpleShell } from '../components/ui/SimpleShell'
 import { useCountUp } from '../hooks/useCountUp'
 import { isNonContributing } from '../utils/transactionTypes'
@@ -9,7 +8,7 @@ import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { supabase } from '../lib/supabase'
 import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
-import { useCategories, useCategoryGroups } from '../hooks/useCategories'
+import { useCategories } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency, formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
@@ -110,7 +109,6 @@ export default function CategoryLedger() {
   const orgId = useOrgStore(s => s.orgId)
 
   const { categories }                           = useCategories()
-  const { groups }                               = useCategoryGroups()
   const { configs, groups: allocGroups, fetch: fetchConfigs, loaded } = useAllocationStore()
   const outflowVersion   = useTransactionSyncStore(s => s.outflowVersion)
   const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
@@ -560,19 +558,6 @@ export default function CategoryLedger() {
     [summarySorted, summaryViewState.page, summaryViewState.pageSize],
   )
 
-  const totals = useMemo(
-    () => summarySorted.filter(r => !fxCategoryNames.has(r.name)).reduce(
-      (acc, r) => ({
-        pct:   acc.pct   + (r.percentage ?? 0),
-        alloc: acc.alloc + r.percentageAllocated,
-        seed:  acc.seed  + r.specificSeed,
-        sav:   acc.sav   + (r.savingsIn - r.savingsOut),
-      }),
-      { pct: 0, alloc: 0, seed: 0, sav: 0 },
-    ),
-    [summarySorted, fxCategoryNames],
-  )
-
   const globalTotals = useMemo(
     () => rows.filter(r => !fxCategoryNames.has(r.name)).reduce(
       (acc, r) => ({
@@ -585,13 +570,9 @@ export default function CategoryLedger() {
     [rows, fxCategoryNames],
   )
 
-  // Progressive disclosure: Simple shows every category's fund-type breakdown
-  // as one stacked chart (no cutoff — a comparison chart needs all of them);
-  // Full is the existing dense KPI cards + sortable/searchable table.
-  const { setLevel: setDetail, isSimple } = useDetailLevel('category-accounts')
-
   // Chart data — every non-FX category, unfiltered by activeCategory (the
-  // dropdown highlights a bar in Simple rather than removing the others).
+  // dropdown / bar-tap selects a category to zoom into, rather than removing
+  // the others from the ranked list).
   const chartRows = useMemo(
     () => rows
       .filter(r => !fxCategoryNames.has(r.name))
@@ -774,294 +755,22 @@ export default function CategoryLedger() {
       </div>
 
       {/* ── SUMMARY VIEW ──────────────────────────────────────────────────────────── */}
-      {viewMode === 'summary' && (isSimple ? (
+      {/* Chart-only summary — the old dense KPI+table view is retired; Ledger
+          already gives transaction-level detail. CSV export of the aggregate
+          data is still available via the header ExportDropdown regardless. */}
+      {viewMode === 'summary' && (
         <SimpleCategorySummary
           chartRows={chartRows}
-          grandTotal={globalTotals.alloc + globalTotals.seed + globalTotals.sav}
+          globalTotals={globalTotals}
           loading={loading}
+          error={error}
           activeCategory={activeCategory}
           categoryOptions={rows.map(r => ({ value: r.name, label: r.name }))}
           onCategoryChange={setActiveCategory}
           baseCurrencyCode={baseCurrencyCode}
           onViewLedger={() => setViewMode('ledger')}
-          onShowFullTable={() => setDetail('full')}
         />
-      ) : (
-        <>
-          {/* Quiet collapse back to the summary chart */}
-          <button
-            type="button"
-            onClick={() => setDetail('simple')}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Show summary
-          </button>
-
-          {/* Aggregate summary cards */}
-          {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[1,2,3,4].map(i => <div key={i} className="h-20 rounded-xl bg-gray-100 animate-pulse" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-xl bg-primary/5 border border-primary/20 px-3 py-3 min-w-0 overflow-hidden">
-                <p className="text-xs font-bold uppercase tracking-wide text-primary mb-1.5 flex items-center gap-1">
-                  <Percent className="w-3 h-3 shrink-0" /><span className="truncate">Regular Funds</span>
-                </p>
-                <p className="text-sm font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc, baseCurrencyCode)}</p>
-              </div>
-              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-3 min-w-0 overflow-hidden">
-                <p className="text-xs font-bold uppercase tracking-wide text-amber-700 mb-1.5 flex items-center gap-1">
-                  <Gift className="w-3 h-3 shrink-0" /><span className="truncate">Designated Gifts</span>
-                </p>
-                <p className="text-sm font-mono font-bold text-amber-700 tabular-nums">{formatCurrency(globalTotals.seed, baseCurrencyCode)}</p>
-              </div>
-              <div className={`rounded-xl border px-3 py-3 min-w-0 overflow-hidden ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                <p className={`text-xs font-bold uppercase tracking-wide mb-1.5 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
-                  <Archive className="w-3 h-3 shrink-0" /><span className="truncate">Savings Balance</span>
-                </p>
-                <p className={`text-sm font-mono font-bold tabular-nums ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav, baseCurrencyCode)}</p>
-              </div>
-              <div className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3 min-w-0 overflow-hidden">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-300 mb-1.5 truncate">Grand Total</p>
-                <p className="text-sm font-mono font-bold text-white tabular-nums">{formatCurrency(globalTotals.alloc + globalTotals.seed + globalTotals.sav, baseCurrencyCode)}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Category selector (portion filter removed — summary is always All) */}
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchableSelect value={activeCategory} onChange={setActiveCategory}
-              options={rows.map(r => ({ value: r.name, label: r.name }))}
-              placeholder="All categories"
-              className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700" />
-          </div>
-
-          {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
-            </div>
-          )}
-
-          {loading && (
-            <div className="space-y-2">
-              {[1,2,3,4].map(i => <div key={i} className="h-12 rounded-xl bg-gray-100 animate-pulse" />)}
-            </div>
-          )}
-
-          {!loading && !error && filteredRows.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <LayoutList className="w-8 h-8 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold text-gray-800">No categories found</p>
-                <p className="text-sm text-gray-500 mt-1">Create categories and tag transactions with a category and fund type to populate this view.</p>
-              </div>
-            </div>
-          )}
-
-          {!loading && !error && filteredRows.length > 0 && (
-            <>
-            <div className="space-y-2">
-              {/* Data Controls — immediately above table */}
-              <DataControlsBar
-                columns={SUMMARY_COLUMNS}
-                sortKey={summaryViewState.sortKey}
-                sortDir={summaryViewState.sortDir}
-                onSort={summaryViewState.setSort}
-                defaultSortKey="name"
-                defaultSortDir="desc"
-                search={summaryViewState.search}
-                onSearchChange={summaryViewState.setSearch}
-                searchPlaceholder="Search categories…"
-                searchCol={summaryViewState.searchCol}
-                onSearchColChange={summaryViewState.setSearchCol}
-                advancedSort={summaryViewState.advancedSort}
-                onAdvancedSort={summaryViewState.setAdvancedSort}
-                pageSize={summaryViewState.pageSize}
-                onPageSizeChange={summaryViewState.setPageSize}
-              />
-
-              {summarySorted.length === 0 ? (
-                <div className="py-10 text-center border border-dashed border-gray-200 rounded-xl bg-gray-50">
-                  <p className="text-sm text-gray-500">No categories match <span className="font-medium">"{summaryViewState.search}"</span></p>
-                  <button
-                    type="button"
-                    onClick={() => summaryViewState.setSearch('')}
-                    className="mt-2 text-xs text-primary hover:underline"
-                  >
-                    Clear search
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b-2 border-black/[0.06] dark:border-white/[0.07]">
-                        <SortableHeader
-                          field={SUMMARY_SORT_FIELDS[0]}
-                          activeSortKey={summaryViewState.sortKey}
-                          activeSortDir={summaryViewState.sortDir}
-                          onSort={summaryViewState.setSort}
-                          className="px-5 py-3"
-                        />
-                        <SortableHeader
-                          field={SUMMARY_SORT_FIELDS[1]}
-                          activeSortKey={summaryViewState.sortKey}
-                          activeSortDir={summaryViewState.sortDir}
-                          onSort={summaryViewState.setSort}
-                          rightAlign
-                          className="px-4 py-3"
-                        >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> Share %</span>
-                        </SortableHeader>
-                        <SortableHeader
-                          field={SUMMARY_SORT_FIELDS[2]}
-                          activeSortKey={summaryViewState.sortKey}
-                          activeSortDir={summaryViewState.sortDir}
-                          onSort={summaryViewState.setSort}
-                          rightAlign
-                          className="px-4 py-3 hidden md:table-cell"
-                        >
-                          <span className="flex items-center justify-end gap-1"><Percent className="w-3 h-3" /> Regular Funds</span>
-                        </SortableHeader>
-                        <SortableHeader
-                          field={SUMMARY_SORT_FIELDS[3]}
-                          activeSortKey={summaryViewState.sortKey}
-                          activeSortDir={summaryViewState.sortDir}
-                          onSort={summaryViewState.setSort}
-                          rightAlign
-                          className="px-4 py-3 hidden md:table-cell"
-                        >
-                          <span className="flex items-center justify-end gap-1"><Gift className="w-3 h-3" /> Designated Gifts</span>
-                        </SortableHeader>
-                        <SortableHeader
-                          field={SUMMARY_SORT_FIELDS[4]}
-                          activeSortKey={summaryViewState.sortKey}
-                          activeSortDir={summaryViewState.sortDir}
-                          onSort={summaryViewState.setSort}
-                          rightAlign
-                          className="px-5 py-3"
-                        >
-                          <span className="flex items-center justify-end gap-1"><Archive className="w-3 h-3" /> Savings Balance</span>
-                        </SortableHeader>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {(() => {
-                        const nameToGroupId = new Map(categories.map(c => [c.name, c.group_id]))
-                        const groupedSections = groups
-                          .map(g => ({ group: g, rows: summaryPage.filter(r => nameToGroupId.get(r.name) === g.id) }))
-                          .filter(s => s.rows.length > 0)
-                        const ungroupedRows = summaryPage.filter(r => !nameToGroupId.get(r.name))
-
-                        const CategoryDataRow = ({ row }: { row: CategoryRow }) => (
-                          <tr className="hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
-                            <td className="px-5 py-3 font-medium text-gray-800">{row.name}</td>
-                            <td className="px-4 py-3 text-right">
-                              {row.percentage !== null
-                                ? <span className="font-mono font-semibold text-primary">{Number(row.percentage).toFixed(1)}%</span>
-                                : <span className="text-gray-300 text-xs">—</span>}
-                            </td>
-                            <td className="px-4 py-3 text-right hidden md:table-cell">
-                              {row.percentageAllocated > 0
-                                ? <span className="font-mono text-primary">{formatCurrency(row.percentageAllocated, baseCurrencyCode)}</span>
-                                : <span className="text-gray-300 text-xs">—</span>}
-                            </td>
-                            <td className="px-4 py-3 text-right hidden md:table-cell">
-                              {row.specificSeed > 0
-                                ? <span className="font-mono text-amber-700">{formatCurrency(row.specificSeed, baseCurrencyCode)}</span>
-                                : <span className="text-gray-300 text-xs">—</span>}
-                            </td>
-                            <td className="px-5 py-3 text-right">
-                              {row.savingsIn > 0 || row.savingsOut > 0
-                                ? <span className={`font-mono font-semibold ${row.savingsIn - row.savingsOut >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(row.savingsIn - row.savingsOut, baseCurrencyCode)}</span>
-                                : <span className="text-gray-300 text-xs">—</span>}
-                            </td>
-                          </tr>
-                        )
-
-                        const GroupSubtotalRow = ({ sectionRows, label }: { sectionRows: CategoryRow[]; label: string }) => {
-                          const localRows = sectionRows.filter(r => !fxCategoryNames.has(r.name))
-                          const sPct   = localRows.reduce((s, r) => s + (r.percentage ?? 0), 0)
-                          const sAlloc = localRows.reduce((s, r) => s + r.percentageAllocated, 0)
-                          const sSeed  = localRows.reduce((s, r) => s + r.specificSeed, 0)
-                          const sSav   = localRows.reduce((s, r) => s + (r.savingsIn - r.savingsOut), 0)
-                          return (
-                            <tr className="bg-gray-50 border-t border-gray-100 text-xs font-semibold text-gray-600">
-                              <td className="px-5 py-2 pl-8">↳ {label} subtotal</td>
-                              <td className="px-4 py-2 text-right font-mono text-primary">{sPct > 0 ? `${sPct.toFixed(1)}%` : '—'}</td>
-                              <td className="px-4 py-2 text-right font-mono text-primary hidden md:table-cell">{sAlloc > 0 ? formatCurrency(sAlloc, baseCurrencyCode) : '—'}</td>
-                              <td className="px-4 py-2 text-right font-mono text-amber-700 hidden md:table-cell">{sSeed > 0 ? formatCurrency(sSeed, baseCurrencyCode) : '—'}</td>
-                              <td className={`px-5 py-2 text-right font-mono ${sSav >= 0 ? 'text-success' : 'text-danger'}`}>{sSav !== 0 ? formatCurrency(sSav, baseCurrencyCode) : '—'}</td>
-                            </tr>
-                          )
-                        }
-
-                        return (
-                          <>
-                            {groupedSections.map(({ group, rows: gRows }) => (
-                              <Fragment key={group.id}>
-                                <tr className="bg-gray-100 border-y border-gray-200">
-                                  <td colSpan={5} className="px-5 py-2">
-                                    <span className="text-xs font-semibold text-gray-500">{group.name}</span>
-                                  </td>
-                                </tr>
-                                {gRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
-                                <GroupSubtotalRow sectionRows={gRows} label={group.name} />
-                              </Fragment>
-                            ))}
-                            {ungroupedRows.length > 0 && groupedSections.length > 0 && (
-                              <tr className="bg-gray-100 border-y border-gray-200">
-                                <td colSpan={5} className="px-5 py-2">
-                                  <span className="text-xs font-semibold text-gray-500">Other</span>
-                                </td>
-                              </tr>
-                            )}
-                            {ungroupedRows.map(row => <CategoryDataRow key={row.name} row={row} />)}
-                          </>
-                        )
-                      })()}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-xs">
-                        <td className="px-5 py-3 text-gray-700">
-                          Totals
-                          {summaryViewState.search && (
-                            <span className="ml-1.5 font-normal text-gray-400">({summarySorted.length} shown)</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-primary">
-                          {totals.pct > 0 ? `${totals.pct.toFixed(1)}%` : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-primary hidden md:table-cell">
-                          {totals.alloc > 0 ? formatCurrency(totals.alloc, baseCurrencyCode) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-amber-700 hidden md:table-cell">
-                          {totals.seed > 0 ? formatCurrency(totals.seed, baseCurrencyCode) : '—'}
-                        </td>
-                        <td className={`px-5 py-3 text-right font-mono ${totals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {formatCurrency(totals.sav, baseCurrencyCode)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-            <PaginationBar
-              page={summaryViewState.page}
-              pageSize={summaryViewState.pageSize}
-              total={summarySorted.length}
-              onPageChange={summaryViewState.setPage}
-              variant="full"
-            />
-            </>
-          )}
-        </>
-      ))}
+      )}
 
       {/* ── LEDGER VIEW ───────────────────────────────────────────────────────────── */}
       {viewMode === 'ledger' && (
@@ -1589,43 +1298,94 @@ export default function CategoryLedger() {
 }
 
 // ── Simple summary view ────────────────────────────────────────────────────────
-// Lean by default: hero grand total + a stacked bar comparing every category's
-// fund-type breakdown (Regular / Designated / Savings) — the whole point of a
-// comparison chart is seeing every category, so there is no top-N cutoff; the
-// chart scrolls instead. Picking a category highlights its bar rather than
-// filtering the others out. "View more" jumps straight to the Ledger view;
-// a quiet secondary link reaches the existing detailed table (Full).
+// Chart-only summary (the old dense KPI+table view is retired — Ledger already
+// gives transaction-level detail). The fund-type totals strip is carried over
+// unchanged from that old view. Every category renders as a single ranked bar
+// (net total) so the list scans fast at any size; picking a category — via the
+// dropdown or by tapping its bar — reveals a detail card with its
+// Regular/Designated/Savings breakdown and amounts. The detail card renders
+// above the (scrollable) ranked list, so it's visible immediately with no
+// scrolling, regardless of where that category sits in the list.
 
+const RANKED_BAR_COLOR = '#0D7377'   // Teal Anchor — default single-color bar
+const COMPOSITION_COLORS = {
+  Regular:    '#0D7377',  // Teal Anchor
+  Designated: '#C89B3C',  // Gold Honour
+  Savings:    '#1A2C42',  // Deep Navy — distinct from Regular's teal
+} as const
 const CHART_ROW_HEIGHT = 34
-const CHART_COLORS = { Regular: '#0D7377', Designated: '#C89B3C', Savings: '#16A34A' } as const
 
 interface ChartRow { name: string; Regular: number; Designated: number; Savings: number }
 
 function SimpleCategorySummary({
-  chartRows, grandTotal, loading, activeCategory, categoryOptions, onCategoryChange,
-  baseCurrencyCode, onViewLedger, onShowFullTable,
+  chartRows, globalTotals, loading, error, activeCategory, categoryOptions, onCategoryChange,
+  baseCurrencyCode, onViewLedger,
 }: {
   chartRows: ChartRow[]
-  grandTotal: number
+  globalTotals: { alloc: number; seed: number; sav: number }
   loading: boolean
+  error: string | null
   activeCategory: string
   categoryOptions: { value: string; label: string }[]
   onCategoryChange: (v: string) => void
   baseCurrencyCode: string
   onViewLedger: () => void
-  onShowFullTable: () => void
 }) {
+  const grandTotal = globalTotals.alloc + globalTotals.seed + globalTotals.sav
   const animatedTotal = useCountUp(grandTotal)
 
+  const ranked = useMemo(
+    () => chartRows
+      .map(r => ({ ...r, net: r.Regular + r.Designated + r.Savings }))
+      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
+    [chartRows],
+  )
+
+  const selected = activeCategory ? (ranked.find(r => r.name === activeCategory) ?? null) : null
+
+  const selectBar = (name: string) => onCategoryChange(name === activeCategory ? '' : name)
+
   const hero = (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5">
-      <p className="text-xs font-medium text-gray-500">Total held across funds</p>
-      <p className="text-3xl font-extrabold tabular-nums text-gray-900 mt-1">
-        {formatCurrency(animatedTotal, baseCurrencyCode)}
-      </p>
-      <p className="text-xs text-gray-400 mt-1">
-        {chartRows.length.toLocaleString()} categor{chartRows.length !== 1 ? 'ies' : 'y'}
-      </p>
+    <div className="space-y-3">
+      {/* Grand total — the hero */}
+      {loading ? (
+        <div className="h-24 rounded-2xl border border-gray-100 bg-white animate-pulse" />
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <p className="text-xs font-medium text-gray-500">Total held across funds</p>
+          <p className="text-3xl font-extrabold tabular-nums text-gray-900 mt-1">
+            {formatCurrency(animatedTotal, baseCurrencyCode)}
+          </p>
+        </div>
+      )}
+
+      {/* Fund-type totals — smaller strip below the hero */}
+      {loading ? (
+        <div className="grid grid-cols-3 gap-2">
+          {[1,2,3].map(i => <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-lg bg-primary/5 border border-primary/20 px-2.5 py-2 min-w-0 overflow-hidden">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-primary mb-0.5 flex items-center gap-1">
+              <Percent className="w-2.5 h-2.5 shrink-0" /><span className="truncate">Regular</span>
+            </p>
+            <p className="text-xs font-mono font-bold text-primary tabular-nums">{formatCurrency(globalTotals.alloc, baseCurrencyCode)}</p>
+          </div>
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2 min-w-0 overflow-hidden">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-0.5 flex items-center gap-1">
+              <Gift className="w-2.5 h-2.5 shrink-0" /><span className="truncate">Designated</span>
+            </p>
+            <p className="text-xs font-mono font-bold text-amber-700 tabular-nums">{formatCurrency(globalTotals.seed, baseCurrencyCode)}</p>
+          </div>
+          <div className={`rounded-lg border px-2.5 py-2 min-w-0 overflow-hidden ${globalTotals.sav >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <p className={`text-[10px] font-bold uppercase tracking-wide mb-0.5 flex items-center gap-1 ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>
+              <Archive className="w-2.5 h-2.5 shrink-0" /><span className="truncate">Savings</span>
+            </p>
+            <p className={`text-xs font-mono font-bold tabular-nums ${globalTotals.sav >= 0 ? 'text-success' : 'text-danger'}`}>{formatCurrency(globalTotals.sav, baseCurrencyCode)}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 
@@ -1635,7 +1395,7 @@ function SimpleCategorySummary({
         value={activeCategory}
         onChange={onCategoryChange}
         options={categoryOptions}
-        placeholder="Highlight a category…"
+        placeholder="Select a category to zoom in…"
         className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700"
       />
       {activeCategory && (
@@ -1650,54 +1410,74 @@ function SimpleCategorySummary({
     </div>
   )
 
-  const body = loading && chartRows.length === 0 ? (
+  const errorBanner = error ? (
+    <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+    </div>
+  ) : null
+
+  const body = loading && ranked.length === 0 ? (
     <div className="h-48 rounded-2xl border border-gray-100 bg-white animate-pulse" />
-  ) : chartRows.length === 0 ? (
+  ) : ranked.length === 0 ? (
     <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-2xl border border-dashed border-gray-200 bg-gray-50">
       <LayoutList className="w-8 h-8 text-primary/60" />
       <p className="text-sm text-gray-500">No category balances yet.</p>
     </div>
   ) : (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-gray-500">Fund balances by category</p>
-        <div className="flex items-center gap-3 text-[11px] text-gray-400">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS.Regular }} />Regular</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS.Designated }} />Designated</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS.Savings }} />Savings</span>
+    <div className="space-y-3">
+      {/* Selected category detail — always renders here, above the scrollable
+          list, so it's visible immediately without scrolling to find it. */}
+      {selected && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-gray-800">{selected.name}</p>
+            <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(selected.net, baseCurrencyCode)}</p>
+          </div>
+          <div className="space-y-1.5">
+            {([['Regular', selected.Regular], ['Designated', selected.Designated], ['Savings', selected.Savings]] as const).map(([label, amt]) => (
+              <div key={label} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5 text-gray-600">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COMPOSITION_COLORS[label] }} />
+                  {label}
+                </span>
+                <span className="font-mono font-semibold tabular-nums text-gray-800">{formatCurrency(amt, baseCurrencyCode)}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="max-h-[420px] overflow-y-auto">
-        <ResponsiveContainer width="100%" height={Math.max(CHART_ROW_HEIGHT * chartRows.length, 120)}>
-          <BarChart data={chartRows} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
-            <XAxis type="number" tickFormatter={(v: number) => formatCurrencyCompact(v, baseCurrencyCode)} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
-            <RTooltip
-              cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-              formatter={(v: number, key: string) => [formatCurrency(v, baseCurrencyCode), key]}
-            />
-            {(['Regular', 'Designated', 'Savings'] as const).map(key => (
-              <Bar key={key} dataKey={key} stackId="fund" radius={key === 'Savings' ? [0, 3, 3, 0] : undefined}>
-                {chartRows.map(row => (
+      )}
+
+      {/* Ranked list — every category, one plain bar each; tap a bar to select it. */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <div className="max-h-[420px] overflow-y-auto">
+          <ResponsiveContainer width="100%" height={Math.max(CHART_ROW_HEIGHT * ranked.length, 120)}>
+            <BarChart data={ranked} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
+              <XAxis type="number" tickFormatter={(v: number) => formatCurrencyCompact(v, baseCurrencyCode)} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
+              <RTooltip
+                cursor={{ fill: 'rgba(0,0,0,0.03)' }}
+                formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Net']}
+              />
+              <Bar
+                dataKey="net"
+                radius={[0, 3, 3, 0]}
+                cursor="pointer"
+                onClick={(d: { name?: string; payload?: { name?: string } }) => {
+                  const nm = d?.name ?? d?.payload?.name
+                  if (nm) selectBar(nm)
+                }}
+              >
+                {ranked.map(row => (
                   <Cell
                     key={row.name}
-                    fill={CHART_COLORS[key]}
-                    fillOpacity={!activeCategory || row.name === activeCategory ? 1 : 0.25}
+                    fill={RANKED_BAR_COLOR}
+                    fillOpacity={!activeCategory || row.name === activeCategory ? 1 : 0.35}
                   />
                 ))}
               </Bar>
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="mt-3 text-center">
-        <button
-          type="button"
-          onClick={onShowFullTable}
-          className="text-xs text-gray-400 hover:text-gray-600 hover:underline"
-        >
-          View detailed table
-        </button>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   )
@@ -1707,8 +1487,8 @@ function SimpleCategorySummary({
       pageId="category-accounts"
       hero={hero}
       filters={filters}
-      bodyTitle="Your funds"
-      body={body}
+      bodyTitle="Fund balances by category"
+      body={<>{errorBanner}{body}</>}
       onViewAll={onViewLedger}
       viewAllLabel="View full ledger"
     />
