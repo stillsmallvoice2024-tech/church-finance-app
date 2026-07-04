@@ -1508,10 +1508,17 @@ function SimpleCategorySummary({
                 content={<RankedTooltip baseCurrencyCode={baseCurrencyCode} />}
               />
               {/* Invisible full-width click target — same onClick as the real bar
-                  below, so thin/near-zero bars are just as easy to tap. */}
+                  below, so thin/near-zero bars are just as easy to tap.
+                  fill="transparent" would NOT work here: SVG's default
+                  pointer-events (visiblePainted) ignores unpainted shapes, so
+                  a truly transparent fill silently swallows clicks. Using an
+                  opaque fill with fillOpacity=0 keeps it "painted" (and thus
+                  clickable) while staying invisible. */}
               <Bar
                 dataKey="hitArea"
-                fill="transparent"
+                fill="#000000"
+                fillOpacity={0}
+                style={{ pointerEvents: 'all' }}
                 isAnimationActive={false}
                 legendType="none"
                 cursor="pointer"
