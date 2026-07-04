@@ -880,6 +880,90 @@ function SimpleInflowView({
   const chartData = summary.monthly.map(p => ({ ...p, label: monthLabel(p.month) }))
   const recent    = rows.slice(0, 8)
 
+  const insightsPanel = (
+    <div className="space-y-4">
+      {/* Trend vs previous period */}
+      {delta !== null && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 flex items-center gap-2">
+          <span className={`inline-flex items-center gap-0.5 text-lg font-bold ${delta >= 0 ? 'text-success' : 'text-danger'}`}>
+            {delta >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+            {Math.abs(delta).toFixed(0)}%
+          </span>
+          <span className="text-sm text-gray-500">vs the previous {periodLabel(datePreset).replace('this ', '').replace('last ', '')}</span>
+        </div>
+      )}
+
+      {/* Monthly trend — tap a bar to drill */}
+      {!summary.loading && chartData.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-500">Monthly inflows</p>
+            <p className="text-[11px] text-gray-400">Tap a month to open it</p>
+          </div>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <RTooltip
+                cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Inflow']}
+                labelFormatter={() => ''}
+              />
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
+                onClick={(d: { month?: string; payload?: { month?: string } }) => {
+                  const ym = d?.month ?? d?.payload?.month
+                  if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
+                }}>
+                {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Income-type breakdown — tap to drill */}
+      {!summary.loading && topTypes.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold text-gray-500 mb-3">Top income types</p>
+          <div className="flex flex-wrap gap-2">
+            {topTypes.map(slice => {
+              const { name, color } = typeMeta(slice.incomeTypeId)
+              const pct = summary.total > 0 ? (slice.amount / summary.total) * 100 : 0
+              return (
+                <button
+                  key={slice.incomeTypeId ?? 'none'}
+                  type="button"
+                  onClick={onViewAll}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 pl-2 pr-3 py-1.5 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-xs font-medium text-gray-700">{name}</span>
+                  <span className="text-xs font-semibold text-gray-400 tabular-nums">{pct.toFixed(0)}%</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Attention nudge */}
+      {unmappedCount > 0 && (
+        <button
+          type="button"
+          onClick={onDrillUnmapped}
+          className="w-full flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            <p className="text-sm text-amber-800">
+              <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not yet assigned to a distribution rule
+            </p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-amber-600 shrink-0" />
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div className="space-y-4">
 
@@ -897,20 +981,25 @@ function SimpleInflowView({
       {/* Quick ranges */}
       <PageDatePresets activePreset={datePreset} onPreset={onPreset} />
 
-      {/* Recent activity — tap to expand */}
+      {/* Recent inflows header + insights toggle */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700">Recent inflows</h2>
+        <button
+          type="button"
+          onClick={toggleInsights}
+          aria-expanded={showInsights}
+          className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          {showInsights ? 'Hide insights' : 'More insights'}
+          <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${showInsights ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {/* Insights — before the list so recent flows straight into "View all" */}
+      {showInsights && insightsPanel}
+
+      {/* Recent list */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-700">Recent inflows</h2>
-          <button
-            type="button"
-            onClick={toggleInsights}
-            aria-expanded={showInsights}
-            className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            {showInsights ? 'Hide insights' : 'More insights'}
-            <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${showInsights ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
         {recentLoading && recent.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -957,92 +1046,6 @@ function SimpleInflowView({
           </div>
         )}
       </div>
-
-      {/* Insights — toggled from the Recent inflows header above */}
-      {showInsights && (
-        <div className="space-y-4">
-
-            {/* Trend vs previous period */}
-            {delta !== null && (
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 flex items-center gap-2">
-                <span className={`inline-flex items-center gap-0.5 text-lg font-bold ${delta >= 0 ? 'text-success' : 'text-danger'}`}>
-                  {delta >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
-                  {Math.abs(delta).toFixed(0)}%
-                </span>
-                <span className="text-sm text-gray-500">vs the previous {periodLabel(datePreset).replace('this ', '').replace('last ', '')}</span>
-              </div>
-            )}
-
-            {/* Monthly trend — tap a bar to drill */}
-            {!summary.loading && chartData.length > 0 && (
-              <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-500">Monthly inflows</p>
-                  <p className="text-[11px] text-gray-400">Tap a month to open it</p>
-                </div>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <RTooltip
-                      cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-                      formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Inflow']}
-                      labelFormatter={() => ''}
-                    />
-                    <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
-                      onClick={(d: { month?: string; payload?: { month?: string } }) => {
-                        const ym = d?.month ?? d?.payload?.month
-                        if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
-                      }}>
-                      {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Income-type breakdown — tap to drill */}
-            {!summary.loading && topTypes.length > 0 && (
-              <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                <p className="text-xs font-semibold text-gray-500 mb-3">Top income types</p>
-                <div className="flex flex-wrap gap-2">
-                  {topTypes.map(slice => {
-                    const { name, color } = typeMeta(slice.incomeTypeId)
-                    const pct = summary.total > 0 ? (slice.amount / summary.total) * 100 : 0
-                    return (
-                      <button
-                        key={slice.incomeTypeId ?? 'none'}
-                        type="button"
-                        onClick={onViewAll}
-                        className="inline-flex items-center gap-2 rounded-full border border-gray-200 pl-2 pr-3 py-1.5 hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                        <span className="text-xs font-medium text-gray-700">{name}</span>
-                        <span className="text-xs font-semibold text-gray-400 tabular-nums">{pct.toFixed(0)}%</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Attention nudge */}
-            {unmappedCount > 0 && (
-              <button
-                type="button"
-                onClick={onDrillUnmapped}
-                className="w-full flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                  <p className="text-sm text-amber-800">
-                    <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not yet assigned to a distribution rule
-                  </p>
-                </div>
-                <ArrowRight className="w-4 h-4 text-amber-600 shrink-0" />
-              </button>
-            )}
-          </div>
-        )}
 
       <button
         type="button"
