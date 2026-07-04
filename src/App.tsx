@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useAuthListener } from './hooks/useAuth'
 import { useAccountCodesStore } from './store/accountCodesStore'
@@ -10,30 +10,34 @@ import { OrgLockedScreen } from './components/layout/OrgLockedScreen'
 import { useRole } from './hooks/useRole'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
-import LoginPage from './components/auth/LoginPage'
-import Onboarding from './pages/Onboarding'
-import Dashboard from './pages/Dashboard'
-import Inflows from './pages/Inflows'
-import Outflows from './pages/Outflows'
-import Categories from './pages/Categories'
-import ForeignCurrency from './pages/ForeignCurrency'
-import IntraFlow from './pages/IntraFlow'
-import ReportCentre from './pages/ReportCentre'
-import DynamicReportEditor from './pages/DynamicReportEditor'
-import SettingsPage from './pages/Setup'
-import UserManagement from './pages/UserManagement'
-import Import from './pages/Import'
-import Adjustments from './pages/Adjustments'
-import PercentageAllocations from './pages/PercentageAllocations'
-import Funds from './pages/Funds'
-import BankLedger           from './pages/BankLedger'
-import BankMovement         from './pages/BankMovement'
-import Receipts             from './pages/Receipts'
-import ChangeLog            from './pages/ChangeLog'
-import ReconciliationCenter from './pages/ReconciliationCenter'
-import ResetPassword        from './pages/ResetPassword'
-import AcceptInvite         from './pages/AcceptInvite'
-import Tutorial             from './pages/Tutorial'
+import { RouteFallback } from './components/ui/RouteFallback'
+
+// Route components are lazy-loaded so heavy dependencies (pdfjs, xlsx, jspdf,
+// recharts) are code-split per route instead of shipping in the initial bundle.
+const LoginPage             = lazy(() => import('./components/auth/LoginPage'))
+const Onboarding            = lazy(() => import('./pages/Onboarding'))
+const Dashboard             = lazy(() => import('./pages/Dashboard'))
+const Inflows               = lazy(() => import('./pages/Inflows'))
+const Outflows              = lazy(() => import('./pages/Outflows'))
+const Categories            = lazy(() => import('./pages/Categories'))
+const ForeignCurrency       = lazy(() => import('./pages/ForeignCurrency'))
+const IntraFlow             = lazy(() => import('./pages/IntraFlow'))
+const ReportCentre          = lazy(() => import('./pages/ReportCentre'))
+const DynamicReportEditor   = lazy(() => import('./pages/DynamicReportEditor'))
+const SettingsPage          = lazy(() => import('./pages/Setup'))
+const UserManagement        = lazy(() => import('./pages/UserManagement'))
+const Import                = lazy(() => import('./pages/Import'))
+const Adjustments           = lazy(() => import('./pages/Adjustments'))
+const PercentageAllocations = lazy(() => import('./pages/PercentageAllocations'))
+const Funds                 = lazy(() => import('./pages/Funds'))
+const BankLedger            = lazy(() => import('./pages/BankLedger'))
+const BankMovement          = lazy(() => import('./pages/BankMovement'))
+const Receipts              = lazy(() => import('./pages/Receipts'))
+const ChangeLog             = lazy(() => import('./pages/ChangeLog'))
+const ReconciliationCenter  = lazy(() => import('./pages/ReconciliationCenter'))
+const ResetPassword         = lazy(() => import('./pages/ResetPassword'))
+const AcceptInvite          = lazy(() => import('./pages/AcceptInvite'))
+const Tutorial              = lazy(() => import('./pages/Tutorial'))
 
 // ── Route-level role guards ────────────────────────────────────────────────────
 // These run inside AuthGuard (loading=false, user set) so canWrite/isAdmin resolve correctly.
@@ -104,6 +108,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
@@ -170,6 +175,7 @@ export default function App() {
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

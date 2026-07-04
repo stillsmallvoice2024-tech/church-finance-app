@@ -1,5 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { RefreshCw, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
+import { reportError } from '../../lib/errorMonitor'
 
 interface Props  { children: ReactNode; fallback?: ReactNode }
 interface State  { hasError: boolean; error: Error | null; showDetails: boolean }
@@ -12,7 +13,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[ErrorBoundary]', error, info.componentStack)
+    reportError(error, { source: 'ErrorBoundary', componentStack: info.componentStack ?? undefined })
   }
 
   reset = () => this.setState({ hasError: false, error: null, showDetails: false })

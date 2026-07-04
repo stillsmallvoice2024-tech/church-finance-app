@@ -18,7 +18,7 @@ describe('C1: schema.sql has no duplicate policy definitions', () => {
   const schema = sql('supabase/schema.sql')
 
   const policyNames = [
-    'audit_select', 'field_changes_select', 'field_changes_delete',
+    'audit_select', 'field_changes_select',
     'cob_select', 'cob_insert', 'cob_update', 'cob_delete',
     'orgs_select', 'orgs_insert', 'orgs_update', 'orgs_delete',
     'org_members_select', 'org_members_insert', 'org_members_update', 'org_members_delete',
@@ -32,6 +32,47 @@ describe('C1: schema.sql has no duplicate policy definitions', () => {
       const matches = schema.match(pattern) ?? []
       expect(matches.length).toBe(1)
     })
+  })
+})
+
+// ── R1: profiles_select scoped to shared-org membership ───────────────────────
+
+describe('R1: profiles_select does not leak cross-org PII', () => {
+  const schema = sql('supabase/schema.sql')
+
+  it('profiles_select no longer uses bare auth.uid() is not null', () => {
+    const policySection = schema.slice(
+      schema.indexOf('create policy "profiles_select"'),
+      schema.indexOf('create policy "profiles_insert"'),
+    )
+    expect(policySection).not.toContain('using (auth.uid() is not null)')
+    expect(policySection).toContain('id = auth.uid()')
+    expect(policySection).toContain('org_members caller')
+  })
+
+  it('migration scopes profiles_select and invitation_emails_admin_read', () => {
+    const fix = migration('20260704000001_scope_profiles_and_global_admin.sql')
+    expect(fix).toContain('CREATE POLICY "profiles_select"')
+    expect(fix).toContain('target.user_id = profiles.id')
+    expect(fix).toContain('CREATE POLICY "invitation_emails_admin_read"')
+    expect(fix).toContain('public.is_org_admin(i.org_id)')
+  })
+})
+
+// ── R2: audit_log + field_changes are client-append-only ──────────────────────
+
+describe('R2: audit trail has no client DELETE policy', () => {
+  const schema = sql('supabase/schema.sql')
+
+  it('schema.sql defines no audit_delete or field_changes_delete policy', () => {
+    expect(schema).not.toContain('create policy "audit_delete"')
+    expect(schema).not.toContain('create policy "field_changes_delete"')
+  })
+
+  it('migration drops both client DELETE policies', () => {
+    const fix = migration('20260704000002_audit_log_append_only.sql')
+    expect(fix).toContain('DROP POLICY IF EXISTS "audit_delete"         ON public.audit_log')
+    expect(fix).toContain('DROP POLICY IF EXISTS "field_changes_delete" ON public.field_changes')
   })
 })
 
