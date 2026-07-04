@@ -1,5 +1,9 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
-import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react'
+import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw, ArrowLeft } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { useDetailLevel } from '../hooks/useDetailLevel'
+import { SimpleShell } from '../components/ui/SimpleShell'
+import { useCountUp } from '../hooks/useCountUp'
 import { isNonContributing } from '../utils/transactionTypes'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
@@ -7,7 +11,7 @@ import { supabase } from '../lib/supabase'
 import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
 import { useCategories, useCategoryGroups } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { formatCurrency, formatDate, getCurrencyLocale } from '../utils/formatters'
+import { formatCurrency, formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
@@ -581,6 +585,27 @@ export default function CategoryLedger() {
     [rows, fxCategoryNames],
   )
 
+  // Progressive disclosure: Simple shows every category's fund-type breakdown
+  // as one stacked chart (no cutoff — a comparison chart needs all of them);
+  // Full is the existing dense KPI cards + sortable/searchable table.
+  const { setLevel: setDetail, isSimple } = useDetailLevel('category-accounts')
+
+  // Chart data — every non-FX category, unfiltered by activeCategory (the
+  // dropdown highlights a bar in Simple rather than removing the others).
+  const chartRows = useMemo(
+    () => rows
+      .filter(r => !fxCategoryNames.has(r.name))
+      .map(r => ({
+        name:       r.name,
+        Regular:    r.percentageAllocated,
+        Designated: r.specificSeed,
+        Savings:    r.savingsIn - r.savingsOut,
+      }))
+      .filter(r => r.Regular !== 0 || r.Designated !== 0 || r.Savings !== 0)
+      .sort((a, b) => (b.Regular + b.Designated + b.Savings) - (a.Regular + a.Designated + a.Savings)),
+    [rows, fxCategoryNames],
+  )
+
   // Currency for the currently selected ledger category (FX categories carry their own)
   const ledgerDisplayCurrency = useMemo(
     () => categories.find(c => c.name === activeCategory)?.currency ?? baseCurrencyCode,
@@ -749,8 +774,30 @@ export default function CategoryLedger() {
       </div>
 
       {/* ── SUMMARY VIEW ──────────────────────────────────────────────────────────── */}
-      {viewMode === 'summary' && (
+      {viewMode === 'summary' && (isSimple ? (
+        <SimpleCategorySummary
+          chartRows={chartRows}
+          grandTotal={globalTotals.alloc + globalTotals.seed + globalTotals.sav}
+          loading={loading}
+          activeCategory={activeCategory}
+          categoryOptions={rows.map(r => ({ value: r.name, label: r.name }))}
+          onCategoryChange={setActiveCategory}
+          baseCurrencyCode={baseCurrencyCode}
+          onViewLedger={() => setViewMode('ledger')}
+          onShowFullTable={() => setDetail('full')}
+        />
+      ) : (
         <>
+          {/* Quiet collapse back to the summary chart */}
+          <button
+            type="button"
+            onClick={() => setDetail('simple')}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Show summary
+          </button>
+
           {/* Aggregate summary cards */}
           {loading ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1014,7 +1061,7 @@ export default function CategoryLedger() {
             </>
           )}
         </>
-      )}
+      ))}
 
       {/* ── LEDGER VIEW ───────────────────────────────────────────────────────────── */}
       {viewMode === 'ledger' && (
@@ -1538,6 +1585,133 @@ export default function CategoryLedger() {
 
       <DescriptionTooltip tooltip={descTooltip} />
     </div>
+  )
+}
+
+// ── Simple summary view ────────────────────────────────────────────────────────
+// Lean by default: hero grand total + a stacked bar comparing every category's
+// fund-type breakdown (Regular / Designated / Savings) — the whole point of a
+// comparison chart is seeing every category, so there is no top-N cutoff; the
+// chart scrolls instead. Picking a category highlights its bar rather than
+// filtering the others out. "View more" jumps straight to the Ledger view;
+// a quiet secondary link reaches the existing detailed table (Full).
+
+const CHART_ROW_HEIGHT = 34
+const CHART_COLORS = { Regular: '#0D7377', Designated: '#C89B3C', Savings: '#16A34A' } as const
+
+interface ChartRow { name: string; Regular: number; Designated: number; Savings: number }
+
+function SimpleCategorySummary({
+  chartRows, grandTotal, loading, activeCategory, categoryOptions, onCategoryChange,
+  baseCurrencyCode, onViewLedger, onShowFullTable,
+}: {
+  chartRows: ChartRow[]
+  grandTotal: number
+  loading: boolean
+  activeCategory: string
+  categoryOptions: { value: string; label: string }[]
+  onCategoryChange: (v: string) => void
+  baseCurrencyCode: string
+  onViewLedger: () => void
+  onShowFullTable: () => void
+}) {
+  const animatedTotal = useCountUp(grandTotal)
+
+  const hero = (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+      <p className="text-xs font-medium text-gray-500">Total held across funds</p>
+      <p className="text-3xl font-extrabold tabular-nums text-gray-900 mt-1">
+        {formatCurrency(animatedTotal, baseCurrencyCode)}
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        {chartRows.length.toLocaleString()} categor{chartRows.length !== 1 ? 'ies' : 'y'}
+      </p>
+    </div>
+  )
+
+  const filters = (
+    <div className="flex flex-wrap items-center gap-2">
+      <SearchableSelect
+        value={activeCategory}
+        onChange={onCategoryChange}
+        options={categoryOptions}
+        placeholder="Highlight a category…"
+        className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700"
+      />
+      {activeCategory && (
+        <button
+          type="button"
+          onClick={() => onCategoryChange('')}
+          className="text-xs text-gray-400 hover:text-gray-600"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  )
+
+  const body = loading && chartRows.length === 0 ? (
+    <div className="h-48 rounded-2xl border border-gray-100 bg-white animate-pulse" />
+  ) : chartRows.length === 0 ? (
+    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-2xl border border-dashed border-gray-200 bg-gray-50">
+      <LayoutList className="w-8 h-8 text-primary/60" />
+      <p className="text-sm text-gray-500">No category balances yet.</p>
+    </div>
+  ) : (
+    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-gray-500">Fund balances by category</p>
+        <div className="flex items-center gap-3 text-[11px] text-gray-400">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS.Regular }} />Regular</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS.Designated }} />Designated</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS.Savings }} />Savings</span>
+        </div>
+      </div>
+      <div className="max-h-[420px] overflow-y-auto">
+        <ResponsiveContainer width="100%" height={Math.max(CHART_ROW_HEIGHT * chartRows.length, 120)}>
+          <BarChart data={chartRows} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
+            <XAxis type="number" tickFormatter={(v: number) => formatCurrencyCompact(v, baseCurrencyCode)} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
+            <RTooltip
+              cursor={{ fill: 'rgba(0,0,0,0.03)' }}
+              formatter={(v: number, key: string) => [formatCurrency(v, baseCurrencyCode), key]}
+            />
+            {(['Regular', 'Designated', 'Savings'] as const).map(key => (
+              <Bar key={key} dataKey={key} stackId="fund" radius={key === 'Savings' ? [0, 3, 3, 0] : undefined}>
+                {chartRows.map(row => (
+                  <Cell
+                    key={row.name}
+                    fill={CHART_COLORS[key]}
+                    fillOpacity={!activeCategory || row.name === activeCategory ? 1 : 0.25}
+                  />
+                ))}
+              </Bar>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 text-center">
+        <button
+          type="button"
+          onClick={onShowFullTable}
+          className="text-xs text-gray-400 hover:text-gray-600 hover:underline"
+        >
+          View detailed table
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <SimpleShell
+      pageId="category-accounts"
+      hero={hero}
+      filters={filters}
+      bodyTitle="Your funds"
+      body={body}
+      onViewAll={onViewLedger}
+      viewAllLabel="View full ledger"
+    />
   )
 }
 
