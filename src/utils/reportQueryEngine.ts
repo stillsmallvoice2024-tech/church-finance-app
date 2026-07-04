@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { useOrgStore } from '../store/orgStore'
 import { allocatePercent } from './financeMath'
 import { isNonContributing } from './transactionTypes'
 
@@ -21,13 +22,23 @@ export const STAGE_CODE_MAP: Record<string, string> = {
   percentage: 'Percentage Allocation',
 }
 
+// The report engine relies on RLS for tenant isolation, but a user who belongs
+// to more than one org would otherwise have RLS return rows from ALL their orgs
+// — silently summing unrelated organisations into one figure. Every query below
+// therefore also filters by the active org_id explicitly, matching the guard
+// pattern used throughout the rest of the app's data layer.
+function activeOrgId(): string | null {
+  return useOrgStore.getState().orgId
+}
+
+const NO_ORG: QueryResult = { value: 0, error: 'No active organisation.' }
+
 // Internal config shape returned by fetchLockedConfigs
 interface RawConfig {
   id:              string
   rows:            unknown
   config_group_id?: string | null
   start_date?:     string | null
-  end_date?:       string | null
   effective_from?: string | null
   effective_to?:   string | null
   is_special?:     boolean | null
@@ -57,7 +68,7 @@ function buildRawIndex(configs: RawConfig[], groups: RawGroup[]) {
       let result: RawConfig | null = null
       for (const v of versions) {
         const from = v.effective_from ?? v.start_date
-        const to   = v.effective_to   ?? v.end_date
+        const to   = v.effective_to
         if (from && date < from) continue
         if (to   && date > to)   continue
         if (!result) { result = v; continue }
@@ -72,21 +83,26 @@ function buildRawIndex(configs: RawConfig[], groups: RawGroup[]) {
 
 // Fetch ALL locked allocation configs so explicit allocation_config_id
 // references to special configs are resolved correctly.
-async function fetchLockedConfigs(): Promise<{ data: RawConfig[] | null; error: { message: string } | null }> {
+async function fetchLockedConfigs(orgId: string): Promise<{ data: RawConfig[] | null; error: { message: string } | null }> {
   return supabase
     .from('allocation_configs')
-    .select('id, rows, config_group_id, effective_from, effective_to, start_date, end_date, is_special')
+    .select('id, rows, config_group_id, effective_from, effective_to, start_date, is_special')
+    .eq('org_id', orgId)
     .eq('status', 'locked')
 }
 
-async function fetchGroups(): Promise<{ data: RawGroup[] | null; error: { message: string } | null }> {
+async function fetchGroups(orgId: string): Promise<{ data: RawGroup[] | null; error: { message: string } | null }> {
   return supabase
     .from('special_config_groups')
     .select('id, is_default')
+    .eq('org_id', orgId)
 }
 
-async function fetchIncomeTypeGroupMap(): Promise<Map<string, string | null>> {
-  const { data } = await supabase.from('income_types').select('id, special_config_group_id')
+async function fetchIncomeTypeGroupMap(orgId: string): Promise<Map<string, string | null>> {
+  const { data } = await supabase
+    .from('income_types')
+    .select('id, special_config_group_id')
+    .eq('org_id', orgId)
   return new Map<string, string | null>(
     (data ?? []).map((r: Record<string, unknown>) => [r.id as string, r.special_config_group_id as string | null])
   )
@@ -111,11 +127,14 @@ async function getCategoryConfigInflows(
   dateField:    string | undefined,
   portionFilter: string | null,
 ): Promise<QueryResult> {
+  const orgId = activeOrgId()
+  if (!orgId) return NO_ORG
   const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
 
   let inflowQ = supabase
     .from('inflow_transactions')
     .select('amount, allocation_config_id, income_type_id, date, transaction_type, stage_code_2, offset_role')
+    .eq('org_id', orgId)
     // Allow null (normal inflows) and fx_conversion (converted naira). All other tagged
     // types (reversal, refund, bank_deposit, intrabank_transfer, balance_brought_forward)
     // are pass-through entries that carry no allocatable income.
@@ -128,9 +147,9 @@ async function getCategoryConfigInflows(
 
   const [inflowRes, configRes, groupsRes, itGroupMap] = await Promise.all([
     inflowQ,
-    fetchLockedConfigs(),
-    fetchGroups(),
-    fetchIncomeTypeGroupMap(),
+    fetchLockedConfigs(orgId),
+    fetchGroups(orgId),
+    fetchIncomeTypeGroupMap(orgId),
   ])
 
   if (inflowRes.error) return { value: 0, error: inflowRes.error.message }
@@ -181,9 +200,12 @@ async function getCategoryOpeningBalance(
   category: string,
   portion?: BudgetPortion,
 ): Promise<QueryResult> {
+  const orgId = activeOrgId()
+  if (!orgId) return NO_ORG
   const { data, error } = await supabase
     .from('category_opening_balances')
     .select('amount, budget_portion, categories(name)')
+    .eq('org_id', orgId)
 
   if (error) return { value: 0, error: error.message }
 
@@ -210,6 +232,8 @@ export async function getCategoryInflows(
   portion?:   BudgetPortion,
   dateField?: string,
 ): Promise<QueryResult> {
+  const orgId = activeOrgId()
+  if (!orgId) return NO_ORG
   const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
 
   // ── Percentage portion: purely config-distributed ─────────────────────────
@@ -222,6 +246,7 @@ export async function getCategoryInflows(
     let intraQ = supabase
       .from('intra_flows')
       .select('total_amount')
+      .eq('org_id', orgId)
       .eq('account_to', category)
       .eq('account_to_stage2', 'Percentage Allocation')
       .eq('status', 'active')
@@ -242,11 +267,13 @@ export async function getCategoryInflows(
     let directQ = supabase
       .from('inflow_transactions')
       .select('amount')
+      .eq('org_id', orgId)
       .eq('stage_code_1', category)
       .eq('stage_code_2', stageCode)
     let intraQ = supabase
       .from('intra_flows')
       .select('total_amount')
+      .eq('org_id', orgId)
       .eq('account_to', category)
       .eq('account_to_stage2', stageCode)
       .eq('status', 'active')
@@ -283,16 +310,19 @@ export async function getCategoryInflows(
     let seedQ = supabase
       .from('inflow_transactions')
       .select('amount')
+      .eq('org_id', orgId)
       .eq('stage_code_1', category)
       .eq('stage_code_2', 'Specific Seed')
     let savingsQ = supabase
       .from('inflow_transactions')
       .select('amount')
+      .eq('org_id', orgId)
       .eq('stage_code_1', category)
       .eq('stage_code_2', 'Savings')
     let intraQ = supabase
       .from('intra_flows')
       .select('total_amount')
+      .eq('org_id', orgId)
       .eq('account_to', category)
       .eq('status', 'active')
 
@@ -330,16 +360,20 @@ export async function getCategoryOutflows(
   portion?:   BudgetPortion,
   dateField?: string,
 ): Promise<QueryResult> {
+  const orgId = activeOrgId()
+  if (!orgId) return NO_ORG
   const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
 
   let q = supabase
     .from('outflow_transactions')
     .select('amount_disbursed, offset_role')
+    .eq('org_id', orgId)
     .eq('stage_code_1', category)
 
   let intraQ = supabase
     .from('intra_flows')
     .select('total_amount')
+    .eq('org_id', orgId)
     .eq('account_from', category)
     .eq('status', 'active')
 
@@ -395,14 +429,18 @@ export async function getCategoryBalance(
 }
 
 export async function getNetMovement(dateRange?: DateRange, dateField?: string): Promise<QueryResult> {
+  const orgId = activeOrgId()
+  if (!orgId) return NO_ORG
   const col = dateField === 'recorded_at' ? 'recorded_at' : 'date'
   let inflowQ  = supabase
     .from('inflow_transactions')
     .select('amount, transaction_type, offset_role')
+    .eq('org_id', orgId)
     .or('transaction_type.is.null,transaction_type.eq.fx_conversion')
   let outflowQ = supabase
     .from('outflow_transactions')
     .select('amount_disbursed, offset_role')
+    .eq('org_id', orgId)
   if (dateRange) {
     const to = col === 'recorded_at' ? `${dateRange.to}T23:59:59` : dateRange.to
     inflowQ  = inflowQ.gte(col, dateRange.from).lte(col, to)

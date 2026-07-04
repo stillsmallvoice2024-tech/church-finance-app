@@ -18,24 +18,16 @@ import Outflows from './pages/Outflows'
 import Categories from './pages/Categories'
 import ForeignCurrency from './pages/ForeignCurrency'
 import IntraFlow from './pages/IntraFlow'
-import Reports from './pages/Reports'
-import FinancialReport from './pages/FinancialReport'
-import DynamicReports from './pages/DynamicReports'
+import ReportCentre from './pages/ReportCentre'
 import DynamicReportEditor from './pages/DynamicReportEditor'
-import Settings from './pages/Settings'
+import SettingsPage from './pages/Setup'
 import UserManagement from './pages/UserManagement'
 import Import from './pages/Import'
-import PendingDeductions from './pages/PendingDeductions'
-import Setup from './pages/Setup'
+import Adjustments from './pages/Adjustments'
 import PercentageAllocations from './pages/PercentageAllocations'
-import PercentageAllocation from './pages/PercentageAllocation'
-import SpecificGivings from './pages/SpecificGivings'
-import SavingsPortions from './pages/SavingsPortions'
-import CategoryLedger       from './pages/CategoryLedger'
+import Funds from './pages/Funds'
 import BankLedger           from './pages/BankLedger'
 import BankMovement         from './pages/BankMovement'
-import RefundTransactions   from './pages/RefundTransactions'
-import ReversalTransactions from './pages/ReversalTransactions'
 import Receipts             from './pages/Receipts'
 import ChangeLog            from './pages/ChangeLog'
 import ReconciliationCenter from './pages/ReconciliationCenter'
@@ -135,16 +127,17 @@ export default function App() {
             <Route path="categories" element={<ErrorBoundary><Categories /></ErrorBoundary>} />
             <Route path="foreign-currency" element={<ErrorBoundary><ForeignCurrency /></ErrorBoundary>} />
             <Route path="intra-flow" element={<ErrorBoundary><IntraFlow /></ErrorBoundary>} />
-            <Route path="reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
-            <Route path="financial-report" element={<ErrorBoundary><FinancialReport /></ErrorBoundary>} />
-            <Route path="dynamic-reports" element={<ErrorBoundary><DynamicReports /></ErrorBoundary>} />
+            {/* Report Centre — old report routes redirect into its tabs */}
+            <Route path="reports" element={<ErrorBoundary><ReportCentre /></ErrorBoundary>} />
+            <Route path="financial-report" element={<Navigate to="/reports?tab=financial" replace />} />
+            <Route path="dynamic-reports" element={<Navigate to="/reports?tab=custom" replace />} />
             <Route path="dynamic-reports/:id" element={<ErrorBoundary><DynamicReportEditor /></ErrorBoundary>} />
-            <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
-            <Route path="pending-deductions" element={<ErrorBoundary><PendingDeductions /></ErrorBoundary>} />
+            {/* Unified Settings — /setup redirects into the finance General tab (role-gated inside) */}
+            <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+            <Route path="setup" element={<Navigate to="/settings?tab=general" replace />} />
             {/* Viewer-blocked routes: admin + accountant only */}
             <Route element={<CanWriteGuard />}>
               <Route path="import" element={<ErrorBoundary><Import /></ErrorBoundary>} />
-              <Route path="setup" element={<ErrorBoundary><Setup /></ErrorBoundary>} />
             </Route>
             {/* Admin-only routes */}
             <Route element={<AdminOnlyGuard />}>
@@ -152,15 +145,20 @@ export default function App() {
               <Route path="change-log" element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
             </Route>
             <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
-            <Route path="percentage-allocation" element={<ErrorBoundary><PercentageAllocation /></ErrorBoundary>} />
-            <Route path="specific-givings" element={<ErrorBoundary><SpecificGivings /></ErrorBoundary>} />
-            <Route path="savings-portions" element={<ErrorBoundary><SavingsPortions /></ErrorBoundary>} />
-            <Route path="category-ledger"      element={<ErrorBoundary><CategoryLedger /></ErrorBoundary>} />
+            {/* Funds — old fund-view routes redirect into its tabs */}
+            <Route path="funds" element={<ErrorBoundary><Funds /></ErrorBoundary>} />
+            <Route path="category-ledger"      element={<Navigate to="/funds?tab=accounts" replace />} />
+            <Route path="percentage-allocation" element={<Navigate to="/funds?tab=regular" replace />} />
+            <Route path="specific-givings"     element={<Navigate to="/funds?tab=designated" replace />} />
+            <Route path="savings-portions"     element={<Navigate to="/funds?tab=savings" replace />} />
             <Route path="bank-ledger"           element={<ErrorBoundary><BankLedger /></ErrorBoundary>} />
             <Route path="reconciliation"        element={<ErrorBoundary><ReconciliationCenter /></ErrorBoundary>} />
             <Route path="bank-movement"         element={<ErrorBoundary><BankMovement /></ErrorBoundary>} />
-            <Route path="refunds"              element={<ErrorBoundary><RefundTransactions /></ErrorBoundary>} />
-            <Route path="reversals"            element={<ErrorBoundary><ReversalTransactions /></ErrorBoundary>} />
+            {/* Adjustments — old routes redirect into its tabs */}
+            <Route path="adjustments" element={<ErrorBoundary><Adjustments /></ErrorBoundary>} />
+            <Route path="pending-deductions"   element={<Navigate to="/adjustments?tab=upcoming" replace />} />
+            <Route path="refunds"              element={<Navigate to="/adjustments?tab=refunds" replace />} />
+            <Route path="reversals"            element={<Navigate to="/adjustments?tab=reversals" replace />} />
             <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
             <Route path="tutorial"             element={<ErrorBoundary><Tutorial /></ErrorBoundary>} />
             <Route path="tutorial/:chapterId"  element={<ErrorBoundary><Tutorial /></ErrorBoundary>} />

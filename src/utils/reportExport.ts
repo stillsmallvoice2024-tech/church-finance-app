@@ -133,7 +133,7 @@ export function normaliseTables(layout: ReportLayout): ReportTable[] {
     layout.tables && layout.tables.length > 0
       ? layout.tables
       : layout.groups && layout.groups.length > 0
-        ? [{ id: 'legacy', title: 'Financial Report', visible: true, groups: layout.groups, include_in_combined_total: true }]
+        ? [{ id: 'legacy', title: 'Board Report', visible: true, groups: layout.groups, include_in_combined_total: true }]
         : []
   return rawTables.map(t => ({
     ...t,
@@ -168,7 +168,7 @@ export function exportReportPDF(
   layout: ReportLayout,
   balances: Map<string, ReportCategoryBalance>,
   reportDate: string,
-  orgName = 'Financial Report',
+  orgName = 'Board Report',
   opBalances: OperationalBalanceMap = new Map(),
   currencySymbol = '₦',
   numberLocale = 'en-NG',
@@ -332,7 +332,7 @@ export function exportReportPDF(
     doc.text('Note: Rows with zero values are hidden from view. All subtotals and totals are calculated from complete data.', sideMargin, noteY, { maxWidth: PDF_TABLE_WIDTH })
   }
 
-  doc.save(`Financial_Report_${reportDate}.pdf`)
+  doc.save(`Board_Report_${reportDate}.pdf`)
 }
 
 // ── Excel Export ──────────────────────────────────────────────────────────────
@@ -341,7 +341,7 @@ export function exportReportExcel(
   layout: ReportLayout,
   balances: Map<string, ReportCategoryBalance>,
   reportDate: string,
-  orgName = 'Financial Report',
+  orgName = 'Board Report',
   opBalances: OperationalBalanceMap = new Map(),
   currencySymbol = '₦',
   _numberLocale = 'en-NG',
@@ -436,5 +436,5 @@ export function exportReportExcel(
   ws['!cols'] = [{ wch: 50 }, { wch: 20 }]
   XLSX.utils.book_append_sheet(wb, ws, 'Report')
 
-  XLSX.writeFile(wb, `Financial_Report_${reportDate}.xlsx`)
+  XLSX.writeFile(wb, `Board_Report_${reportDate}.xlsx`)
 }

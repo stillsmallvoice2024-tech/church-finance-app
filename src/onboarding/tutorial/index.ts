@@ -152,7 +152,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
     id: 'reports',
     number: 15,
     title: 'Reports',
-    summary: 'Ready-made summaries, the Financial Report builder, and live Custom Reports.',
+    summary: 'Ready-made summaries, the Board Report builder, and live Custom Reports.',
     updatedAt: '2026-06-20',
     content: ch15,
   },

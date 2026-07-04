@@ -1514,16 +1514,16 @@ export default function Reports() {
           },
           {
             icon:  FileText,
-            label: 'Financial Report Builder',
+            label: 'Board Report Builder',
             desc:  'Build custom multi-table reports with drag-and-drop layout',
-            href:  '/financial-report',
+            href:  '/reports?tab=financial',
             active: false,
           },
           {
             icon:  FilePlus,
             label: 'Dynamic Reports',
             desc:  'Create live-updating named reports with custom filters',
-            href:  '/dynamic-reports',
+            href:  '/reports?tab=custom',
             active: false,
           },
         ].map(({ icon: Icon, label, desc, href, active }) => {

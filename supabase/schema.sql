@@ -1416,6 +1416,37 @@ create policy "drs_delete" on public.dynamic_report_snapshots
     )
   );
 
+-- Atomic replacement of a report's blocks (delete + insert in one transaction).
+-- SECURITY INVOKER: runs under the caller's RLS, preserving tenant isolation.
+create or replace function public.save_dynamic_report_blocks(
+  p_report_id uuid,
+  p_blocks    jsonb
+)
+returns void
+language plpgsql
+as $$
+declare
+  v_block jsonb;
+  v_pos   int := 0;
+begin
+  delete from public.dynamic_report_blocks where report_id = p_report_id;
+
+  for v_block in select * from jsonb_array_elements(coalesce(p_blocks, '[]'::jsonb))
+  loop
+    insert into public.dynamic_report_blocks (report_id, block_type, position, config_json)
+    values (
+      p_report_id,
+      v_block->>'block_type',
+      v_pos,
+      coalesce(v_block->'config_json', '{}'::jsonb)
+    );
+    v_pos := v_pos + 1;
+  end loop;
+end;
+$$;
+
+grant execute on function public.save_dynamic_report_blocks(uuid, jsonb) to authenticated;
+
 -- ── currencies ─────────────────────────────────────────────────────────────────
 
 create policy "currencies_select" on public.currencies

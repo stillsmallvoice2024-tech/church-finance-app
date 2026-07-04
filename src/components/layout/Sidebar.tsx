@@ -3,10 +3,10 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, TrendingUp, TrendingDown, FileUp, Receipt,
   BookOpen, Repeat2, Globe, ShieldCheck,
-  Hourglass, RotateCcw, Undo2,
-  Layers, LayoutList, Percent, PieChart, HandCoins, PiggyBank,
-  BarChart3, FileText, NotebookPen,
-  SlidersHorizontal, Settings, Users, ClipboardList,
+  RotateCcw,
+  Layers, Percent, PieChart,
+  BarChart3,
+  Settings, Users, ClipboardList,
   ChevronDown, X, HelpCircle,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
@@ -61,10 +61,8 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Review & Processing',
     defaultOpen: false,
     items: [
-      { label: 'Upcoming Deductions', path: '/pending-deductions', icon: Hourglass },
-      { label: 'Refunds',             path: '/refunds',            icon: RotateCcw },
-      { label: 'Reversals',           path: '/reversals',          icon: Undo2     },
-      { label: 'Reconciliation',      path: '/reconciliation',     icon: ShieldCheck },
+      { label: 'Adjustments',    path: '/adjustments',    icon: RotateCcw   },
+      { label: 'Reconciliation', path: '/reconciliation', icon: ShieldCheck },
     ],
   },
   {
@@ -72,12 +70,9 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Budget & Allocation',
     defaultOpen: false,
     items: [
-      { label: 'Categories',        path: '/categories',             icon: Layers     },
-      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent    },
-      { label: 'Category Accounts', path: '/category-ledger',        icon: LayoutList },
-      { label: 'Regular Funds',     path: '/percentage-allocation',  icon: PieChart   },
-      { label: 'Designated Gifts',  path: '/specific-givings',       icon: HandCoins  },
-      { label: 'Savings Funds',     path: '/savings-portions',       icon: PiggyBank  },
+      { label: 'Categories',         path: '/categories',             icon: Layers   },
+      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent  },
+      { label: 'Funds',              path: '/funds',                  icon: PieChart },
     ],
   },
   {
@@ -85,9 +80,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Reports',
     defaultOpen: false,
     items: [
-      { label: 'Reports',          path: '/reports',          icon: BarChart3    },
-      { label: 'Financial Report', path: '/financial-report', icon: FileText     },
-      { label: 'Custom Reports',   path: '/dynamic-reports',  icon: NotebookPen  },
+      { label: 'Reports', path: '/reports', icon: BarChart3 },
     ],
   },
   {
@@ -95,7 +88,6 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Administration',
     defaultOpen: false,
     items: [
-      { label: 'Setup',             path: '/setup',       icon: SlidersHorizontal, canWriteOnly: true },
       { label: 'Settings',          path: '/settings',    icon: Settings          },
       { label: 'User Management',   path: '/users',       icon: Users,         adminOnly: true },
       { label: 'Activity History',  path: '/change-log',  icon: ClipboardList, adminOnly: true },

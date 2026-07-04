@@ -25,14 +25,14 @@ export const EMPTY_STATES: EmptyStateDefinition[] = [
     iconName: 'Landmark',
     title: 'No bank accounts yet',
     description: 'Bank accounts appear here once transactions with a bank name are recorded. Add your first bank in Setup to get started.',
-    action: { label: 'Go to Setup', href: '/setup' },
+    action: { label: 'Go to Setup', href: '/settings?tab=general' },
   },
   {
     pageId: 'categories',
     iconName: 'Tag',
     title: 'No categories yet',
     description: 'Create income and outflow types to classify your transactions.',
-    action: { label: 'Add Category', href: '/setup' },
+    action: { label: 'Add Category', href: '/settings?tab=general' },
   },
   {
     pageId: 'reports',

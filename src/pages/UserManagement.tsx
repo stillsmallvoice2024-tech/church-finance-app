@@ -141,7 +141,7 @@ function InviteUserModal({
     const { orgId } = useOrgStore.getState()
 
     if (!orgId) {
-      toast({ type: 'error', message: 'Cannot send invite: no active organisation. Please refresh and try again.' })
+      toast('Cannot send invite: no active organisation. Please refresh and try again.', 'error')
       setLoading(false)
       return
     }

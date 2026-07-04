@@ -13,7 +13,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     iconName: 'Building2',
     required: true,
     completionCheck: (d) => d.hasDepartments,
-    action: { label: 'Go to Setup', href: '/setup' },
+    action: { label: 'Go to Setup', href: '/settings?tab=general' },
   },
   {
     id: 'add-bank-account',
@@ -22,7 +22,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     iconName: 'Landmark',
     required: true,
     completionCheck: (d) => d.hasBankAccounts,
-    action: { label: 'Go to Setup', href: '/setup' },
+    action: { label: 'Go to Setup', href: '/settings?tab=general' },
   },
   {
     id: 'create-income-type',
@@ -31,7 +31,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     iconName: 'ArrowDownCircle',
     required: true,
     completionCheck: (d) => d.hasIncomeTypes,
-    action: { label: 'Go to Setup', href: '/setup' },
+    action: { label: 'Go to Setup', href: '/settings?tab=general' },
   },
   {
     id: 'create-outflow-type',
@@ -40,7 +40,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     iconName: 'ArrowUpCircle',
     required: true,
     completionCheck: (d) => d.hasOutflowTypes,
-    action: { label: 'Go to Setup', href: '/setup' },
+    action: { label: 'Go to Setup', href: '/settings?tab=general' },
   },
   {
     id: 'create-category',

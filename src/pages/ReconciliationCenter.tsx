@@ -197,10 +197,10 @@ function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
     } else if (txnType === 'intrabank_transfer') {
       action = { label: 'View Transfers', href: '/bank-movement?tab=transfers', icon: ArrowRightLeft }
     } else if (txnType === 'refund') {
-      action = { label: 'View Refunds', href: '/refunds', icon: FileSearch }
+      action = { label: 'View Refunds', href: '/adjustments?tab=refunds', icon: FileSearch }
     } else {
       // reversal or other offset types
-      action = { label: 'View Reversals', href: '/reversals', icon: FileSearch }
+      action = { label: 'View Reversals', href: '/adjustments?tab=reversals', icon: FileSearch }
     }
   } else {
     const links: Record<string, { label: string; href: string; icon: React.ElementType }> = {
@@ -209,7 +209,7 @@ function RuleActionLink({ issue }: { issue: ReconciliationIssue }) {
       duplicate_import:          isOutflow
                                    ? { label: 'View Outflows', href: '/outflows', icon: FileSearch }
                                    : { label: 'View Inflows',  href: '/inflows',  icon: FileSearch },
-      pending_deduction:         { label: 'View Deductions',    href: '/pending-deductions',           icon: Clock },
+      pending_deduction:         { label: 'View Deductions',    href: '/adjustments?tab=upcoming',           icon: Clock },
       balance_mismatch:          { label: 'View Bank Ledger',   href: '/bank-ledger',                  icon: BookOpen },
       allocation_inconsistency:  { label: 'View Configs',       href: '/percentage-allocations',       icon: FileSearch },
       negative_balance:          { label: 'View Bank Ledger',   href: '/bank-ledger',                  icon: BookOpen },

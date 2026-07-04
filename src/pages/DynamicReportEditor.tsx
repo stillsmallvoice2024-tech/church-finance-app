@@ -1612,7 +1612,7 @@ export default function DynamicReportEditor() {
 
   const { blocks: savedBlocks, loading: blocksLoading } = useDynamicReportBlocks(id ?? null)
   const { mutate: updateTitle }  = useUpdateDynamicReport()
-  const { mutate: saveBlocks, loading: saving, error: saveError } = useSaveDynamicReportBlocks()
+  const { mutate: saveBlocks, loading: saving } = useSaveDynamicReportBlocks()
   const { snapshots, refetch: refetchSnapshots } = useReportSnapshots(id ?? null)
   const { mutate: saveSnapshot, loading: savingSnapshot } = useSaveSnapshot()
   const { mutate: deleteSnapshot } = useDeleteSnapshot()
@@ -1795,7 +1795,9 @@ export default function DynamicReportEditor() {
   const handleSave = useCallback(async () => {
     if (!id) return
     const trimmedTitle = title.trim() || 'Untitled Report'
-    const [, blocksOk] = await Promise.all([
+    // Both mutations return null on success or the real DB error message on
+    // failure — surfaced directly so a save failure is diagnosable, not generic.
+    const [titleErr, blocksErr] = await Promise.all([
       updateTitle(id, trimmedTitle),
       saveBlocks(id, blocks.map((b, i) => ({
         block_type:  b.block_type,
@@ -1803,16 +1805,17 @@ export default function DynamicReportEditor() {
         config_json: b.config_json,
       }))),
     ])
-    if (blocksOk) {
+    const err = blocksErr ?? titleErr
+    if (!err) {
       setTitle(trimmedTitle)
       setIsDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
       pushToast('Report saved', 'success')
     } else {
-      pushToast(saveError ?? 'Failed to save report', 'error')
+      pushToast(`Couldn't save report: ${err}`, 'error')
     }
-  }, [id, title, blocks, updateTitle, saveBlocks, saveError, pushToast])
+  }, [id, title, blocks, updateTitle, saveBlocks, pushToast])
 
   const loading = reportsLoading || blocksLoading
 
@@ -1830,7 +1833,7 @@ export default function DynamicReportEditor() {
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <AlertCircle className="w-10 h-10 text-gray-300 mb-3" />
         <p className="text-sm text-gray-500">Report not found.</p>
-        <button onClick={() => navigate('/dynamic-reports')} className="mt-4 text-sm text-primary hover:underline">
+        <button onClick={() => navigate('/reports?tab=custom')} className="mt-4 text-sm text-primary hover:underline">
           Back to reports
         </button>
       </div>
@@ -1842,7 +1845,7 @@ export default function DynamicReportEditor() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <button
-          onClick={() => navigate('/dynamic-reports')}
+          onClick={() => navigate('/reports?tab=custom')}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors self-start"
         >
           <ArrowLeft className="w-4 h-4" />
