@@ -563,7 +563,7 @@ export default function Import() {
         <ImportWizardModal open={wizardOpen} onClose={() => setWizardOpen(false)} />
       )}
 
-      {/* Standard Import modal */}
+      {/* Quick Import modal */}
       <ImportModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
