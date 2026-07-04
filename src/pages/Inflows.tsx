@@ -50,8 +50,7 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { MobileFab } from '../components/ui/MobileFab'
 import { ReceiptBadge } from '../components/ui/ReceiptBadge'
 import { useDetailLevel } from '../hooks/useDetailLevel'
-import { DetailLevelToggle } from '../components/ui/DetailLevelToggle'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ArrowLeft } from 'lucide-react'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -169,7 +168,7 @@ export default function Inflows() {
 
   // Progressive disclosure: Simple opens with just the latest inflows; Full is
   // the current dense experience (filters, controls, table, bulk actions).
-  const { level: detail, setLevel: setDetail, isSimple } = useDetailLevel('inflows')
+  const { setLevel: setDetail, isSimple } = useDetailLevel('inflows')
   const SIMPLE_LIMIT = 10
 
   const { data, count, unmappedCount = 0, loading, error, refetch } = useInflowTransactions({
@@ -336,7 +335,6 @@ export default function Inflows() {
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
-            <DetailLevelToggle value={detail} onChange={setDetail} />
             <HelpButton tourId="inflowsTour" size="sm" />
             {canWrite() && (
               <button
@@ -415,6 +413,16 @@ export default function Inflows() {
 
         {/* ── Full view: dense controls + list ─────────────────────────────── */}
         {!isSimple && <>
+
+        {/* Quiet collapse back to the summary view */}
+        <button
+          type="button"
+          onClick={() => setDetail('simple')}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Show summary
+        </button>
 
         {/* Data controls bar */}
         <DataControlsBar
