@@ -901,8 +901,22 @@ alter table public.org_deletion_backups           enable row level security;
 
 -- ── profiles (no org_id — global user registry) ───────────────────────────────
 
+-- Restricted to own row or a user who shares an active org (no cross-org PII).
+-- Username login resolves via resolve_username() SECURITY DEFINER RPC, not this.
 create policy "profiles_select" on public.profiles
-  for select using (auth.uid() is not null);
+  for select using (
+    id = auth.uid()
+    or exists (
+      select 1
+      from   public.org_members caller
+      join   public.org_members target
+        on   target.org_id = caller.org_id
+      where  caller.user_id = auth.uid()
+        and  caller.status  = 'active'
+        and  target.user_id = profiles.id
+        and  target.status  = 'active'
+    )
+  );
 
 create policy "profiles_insert" on public.profiles
   for insert with check (auth.uid() is not null);
@@ -1237,8 +1251,15 @@ create policy "invitations_delete" on public.invitations
 -- ── invitation_emails ──────────────────────────────────────────────────────────
 -- Service role (edge function) bypasses RLS for INSERT.
 
+-- Scoped to admins of the invitation's own org (no cross-org read).
 create policy "invitation_emails_admin_read" on public.invitation_emails
-  for select using (public.is_admin());
+  for select using (
+    exists (
+      select 1 from public.invitations i
+      where  i.id = invitation_emails.invitation_id
+        and  public.is_org_admin(i.org_id)
+    )
+  );
 
 -- ── audit_log (org-scoped since migration 20260602000002) ─────────────────────
 
@@ -1254,10 +1275,8 @@ create policy "audit_insert" on public.audit_log
     org_id is not null and public.is_org_member(org_id)
   );
 
-create policy "audit_delete" on public.audit_log
-  for delete using (
-    org_id is not null and public.is_org_admin(org_id)
-  );
+-- No client DELETE policy: audit_log is append-only from the client.
+-- Retention cleanup runs via purge_old_audit_logs() (SECURITY DEFINER).
 
 -- ── field_changes (org-scoped since migration 20260602000002) ─────────────────
 
@@ -1273,10 +1292,8 @@ create policy "field_changes_insert" on public.field_changes
     org_id is not null and public.is_org_member(org_id)
   );
 
-create policy "field_changes_delete" on public.field_changes
-  for delete using (
-    org_id is not null and public.is_org_admin(org_id)
-  );
+-- No client DELETE policy: field_changes is append-only from the client.
+-- Retention cleanup runs via SECURITY DEFINER maintenance only.
 
 -- ── audit_maintenance_log (N-3) ───────────────────────────────────────────────
 

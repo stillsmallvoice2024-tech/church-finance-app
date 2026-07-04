@@ -18,6 +18,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Split heavy, independently-loadable libraries into their own chunks
+        // so they are fetched only by the routes that use them.
+        manualChunks: {
+          'vendor-pdf':    ['pdfjs-dist'],
+          'vendor-xlsx':   ['xlsx'],
+          'vendor-jspdf':  ['jspdf', 'jspdf-autotable'],
+          'vendor-charts': ['recharts'],
+        },
+      },
+    },
   },
   test: {
     environment: 'node',
