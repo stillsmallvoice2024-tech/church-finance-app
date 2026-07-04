@@ -401,8 +401,10 @@ export default function Inflows() {
         </Card>
         )}
 
-        {/* Summary strip */}
-        <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        {/* Summary strip — full view only (Simple has its own hero total) */}
+        {!isSimple && (
+          <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        )}
 
         {/* ── Simple view: interactive summary + reveal ────────────────────── */}
         {isSimple && (
@@ -1019,6 +1021,7 @@ function PageDatePresets({ activePreset, onPreset }: {
       activePreset={activePreset}
       onPreset={onPreset}
       onCustom={() => { /* custom handled in full view */ }}
+      hideCustom
     />
   )
 }
