@@ -49,6 +49,9 @@ import { inflowDetailItems } from '../utils/rowDetailItems'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { MobileFab } from '../components/ui/MobileFab'
 import { ReceiptBadge } from '../components/ui/ReceiptBadge'
+import { useDetailLevel } from '../hooks/useDetailLevel'
+import { DetailLevelToggle } from '../components/ui/DetailLevelToggle'
+import { ArrowRight } from 'lucide-react'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -164,17 +167,22 @@ export default function Inflows() {
   // Data controls state
   const infState = useDataViewState({ storageKey: 'inf', defaultSortKey: 'recorded_at', defaultSortDir: 'desc', defaultPageSize: DEFAULT_PAGE_SIZE })
 
+  // Progressive disclosure: Simple opens with just the latest inflows; Full is
+  // the current dense experience (filters, controls, table, bulk actions).
+  const { level: detail, setLevel: setDetail, isSimple } = useDetailLevel('inflows')
+  const SIMPLE_LIMIT = 10
+
   const { data, count, unmappedCount = 0, loading, error, refetch } = useInflowTransactions({
     dateFrom:     dateFrom  || undefined,
     dateTo:       dateTo    || undefined,
-    search:       debouncedSearch || undefined,
+    search:       isSimple ? undefined : (debouncedSearch || undefined),
     searchCol:    infState.searchCol,
-    page,
-    pageSize:     infState.pageSize,
-    sortColumn:   infState.advancedSort.length === 0 ? infState.sortKey : undefined,
-    sortAscending: infState.advancedSort.length === 0 ? (infState.sortDir === 'asc') : undefined,
-    advancedSort: infState.advancedSort.length > 0 ? infState.advancedSort : undefined,
-    unmappedOnly: showUnmappedOnly,
+    page:         isSimple ? 0 : page,
+    pageSize:     isSimple ? SIMPLE_LIMIT : infState.pageSize,
+    sortColumn:   isSimple ? 'recorded_at' : (infState.advancedSort.length === 0 ? infState.sortKey : undefined),
+    sortAscending: isSimple ? false : (infState.advancedSort.length === 0 ? (infState.sortDir === 'asc') : undefined),
+    advancedSort: isSimple ? undefined : (infState.advancedSort.length > 0 ? infState.advancedSort : undefined),
+    unmappedOnly: isSimple ? false : showUnmappedOnly,
   })
 
   const displayed = data
@@ -328,6 +336,7 @@ export default function Inflows() {
             <p className="text-sm text-gray-500 mt-0.5">All income and receipts</p>
           </div>
           <div className="flex items-center gap-2">
+            <DetailLevelToggle value={detail} onChange={setDetail} />
             <HelpButton tourId="inflowsTour" size="sm" />
             {canWrite() && (
               <button
@@ -353,13 +362,16 @@ export default function Inflows() {
           </div>
         </div>
 
+        {!isSimple && (
         <PageHelpBanner storageKey="help-dismissed-inflows" title="Inflow Transactions">
           Transactions here come from imported bank statements — use the <strong>Import</strong> page for bulk
           uploads. <strong>Add Inflow</strong> is for one-off manual entries only. Filter by date, bank, or
           category, and export the current view at any time.
         </PageHelpBanner>
+        )}
 
         {/* Filter bar */}
+        {!isSimple && (
         <Card data-tour="data-controls">
           <div className="space-y-3">
             <DatePresetBar
@@ -385,9 +397,24 @@ export default function Inflows() {
             </div>
           </div>
         </Card>
+        )}
 
         {/* Summary strip */}
         <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+
+        {/* ── Simple view: latest inflows + reveal ─────────────────────────── */}
+        {isSimple && (
+          <SimpleInflowList
+            rows={displayed}
+            totalCount={count}
+            loading={loading}
+            baseCurrencyCode={baseCurrencyCode}
+            onViewAll={() => setDetail('full')}
+          />
+        )}
+
+        {/* ── Full view: dense controls + list ─────────────────────────────── */}
+        {!isSimple && <>
 
         {/* Data controls bar */}
         <DataControlsBar
@@ -697,6 +724,8 @@ export default function Inflows() {
             variant="full"
           />
         </Card>}
+
+        </>}
       </div>
 
       <AddInflowModal
@@ -749,6 +778,63 @@ export default function Inflows() {
         record={fxInflowEditRecord}
       />
     </>
+  )
+}
+
+// ── Simple view ──────────────────────────────────────────────────────────────
+// Read-only list of the most recent inflows with a reveal into the full view.
+
+function SimpleInflowList({ rows, totalCount, loading, baseCurrencyCode, onViewAll }: {
+  rows: InflowTransaction[]
+  totalCount: number
+  loading: boolean
+  baseCurrencyCode: string
+  onViewAll: () => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700">Recent inflows</h2>
+        {totalCount > rows.length && (
+          <span className="text-xs text-gray-400">Showing latest {rows.length} of {totalCount.toLocaleString()}</span>
+        )}
+      </div>
+
+      {loading && rows.length === 0 ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-14 rounded-xl border border-gray-100 bg-white animate-pulse" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <PageEmptyState pageId="inflows" compact />
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">
+          {rows.map(row => (
+            <div key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm text-gray-800 truncate">{row.description || '—'}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {formatDate(row.date)}{row.bank_name ? ` · ${row.bank_name}` : ''}
+                </p>
+              </div>
+              <p className="text-sm font-mono font-bold tabular-nums text-success shrink-0">
+                {formatCurrency(Number(row.amount), baseCurrencyCode)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onViewAll}
+        className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+      >
+        View all transactions
+        <ArrowRight className="w-4 h-4" />
+      </button>
+    </div>
   )
 }
 
