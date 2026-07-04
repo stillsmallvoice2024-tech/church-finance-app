@@ -1330,6 +1330,24 @@ function CategoryAxisTick({ x, y, payload }: { x: number; y: number; payload: { 
   )
 }
 
+// Custom tooltip content — the default recharts tooltip would otherwise show
+// a confusing second "hitArea" line for the invisible click-target Bar.
+function RankedTooltip({ active, payload, baseCurrencyCode }: {
+  active?: boolean
+  payload?: { dataKey?: string; value?: number; payload?: { name?: string } }[]
+  baseCurrencyCode: string
+}) {
+  if (!active || !payload?.length) return null
+  const entry = payload.find(p => p.dataKey === 'net')
+  if (!entry || entry.value == null) return null
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-sm">
+      <p className="font-medium text-gray-700 mb-0.5">{entry.payload?.name}</p>
+      <p className="font-mono font-semibold text-gray-900">{formatCurrency(entry.value, baseCurrencyCode)}</p>
+    </div>
+  )
+}
+
 interface ChartRow { name: string; Regular: number; Designated: number; Savings: number }
 
 function SimpleCategorySummary({
@@ -1349,12 +1367,17 @@ function SimpleCategorySummary({
   const grandTotal = globalTotals.alloc + globalTotals.seed + globalTotals.sav
   const animatedTotal = useCountUp(grandTotal)
 
-  const ranked = useMemo(
-    () => chartRows
-      .map(r => ({ ...r, net: r.Regular + r.Designated + r.Savings }))
-      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
-    [chartRows],
-  )
+  // hitArea gives every row a full-width invisible click target (same sign as
+  // its own net) — recharts' Bar onClick only fires on the bar's actual
+  // rendered rectangle, so a near-zero-value bar is only a few pixels wide
+  // and nearly impossible to tap without this.
+  const ranked = useMemo(() => {
+    const withNet = chartRows.map(r => ({ ...r, net: r.Regular + r.Designated + r.Savings }))
+    const maxAbsNet = Math.max(1, ...withNet.map(r => Math.abs(r.net)))
+    return withNet
+      .map(r => ({ ...r, hitArea: r.net >= 0 ? maxAbsNet : -maxAbsNet }))
+      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
+  }, [chartRows])
 
   const selected = activeCategory ? (ranked.find(r => r.name === activeCategory) ?? null) : null
 
@@ -1482,7 +1505,20 @@ function SimpleCategorySummary({
               <YAxis type="category" dataKey="name" width={110} tick={<CategoryAxisTick x={0} y={0} payload={{ value: '' }} />} axisLine={false} tickLine={false} />
               <RTooltip
                 cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-                formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Net']}
+                content={<RankedTooltip baseCurrencyCode={baseCurrencyCode} />}
+              />
+              {/* Invisible full-width click target — same onClick as the real bar
+                  below, so thin/near-zero bars are just as easy to tap. */}
+              <Bar
+                dataKey="hitArea"
+                fill="transparent"
+                isAnimationActive={false}
+                legendType="none"
+                cursor="pointer"
+                onClick={(d: { name?: string; payload?: { name?: string } }) => {
+                  const nm = d?.name ?? d?.payload?.name
+                  if (nm) selectBar(nm)
+                }}
               />
               <Bar
                 dataKey="net"
