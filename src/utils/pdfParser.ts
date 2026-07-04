@@ -71,6 +71,25 @@ function snapToGrid(val: number, snap: number): number {
   return Math.round(val / snap) * snap
 }
 
+// Merge pdfjs-fragmented tokens within a row (e.g. "Credit(" + "₦" + ")" → "Credit(₦)")
+// when consecutive items are ≤30px apart AND at least one token is ≤3 chars.
+function mergeRowFragments(items: TextItem[]): TextItem[] {
+  if (items.length <= 1) return items
+  const sorted = [...items].sort((a, b) => a.x - b.x)
+  const result: TextItem[] = [{ ...sorted[0] }]
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = result[result.length - 1]
+    const cur = sorted[i]
+    const isShort = prev.text.length <= 3 || cur.text.length <= 3
+    if (isShort && cur.x - prev.x <= 30) {
+      prev.text = prev.text + cur.text
+    } else {
+      result.push({ ...cur })
+    }
+  }
+  return result
+}
+
 function detectColumns(rows: TextItem[][]): number[] {
   // Collect all distinct X positions across rows
   const xSet = new Set<number>()
@@ -83,7 +102,7 @@ function detectColumns(rows: TextItem[][]): number[] {
   const sorted = [...xSet].sort((a, b) => a - b)
   const cols: number[] = []
   for (const x of sorted) {
-    if (cols.length === 0 || x - cols[cols.length - 1] > COL_SNAP) {
+    if (cols.length === 0 || x - cols[cols.length - 1] >= COL_SNAP) {
       cols.push(x)
     }
   }
@@ -152,10 +171,10 @@ export async function parsePDF(file: File, password?: string): Promise<ParsedShe
     rowMap.get(yKey)!.push(item)
   }
 
-  // Sort rows top-to-bottom, then items left-to-right within each row
+  // Sort rows top-to-bottom, merge intra-row fragments, then sort items left-to-right
   const sortedYKeys = [...rowMap.keys()].sort((a, b) => a - b)
   const textRows: TextItem[][] = sortedYKeys.map(y =>
-    rowMap.get(y)!.sort((a, b) => a.x - b.x)
+    mergeRowFragments(rowMap.get(y)!.sort((a, b) => a.x - b.x))
   )
 
   // Keep rows with at least one text item; preserve Y so continuation direction can
