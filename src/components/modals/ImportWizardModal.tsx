@@ -497,7 +497,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
     const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
     if (ext !== 'xlsx' && ext !== 'xls') {
       setParseError(
-        'Please upload an Excel file (.xlsx or .xls). For PDF files, use the Standard Import instead.',
+        'Please upload an Excel file (.xlsx or .xls). For PDF files, use Quick Import instead.',
       )
       return
     }
@@ -839,7 +839,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
                   Drop your Excel file here, or click to browse
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Accepts .xlsx and .xls · PDF files require Standard Import
+                  Accepts .xlsx and .xls · PDF files require Quick Import
                 </p>
               </div>
             </>
