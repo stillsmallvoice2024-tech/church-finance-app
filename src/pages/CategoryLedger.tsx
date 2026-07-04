@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
-import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react'
+import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw, X } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
 import { SimpleShell } from '../components/ui/SimpleShell'
 import { useCountUp } from '../hooks/useCountUp'
@@ -1314,6 +1314,21 @@ const COMPOSITION_COLORS = {
   Savings:    '#1A2C42',  // Deep Navy — distinct from Regular's teal
 } as const
 const CHART_ROW_HEIGHT = 34
+const Y_AXIS_LABEL_MAX_CHARS = 16
+
+// Truncates long category names so they never bleed into the bars or clip
+// mid-word. The full name is still available on hover/tap (recharts' default
+// tooltip) and in the selected-category detail card below.
+function CategoryAxisTick({ x, y, payload }: { x: number; y: number; payload: { value: string } }) {
+  const name = payload.value
+  const truncated = name.length > Y_AXIS_LABEL_MAX_CHARS ? `${name.slice(0, Y_AXIS_LABEL_MAX_CHARS - 1)}…` : name
+  return (
+    <text x={x} y={y} dy={4} textAnchor="end" fontSize={11} fill="#374151">
+      {truncated}
+      {truncated !== name && <title>{name}</title>}
+    </text>
+  )
+}
 
 interface ChartRow { name: string; Regular: number; Designated: number; Savings: number }
 
@@ -1429,9 +1444,19 @@ function SimpleCategorySummary({
           list, so it's visible immediately without scrolling to find it. */}
       {selected && (
         <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-gray-800">{selected.name}</p>
-            <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(selected.net, baseCurrencyCode)}</p>
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <p className="text-sm font-semibold text-gray-800 min-w-0 truncate">{selected.name}</p>
+            <div className="flex items-center gap-2 shrink-0">
+              <p className="text-sm font-mono font-bold tabular-nums text-gray-900">{formatCurrency(selected.net, baseCurrencyCode)}</p>
+              <button
+                type="button"
+                onClick={() => onCategoryChange('')}
+                aria-label="Close category detail"
+                className="p-1 -m-1 rounded text-gray-400 hover:text-gray-600 hover:bg-black/5 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
           <div className="space-y-1.5">
             {([['Regular', selected.Regular], ['Designated', selected.Designated], ['Savings', selected.Savings]] as const).map(([label, amt]) => (
@@ -1449,11 +1474,12 @@ function SimpleCategorySummary({
 
       {/* Ranked list — every category, one plain bar each; tap a bar to select it. */}
       <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <p className="text-[11px] text-gray-400 mb-2">Tap a category to see its fund-type breakdown</p>
         <div className="max-h-[420px] overflow-y-auto">
           <ResponsiveContainer width="100%" height={Math.max(CHART_ROW_HEIGHT * ranked.length, 120)}>
             <BarChart data={ranked} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
               <XAxis type="number" tickFormatter={(v: number) => formatCurrencyCompact(v, baseCurrencyCode)} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={110} tick={<CategoryAxisTick x={0} y={0} payload={{ value: '' }} />} axisLine={false} tickLine={false} />
               <RTooltip
                 cursor={{ fill: 'rgba(0,0,0,0.03)' }}
                 formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Net']}
