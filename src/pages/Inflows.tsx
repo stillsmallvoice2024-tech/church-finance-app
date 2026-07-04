@@ -50,7 +50,12 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { MobileFab } from '../components/ui/MobileFab'
 import { ReceiptBadge } from '../components/ui/ReceiptBadge'
 import { useDetailLevel } from '../hooks/useDetailLevel'
-import { ArrowRight, ArrowLeft } from 'lucide-react'
+import { ArrowRight, ArrowLeft, ArrowUpRight, ArrowDownRight, ChevronDown as ChevronDownIcon } from 'lucide-react'
+import { BarChart, Bar, XAxis, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { useCountUp } from '../hooks/useCountUp'
+import { useInflowSummary } from '../hooks/useInflowSummary'
+import { SimpleShell } from '../components/ui/SimpleShell'
+import type { IncomeType } from '../hooks/useIncomeTypes'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -152,7 +157,9 @@ export default function Inflows() {
   // Filters
   const [dateFrom,        setDateFrom]        = useState(yearStart)
   const [dateTo,          setDateTo]          = useState(yearEnd)
-  const [datePreset,      setDatePreset]      = useState<DatePreset | null>(null)
+  // Default to the full accounting year — mark 'ytd' so the "This Year" chip
+  // is active on first load (matches the hero's "this year" label).
+  const [datePreset,      setDatePreset]      = useState<DatePreset | null>('ytd')
   const [searchInput,     setSearchInput]     = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page,            setPage]            = useState(0)
@@ -397,17 +404,26 @@ export default function Inflows() {
         </Card>
         )}
 
-        {/* Summary strip */}
-        <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        {/* Summary strip — full view only (Simple has its own hero total) */}
+        {!isSimple && (
+          <SummaryStrip total={total} count={count} largest={largest} average={average} loading={loading} />
+        )}
 
-        {/* ── Simple view: latest inflows + reveal ─────────────────────────── */}
+        {/* ── Simple view: interactive summary + reveal ────────────────────── */}
         {isSimple && (
-          <SimpleInflowList
+          <SimpleInflowView
             rows={displayed}
-            totalCount={count}
-            loading={loading}
+            recentLoading={loading}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            datePreset={datePreset}
+            unmappedCount={unmappedCount}
+            incomeTypes={incomeTypes}
             baseCurrencyCode={baseCurrencyCode}
+            onPreset={(preset, from, to) => { setDatePreset(preset); setDateFrom(from); setDateTo(to) }}
             onViewAll={() => setDetail('full')}
+            onDrillMonth={(from, to) => { setDatePreset('custom'); setDateFrom(from); setDateTo(to); setDetail('full') }}
+            onDrillUnmapped={() => { setShowUnmappedOnly(true); setDetail('full') }}
           />
         )}
 
@@ -790,59 +806,241 @@ export default function Inflows() {
 }
 
 // ── Simple view ──────────────────────────────────────────────────────────────
-// Read-only list of the most recent inflows with a reveal into the full view.
+// Lean by default: hero total + quick ranges + recent activity + reveal.
+// A "More insights" peel expands the extras (trend, monthly chart, income-type
+// breakdown, attention nudge) for users who want them. Every element drills
+// into the full (filtered) view.
 
-function SimpleInflowList({ rows, totalCount, loading, baseCurrencyCode, onViewAll }: {
+function periodLabel(preset: DatePreset | null): string {
+  switch (preset) {
+    case 'this_month': return 'this month'
+    case 'last_month': return 'last month'
+    case 'custom':     return 'selected dates'
+    default:           return 'this year'   // 'ytd' or default full-year range
+  }
+}
+
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function monthLabel(ym: string): string {
+  const m = Number(ym.slice(5, 7))
+  return MONTH_ABBR[m - 1] ?? ym
+}
+function monthRange(ym: string): { from: string; to: string } {
+  const y = Number(ym.slice(0, 4)); const m = Number(ym.slice(5, 7))
+  const last = new Date(y, m, 0).getDate()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return { from: `${ym}-01`, to: `${ym}-${pad(last)}` }
+}
+const UNCLASSIFIED_COLOR = '#94a3b8'
+
+interface SimpleInflowViewProps {
   rows: InflowTransaction[]
-  totalCount: number
-  loading: boolean
+  recentLoading: boolean
+  dateFrom: string
+  dateTo: string
+  datePreset: DatePreset | null
+  unmappedCount: number
+  incomeTypes: IncomeType[]
   baseCurrencyCode: string
+  onPreset: (preset: DatePreset, from: string, to: string) => void
   onViewAll: () => void
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700">Recent inflows</h2>
-        {totalCount > rows.length && (
-          <span className="text-xs text-gray-400">Showing latest {rows.length} of {totalCount.toLocaleString()}</span>
-        )}
-      </div>
+  onDrillMonth: (from: string, to: string) => void
+  onDrillUnmapped: () => void
+}
 
-      {loading && rows.length === 0 ? (
+function SimpleInflowView({
+  rows, recentLoading, dateFrom, dateTo, datePreset, unmappedCount, incomeTypes,
+  baseCurrencyCode, onPreset, onViewAll, onDrillMonth, onDrillUnmapped,
+}: SimpleInflowViewProps) {
+  const summary       = useInflowSummary(dateFrom, dateTo)
+  const animatedTotal = useCountUp(summary.total)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const delta = summary.prevTotal && summary.prevTotal > 0
+    ? ((summary.total - summary.prevTotal) / summary.prevTotal) * 100
+    : null
+
+  const typeMeta = (id: string | null): { name: string; color: string } => {
+    if (!id) return { name: 'Unclassified', color: UNCLASSIFIED_COLOR }
+    const t = incomeTypes.find(x => x.id === id)
+    return { name: t?.name ?? 'Unknown', color: t?.color ?? UNCLASSIFIED_COLOR }
+  }
+
+  const topTypes  = summary.byType.slice(0, 5)
+  const chartData = summary.monthly.map(p => ({ ...p, label: monthLabel(p.month) }))
+  const recent    = rows.slice(0, 8)
+
+  const insightsPanel = (
+    <div className="space-y-4">
+      {/* Trend vs previous period */}
+      {delta !== null && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 flex items-center gap-2">
+          <span className={`inline-flex items-center gap-0.5 text-lg font-bold ${delta >= 0 ? 'text-success' : 'text-danger'}`}>
+            {delta >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+            {Math.abs(delta).toFixed(0)}%
+          </span>
+          <span className="text-sm text-gray-500">vs the previous {periodLabel(datePreset).replace('this ', '').replace('last ', '')}</span>
+        </div>
+      )}
+
+      {/* Monthly trend — tap a bar to drill */}
+      {!summary.loading && chartData.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-500">Monthly inflows</p>
+            <p className="text-[11px] text-gray-400">Tap a month to open it</p>
+          </div>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <RTooltip
+                cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Inflow']}
+                labelFormatter={() => ''}
+              />
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
+                onClick={(d: { month?: string; payload?: { month?: string } }) => {
+                  const ym = d?.month ?? d?.payload?.month
+                  if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
+                }}>
+                {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Income-type breakdown — tap to drill */}
+      {!summary.loading && topTypes.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold text-gray-500 mb-3">Top income types</p>
+          <div className="flex flex-wrap gap-2">
+            {topTypes.map(slice => {
+              const { name, color } = typeMeta(slice.incomeTypeId)
+              const pct = summary.total > 0 ? (slice.amount / summary.total) * 100 : 0
+              return (
+                <button
+                  key={slice.incomeTypeId ?? 'none'}
+                  type="button"
+                  onClick={onViewAll}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 pl-2 pr-3 py-1.5 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-xs font-medium text-gray-700">{name}</span>
+                  <span className="text-xs font-semibold text-gray-400 tabular-nums">{pct.toFixed(0)}%</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Attention nudge */}
+      {unmappedCount > 0 && (
+        <button
+          type="button"
+          onClick={onDrillUnmapped}
+          className="w-full flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            <p className="text-sm text-amber-800">
+              <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not yet assigned to a distribution rule
+            </p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-amber-600 shrink-0" />
+        </button>
+      )}
+    </div>
+  )
+
+  const hero = (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+      <p className="text-xs font-medium text-gray-500">Total inflows {periodLabel(datePreset)}</p>
+      <p className="text-3xl font-extrabold tabular-nums text-gray-900 mt-1">
+        {formatCurrency(animatedTotal, baseCurrencyCode)}
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        {summary.count.toLocaleString()} transaction{summary.count !== 1 ? 's' : ''}
+      </p>
+    </div>
+  )
+
+  const recentList = (
+    <div>
+      {recentLoading && recent.length === 0 ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-14 rounded-xl border border-gray-100 bg-white animate-pulse" />
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : recent.length === 0 ? (
         <PageEmptyState pageId="inflows" compact />
       ) : (
         <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">
-          {rows.map(row => (
-            <div key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm text-gray-800 truncate">{row.description || '—'}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {formatDate(row.date)}{row.bank_name ? ` · ${row.bank_name}` : ''}
-                </p>
+          {recent.map(row => {
+            const expanded = expandedId === row.id
+            const it = incomeTypes.find(t => t.id === row.income_type_id)
+            return (
+              <div key={row.id}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : row.id)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <div className="min-w-0 flex items-center gap-2">
+                    <ChevronDownIcon className={`w-4 h-4 text-gray-300 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 truncate">{row.description || '—'}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {formatDate(row.date)}{row.bank_name ? ` · ${row.bank_name}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-mono font-bold tabular-nums text-success shrink-0">
+                    {formatCurrency(Number(row.amount), baseCurrencyCode)}
+                  </p>
+                </button>
+                {expanded && (
+                  <div className="px-4 pb-3 pt-0 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pl-10">
+                    {it && <span>Type: <span className="font-medium" style={{ color: it.color }}>{it.name}</span></span>}
+                    {row.transaction_ref && <span>Ref: <span className="font-medium text-gray-600">{row.transaction_ref}</span></span>}
+                    {row.remark && <span className="w-full text-gray-400">{row.remark}</span>}
+                  </div>
+                )}
               </div>
-              <p className="text-sm font-mono font-bold tabular-nums text-success shrink-0">
-                {formatCurrency(Number(row.amount), baseCurrencyCode)}
-              </p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={onViewAll}
-        className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
-      >
-        View all transactions
-        <ArrowRight className="w-4 h-4" />
-      </button>
     </div>
+  )
+
+  return (
+    <SimpleShell
+      pageId="inflows"
+      hero={hero}
+      filters={<PageDatePresets activePreset={datePreset} onPreset={onPreset} />}
+      bodyTitle="Recent inflows"
+      insights={insightsPanel}
+      body={recentList}
+      onViewAll={onViewAll}
+    />
+  )
+}
+
+// Quick date-range chips for the simple view (reuses the shared preset logic).
+function PageDatePresets({ activePreset, onPreset }: {
+  activePreset: DatePreset | null
+  onPreset: (preset: DatePreset, from: string, to: string) => void
+}) {
+  return (
+    <DatePresetBar
+      activePreset={activePreset}
+      onPreset={onPreset}
+      onCustom={() => { /* custom handled in full view */ }}
+      hideCustom
+    />
   )
 }
 

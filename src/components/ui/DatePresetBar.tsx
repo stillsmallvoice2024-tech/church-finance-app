@@ -11,12 +11,13 @@ interface DatePresetBarProps {
   activePreset: DatePreset | null
   onPreset: (preset: DatePreset, from: string, to: string) => void
   onCustom: () => void
+  hideCustom?: boolean
 }
 
 const PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'this_month', label: 'This Month' },
   { key: 'last_month', label: 'Last Month' },
-  { key: 'ytd',        label: 'YTD' },
+  { key: 'ytd',        label: 'This Year' },
   { key: 'custom',     label: 'Custom' },
 ]
 
@@ -24,8 +25,9 @@ function isoDate(d: Date) {
   return format(d, 'yyyy-MM-dd')
 }
 
-export function DatePresetBar({ activePreset, onPreset, onCustom }: DatePresetBarProps) {
+export function DatePresetBar({ activePreset, onPreset, onCustom, hideCustom = false }: DatePresetBarProps) {
   const today = new Date()
+  const presets = hideCustom ? PRESETS.filter(p => p.key !== 'custom') : PRESETS
 
   const handleClick = (preset: DatePreset) => {
     if (preset === 'custom') {
@@ -50,7 +52,7 @@ export function DatePresetBar({ activePreset, onPreset, onCustom }: DatePresetBa
 
   return (
     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Date presets">
-      {PRESETS.map(({ key, label }) => {
+      {presets.map(({ key, label }) => {
         const active = activePreset === key
         return (
           <button
