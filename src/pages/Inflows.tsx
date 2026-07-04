@@ -803,9 +803,21 @@ export default function Inflows() {
 }
 
 // ── Simple view ──────────────────────────────────────────────────────────────
-// Interactive summary: hero total + trend, quick ranges, monthly chart,
-// income-type breakdown, an attention nudge, and recent activity. Every
-// element drills into the full (filtered) view.
+// Lean by default: hero total + quick ranges + recent activity + reveal.
+// A "More insights" peel expands the extras (trend, monthly chart, income-type
+// breakdown, attention nudge) for users who want them. Every element drills
+// into the full (filtered) view.
+
+const INSIGHTS_KEY = 'inflows-insights-open'
+
+function periodLabel(preset: DatePreset | null): string {
+  switch (preset) {
+    case 'this_month': return 'this month'
+    case 'last_month': return 'last month'
+    case 'custom':     return 'selected dates'
+    default:           return 'this year'   // 'ytd' or default full-year range
+  }
+}
 
 const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function monthLabel(ym: string): string {
@@ -842,6 +854,17 @@ function SimpleInflowView({
   const summary       = useInflowSummary(dateFrom, dateTo)
   const animatedTotal = useCountUp(summary.total)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [showInsights, setShowInsights] = useState<boolean>(() => {
+    try { return localStorage.getItem(INSIGHTS_KEY) === 'true' } catch { return false }
+  })
+
+  const toggleInsights = () => {
+    setShowInsights(prev => {
+      const next = !prev
+      try { localStorage.setItem(INSIGHTS_KEY, String(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
 
   const delta = summary.prevTotal && summary.prevTotal > 0
     ? ((summary.total - summary.prevTotal) / summary.prevTotal) * 100
@@ -860,94 +883,19 @@ function SimpleInflowView({
   return (
     <div className="space-y-4">
 
-      {/* Hero — animated total + trend */}
+      {/* Hero — the one number that matters */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5">
-        <p className="text-xs font-medium text-gray-500">Total inflows{datePreset ? '' : ' this year'}</p>
-        <div className="flex items-end gap-3 mt-1">
-          <p className="text-3xl font-extrabold tabular-nums text-gray-900">
-            {formatCurrency(animatedTotal, baseCurrencyCode)}
-          </p>
-          {delta !== null && (
-            <span className={`inline-flex items-center gap-0.5 text-sm font-semibold mb-1 ${delta >= 0 ? 'text-success' : 'text-danger'}`}>
-              {delta >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-              {Math.abs(delta).toFixed(0)}%
-            </span>
-          )}
-        </div>
+        <p className="text-xs font-medium text-gray-500">Total inflows {periodLabel(datePreset)}</p>
+        <p className="text-3xl font-extrabold tabular-nums text-gray-900 mt-1">
+          {formatCurrency(animatedTotal, baseCurrencyCode)}
+        </p>
         <p className="text-xs text-gray-400 mt-1">
           {summary.count.toLocaleString()} transaction{summary.count !== 1 ? 's' : ''}
-          {delta !== null && <span> · vs previous period</span>}
         </p>
       </div>
 
       {/* Quick ranges */}
       <PageDatePresets activePreset={datePreset} onPreset={onPreset} />
-
-      {/* Monthly trend — tap a bar to drill */}
-      {!summary.loading && chartData.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
-          <p className="text-xs font-semibold text-gray-500 mb-2">Monthly inflows</p>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <RTooltip
-                cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-                formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Inflow']}
-                labelFormatter={() => ''}
-              />
-              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
-                onClick={(d: { month?: string; payload?: { month?: string } }) => {
-                  const ym = d?.month ?? d?.payload?.month
-                  if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
-                }}>
-                {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Income-type breakdown — tap to drill */}
-      {!summary.loading && topTypes.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
-          <p className="text-xs font-semibold text-gray-500 mb-3">Top income types</p>
-          <div className="flex flex-wrap gap-2">
-            {topTypes.map(slice => {
-              const { name, color } = typeMeta(slice.incomeTypeId)
-              const pct = summary.total > 0 ? (slice.amount / summary.total) * 100 : 0
-              return (
-                <button
-                  key={slice.incomeTypeId ?? 'none'}
-                  type="button"
-                  onClick={onViewAll}
-                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 pl-2 pr-3 py-1.5 hover:bg-gray-50 transition-colors"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                  <span className="text-xs font-medium text-gray-700">{name}</span>
-                  <span className="text-xs font-semibold text-gray-400 tabular-nums">{pct.toFixed(0)}%</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Attention nudge */}
-      {unmappedCount > 0 && (
-        <button
-          type="button"
-          onClick={onDrillUnmapped}
-          className="w-full flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors text-left"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-            <p className="text-sm text-amber-800">
-              <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not mapped to a distribution rule
-            </p>
-          </div>
-          <ArrowRight className="w-4 h-4 text-amber-600 shrink-0" />
-        </button>
-      )}
 
       {/* Recent activity — tap to expand */}
       <div>
@@ -995,6 +943,104 @@ function SimpleInflowView({
                 </div>
               )
             })}
+          </div>
+        )}
+      </div>
+
+      {/* ── More insights — collapsed by default ─────────────────────────── */}
+      <div>
+        <button
+          type="button"
+          onClick={toggleInsights}
+          aria-expanded={showInsights}
+          className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          <ChevronDownIcon className={`w-4 h-4 transition-transform ${showInsights ? 'rotate-180' : ''}`} />
+          {showInsights ? 'Hide insights' : 'More insights'}
+        </button>
+
+        {showInsights && (
+          <div className="space-y-4 pt-3">
+
+            {/* Trend vs previous period */}
+            {delta !== null && (
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 flex items-center gap-2">
+                <span className={`inline-flex items-center gap-0.5 text-lg font-bold ${delta >= 0 ? 'text-success' : 'text-danger'}`}>
+                  {delta >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+                  {Math.abs(delta).toFixed(0)}%
+                </span>
+                <span className="text-sm text-gray-500">vs the previous {periodLabel(datePreset).replace('this ', '').replace('last ', '')}</span>
+              </div>
+            )}
+
+            {/* Monthly trend — tap a bar to drill */}
+            {!summary.loading && chartData.length > 0 && (
+              <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500">Monthly inflows</p>
+                  <p className="text-[11px] text-gray-400">Tap a month to open it</p>
+                </div>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                    <RTooltip
+                      cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                      formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Inflow']}
+                      labelFormatter={() => ''}
+                    />
+                    <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
+                      onClick={(d: { month?: string; payload?: { month?: string } }) => {
+                        const ym = d?.month ?? d?.payload?.month
+                        if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
+                      }}>
+                      {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Income-type breakdown — tap to drill */}
+            {!summary.loading && topTypes.length > 0 && (
+              <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                <p className="text-xs font-semibold text-gray-500 mb-3">Top income types</p>
+                <div className="flex flex-wrap gap-2">
+                  {topTypes.map(slice => {
+                    const { name, color } = typeMeta(slice.incomeTypeId)
+                    const pct = summary.total > 0 ? (slice.amount / summary.total) * 100 : 0
+                    return (
+                      <button
+                        key={slice.incomeTypeId ?? 'none'}
+                        type="button"
+                        onClick={onViewAll}
+                        className="inline-flex items-center gap-2 rounded-full border border-gray-200 pl-2 pr-3 py-1.5 hover:bg-gray-50 transition-colors"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                        <span className="text-xs font-medium text-gray-700">{name}</span>
+                        <span className="text-xs font-semibold text-gray-400 tabular-nums">{pct.toFixed(0)}%</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Attention nudge */}
+            {unmappedCount > 0 && (
+              <button
+                type="button"
+                onClick={onDrillUnmapped}
+                className="w-full flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <p className="text-sm text-amber-800">
+                    <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not yet assigned to a distribution rule
+                  </p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-amber-600 shrink-0" />
+              </button>
+            )}
           </div>
         )}
       </div>
