@@ -1044,7 +1044,7 @@ function SimpleOutflowView({
     <SimpleShell
       pageId="outflows"
       hero={hero}
-      ranges={
+      filters={
         <DatePresetBar
           activePreset={datePreset}
           onPreset={onPreset}

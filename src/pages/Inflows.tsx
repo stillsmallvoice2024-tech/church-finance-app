@@ -1020,7 +1020,7 @@ function SimpleInflowView({
     <SimpleShell
       pageId="inflows"
       hero={hero}
-      ranges={<PageDatePresets activePreset={datePreset} onPreset={onPreset} />}
+      filters={<PageDatePresets activePreset={datePreset} onPreset={onPreset} />}
       bodyTitle="Recent inflows"
       insights={insightsPanel}
       body={recentList}

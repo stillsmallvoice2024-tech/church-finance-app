@@ -9,8 +9,8 @@ import { ChevronDown, ArrowRight } from 'lucide-react'
 interface SimpleShellProps {
   pageId:        string        // used for the insights-open localStorage key
   hero:          ReactNode     // the headline card (e.g. total)
-  ranges?:       ReactNode     // optional quick range chips
-  bodyTitle:     string        // heading above the body list (e.g. "Recent inflows")
+  filters?:      ReactNode     // optional chip row (date presets, group filters, …)
+  bodyTitle:     string        // heading above the body (e.g. "Recent inflows")
   insights?:     ReactNode     // optional; when present a "More insights" toggle appears
   body:          ReactNode     // the main list/content
   onViewAll:     () => void
@@ -18,7 +18,7 @@ interface SimpleShellProps {
 }
 
 export function SimpleShell({
-  pageId, hero, ranges, bodyTitle, insights, body, onViewAll,
+  pageId, hero, filters, bodyTitle, insights, body, onViewAll,
   viewAllLabel = 'View all transactions',
 }: SimpleShellProps) {
   const storageKey = `${pageId}-insights-open`
@@ -37,7 +37,7 @@ export function SimpleShell({
   return (
     <div className="space-y-4">
       {hero}
-      {ranges}
+      {filters}
 
       {/* Body header + optional insights toggle */}
       <div className="flex items-center justify-between">
