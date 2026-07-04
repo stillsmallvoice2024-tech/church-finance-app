@@ -899,7 +899,18 @@ function SimpleInflowView({
 
       {/* Recent activity — tap to expand */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">Recent inflows</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-700">Recent inflows</h2>
+          <button
+            type="button"
+            onClick={toggleInsights}
+            aria-expanded={showInsights}
+            className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            {showInsights ? 'Hide insights' : 'More insights'}
+            <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${showInsights ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
         {recentLoading && recent.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -947,20 +958,9 @@ function SimpleInflowView({
         )}
       </div>
 
-      {/* ── More insights — collapsed by default ─────────────────────────── */}
-      <div>
-        <button
-          type="button"
-          onClick={toggleInsights}
-          aria-expanded={showInsights}
-          className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <ChevronDownIcon className={`w-4 h-4 transition-transform ${showInsights ? 'rotate-180' : ''}`} />
-          {showInsights ? 'Hide insights' : 'More insights'}
-        </button>
-
-        {showInsights && (
-          <div className="space-y-4 pt-3">
+      {/* Insights — toggled from the Recent inflows header above */}
+      {showInsights && (
+        <div className="space-y-4">
 
             {/* Trend vs previous period */}
             {delta !== null && (
@@ -1043,7 +1043,6 @@ function SimpleInflowView({
             )}
           </div>
         )}
-      </div>
 
       <button
         type="button"
