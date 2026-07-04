@@ -16,6 +16,7 @@ import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
 import { allocatePercent } from '../utils/financeMath'
 import { fetchAllRows } from '../utils/fetchAllRows'
+import { computeFundBuckets } from '../utils/fundBuckets'
 import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows, directionLabel } from '../utils/sortUtils'
@@ -87,7 +88,6 @@ type ViewMode      = 'summary' | 'ledger' | 'fx'
 type Portion       = 'All' | 'Percentage' | 'Specific Seed' | 'Savings'
 type LedgerPortion = 'Percentage' | 'Specific Seed' | 'Savings'
 
-const PORTIONS: Portion[]             = ['All', 'Percentage', 'Specific Seed', 'Savings']
 const LEDGER_PORTIONS: LedgerPortion[] = ['Percentage', 'Specific Seed', 'Savings']
 
 // Display labels only — internal values above are unchanged (used as DB keys).
@@ -126,7 +126,7 @@ export default function CategoryLedger() {
 
   // UI state
   const [viewMode,       setViewMode]       = useState<ViewMode>('summary')
-  const [activePortion,  setActivePortion]  = useState<Portion>('All')
+  const activePortion: Portion = 'All'
   const [activeCategory, setActiveCategory] = useState('')
   const [ledgerPortion,  setLedgerPortion]  = useState<LedgerPortion>('Percentage')
 
@@ -168,43 +168,17 @@ export default function CategoryLedger() {
   // ── Summary load ─────────────────────────────────────────────────────────────
 
   const loadSummary = useCallback(async () => {
+    if (!orgId) { setLoading(false); return }
     setLoading(true)
     setError(null)
 
-    const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes, incomeTypeRes] = await Promise.all([
-      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('org_id', orgId!).eq('stage_code_2', 'Specific Seed')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId!).eq('stage_code_2', 'Specific Seed')),
-      fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('org_id', orgId!).eq('stage_code_2', 'Savings')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId!).eq('stage_code_2', 'Savings')),
-      fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, income_type_id, transaction_type, offset_role').eq('org_id', orgId!)),
-      supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)').eq('org_id', orgId!),
-      fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount').eq('org_id', orgId!).eq('status', 'active')),
-      fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role')
-        .eq('org_id', orgId!)
-        .not('stage_code_2', 'eq', 'Specific Seed')
-        .not('stage_code_2', 'eq', 'Savings')),
-      supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId!),
-    ])
+    // Authoritative bucket engine — shared with the Regular / Designated /
+    // Savings tabs so all four surfaces reconcile by construction.
+    const fb = await computeFundBuckets(orgId)
+    if (fb.error) { setError(fb.error); setLoading(false); return }
 
-    if (seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error) {
-      setError(
-        seedRes.error?.message ?? seedOutRes.error?.message ?? savInRes.error?.message ??
-        savOutRes.error?.message ?? allInflowRes.error?.message ??
-        pctOutRes.error?.message ?? 'Failed to load',
-      )
-      setLoading(false)
-      return
-    }
-
-    const cobRows = cobRes.error ? [] : (cobRes.data ?? [])
-
-    const incomeTypeGroupMap = new Map<string, string | null>(
-      (incomeTypeRes.data ?? []).map((r: Record<string, unknown>) =>
-        [r.id as string, r.special_config_group_id as string | null]
-      )
-    )
+    // Current percentages for display come from the live general config.
     const versionIndex = buildVersionIndex(configs, allocGroups)
-
     const today = new Date().toISOString().slice(0, 10)
     const currentGeneral = versionIndex.resolve(null, today)
     const pctMap = new Map<string, number>()
@@ -212,119 +186,21 @@ export default function CategoryLedger() {
       for (const r of currentGeneral.rows) pctMap.set(r.category_name, Number(r.percentage ?? 0))
     }
 
-    const map = new Map<string, Omit<CategoryRow, 'name' | 'percentage' | 'percentageAllocated'>>()
-    const ensure = (cat: string) => {
-      if (!map.has(cat)) map.set(cat, { specificSeed: 0, savingsIn: 0, savingsOut: 0 })
-      return map.get(cat)!
-    }
-
-    for (const r of seedRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').specificSeed += Number(r.amount)
-    }
-    for (const r of seedOutRes.data ?? []) {
-      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      const amt = Number(r.amount_disbursed || 0)
-      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
-      ensure(cat).specificSeed += isOffset ? amt : -amt
-    }
-    for (const r of savInRes.data ?? []) {
-      ensure((r.stage_code_1 as string | null) || '(Uncategorised)').savingsIn += Number(r.amount)
-    }
-    for (const r of savOutRes.data ?? []) {
-      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      const amt = Number(r.amount_disbursed || 0)
-      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
-      ensure(cat).savingsOut += isOffset ? -amt : amt
-    }
-
-    for (const ob of cobRows) {
-      const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
-      if (!catName) continue
-      const row = ensure(catName)
-      if (ob.budget_portion === 'Specific Seed') row.specificSeed += Number(ob.amount)
-      else if (ob.budget_portion === 'Savings') row.savingsIn += Number(ob.amount)
-    }
-
-    const allocMap = new Map<string, number>()
-    for (const r of allInflowRes.data ?? []) {
-      if (r.stage_code_2 && r.stage_code_2 !== 'Percentage Allocation') continue
-      if (isNonContributing(r)) continue
-      const configId     = r.allocation_config_id as string | null
-      const incomeTypeId = r.income_type_id as string | null
-      const groupId      = incomeTypeId ? (incomeTypeGroupMap.get(incomeTypeId) ?? null) : null
-      const cfg = configId
-        ? (configs.find(c => c.id === configId) ?? versionIndex.resolve(groupId, r.date as string))
-        : versionIndex.resolve(groupId, r.date as string)
-      if (!cfg) continue
-      for (const catRow of cfg.rows) {
-        let allocated: number
-        if (catRow.amount != null && catRow.amount > 0) {
-          allocated = catRow.amount
-        } else if (catRow.percentage) {
-          allocated = allocatePercent(Number(r.amount), catRow.percentage)
-        } else {
-          continue
-        }
-        if (catRow.budget_portion === 'Specific Seed') {
-          ensure(catRow.category_name).specificSeed += allocated
-        } else if (catRow.budget_portion === 'Savings') {
-          ensure(catRow.category_name).savingsIn += allocated
-        } else {
-          allocMap.set(catRow.category_name, (allocMap.get(catRow.category_name) ?? 0) + allocated)
-        }
-      }
-    }
-
-    for (const ob of cobRows) {
-      if (ob.budget_portion !== 'Percentage Allocation') continue
-      const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
-      if (!catName) continue
-      allocMap.set(catName, (allocMap.get(catName) ?? 0) + Number(ob.amount))
-    }
-
-    // Intraflow adjustments: internal transfers shift balances between categories.
-    // FROM = debit, TO = credit. Net across all categories is always zero.
-    for (const r of intraFlowRes.error ? [] : (intraFlowRes.data ?? [])) {
-      const amount = Number(r.total_amount)
-      if (amount <= 0) continue
-      const fromCat   = (r.account_from       as string | null) || ''
-      const fromStage = (r.account_from_stage2 as string | null) || ''
-      const toCat     = (r.account_to         as string | null) || ''
-      const toStage   = (r.account_to_stage2   as string | null) || ''
-      // Circular reallocation: same category+portion on both sides — net zero, skip
-      if (fromCat === toCat && fromStage === toStage) continue
-      if (fromCat) {
-        if (fromStage === 'Percentage Allocation') allocMap.set(fromCat, (allocMap.get(fromCat) ?? 0) - amount)
-        else { const row = ensure(fromCat); if (fromStage === 'Specific Seed') row.specificSeed -= amount; else if (fromStage === 'Savings') row.savingsIn -= amount }
-      }
-      if (toCat) {
-        if (toStage === 'Percentage Allocation') allocMap.set(toCat, (allocMap.get(toCat) ?? 0) + amount)
-        else { const row = ensure(toCat); if (toStage === 'Specific Seed') row.specificSeed += amount; else if (toStage === 'Savings') row.savingsIn += amount }
-      }
-    }
-
-    const pctOutMap = new Map<string, number>()
-    for (const r of pctOutRes.data ?? []) {
-      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      const amt = Number(r.amount_disbursed || 0)
-      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
-      pctOutMap.set(cat, (pctOutMap.get(cat) ?? 0) + (isOffset ? -amt : amt))
-    }
-
     const allNames = new Set<string>([
       ...categories.map(c => c.name),
       ...pctMap.keys(),
-      ...map.keys(),
-      ...allocMap.keys(),
+      ...fb.byCategory.keys(),
     ])
 
     const result: CategoryRow[] = [...allNames].map(name => {
-      const d = map.get(name) ?? { specificSeed: 0, savingsIn: 0, savingsOut: 0 }
+      const b = fb.byCategory.get(name)
       return {
         name,
         percentage:          pctMap.has(name) ? pctMap.get(name)! : null,
-        percentageAllocated: (allocMap.get(name) ?? 0) - (pctOutMap.get(name) ?? 0),
-        ...d,
+        percentageAllocated: b ? b.pctIn - b.pctOut : 0,
+        specificSeed:        b ? b.seedIn - b.seedOut : 0,
+        savingsIn:           b?.savIn ?? 0,
+        savingsOut:          b?.savOut ?? 0,
       }
     }).sort((a, b) => a.name.localeCompare(b.name))
 
@@ -907,21 +783,8 @@ export default function CategoryLedger() {
             </div>
           )}
 
-          {/* Portion filter + Category selector */}
+          {/* Category selector (portion filter removed — summary is always All) */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-              {PORTIONS.map(p => (
-                <button
-                  key={p}
-                  onClick={() => setActivePortion(p)}
-                  className={`px-3 py-1.5 border-r last:border-r-0 border-gray-200 transition-colors ${
-                    activePortion === p ? 'bg-primary text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {PORTION_LABELS[p]}
-                </button>
-              ))}
-            </div>
             <SearchableSelect value={activeCategory} onChange={setActiveCategory}
               options={rows.map(r => ({ value: r.name, label: r.name }))}
               placeholder="All categories"

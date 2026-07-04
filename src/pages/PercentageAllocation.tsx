@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { PieChart, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
-import { supabase } from '../lib/supabase'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatCurrency } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
@@ -13,10 +12,10 @@ import { PaginationBar } from '../components/ui/PaginationBar'
 import { useDataViewState } from '../hooks/useDataViewState'
 import { sortRows, multiSortRows } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
-import { allocatePercent } from '../utils/financeMath'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
+import { computeFundBuckets } from '../utils/fundBuckets'
 
 interface PctRow {
   category:  string
@@ -32,8 +31,6 @@ const PA_COLUMNS: TableColumnDef<PctRow>[] = [
 ]
 
 const PA_SORT_FIELDS = deriveSortFields(PA_COLUMNS)
-
-type ConfigRowShape = { category_name: string; budget_portion?: string; percentage?: number }
 
 export default function PercentageAllocation() {
   usePageTitle('Regular Funds')
@@ -52,116 +49,20 @@ export default function PercentageAllocation() {
     setLoading(true)
     setError(null)
 
-    const [inflowRes, outflowRes, cobRes, configSplitRes, intraflowRes] = await Promise.all([
-      supabase
-        .from('inflow_transactions')
-        .select('stage_code_1, amount')
-        .eq('org_id', orgId)
-        .eq('stage_code_2', 'Percentage Allocation'),
-      supabase
-        .from('outflow_transactions')
-        .select('stage_code_1, amount_disbursed, offset_role')
-        .eq('org_id', orgId)
-        .eq('stage_code_2', 'Percentage Allocation'),
-      supabase
-        .from('category_opening_balances')
-        .select('amount, categories(name)')
-        .eq('org_id', orgId)
-        .eq('budget_portion', 'Percentage Allocation'),
-      supabase
-        .from('inflow_transactions')
-        .select('amount, allocation_config_id')
-        .eq('org_id', orgId)
-        .not('allocation_config_id', 'is', null)
-        .is('stage_code_2', null)
-        .is('transaction_type', null),
-      supabase
-        .from('intra_flows')
-        .select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
-        .eq('org_id', orgId)
-        .eq('status', 'active'),
-    ])
+    // Single shared source of truth — same engine as the Category Accounts
+    // summary cards, so Regular Funds here always reconciles with that card.
+    const fb = await computeFundBuckets(orgId)
+    if (fb.error) { setError(fb.error); setLoading(false); return }
 
-    if (inflowRes.error || outflowRes.error) {
-      setError(inflowRes.error?.message ?? outflowRes.error?.message ?? 'Failed to load')
-      setLoading(false)
-      return
-    }
-
-    const cobData = cobRes.error ? [] : (cobRes.data ?? [])
-
-    const map = new Map<string, { deposited: number; withdrawn: number }>()
-    const ensure = (cat: string) => {
-      if (!map.has(cat)) map.set(cat, { deposited: 0, withdrawn: 0 })
-      return map.get(cat)!
-    }
-
-    for (const r of inflowRes.data ?? []) {
-      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      ensure(cat).deposited += Number(r.amount)
-    }
-    for (const r of outflowRes.data ?? []) {
-      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      const amt = Number(r.amount_disbursed || 0)
-      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
-      ensure(cat).withdrawn += isOffset ? -amt : amt
-    }
-    for (const ob of cobData) {
-      const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
-      if (!catName) continue
-      ensure(catName).deposited += Number(ob.amount)
-    }
-
-    // Config-split inflows: allocation_config_id set, stage_code_2 null
-    // Config rows with budget_portion = 'Percentage' (or unset) contribute here
-    const configSplitData = (configSplitRes.data ?? []) as Array<{
-      amount: number; allocation_config_id: string
-    }>
-    if (configSplitData.length > 0) {
-      const configIds = [...new Set(configSplitData.map(r => r.allocation_config_id))]
-      const configsRes = await supabase
-        .from('allocation_configs')
-        .select('id, rows')
-        .eq('org_id', orgId)
-        .in('id', configIds)
-
-      const configMap = new Map<string, ConfigRowShape[]>(
-        (configsRes.data ?? []).map(c => [c.id as string, c.rows as ConfigRowShape[]])
-      )
-
-      for (const inflow of configSplitData) {
-        const cfgRows = configMap.get(inflow.allocation_config_id) ?? []
-        for (const row of cfgRows) {
-          // Unset budget_portion defaults to Percentage; skip Specific Seed / Savings rows
-          if (row.budget_portion && row.budget_portion !== 'Percentage' && row.budget_portion !== 'Percentage Allocation') continue
-          const pct = Number(row.percentage ?? 0)
-          if (pct <= 0) continue
-          const allocAmount = allocatePercent(Number(inflow.amount), pct)
-          if (allocAmount <= 0) continue
-          const cat = row.category_name || '(Uncategorised)'
-          ensure(cat).deposited += allocAmount
-        }
-      }
-    }
-
-    for (const r of intraflowRes.error ? [] : (intraflowRes.data ?? [])) {
-      const amount    = Number(r.total_amount)
-      if (amount <= 0) continue
-      const fromCat   = (r.account_from       as string | null) || ''
-      const fromStage = (r.account_from_stage2 as string | null) || ''
-      const toCat     = (r.account_to         as string | null) || ''
-      const toStage   = (r.account_to_stage2   as string | null) || ''
-      if (fromCat === toCat && fromStage === toStage) continue
-      if (toStage === 'Percentage Allocation' && toCat)   ensure(toCat).deposited  += amount
-      if (fromStage === 'Percentage Allocation' && fromCat) ensure(fromCat).withdrawn += amount
-    }
-
-    const result: PctRow[] = [...map.entries()].map(([category, v]) => ({
-      category,
-      deposited: v.deposited,
-      withdrawn: v.withdrawn,
-      balance:   v.deposited - v.withdrawn,
-    })).sort((a, b) => b.balance - a.balance)
+    const result: PctRow[] = [...fb.byCategory.values()]
+      .filter(b => b.pctIn !== 0 || b.pctOut !== 0)
+      .map(b => ({
+        category:  b.category,
+        deposited: b.pctIn,
+        withdrawn: b.pctOut,
+        balance:   b.pctIn - b.pctOut,
+      }))
+      .sort((a, b) => b.balance - a.balance)
 
     setRows(result)
     setLoading(false)

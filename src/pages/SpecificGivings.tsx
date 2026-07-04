@@ -3,10 +3,8 @@ import { Gift, AlertCircle, RefreshCw, TrendingUp, TrendingDown, ChevronDown, Ch
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
-import { supabase } from '../lib/supabase'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatCurrency } from '../utils/formatters'
-import { friendlyError } from '../utils/friendlyError'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DataControlsBar } from '../components/ui/DataControlsBar'
 import { SortableHeader } from '../components/ui/SortableHeader'
@@ -17,23 +15,14 @@ import type { TableColumnDef } from '../utils/tableColumns'
 import { deriveSortFields, searchRows } from '../utils/tableColumns'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
-import { allocatePercent } from '../utils/financeMath'
-
-// One signed contribution to a designated fund (inflow, opening balance,
-// config split, or transfer in/out). Feeds both the balance columns and the
-// per-target breakdown in the expandable row.
-interface ContributionRow {
-  date:   string
-  target: string
-  amount: number
-}
+import { computeFundBuckets, type SeedTarget } from '../utils/fundBuckets'
 
 interface GiftRow {
   category:  string
   deposited: number
   withdrawn: number
   balance:   number
-  targets:   { target: string; total: number; count: number; latest: string }[]
+  targets:   SeedTarget[]
 }
 
 const SG_COLUMNS: TableColumnDef<GiftRow>[] = [
@@ -62,147 +51,22 @@ export default function SpecificGivings() {
     setLoading(true)
     setError(null)
 
-    const [directRes, outflowRes, configSplitRes, cobRes, intraflowRes] = await Promise.all([
-      supabase
-        .from('inflow_transactions')
-        .select('date, stage_code_1, specific_seed_description, description, amount')
-        .eq('org_id', orgId)
-        .eq('stage_code_2', 'Specific Seed'),
-      supabase
-        .from('outflow_transactions')
-        .select('stage_code_1, amount_disbursed, offset_role')
-        .eq('org_id', orgId)
-        .eq('stage_code_2', 'Specific Seed'),
-      supabase
-        .from('inflow_transactions')
-        .select('id, date, amount, description, allocation_config_id')
-        .eq('org_id', orgId)
-        .not('allocation_config_id', 'is', null)
-        .is('stage_code_2', null)
-        .is('transaction_type', null),
-      supabase
-        .from('category_opening_balances')
-        .select('amount, categories(name)')
-        .eq('org_id', orgId)
-        .eq('budget_portion', 'Specific Seed'),
-      supabase
-        .from('intra_flows')
-        .select('date, account_from, account_from_stage2, account_to, account_to_stage2, total_amount')
-        .eq('org_id', orgId)
-        .eq('status', 'active'),
-    ])
+    // Single shared source of truth — same engine as the Category Accounts
+    // summary cards. Designated Gifts here (and its per-target breakdown)
+    // always reconciles with that card.
+    const fb = await computeFundBuckets(orgId)
+    if (fb.error) { setError(fb.error); setLoading(false); return }
 
-    if (directRes.error || outflowRes.error) {
-      setError(friendlyError(directRes.error ?? outflowRes.error, 'load'))
-      setLoading(false)
-      return
-    }
-
-    // Per-category accumulator + per-category contribution list for the
-    // expandable target breakdown.
-    const map = new Map<string, { deposited: number; withdrawn: number }>()
-    const contribs = new Map<string, ContributionRow[]>()
-    const ensure = (cat: string) => {
-      if (!map.has(cat)) { map.set(cat, { deposited: 0, withdrawn: 0 }); contribs.set(cat, []) }
-      return map.get(cat)!
-    }
-    const addContrib = (cat: string, row: ContributionRow) => { contribs.get(cat)!.push(row) }
-
-    for (const r of directRes.data ?? []) {
-      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      const amt = Number(r.amount)
-      ensure(cat).deposited += amt
-      addContrib(cat, {
-        date:   r.date as string,
-        target: (r.specific_seed_description as string | null) || (r.description as string | null) || '(No target specified)',
-        amount: amt,
-      })
-    }
-
-    for (const r of outflowRes.data ?? []) {
-      const cat = (r.stage_code_1 as string | null) || '(Uncategorised)'
-      const amt = Number(r.amount_disbursed || 0)
-      const isOffset = (r as Record<string, unknown>).offset_role === 'offset'
-      ensure(cat).withdrawn += isOffset ? -amt : amt
-    }
-
-    for (const ob of cobRes.error ? [] : (cobRes.data ?? [])) {
-      const catName = (ob.categories as unknown as { name: string } | null)?.name ?? ''
-      if (!catName) continue
-      const amt = Number(ob.amount)
-      ensure(catName).deposited += amt
-      addContrib(catName, { date: '0000-01-01', target: 'Opening Balance', amount: amt })
-    }
-
-    // Config-split inflows: allocation_config_id set, stage_code_2 null —
-    // route each config row tagged 'Specific Seed' to its category.
-    const configSplitData = (configSplitRes.data ?? []) as Array<{
-      id: string; date: string; amount: number; description: string | null; allocation_config_id: string
-    }>
-    if (configSplitData.length > 0) {
-      const configIds = [...new Set(configSplitData.map(r => r.allocation_config_id))]
-      const configsRes = await supabase
-        .from('allocation_configs')
-        .select('id, rows')
-        .eq('org_id', orgId)
-        .in('id', configIds)
-
-      type ConfigRowShape = { category_name: string; budget_portion?: string; percentage?: number }
-      const configMap = new Map<string, ConfigRowShape[]>(
-        (configsRes.data ?? []).map(c => [c.id as string, c.rows as ConfigRowShape[]])
-      )
-
-      for (const inflow of configSplitData) {
-        const cfgRows = configMap.get(inflow.allocation_config_id) ?? []
-        for (const row of cfgRows) {
-          if (row.budget_portion !== 'Specific Seed') continue
-          const pct = Number(row.percentage ?? 0)
-          if (pct <= 0) continue
-          const allocAmount = allocatePercent(Number(inflow.amount), pct)
-          if (allocAmount <= 0) continue
-          const cat = row.category_name || '(Uncategorised)'
-          ensure(cat).deposited += allocAmount
-          addContrib(cat, { date: inflow.date, target: inflow.description || '(No target specified)', amount: allocAmount })
-        }
-      }
-    }
-
-    for (const r of intraflowRes.error ? [] : (intraflowRes.data ?? [])) {
-      const amount    = Number(r.total_amount)
-      if (amount <= 0) continue
-      const fromCat   = (r.account_from        as string | null) || ''
-      const fromStage = (r.account_from_stage2 as string | null) || ''
-      const toCat     = (r.account_to          as string | null) || ''
-      const toStage   = (r.account_to_stage2   as string | null) || ''
-      if (fromCat === toCat && fromStage === toStage) continue
-      if (toStage === 'Specific Seed' && toCat) {
-        ensure(toCat).deposited += amount
-        addContrib(toCat, { date: r.date as string, target: `Transfer In (from ${fromCat || 'unknown'})`, amount })
-      }
-      if (fromStage === 'Specific Seed' && fromCat) {
-        ensure(fromCat).withdrawn += amount
-        addContrib(fromCat, { date: r.date as string, target: `Transfer Out (to ${toCat || 'unknown'})`, amount: -amount })
-      }
-    }
-
-    const result: GiftRow[] = [...map.entries()].map(([category, v]) => {
-      const targetMap = new Map<string, { total: number; count: number; latest: string }>()
-      for (const c of contribs.get(category) ?? []) {
-        const existing = targetMap.get(c.target) ?? { total: 0, count: 0, latest: '' }
-        targetMap.set(c.target, {
-          total:  existing.total + c.amount,
-          count:  existing.count + 1,
-          latest: existing.latest < c.date ? c.date : existing.latest,
-        })
-      }
-      return {
-        category,
-        deposited: v.deposited,
-        withdrawn: v.withdrawn,
-        balance:   v.deposited - v.withdrawn,
-        targets:   [...targetMap.entries()].map(([target, t]) => ({ target, ...t })).sort((a, b) => b.total - a.total),
-      }
-    }).sort((a, b) => b.balance - a.balance)
+    const result: GiftRow[] = [...fb.byCategory.values()]
+      .filter(b => b.seedIn !== 0 || b.seedOut !== 0)
+      .map(b => ({
+        category:  b.category,
+        deposited: b.seedIn,
+        withdrawn: b.seedOut,
+        balance:   b.seedIn - b.seedOut,
+        targets:   fb.seedTargets.get(b.category) ?? [],
+      }))
+      .sort((a, b) => b.balance - a.balance)
 
     setRows(result)
     setLoading(false)
@@ -403,7 +267,7 @@ export default function SpecificGivings() {
                                     <td className="px-3 py-2 text-gray-700">{t.target}</td>
                                     <td className="px-3 py-2 text-center text-gray-500 text-xs hidden sm:table-cell">{t.count}</td>
                                     <td className="px-3 py-2 text-center text-gray-500 text-xs hidden sm:table-cell">
-                                      {t.latest === '0000-01-01' ? '—' : formatDate(t.latest)}
+                                      {t.latest ? formatDate(t.latest) : '—'}
                                     </td>
                                     <td className={`px-3 py-2 text-right font-semibold ${t.total >= 0 ? 'text-success' : 'text-danger'}`}>
                                       {formatCurrency(t.total, baseCurrencyCode)}
