@@ -1341,6 +1341,15 @@ function CategoryAxisTick({ x, y, payload }: { x: number; y: number; payload: { 
 
 interface ChartRow { name: string; Regular: number; Designated: number; Savings: number }
 
+// A row as actually rendered/selected in the chart: ChartRow plus its net
+// total, whether it's the aggregated "Other" bucket, and — only for that
+// bucket — the individual categories folded into it.
+interface DisplayRow extends ChartRow {
+  net: number
+  isOther: boolean
+  members?: { name: string; net: number }[]
+}
+
 function SimpleCategorySummary({
   chartRows, globalTotals, loading, error, activeCategory, categoryOptions, onCategoryChange,
   baseCurrencyCode, onViewLedger,
@@ -1358,9 +1367,9 @@ function SimpleCategorySummary({
   const grandTotal = globalTotals.alloc + globalTotals.seed + globalTotals.sav
   const animatedTotal = useCountUp(grandTotal)
 
-  const ranked = useMemo(
+  const ranked: DisplayRow[] = useMemo(
     () => chartRows
-      .map(r => ({ ...r, net: r.Regular + r.Designated + r.Savings, isOther: false as boolean }))
+      .map(r => ({ ...r, net: r.Regular + r.Designated + r.Savings, isOther: false }))
       .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
     [chartRows],
   )
@@ -1369,7 +1378,7 @@ function SimpleCategorySummary({
   // otherwise keep the top (MAX_ROWS - 1) by |net| and fold the smallest
   // remainder into one "Other" row, so the chart never needs to scroll.
   const { displayRows, rowHeight } = useMemo(() => {
-    let rows = ranked
+    let rows: DisplayRow[] = ranked
     if (ranked.length > MAX_ROWS) {
       const top  = ranked.slice(0, MAX_ROWS - 1)
       const rest = ranked.slice(MAX_ROWS - 1)
@@ -1382,6 +1391,11 @@ function SimpleCategorySummary({
         ...agg,
         net: agg.Regular + agg.Designated + agg.Savings,
         isOther: true,
+        // Individual folded categories, so "Other" can list what's inside it,
+        // not just its aggregate fund-type composition.
+        members: rest
+          .map(r => ({ name: r.name, net: r.net }))
+          .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
       }]
     }
     const height = Math.max(MIN_ROW_HEIGHT, Math.min(NORMAL_ROW_HEIGHT, MAX_CHART_HEIGHT / rows.length))
@@ -1503,6 +1517,23 @@ function SimpleCategorySummary({
               </div>
             ))}
           </div>
+
+          {/* "Other" is an aggregate — list what's actually folded into it,
+              not just its combined fund-type composition. */}
+          {selected.isOther && selected.members && selected.members.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-primary/20 space-y-1">
+              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Categories in this group</p>
+              {selected.members.slice(0, 10).map(m => (
+                <div key={m.name} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600 truncate min-w-0 mr-2">{m.name}</span>
+                  <span className="font-mono text-gray-700 shrink-0">{formatCurrency(m.net, baseCurrencyCode)}</span>
+                </div>
+              ))}
+              {selected.members.length > 10 && (
+                <p className="text-[11px] text-gray-400 pt-0.5">+{selected.members.length - 10} more</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1523,7 +1554,11 @@ function SimpleCategorySummary({
                   plot area, throwing off the overlay's row-height math below.
                   Exact amounts are already one tap away in the detail card. */}
               <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" width={110} tick={<CategoryAxisTick x={0} y={0} payload={{ value: '' }} />} axisLine={false} tickLine={false} />
+              {/* interval={0} forces every row's label to render — recharts'
+                  default auto-skips category ticks it guesses will collide
+                  once rows get this thin, which silently drops labels even
+                  though each row already has its own legible slot. */}
+              <YAxis type="category" dataKey="name" width={110} interval={0} tick={<CategoryAxisTick x={0} y={0} payload={{ value: '' }} />} axisLine={false} tickLine={false} />
               <Bar dataKey="net" radius={[0, 3, 3, 0]} isAnimationActive={false}>
                 {displayRows.map(row => (
                   <Cell
