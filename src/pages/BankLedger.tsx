@@ -5,6 +5,7 @@ import { useDetailLevel } from '../hooks/useDetailLevel'
 import { SimpleShell } from '../components/ui/SimpleShell'
 import { useCountUp } from '../hooks/useCountUp'
 import { useBankBalances, type BankBalance } from '../hooks/useBankBalances'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
@@ -112,19 +113,19 @@ export default function BankLedger() {
     setError(null)
 
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase
+      fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
         .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)
         .order('date', { ascending: true })
-        .order('import_seq', { ascending: true }),
-      supabase
+        .order('import_seq', { ascending: true })),
+      fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('*')
         .eq('bank_name', bankName)
         .order('date', { ascending: true })
-        .order('import_seq', { ascending: true }),
+        .order('import_seq', { ascending: true })),
     ])
 
     if (inflowRes.error || outflowRes.error) {
