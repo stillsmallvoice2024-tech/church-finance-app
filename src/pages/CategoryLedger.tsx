@@ -1347,7 +1347,7 @@ interface ChartRow { name: string; Regular: number; Designated: number; Savings:
 interface DisplayRow extends ChartRow {
   net: number
   isOther: boolean
-  members?: { name: string; net: number }[]
+  members?: (ChartRow & { net: number })[]
 }
 
 function SimpleCategorySummary({
@@ -1391,10 +1391,10 @@ function SimpleCategorySummary({
         ...agg,
         net: agg.Regular + agg.Designated + agg.Savings,
         isOther: true,
-        // Individual folded categories, so "Other" can list what's inside it,
-        // not just its aggregate fund-type composition.
+        // Individual folded categories, so "Other" can list what's inside it —
+        // including each one's own fund-type breakdown, not just its net.
         members: rest
-          .map(r => ({ name: r.name, net: r.net }))
+          .map(r => ({ name: r.name, Regular: r.Regular, Designated: r.Designated, Savings: r.Savings, net: r.net }))
           .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
       }]
     }
@@ -1525,7 +1525,16 @@ function SimpleCategorySummary({
               <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Categories in this group</p>
               {selected.members.slice(0, 10).map(m => (
                 <div key={m.name} className="flex items-center justify-between text-xs">
-                  <span className="text-gray-600 truncate min-w-0 mr-2">{m.name}</span>
+                  <span className="flex items-center gap-1.5 min-w-0 mr-2">
+                    <span className="flex items-center gap-0.5 shrink-0">
+                      {(['Regular', 'Designated', 'Savings'] as const)
+                        .filter(k => m[k] !== 0)
+                        .map(k => (
+                          <span key={k} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COMPOSITION_COLORS[k] }} title={k} />
+                        ))}
+                    </span>
+                    <span className="text-gray-600 truncate min-w-0">{m.name}</span>
+                  </span>
                   <span className="font-mono text-gray-700 shrink-0">{formatCurrency(m.net, baseCurrencyCode)}</span>
                 </div>
               ))}
