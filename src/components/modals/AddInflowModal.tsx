@@ -17,6 +17,7 @@ import { useBanks } from '../../hooks/useBanks'
 import { useAllocationStore, buildVersionIndex } from '../../store/allocationStore'
 import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
+import { getFinalConfig } from '../../utils/configResolver'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
@@ -116,10 +117,27 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
 
+  const generalConfigId = useMemo(() => {
+    if (!watchedDate) return null
+    return versionIndex.resolve(null, watchedDate)?.id ?? null
+  }, [watchedDate, versionIndex])
+
+  // Single source of truth for the config that will actually be saved —
+  // mirrors Import.tsx's doSaveInflow so the auto-resolved rule shown here
+  // is the same one persisted on submit (not just a display-only preview).
+  const effectiveConfigId = useMemo(() => {
+    if (transactionType || !watchedDate) return null
+    return getFinalConfig(
+      { incomeType: selectedIncomeType, allocationConfigId: selectedConfigId, isManualOverride: configManuallySet },
+      generalConfigId,
+      gId => versionIndex.resolve(gId, watchedDate)?.id ?? null,
+    )
+  }, [transactionType, watchedDate, selectedIncomeType, selectedConfigId, configManuallySet, generalConfigId, versionIndex])
+
   const resolvedConfig = useMemo(() => {
-    if (!watchedDate || transactionType) return null
-    return versionIndex.resolve(selectedIncomeType?.special_config_group_id ?? null, watchedDate)
-  }, [watchedDate, transactionType, selectedIncomeType, versionIndex])
+    if (!effectiveConfigId) return null
+    return allocConfigs.find(c => c.id === effectiveConfigId) ?? null
+  }, [effectiveConfigId, allocConfigs])
 
   const filteredCategories = useMemo(
     () => categories.filter(c => !c.currency),
@@ -246,7 +264,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
             date:                       values.date,
             amount:                     values.amount,
             description:                values.description  || null,
-            allocation_config_id:       (!values.transaction_type && configManuallySet) ? (selectedConfigId || null) : null,
+            allocation_config_id:       values.transaction_type ? null : (effectiveConfigId || null),
             bank_name:                  values.bank_name   || null,
             stage_code_1:               values.stage_code_1 || null,
             stage_code_2:               values.stage_code_2 || null,
@@ -282,7 +300,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           date:                       values.date,
           amount:                     values.amount,
           description:                values.description  || undefined,
-          allocation_config_id:       (!values.transaction_type && configManuallySet) ? (selectedConfigId || undefined) : undefined,
+          allocation_config_id:       values.transaction_type ? undefined : (effectiveConfigId || undefined),
           bank_name:                  values.bank_name   || undefined,
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
