@@ -18,7 +18,6 @@ import { StatCard }                from '../components/ui/StatCard'
 import { CanWrite }                from '../components/auth/RoleGates'
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
 import { AddOutflowModal }         from '../components/modals/AddOutflowModal'
-import { ImportModal }             from '../components/modals/ImportModal'
 
 import { useDashboardStats }       from '../hooks/useDashboard'
 import { useAccountingYearStore }  from '../store/accountingYearStore'
@@ -108,7 +107,6 @@ export default function Dashboard() {
 
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
-  const [showImport,     setShowImport]     = useState(false)
   const [lastVisit,      setLastVisit]      = useState<VisitSnapshot | null>(null)
 
   const healthStatus  = useHealthStore(s => s.status)
@@ -248,13 +246,13 @@ export default function Dashboard() {
                 <MinusCircle className="w-4 h-4" />
                 Add Outflow
               </button>
-              <button
-                onClick={() => setShowImport(true)}
+              <Link
+                to="/import"
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 Import
-              </button>
+              </Link>
             </div>
           </CanWrite>
         </div>
@@ -561,11 +559,6 @@ export default function Dashboard() {
       <AddOutflowModal
         open={showAddOutflow}
         onClose={() => setShowAddOutflow(false)}
-        onSuccess={() => stats.refetch()}
-      />
-      <ImportModal
-        open={showImport}
-        onClose={() => setShowImport(false)}
         onSuccess={() => stats.refetch()}
       />
     </>
