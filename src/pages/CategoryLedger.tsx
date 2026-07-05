@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, Fragment, useMemo } from 'react'
 import { LayoutList, AlertCircle, RefreshCw, Percent, Gift, Archive, Layers, ArrowLeftRight, ChevronRight, ChevronDown, Globe, TrendingUp, TrendingDown, RotateCcw, X } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer } from 'recharts'
 import { SimpleShell } from '../components/ui/SimpleShell'
 import { useCountUp } from '../hooks/useCountUp'
 import { isNonContributing } from '../utils/transactionTypes'
@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
 import { useCategories } from '../hooks/useCategories'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { formatCurrency, formatCurrencyCompact, formatDate, getCurrencyLocale } from '../utils/formatters'
+import { formatCurrency, formatDate, getCurrencyLocale } from '../utils/formatters'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
@@ -1308,13 +1308,22 @@ export default function CategoryLedger() {
 // scrolling, regardless of where that category sits in the list.
 
 const RANKED_BAR_COLOR = '#0D7377'   // Teal Anchor — default single-color bar
+const OTHER_BAR_COLOR  = '#94a3b8'   // Muted slate — the aggregated "Other" bucket
 const COMPOSITION_COLORS = {
   Regular:    '#0D7377',  // Teal Anchor
   Designated: '#C89B3C',  // Gold Honour
   Savings:    '#1A2C42',  // Deep Navy — distinct from Regular's teal
 } as const
-const CHART_ROW_HEIGHT = 34
 const Y_AXIS_LABEL_MAX_CHARS = 16
+
+// Shrink-to-fit sizing: the chart always fits in one screen, no scrolling.
+// Rows shrink from NORMAL_ROW_HEIGHT down to MIN_ROW_HEIGHT as the category
+// count grows; past that, the smallest categories fold into a single
+// "Other" row so the rest stay legible and tappable.
+const NORMAL_ROW_HEIGHT = 34
+const MIN_ROW_HEIGHT     = 18
+const MAX_CHART_HEIGHT   = 420
+const MAX_ROWS = Math.floor(MAX_CHART_HEIGHT / MIN_ROW_HEIGHT)
 
 // Truncates long category names so they never bleed into the bars or clip
 // mid-word. The full name is still available on hover/tap (recharts' default
@@ -1327,24 +1336,6 @@ function CategoryAxisTick({ x, y, payload }: { x: number; y: number; payload: { 
       {truncated}
       {truncated !== name && <title>{name}</title>}
     </text>
-  )
-}
-
-// Custom tooltip content — the default recharts tooltip would otherwise show
-// a confusing second "hitArea" line for the invisible click-target Bar.
-function RankedTooltip({ active, payload, baseCurrencyCode }: {
-  active?: boolean
-  payload?: { dataKey?: string; value?: number; payload?: { name?: string } }[]
-  baseCurrencyCode: string
-}) {
-  if (!active || !payload?.length) return null
-  const entry = payload.find(p => p.dataKey === 'net')
-  if (!entry || entry.value == null) return null
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-sm">
-      <p className="font-medium text-gray-700 mb-0.5">{entry.payload?.name}</p>
-      <p className="font-mono font-semibold text-gray-900">{formatCurrency(entry.value, baseCurrencyCode)}</p>
-    </div>
   )
 }
 
@@ -1367,19 +1358,39 @@ function SimpleCategorySummary({
   const grandTotal = globalTotals.alloc + globalTotals.seed + globalTotals.sav
   const animatedTotal = useCountUp(grandTotal)
 
-  // hitArea gives every row a full-width invisible click target (same sign as
-  // its own net) — recharts' Bar onClick only fires on the bar's actual
-  // rendered rectangle, so a near-zero-value bar is only a few pixels wide
-  // and nearly impossible to tap without this.
-  const ranked = useMemo(() => {
-    const withNet = chartRows.map(r => ({ ...r, net: r.Regular + r.Designated + r.Savings }))
-    const maxAbsNet = Math.max(1, ...withNet.map(r => Math.abs(r.net)))
-    return withNet
-      .map(r => ({ ...r, hitArea: r.net >= 0 ? maxAbsNet : -maxAbsNet }))
-      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
-  }, [chartRows])
+  const ranked = useMemo(
+    () => chartRows
+      .map(r => ({ ...r, net: r.Regular + r.Designated + r.Savings, isOther: false as boolean }))
+      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
+    [chartRows],
+  )
 
-  const selected = activeCategory ? (ranked.find(r => r.name === activeCategory) ?? null) : null
+  // Shrink-to-fit: show every category if they fit at >= MIN_ROW_HEIGHT each;
+  // otherwise keep the top (MAX_ROWS - 1) by |net| and fold the smallest
+  // remainder into one "Other" row, so the chart never needs to scroll.
+  const { displayRows, rowHeight } = useMemo(() => {
+    let rows = ranked
+    if (ranked.length > MAX_ROWS) {
+      const top  = ranked.slice(0, MAX_ROWS - 1)
+      const rest = ranked.slice(MAX_ROWS - 1)
+      const agg = rest.reduce(
+        (acc, r) => ({ Regular: acc.Regular + r.Regular, Designated: acc.Designated + r.Designated, Savings: acc.Savings + r.Savings }),
+        { Regular: 0, Designated: 0, Savings: 0 },
+      )
+      rows = [...top, {
+        name: `Other (${rest.length})`,
+        ...agg,
+        net: agg.Regular + agg.Designated + agg.Savings,
+        isOther: true,
+      }]
+    }
+    const height = Math.max(MIN_ROW_HEIGHT, Math.min(NORMAL_ROW_HEIGHT, MAX_CHART_HEIGHT / rows.length))
+    return { displayRows: rows, rowHeight: height }
+  }, [ranked])
+
+  const selected = activeCategory
+    ? (displayRows.find(r => r.name === activeCategory) ?? ranked.find(r => r.name === activeCategory) ?? null)
+    : null
 
   const selectBar = (name: string) => onCategoryChange(name === activeCategory ? '' : name)
 
@@ -1495,57 +1506,47 @@ function SimpleCategorySummary({
         </div>
       )}
 
-      {/* Ranked list — every category, one plain bar each; tap a bar to select it. */}
+      {/* Ranked list — shrinks to fit every category on screen, no scrolling;
+          the smallest fold into "Other" once rows would get too thin.
+          Click handling uses a plain HTML overlay per row (not recharts'
+          Bar onClick) — recharts only registers clicks on a bar's own
+          rendered rectangle, so near-zero-value bars are just a few pixels
+          wide and effectively untappable through the chart's own hit-testing.
+          An absolutely-positioned div per row sidesteps that entirely: the
+          whole row is clickable regardless of how thin its bar is. */}
       <div className="rounded-2xl border border-gray-200 bg-white p-4">
         <p className="text-[11px] text-gray-400 mb-2">Tap a category to see its fund-type breakdown</p>
-        <div className="max-h-[420px] overflow-y-auto">
-          <ResponsiveContainer width="100%" height={Math.max(CHART_ROW_HEIGHT * ranked.length, 120)}>
-            <BarChart data={ranked} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
-              <XAxis type="number" tickFormatter={(v: number) => formatCurrencyCompact(v, baseCurrencyCode)} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+        <div className="relative">
+          <ResponsiveContainer width="100%" height={rowHeight * displayRows.length}>
+            <BarChart data={displayRows} layout="vertical" margin={{ top: 0, right: 12, left: 4, bottom: 0 }}>
+              {/* Hidden — a visible tick strip would eat vertical space from the
+                  plot area, throwing off the overlay's row-height math below.
+                  Exact amounts are already one tap away in the detail card. */}
+              <XAxis type="number" hide />
               <YAxis type="category" dataKey="name" width={110} tick={<CategoryAxisTick x={0} y={0} payload={{ value: '' }} />} axisLine={false} tickLine={false} />
-              <RTooltip
-                cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-                content={<RankedTooltip baseCurrencyCode={baseCurrencyCode} />}
-              />
-              {/* Invisible full-width click target — same onClick as the real bar
-                  below, so thin/near-zero bars are just as easy to tap.
-                  fill="transparent" would NOT work here: SVG's default
-                  pointer-events (visiblePainted) ignores unpainted shapes, so
-                  a truly transparent fill silently swallows clicks. Using an
-                  opaque fill with fillOpacity=0 keeps it "painted" (and thus
-                  clickable) while staying invisible. */}
-              <Bar
-                dataKey="hitArea"
-                fill="#000000"
-                fillOpacity={0}
-                style={{ pointerEvents: 'all' }}
-                isAnimationActive={false}
-                legendType="none"
-                cursor="pointer"
-                onClick={(d: { name?: string; payload?: { name?: string } }) => {
-                  const nm = d?.name ?? d?.payload?.name
-                  if (nm) selectBar(nm)
-                }}
-              />
-              <Bar
-                dataKey="net"
-                radius={[0, 3, 3, 0]}
-                cursor="pointer"
-                onClick={(d: { name?: string; payload?: { name?: string } }) => {
-                  const nm = d?.name ?? d?.payload?.name
-                  if (nm) selectBar(nm)
-                }}
-              >
-                {ranked.map(row => (
+              <Bar dataKey="net" radius={[0, 3, 3, 0]} isAnimationActive={false}>
+                {displayRows.map(row => (
                   <Cell
                     key={row.name}
-                    fill={RANKED_BAR_COLOR}
+                    fill={row.isOther ? OTHER_BAR_COLOR : RANKED_BAR_COLOR}
                     fillOpacity={!activeCategory || row.name === activeCategory ? 1 : 0.35}
                   />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+
+          {/* Click overlay — one plain div per row, full width, exact row height */}
+          <div className="absolute inset-0">
+            {displayRows.map((row, i) => (
+              <div
+                key={row.name}
+                onClick={() => selectBar(row.name)}
+                className="absolute left-0 right-0 cursor-pointer rounded hover:bg-black/5 transition-colors"
+                style={{ top: i * rowHeight, height: rowHeight }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
