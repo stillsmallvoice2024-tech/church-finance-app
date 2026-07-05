@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown } from 'lucide-react'
+import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown, ArrowLeft, X, AlertTriangle } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { useDetailLevel } from '../hooks/useDetailLevel'
+import { SimpleShell } from '../components/ui/SimpleShell'
+import { useCountUp } from '../hooks/useCountUp'
+import { useBankBalances, type BankBalance } from '../hooks/useBankBalances'
 import { Card }          from '../components/ui/Card'
 import { filterInputCls } from '../components/ui/FormField'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
@@ -87,6 +92,8 @@ export default function BankLedger() {
 
   const [selectedBank, setSelectedBank] = useState('')
   const didAutoSelect = useRef(false)
+  const { setLevel: setDetail, isSimple } = useDetailLevel('bank-ledger')
+  const { balances, loading: balancesLoading, error: balancesError } = useBankBalances()
   const blState = useDataViewState({ storageKey: 'bl', defaultSortKey: 'date', defaultSortDir: 'desc' })
   const [ledgerRows,   setLedgerRows]   = useState<LedgerRow[]>([])
   const [loading,      setLoading]      = useState(false)
@@ -256,8 +263,31 @@ export default function BankLedger() {
   const handleExportView = () => exportCSV(BL_CSV_FILE, BL_CSV_HEADERS, pagedRows.map(blCsvRow))
   const handleExportAll  = () => exportCSV(BL_CSV_FILE, BL_CSV_HEADERS, sortedRows.map(blCsvRow))
 
+  if (isSimple) {
+    return (
+      <SimpleBankLedgerView
+        balances={balances}
+        loading={balancesLoading}
+        error={balancesError}
+        baseCurrencyCode={baseCurrencyCode}
+        selectedBank={selectedBank}
+        onSelectBank={id => { didAutoSelect.current = true; setSelectedBank(id) }}
+        onViewAll={() => setDetail('full')}
+      />
+    )
+  }
+
   return (
     <div className="space-y-5">
+      <button
+        type="button"
+        onClick={() => setDetail('simple')}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Show summary
+      </button>
+
       {/* Header */}
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
         <div>
@@ -610,5 +640,178 @@ export default function BankLedger() {
       />
       <DescriptionTooltip tooltip={descTooltip} />
     </div>
+  )
+}
+
+// ── Simple view ──────────────────────────────────────────────────────────────
+// Bank Ledger is a single-bank drill-down by design (pick a bank, see its
+// ledger) — there is no "all banks at a glance" view today. Simple adds one:
+// a donut of base-currency bank balances (hero = true net total, including
+// any overdrawn accounts) + a compact list, with foreign-currency banks in
+// their own strip below (their balances can't be summed with the base
+// currency, or with each other across different FX currencies, into one
+// chart). Tapping a bank selects it — the same selectedBank the Full view's
+// bank picker already uses — so "View full ledger" opens straight into it.
+
+const DONUT_COLORS = ['#0D7377', '#C89B3C', '#1A2C42', '#14A085', '#4A5568']
+
+function SimpleBankLedgerView({
+  balances, loading, error, baseCurrencyCode, selectedBank, onSelectBank, onViewAll,
+}: {
+  balances: BankBalance[]
+  loading: boolean
+  error: string | null
+  baseCurrencyCode: string
+  selectedBank: string
+  onSelectBank: (id: string) => void
+  onViewAll: () => void
+}) {
+  const baseBanks = useMemo(() => balances.filter(b => !b.isForeign), [balances])
+  const fxBanks    = useMemo(() => balances.filter(b => b.isForeign), [balances])
+
+  const netTotal = baseBanks.reduce((s, b) => s + b.balance, 0)
+  const animatedTotal = useCountUp(netTotal)
+
+  // Only positive balances can render as a donut slice — an overdrawn bank
+  // still counts in the true net total above, but is flagged in the list
+  // instead of pretending to be a slice.
+  const positiveBanks = useMemo(() => baseBanks.filter(b => b.balance > 0), [baseBanks])
+
+  const selected = selectedBank ? (balances.find(b => b.id === selectedBank) ?? null) : null
+
+  const selectBank = (id: string) => onSelectBank(id === selectedBank ? '' : id)
+
+  const hero = (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+      <p className="text-xs font-medium text-gray-500">Total across banks</p>
+      <p className={`text-3xl font-extrabold tabular-nums mt-1 ${netTotal >= 0 ? 'text-gray-900' : 'text-danger'}`}>
+        {formatCurrency(animatedTotal, baseCurrencyCode)}
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        {baseBanks.length.toLocaleString()} bank{baseBanks.length !== 1 ? 's' : ''} in {baseCurrencyCode}
+      </p>
+    </div>
+  )
+
+  const body = loading && balances.length === 0 ? (
+    <div className="h-48 rounded-2xl border border-gray-100 bg-white animate-pulse" />
+  ) : baseBanks.length === 0 ? (
+    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-2xl border border-dashed border-gray-200 bg-gray-50">
+      <BookOpen className="w-8 h-8 text-primary/60" />
+      <p className="text-sm text-gray-500">No banks configured yet.</p>
+    </div>
+  ) : (
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+        </div>
+      )}
+
+      {selected && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-gray-800 min-w-0 truncate">{selected.name}</p>
+            <div className="flex items-center gap-2 shrink-0">
+              <p className={`text-sm font-mono font-bold tabular-nums ${selected.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
+                {formatCurrency(selected.balance, selected.currency)}
+              </p>
+              <button type="button" onClick={() => onSelectBank('')} aria-label="Close bank detail" className="p-1 -m-1 rounded text-gray-400 hover:text-gray-600 hover:bg-black/5 transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+          {selected.balance < 0 && (
+            <p className="text-xs text-danger mt-1.5 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Overdrawn</p>
+          )}
+        </div>
+      )}
+
+      {positiveBanks.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-[11px] text-gray-400 mb-2">Tap a bank to see its detail</p>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie
+                data={positiveBanks}
+                dataKey="balance"
+                nameKey="name"
+                innerRadius="55%"
+                outerRadius="85%"
+                paddingAngle={2}
+                onClick={(d: { id?: string }) => { if (d?.id) selectBank(d.id) }}
+                cursor="pointer"
+                isAnimationActive={false}
+              >
+                {positiveBanks.map((b, i) => (
+                  <Cell
+                    key={b.id}
+                    fill={DONUT_COLORS[i % DONUT_COLORS.length]}
+                    fillOpacity={!selectedBank || b.id === selectedBank ? 1 : 0.35}
+                  />
+                ))}
+              </Pie>
+              <RTooltip formatter={(v: number, _n: string, entry: { payload?: { name?: string } }) => [formatCurrency(v, baseCurrencyCode), entry?.payload?.name ?? '']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">
+        {baseBanks.map(b => {
+          const colorIdx = positiveBanks.findIndex(p => p.id === b.id)
+          return (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => selectBank(b.id)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: colorIdx >= 0 ? DONUT_COLORS[colorIdx % DONUT_COLORS.length] : '#94a3b8' }}
+                />
+                <span className="text-sm text-gray-800 truncate">{b.name}</span>
+                {b.balance < 0 && (
+                  <span className="text-[10px] font-semibold text-danger bg-red-50 px-1.5 py-0.5 rounded-full shrink-0">Overdrawn</span>
+                )}
+              </span>
+              <span className={`text-sm font-mono font-bold tabular-nums shrink-0 ${b.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
+                {formatCurrency(b.balance, baseCurrencyCode)}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {fxBanks.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold text-gray-500 mb-2">Foreign currency accounts</p>
+          <p className="text-[11px] text-gray-400 mb-3">Shown in each account's own currency — see the Foreign Currency page for full detail.</p>
+          <div className="space-y-2">
+            {fxBanks.map(b => (
+              <div key={b.id} className="flex items-center justify-between text-sm">
+                <span className="text-gray-700">{b.name}</span>
+                <span className={`font-mono font-semibold ${b.balance >= 0 ? 'text-gray-800' : 'text-danger'}`}>
+                  {formatCurrency(b.balance, b.currency)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <SimpleShell
+      pageId="bank-ledger"
+      hero={hero}
+      bodyTitle="Balances by bank"
+      body={body}
+      onViewAll={onViewAll}
+      viewAllLabel="View full ledger"
+    />
   )
 }
