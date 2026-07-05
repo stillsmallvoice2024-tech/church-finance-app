@@ -9,7 +9,10 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:link": "supabase link --project-ref $SUPABASE_PROJECT_ID",
+    "db:push": "supabase db push",
+    "db:diff": "supabase db diff -f"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

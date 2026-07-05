@@ -47,8 +47,15 @@
 
 ## Migration Strategy
 
+- **Automated runner (primary path)**: any `.sql` file added under `supabase/migrations/` (named `YYYYMMDDHHMMSS_description.sql`) is applied automatically —
+  - PR touching `supabase/migrations/**` → `.github/workflows/migrate-check.yml` boots a full local Supabase stack and applies every migration from scratch; a broken migration fails CI instead of failing prod
+  - Merge to `main` → `.github/workflows/migrate.yml` runs `supabase link` + `supabase db push` against the linked project, so the new migration reaches the DB with no manual SQL-editor step
+  - Requires repo secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` (Settings → Secrets → Actions) and the `production` GitHub Environment to exist
+  - Local equivalents: `npm run db:link`, `npm run db:push`, `npm run db:diff` (wraps the Supabase CLI via `npx`)
+  - Still write idempotent SQL (see SQL Authoring Rules below) — `supabase db push` only re-runs migrations not yet recorded in the remote `supabase_migrations.schema_migrations` table, but idempotency remains the safety net for manual/out-of-band runs
+  - **One-time adoption step**: this project's history was applied by hand before the runner existed, so the remote DB's `supabase_migrations.schema_migrations` table won't yet list these files as applied. Before the first `db push` on a real project, baseline it so the CLI doesn't try to re-run already-live migrations: `supabase link --project-ref <ref>` then `supabase migration repair --status applied <version> [<version> ...]` for every migration timestamp already present in the DB (i.e. everything up to the last one actually run manually). Only genuinely new, not-yet-applied migrations should be left unmarked so the next push applies them.
 - `supabase/schema.sql` = complete DDL for fresh installs — **not auto-run** against existing projects
-- Incremental patches live in `MIGRATION_SQL` constant in `Setup.tsx` (Database tab — run manually in Supabase SQL editor)
+- Legacy/manual fallback: `MIGRATION_SQL` constant in `Setup.tsx` (Database tab — copy into Supabase SQL editor). Only needed if the automated runner is unavailable (e.g. CI secrets not yet configured); prefer adding a migration file instead
 - New column or table → update **both** `schema.sql` AND `Setup.tsx`
 - **Receipts feature** has its own separate `MIGRATION_SQL` displayed inline on the Receipts page and in the ReceiptBadge error panel — it is **not** in `Setup.tsx`. Includes: table creation, RLS enable + policies, storage bucket, and `storage.objects` INSERT/SELECT/DELETE policies.
   - Policy blocks use `DROP POLICY IF EXISTS` + `CREATE POLICY` (not `DO $$ EXCEPTION duplicate_object`) — re-running the migration replaces any pre-existing wrong policies

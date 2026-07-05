@@ -1,0 +1,35 @@
+name: Migration check
+
+# PR gate: spins up a full local Supabase stack (Postgres + Auth + Storage)
+# and applies every migration from scratch, so a broken migration fails CI
+# instead of failing the production push after merge.
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Check migration filename convention
+        run: |
+          status=0
+          for f in supabase/migrations/*.sql; do
+            base=$(basename "$f")
+            if ! [[ "$base" =~ ^[0-9]{14}_[a-z0-9_]+\.sql$ ]]; then
+              echo "::error file=$f::Migration filename must match <14-digit-timestamp>_description.sql"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Apply all migrations against a fresh local stack
+        run: supabase start
