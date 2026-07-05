@@ -5,6 +5,10 @@ import {
   ChevronDown, ChevronUp, AlertCircle, RefreshCw,
   ChevronRight, Link2, X, LayoutGrid, LayoutList, Layers,
 } from 'lucide-react'
+import { BarChart, Bar, XAxis, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { RankedBarChart } from '../components/ui/RankedBarChart'
+import { useBankMovementSummary } from '../hooks/useBankMovementSummary'
+import { useCountUp } from '../hooks/useCountUp'
 import { PageHelpBanner }   from '../components/ui/PageHelpBanner'
 import { DataControlsBar }  from '../components/ui/DataControlsBar'
 import { SortableHeader }   from '../components/ui/SortableHeader'
@@ -94,11 +98,12 @@ type Tab = 'deposits' | 'transfers'
 
 export default function BankMovement() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = (searchParams.get('tab') ?? 'deposits') as Tab
+  const tab = searchParams.get('tab') as Tab | null
 
-  usePageTitle(tab === 'deposits' ? 'Bank Deposits' : 'Intrabank Transfers')
+  usePageTitle(tab === 'deposits' ? 'Bank Deposits' : tab === 'transfers' ? 'Intrabank Transfers' : 'Bank Deposits & Transfers')
 
   const setTab = (t: Tab) => setSearchParams({ tab: t }, { replace: true })
+  const showHub = () => setSearchParams({}, { replace: true })
 
   return (
     <div className="space-y-5">
@@ -114,28 +119,142 @@ export default function BankMovement() {
         <p className="text-sm text-gray-500 mt-0.5">Deposits into banks and transfers between banks</p>
       </div>
 
-      {/* Tab strip */}
-      <div className="flex border-b border-gray-200">
-        {([
-          { key: 'deposits'  as Tab, label: 'Bank Deposits',      icon: Landmark       },
-          { key: 'transfers' as Tab, label: 'Intrabank Transfers', icon: ArrowRightLeft },
-        ]).map(({ key, label, icon: Icon }) => (
+      {tab === null ? (
+        <BankMovementHub onSelectTab={setTab} />
+      ) : (
+        <>
           <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              tab === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+            type="button"
+            onClick={showHub}
+            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
           >
-            <Icon className="w-4 h-4" />
-            {label}
+            ← Show summary
           </button>
-        ))}
+
+          {/* Tab strip */}
+          <div className="flex border-b border-gray-200">
+            {([
+              { key: 'deposits'  as Tab, label: 'Bank Deposits',      icon: Landmark       },
+              { key: 'transfers' as Tab, label: 'Intrabank Transfers', icon: ArrowRightLeft },
+            ]).map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                  tab === key
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'deposits' ? <DepositsPanel /> : <TransfersPanel />}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Hub (summary landing) ────────────────────────────────────────────────────────
+
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function monthLabel(ym: string): string {
+  const m = Number(ym.slice(5, 7))
+  return MONTH_ABBR[m - 1] ?? ym
+}
+
+function BankMovementHub({ onSelectTab }: { onSelectTab: (t: Tab) => void }) {
+  const { baseCurrencyCode } = useOrgCurrency()
+  const { deposits, transfers, loading, error } = useBankMovementSummary()
+  const animatedDeposits  = useCountUp(deposits.total)
+  const animatedTransfers = useCountUp(transfers.total)
+  const chartData = deposits.monthly.map(p => ({ ...p, label: monthLabel(p.month) }))
+
+  if (loading && deposits.count === 0 && transfers.count === 0) {
+    return <div className="h-64 rounded-2xl border border-gray-100 bg-white animate-pulse" />
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-medium text-gray-500">Total Deposits</p>
+          <p className="text-2xl font-extrabold tabular-nums text-gray-900 mt-1">{formatCurrency(animatedDeposits, baseCurrencyCode)}</p>
+          <p className="text-xs text-gray-400 mt-1">{deposits.count.toLocaleString()} deposit{deposits.count !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-medium text-gray-500">Total Transfers</p>
+          <p className="text-2xl font-extrabold tabular-nums text-gray-900 mt-1">{formatCurrency(animatedTransfers, baseCurrencyCode)}</p>
+          <p className="text-xs text-gray-400 mt-1">{transfers.count.toLocaleString()} transfer{transfers.count !== 1 ? 's' : ''}</p>
+        </div>
       </div>
 
-      {tab === 'deposits' ? <DepositsPanel /> : <TransfersPanel />}
+      {chartData.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold text-gray-500 mb-2">Monthly deposits</p>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <RTooltip
+                cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Deposited']}
+                labelFormatter={() => ''}
+              />
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" onClick={() => onSelectTab('deposits')}>
+                {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {transfers.byBank.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold text-gray-500 mb-2">Transfer activity by bank</p>
+          <RankedBarChart items={transfers.byBank} color="#0D7377" activeName={null} onSelect={() => onSelectTab('transfers')} />
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => onSelectTab('deposits')}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <Landmark className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm font-medium text-gray-800">Bank Deposits</span>
+          </span>
+          <span className="flex items-center gap-2 text-xs text-gray-500 shrink-0">
+            {deposits.count.toLocaleString()} · {formatCurrency(deposits.total, baseCurrencyCode)}
+            <ChevronRight className="w-4 h-4" />
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelectTab('transfers')}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <ArrowRightLeft className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm font-medium text-gray-800">Intrabank Transfers</span>
+          </span>
+          <span className="flex items-center gap-2 text-xs text-gray-500 shrink-0">
+            {transfers.count.toLocaleString()} · {formatCurrency(transfers.total, baseCurrencyCode)}
+            <ChevronRight className="w-4 h-4" />
+          </span>
+        </button>
+      </div>
     </div>
   )
 }
