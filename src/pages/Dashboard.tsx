@@ -9,6 +9,7 @@ import {
   TrendingUp,
   PlusCircle, MinusCircle, FileSpreadsheet,
   RefreshCw, AlertCircle, ShieldCheck, ShieldAlert, ShieldX,
+  ChevronDown,
 } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -108,6 +109,19 @@ export default function Dashboard() {
   const [showAddInflow,  setShowAddInflow]  = useState(false)
   const [showAddOutflow, setShowAddOutflow] = useState(false)
   const [lastVisit,      setLastVisit]      = useState<VisitSnapshot | null>(null)
+
+  // Recent Transactions is a peel, not a page-level Simple/Full split —
+  // Health and the chart stay always visible; only this list is click-to-reveal.
+  const [showRecent, setShowRecent] = useState<boolean>(() => {
+    try { return localStorage.getItem('dashboard-recent-open') === 'true' } catch { return false }
+  })
+  const toggleRecent = () => {
+    setShowRecent(prev => {
+      const next = !prev
+      try { localStorage.setItem('dashboard-recent-open', String(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
 
   const healthStatus  = useHealthStore(s => s.status)
   const healthRunAt   = useHealthStore(s => s.runAt)
@@ -484,12 +498,20 @@ export default function Dashboard() {
 
         {/* ── Recent transactions ──────────────────────────────────────────── */}
         <Card padding={false} data-tour="recent-transactions">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={toggleRecent}
+            aria-expanded={showRecent}
+            className="w-full px-6 py-4 border-b border-gray-100 flex items-center justify-between hover:bg-black/[0.015] dark:hover:bg-white/[0.02] transition-colors"
+          >
             <h2 className="text-sm font-semibold text-gray-700">Recent Transactions</h2>
-            <span className="text-xs text-gray-500">Last 10 inflows</span>
-          </div>
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              Last {stats.recentTransactions.length || 10} inflows
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showRecent ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
 
-          {isLoading ? (
+          {showRecent && (isLoading ? (
             <div className="divide-y divide-black/[0.05]">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4 px-6 py-3 animate-pulse">
@@ -517,7 +539,7 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-          )}
+          ))}
         </Card>
 
         {/* ── FX currency strip ────────────────────────────────────────────── */}
