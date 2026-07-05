@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import {
   TrendingDown, Pencil, Trash2, PlusCircle,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown, AlertTriangle,
@@ -360,6 +361,12 @@ export default function Outflows() {
                 Add Outflow
               </button>
             )}
+            <Link
+              to="/import"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
+            >
+              Import
+            </Link>
             <ExportDropdown
               onExportView={handleExportView}
               onExportAll={handleExportAll}
