@@ -1,5 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
+import { Archive, AlertCircle, RefreshCw, TrendingUp, TrendingDown, ArrowLeft, X } from 'lucide-react'
+import { useDetailLevel } from '../hooks/useDetailLevel'
+import { SimpleShell } from '../components/ui/SimpleShell'
+import { RankedBarChart, RANKED_CHART_MAX_ROWS } from '../components/ui/RankedBarChart'
+import { useCountUp } from '../hooks/useCountUp'
+import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { PageHelpBanner } from '../components/ui/PageHelpBanner'
 import { exportCSV } from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
@@ -42,6 +47,7 @@ export default function SavingsPortions() {
   const [error,   setError]   = useState<string | null>(null)
 
   const svpState = useDataViewState({ storageKey: 'svp', defaultSortKey: 'balance', defaultSortDir: 'desc' })
+  const { setLevel: setDetail, isSimple } = useDetailLevel('savings-funds')
   const intraflowVersion = useTransactionSyncStore(s => s.intraflowVersion)
 
   const load = useCallback(async () => {
@@ -105,8 +111,28 @@ export default function SavingsPortions() {
   const totalWithdrawn = visibleRows.reduce((s, r) => s + r.withdrawn, 0)
   const totalBalance   = visibleRows.reduce((s, r) => s + r.balance, 0)
 
+  if (isSimple) {
+    return (
+      <SimpleSavingsFundsView
+        rows={rows}
+        loading={loading}
+        baseCurrencyCode={baseCurrencyCode}
+        onViewAll={() => setDetail('full')}
+      />
+    )
+  }
+
   return (
     <div className="space-y-5">
+
+      <button
+        type="button"
+        onClick={() => setDetail('simple')}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Show summary
+      </button>
 
       <PageHelpBanner storageKey="help-dismissed-savings-portions" title="What are Savings Funds?">
         Savings funds are amounts set aside from income as a reserve or contingency fund, separate from the operating budget.
@@ -260,5 +286,168 @@ export default function SavingsPortions() {
         </>
       )}
     </div>
+  )
+}
+
+// ── Simple view ──────────────────────────────────────────────────────────────
+// Same pattern as Regular Funds / Designated Gifts. Bars use Deep Navy — the
+// same color this fund type gets in the Category Accounts composition chart.
+
+const SAVINGS_BAR_COLOR = '#1A2C42' // Deep Navy
+
+type BucketRow = SavingsRow & { isOther?: boolean }
+
+function SimpleSavingsFundsView({ rows, loading, baseCurrencyCode, onViewAll }: {
+  rows: SavingsRow[]
+  loading: boolean
+  baseCurrencyCode: string
+  onViewAll: () => void
+}) {
+  const [activeCategory, setActiveCategory] = useState('')
+
+  const totalDeposited = rows.reduce((s, r) => s + r.deposited, 0)
+  const totalWithdrawn = rows.reduce((s, r) => s + r.withdrawn, 0)
+  const totalBalance   = rows.reduce((s, r) => s + r.balance, 0)
+  const animatedTotal  = useCountUp(totalBalance)
+
+  const ranked: BucketRow[] = useMemo(
+    () => [...rows].sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance)),
+    [rows],
+  )
+
+  const { displayRows, otherMembers } = useMemo(() => {
+    if (ranked.length <= RANKED_CHART_MAX_ROWS) return { displayRows: ranked, otherMembers: null as BucketRow[] | null }
+    const top  = ranked.slice(0, RANKED_CHART_MAX_ROWS - 1)
+    const rest = ranked.slice(RANKED_CHART_MAX_ROWS - 1)
+    const agg = rest.reduce(
+      (acc, r) => ({ deposited: acc.deposited + r.deposited, withdrawn: acc.withdrawn + r.withdrawn, balance: acc.balance + r.balance }),
+      { deposited: 0, withdrawn: 0, balance: 0 },
+    )
+    return {
+      displayRows: [...top, { category: `Other (${rest.length})`, ...agg, isOther: true }] as BucketRow[],
+      otherMembers: rest,
+    }
+  }, [ranked])
+
+  const selected = activeCategory
+    ? (displayRows.find(r => r.category === activeCategory) ?? ranked.find(r => r.category === activeCategory) ?? null)
+    : null
+
+  const selectBar = (name: string) => setActiveCategory(prev => prev === name ? '' : name)
+
+  const hero = (
+    <div className="space-y-3">
+      {loading ? (
+        <div className="h-24 rounded-2xl border border-gray-100 bg-white animate-pulse" />
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <p className="text-xs font-medium text-gray-500">Savings Funds — net balance</p>
+          <p className={`text-3xl font-extrabold tabular-nums mt-1 ${totalBalance >= 0 ? 'text-gray-900' : 'text-danger'}`}>
+            {formatCurrency(animatedTotal, baseCurrencyCode)}
+          </p>
+        </div>
+      )}
+      {loading ? (
+        <div className="grid grid-cols-2 gap-2">
+          {[1, 2].map(i => <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg bg-green-50 border border-green-200 px-2.5 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-success mb-0.5 flex items-center gap-1"><TrendingUp className="w-2.5 h-2.5" />Saved</p>
+            <p className="text-xs font-mono font-bold text-success tabular-nums">{formatCurrency(totalDeposited, baseCurrencyCode)}</p>
+          </div>
+          <div className="rounded-lg bg-red-50 border border-red-200 px-2.5 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-danger mb-0.5 flex items-center gap-1"><TrendingDown className="w-2.5 h-2.5" />Withdrawn</p>
+            <p className="text-xs font-mono font-bold text-danger tabular-nums">{formatCurrency(totalWithdrawn, baseCurrencyCode)}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const filters = (
+    <div className="flex flex-wrap items-center gap-2">
+      <SearchableSelect
+        value={activeCategory}
+        onChange={setActiveCategory}
+        options={rows.map(r => ({ value: r.category, label: r.category }))}
+        placeholder="Select a category to zoom in…"
+        className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700"
+      />
+      {activeCategory && (
+        <button type="button" onClick={() => setActiveCategory('')} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>
+      )}
+    </div>
+  )
+
+  const body = loading && ranked.length === 0 ? (
+    <div className="h-48 rounded-2xl border border-gray-100 bg-white animate-pulse" />
+  ) : ranked.length === 0 ? (
+    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-2xl border border-dashed border-gray-200 bg-gray-50">
+      <Archive className="w-8 h-8 text-primary/60" />
+      <p className="text-sm text-gray-500">No savings recorded yet.</p>
+    </div>
+  ) : (
+    <div className="space-y-3">
+      {selected && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <p className="text-sm font-semibold text-gray-800 min-w-0 truncate">{selected.category}</p>
+            <div className="flex items-center gap-2 shrink-0">
+              <p className={`text-sm font-mono font-bold tabular-nums ${selected.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>{formatCurrency(selected.balance, baseCurrencyCode)}</p>
+              <button type="button" onClick={() => setActiveCategory('')} aria-label="Close category detail" className="p-1 -m-1 rounded text-gray-400 hover:text-gray-600 hover:bg-black/5 transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Saved</span>
+              <span className="font-mono font-semibold text-success">{formatCurrency(selected.deposited, baseCurrencyCode)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Withdrawn</span>
+              <span className="font-mono font-semibold text-danger">{formatCurrency(selected.withdrawn, baseCurrencyCode)}</span>
+            </div>
+          </div>
+
+          {(selected as BucketRow).isOther && otherMembers && otherMembers.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-primary/20 space-y-1">
+              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Categories in this group</p>
+              {otherMembers.slice(0, 10).map(m => (
+                <div key={m.category} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600 truncate min-w-0 mr-2">{m.category}</span>
+                  <span className="font-mono text-gray-700 shrink-0">{formatCurrency(m.balance, baseCurrencyCode)}</span>
+                </div>
+              ))}
+              {otherMembers.length > 10 && <p className="text-[11px] text-gray-400 pt-0.5">+{otherMembers.length - 10} more</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <p className="text-[11px] text-gray-400 mb-2">Tap a category to see its detail</p>
+        <RankedBarChart
+          items={displayRows.map(r => ({ name: r.category, value: r.balance, muted: !!r.isOther }))}
+          color={SAVINGS_BAR_COLOR}
+          activeName={activeCategory || null}
+          onSelect={selectBar}
+        />
+      </div>
+    </div>
+  )
+
+  return (
+    <SimpleShell
+      pageId="savings-funds"
+      hero={hero}
+      filters={filters}
+      bodyTitle="Balances by category"
+      body={body}
+      onViewAll={onViewAll}
+      viewAllLabel="View full table"
+    />
   )
 }
