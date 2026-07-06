@@ -210,7 +210,7 @@ function BankMovementHub({ onSelectTab }: { onSelectTab: (t: Tab) => void }) {
                 formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Deposited']}
                 labelFormatter={() => ''}
               />
-              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" onClick={() => onSelectTab('deposits')}>
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" maxBarSize={40} onClick={() => onSelectTab('deposits')}>
                 {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
               </Bar>
             </BarChart>

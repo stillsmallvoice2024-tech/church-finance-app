@@ -898,7 +898,7 @@ function SimpleInflowView({
                 formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Inflow']}
                 labelFormatter={() => ''}
               />
-              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" maxBarSize={40}
                 onClick={(d: { month?: string; payload?: { month?: string } }) => {
                   const ym = d?.month ?? d?.payload?.month
                   if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
