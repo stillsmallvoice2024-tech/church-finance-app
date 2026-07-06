@@ -34,6 +34,26 @@ type Raw = {
 const included = (r: Raw) =>
   !(r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions')
 
+// Enumerates every 'YYYY-MM' from dateFrom's month through dateTo's month so
+// sparse periods still render a full, evenly-spaced row of months (zero-filled)
+// instead of a couple of bars stranded on one side of a wide chart. Bails out
+// (returns null) past maxMonths so an unusually long custom range doesn't
+// explode into dozens of empty bars — callers fall back to data-only months.
+function enumerateMonths(dateFrom: string, dateTo: string, maxMonths: number): string[] | null {
+  let year  = Number(dateFrom.slice(0, 4))
+  let month = Number(dateFrom.slice(5, 7)) // 1-indexed
+  const endYear  = Number(dateTo.slice(0, 4))
+  const endMonth = Number(dateTo.slice(5, 7))
+  const months: string[] = []
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    months.push(`${year}-${String(month).padStart(2, '0')}`)
+    if (months.length > maxMonths) return null
+    month += 1
+    if (month > 12) { month = 1; year += 1 }
+  }
+  return months
+}
+
 const TYPE_EXCLUDE = 'transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)'
 
 function shiftBack(dateFrom: string, dateTo: string): { from: string; to: string } {
@@ -102,11 +122,9 @@ export function useInflowSummary(dateFrom: string, dateTo: string): InflowSummar
     const prevRows = ((prevRes.data ?? []) as Raw[]).filter(included)
     const prevSum  = prevRows.reduce((s, r) => s + Number(r.amount), 0)
 
-    setMonthly(
-      Array.from(monthMap.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([month, amount]) => ({ month, amount })),
-    )
+    const monthKeys = enumerateMonths(dateFrom, dateTo, 12)
+      ?? Array.from(monthMap.keys()).sort((a, b) => a.localeCompare(b))
+    setMonthly(monthKeys.map(month => ({ month, amount: monthMap.get(month) ?? 0 })))
     setByType(
       Array.from(typeMap.entries())
         .map(([incomeTypeId, amount]) => ({ incomeTypeId, amount }))

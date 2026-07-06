@@ -884,7 +884,7 @@ function SimpleInflowView({
       )}
 
       {/* Monthly trend — tap a bar to drill */}
-      {!summary.loading && chartData.length > 0 && (
+      {!summary.loading && chartData.some(d => d.amount !== 0) && (
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-semibold text-gray-500">Monthly inflows</p>
@@ -898,12 +898,12 @@ function SimpleInflowView({
                 formatter={(v: number) => [formatCurrency(v, baseCurrencyCode), 'Inflow']}
                 labelFormatter={() => ''}
               />
-              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer"
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" maxBarSize={40}
                 onClick={(d: { month?: string; payload?: { month?: string } }) => {
                   const ym = d?.month ?? d?.payload?.month
                   if (ym) { const r = monthRange(ym); onDrillMonth(r.from, r.to) }
                 }}>
-                {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
+                {chartData.map(d => <Cell key={d.month} fill={d.amount === 0 ? '#94a3b8' : '#0D7377'} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

@@ -18,6 +18,7 @@ import { AddInflowModal }  from '../components/modals/AddInflowModal'
 import { AddOutflowModal } from '../components/modals/AddOutflowModal'
 import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 import { useRole } from '../hooks/useRole'
+import { fetchAllRows } from '../utils/fetchAllRows'
 
 interface TxnRow {
   id:                      string
@@ -71,8 +72,6 @@ function groupRows(rows: TxnRow[]): { groups: TxnGroup[]; unmatched: TxnRow[] } 
   }
 }
 
-const REVERSAL_LIMIT = 5_000
-
 export default function ReversalTransactions() {
   usePageTitle('Reversals')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
@@ -81,7 +80,6 @@ export default function ReversalTransactions() {
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState<string | null>(null)
-  const [truncated,   setTruncated]   = useState(false)
   const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
@@ -110,21 +108,20 @@ export default function ReversalTransactions() {
 
   const load = async () => {
     if (!orgId) { setLoading(false); return }
-    setLoading(true); setError(null); setTruncated(false)
+    setLoading(true); setError(null)
 
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions')
-        .select('*', { count: 'exact' }).eq('org_id', orgId)
-        .eq('transaction_type', 'reversal').order('date', { ascending: false }).limit(REVERSAL_LIMIT),
-      supabase.from('outflow_transactions')
-        .select('*', { count: 'exact' }).eq('org_id', orgId)
-        .eq('transaction_type', 'reversal').order('date', { ascending: false }).limit(REVERSAL_LIMIT),
+      fetchAllRows(() => supabase.from('inflow_transactions')
+        .select('*').eq('org_id', orgId)
+        .eq('transaction_type', 'reversal').order('date', { ascending: false })),
+      fetchAllRows(() => supabase.from('outflow_transactions')
+        .select('*').eq('org_id', orgId)
+        .eq('transaction_type', 'reversal').order('date', { ascending: false })),
     ])
 
     if (inflowRes.error || outflowRes.error) {
       setError((inflowRes.error ?? outflowRes.error)!.message); setLoading(false); return
     }
-    setTruncated((inflowRes.count ?? 0) > REVERSAL_LIMIT || (outflowRes.count ?? 0) > REVERSAL_LIMIT)
 
     const allRows: TxnRow[] = [
       ...(inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
@@ -431,12 +428,6 @@ export default function ReversalTransactions() {
         A <strong>refund</strong> (see the Refunds page) is a real cash movement where money is physically returned or reimbursed.
       </PageHelpBanner>
 
-      {truncated && (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          Showing first {REVERSAL_LIMIT.toLocaleString()} reversals. Use a database export for the full dataset.
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
