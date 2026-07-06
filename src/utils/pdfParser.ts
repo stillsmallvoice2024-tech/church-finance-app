@@ -250,11 +250,7 @@ export async function parsePDF(file: File, password?: string): Promise<ParsedShe
   for (const { y, cells } of filteredRowsWithY) {
     const firstEmpty = !cells[0]?.trim()
     const nonEmptyCount = cells.filter(c => c.trim()).length
-    // A single non-empty cell with long non-numeric text is a section header (e.g.
-    // "DEBIT TRANSACTIONS") — always treat as a standalone anchor, never a continuation.
-    const singleCellText = nonEmptyCount === 1 ? (cells.find(c => c.trim()) ?? '') : ''
-    const isSectionHeader = nonEmptyCount === 1 && singleCellText.length > 8 && !/\d/.test(singleCellText)
-    const isContinuation = firstEmpty && !isSectionHeader && nonEmptyCount < Math.ceil(cells.length / 2)
+    const isContinuation = firstEmpty && nonEmptyCount < Math.ceil(cells.length / 2)
 
     if (isContinuation) {
       pending.push({ y, cells: [...cells] })
