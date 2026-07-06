@@ -85,6 +85,10 @@ export default function App() {
   // Pre-fetch account codes once the active org is known.
   useEffect(() => { if (orgId) fetchCodes() }, [orgId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A successful mount means this load's chunks resolved fine — clear the
+  // stale-chunk reload guard so a future genuine chunk error can self-heal again.
+  useEffect(() => { sessionStorage.removeItem('chunk-load-reload-attempted') }, [])
+
   // When the tab becomes visible again after being minimised or backgrounded,
   // force a token refresh before any data queries fire so the JWT isn't stale.
   // Also stop/start the SDK's own auto-refresh timer to match visibility state —

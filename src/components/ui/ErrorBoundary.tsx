@@ -5,6 +5,17 @@ import { reportError } from '../../lib/errorMonitor'
 interface Props  { children: ReactNode; fallback?: ReactNode }
 interface State  { hasError: boolean; error: Error | null; showDetails: boolean }
 
+// A stale hashed chunk (from before the latest Vercel deploy) 404s when a lazy
+// route tries to fetch it. Browsers phrase this differently but it's always
+// recoverable with a single hard reload, so detect it and self-heal instead
+// of showing the "Something went wrong" fallback.
+const CHUNK_ERROR_RE = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i
+const CHUNK_RELOAD_KEY = 'chunk-load-reload-attempted'
+
+function isChunkLoadError(error: Error): boolean {
+  return CHUNK_ERROR_RE.test(error.message)
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null, showDetails: false }
 
@@ -13,6 +24,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (isChunkLoadError(error) && !sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+      sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
+      window.location.reload()
+      return
+    }
     reportError(error, { source: 'ErrorBoundary', componentStack: info.componentStack ?? undefined })
   }
 
