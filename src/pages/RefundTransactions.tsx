@@ -18,6 +18,7 @@ import { filterInputCls } from '../components/ui/FormField'
 import { DatePresetBar, type DatePreset } from '../components/ui/DatePresetBar'
 import { RowDetailPanel, type DetailItem } from '../components/ui/RowDetailPanel'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { fetchAllRows } from '../utils/fetchAllRows'
 
 interface TxnRow {
   id:                      string
@@ -72,8 +73,6 @@ function groupRows(rows: TxnRow[]): { groups: TxnGroup[]; unmatched: TxnRow[] } 
   }
 }
 
-const REFUND_LIMIT = 5_000
-
 export default function RefundTransactions() {
   usePageTitle('Refunds')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
@@ -85,7 +84,6 @@ export default function RefundTransactions() {
   const [rows,        setRows]        = useState<TxnRow[]>([])
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState<string | null>(null)
-  const [truncated,   setTruncated]   = useState(false)
   const [displayMode, setDisplayMode] = useState<'table' | 'cards'>('table')
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
@@ -112,21 +110,20 @@ export default function RefundTransactions() {
 
   const load = async () => {
     if (!orgId) { setLoading(false); return }
-    setLoading(true); setError(null); setTruncated(false)
+    setLoading(true); setError(null)
 
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions')
-        .select('*', { count: 'exact' }).eq('org_id', orgId)
-        .eq('transaction_type', 'refund').order('date', { ascending: false }).limit(REFUND_LIMIT),
-      supabase.from('outflow_transactions')
-        .select('*', { count: 'exact' }).eq('org_id', orgId)
-        .eq('transaction_type', 'refund').order('date', { ascending: false }).limit(REFUND_LIMIT),
+      fetchAllRows(() => supabase.from('inflow_transactions')
+        .select('*').eq('org_id', orgId)
+        .eq('transaction_type', 'refund').order('date', { ascending: false })),
+      fetchAllRows(() => supabase.from('outflow_transactions')
+        .select('*').eq('org_id', orgId)
+        .eq('transaction_type', 'refund').order('date', { ascending: false })),
     ])
 
     if (inflowRes.error || outflowRes.error) {
       setError((inflowRes.error ?? outflowRes.error)!.message); setLoading(false); return
     }
-    setTruncated((inflowRes.count ?? 0) > REFUND_LIMIT || (outflowRes.count ?? 0) > REFUND_LIMIT)
 
     const mapInflow = (r: Record<string, unknown>): TxnRow => ({
       id: r.id as string, date: r.date as string, direction: 'in' as const,
@@ -478,12 +475,6 @@ export default function RefundTransactions() {
         correction for an entry that was made in error — no actual cash changes hands; the original record is cancelled out.
       </PageHelpBanner>
 
-      {truncated && (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          Showing first {REFUND_LIMIT.toLocaleString()} refunds. Use a database export for the full dataset.
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">

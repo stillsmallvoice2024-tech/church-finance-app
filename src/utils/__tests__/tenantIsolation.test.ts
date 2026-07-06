@@ -770,18 +770,17 @@ describe('LB-11: RefundTransactions scoped to org and limited', () => {
     expect(orgIdOccurrences).toBeGreaterThanOrEqual(2)
   })
 
-  it('both queries apply a safety limit', () => {
+  it('both queries paginate past the server row cap instead of a fixed limit', () => {
     const loadSection = code.slice(
       code.indexOf('const load = async'),
       code.indexOf('const handleEdit'),
     )
-    const limitOccurrences = (loadSection.match(/\.limit\(/g) ?? []).length
-    expect(limitOccurrences).toBeGreaterThanOrEqual(2)
+    const fetchAllRowsOccurrences = (loadSection.match(/fetchAllRows\(/g) ?? []).length
+    expect(fetchAllRowsOccurrences).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows truncation banner when limit is hit', () => {
-    expect(code).toContain('truncated')
-    expect(code).toContain('REFUND_LIMIT')
+  it('does not silently cap results with a fixed .limit(N)', () => {
+    expect(code).not.toContain('REFUND_LIMIT')
   })
 })
 
@@ -803,16 +802,15 @@ describe('LB-11: ReversalTransactions scoped to org and limited', () => {
     expect(orgIdOccurrences).toBeGreaterThanOrEqual(2)
   })
 
-  it('both queries apply a safety limit', () => {
+  it('both queries paginate past the server row cap instead of a fixed limit', () => {
     const start = code.indexOf('const load = async')
     const loadSection = code.slice(start, start + 3000)
-    const limitOccurrences = (loadSection.match(/\.limit\(/g) ?? []).length
-    expect(limitOccurrences).toBeGreaterThanOrEqual(2)
+    const fetchAllRowsOccurrences = (loadSection.match(/fetchAllRows\(/g) ?? []).length
+    expect(fetchAllRowsOccurrences).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows truncation banner when limit is hit', () => {
-    expect(code).toContain('truncated')
-    expect(code).toContain('REVERSAL_LIMIT')
+  it('does not silently cap results with a fixed .limit(N)', () => {
+    expect(code).not.toContain('REVERSAL_LIMIT')
   })
 })
 
