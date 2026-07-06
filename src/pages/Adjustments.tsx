@@ -98,7 +98,7 @@ function AdjustmentsHub({ onSelectTab }: { onSelectTab: (id: string) => void }) 
         </div>
       </div>
 
-      {refundChart.length > 0 && (
+      {refundChart.some(d => d.amount !== 0) && (
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-xs font-semibold text-gray-500 mb-2">Monthly refunds</p>
           <ResponsiveContainer width="100%" height={160}>
@@ -110,14 +110,14 @@ function AdjustmentsHub({ onSelectTab }: { onSelectTab: (id: string) => void }) 
                 labelFormatter={() => ''}
               />
               <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" maxBarSize={40} onClick={() => onSelectTab('refunds')}>
-                {refundChart.map(d => <Cell key={d.month} fill="#0D7377" />)}
+                {refundChart.map(d => <Cell key={d.month} fill={d.amount === 0 ? '#94a3b8' : '#0D7377'} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {reversalChart.length > 0 && (
+      {reversalChart.some(d => d.amount !== 0) && (
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-xs font-semibold text-gray-500 mb-2">Monthly reversals</p>
           <ResponsiveContainer width="100%" height={160}>
@@ -129,7 +129,7 @@ function AdjustmentsHub({ onSelectTab }: { onSelectTab: (id: string) => void }) 
                 labelFormatter={() => ''}
               />
               <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" maxBarSize={40} onClick={() => onSelectTab('reversals')}>
-                {reversalChart.map(d => <Cell key={d.month} fill="#4A5568" />)}
+                {reversalChart.map(d => <Cell key={d.month} fill={d.amount === 0 ? '#94a3b8' : '#4A5568'} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

@@ -26,16 +26,24 @@ type TaggedRaw = { date: string; amount: number; offset_role: string | null }
 
 const isRootOrUntagged = (r: { offset_role: string | null }) => r.offset_role !== 'offset'
 
+// Trailing 6 calendar months up to today, zero-filled — a fixed-width window
+// so a new org with one month of history still renders 6 evenly-spaced
+// months instead of one bar stranded on a wide, mostly-empty chart.
+function last6MonthKeys(): string[] {
+  const now = new Date()
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+}
+
 function monthlyOf(rows: TaggedRaw[]): MonthPoint[] {
   const map = new Map<string, number>()
   for (const r of rows) {
     const ym = r.date.slice(0, 7)
     map.set(ym, (map.get(ym) ?? 0) + Number(r.amount))
   }
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, amount]) => ({ month, amount }))
-    .slice(-6)
+  return last6MonthKeys().map(month => ({ month, amount: map.get(month) ?? 0 }))
 }
 
 export function useAdjustmentsSummary(): AdjustmentsSummary {

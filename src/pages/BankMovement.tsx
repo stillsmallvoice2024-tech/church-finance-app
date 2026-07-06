@@ -199,7 +199,7 @@ function BankMovementHub({ onSelectTab }: { onSelectTab: (t: Tab) => void }) {
         </div>
       </div>
 
-      {chartData.length > 0 && (
+      {chartData.some(d => d.amount !== 0) && (
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-xs font-semibold text-gray-500 mb-2">Monthly deposits</p>
           <ResponsiveContainer width="100%" height={160}>
@@ -211,7 +211,7 @@ function BankMovementHub({ onSelectTab }: { onSelectTab: (t: Tab) => void }) {
                 labelFormatter={() => ''}
               />
               <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" maxBarSize={40} onClick={() => onSelectTab('deposits')}>
-                {chartData.map(d => <Cell key={d.month} fill="#0D7377" />)}
+                {chartData.map(d => <Cell key={d.month} fill={d.amount === 0 ? '#94a3b8' : '#0D7377'} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

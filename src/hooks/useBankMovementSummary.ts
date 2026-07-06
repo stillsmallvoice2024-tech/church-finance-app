@@ -30,6 +30,17 @@ type TaggedRaw = { date: string; amount: number; bank_name: string | null; offse
 type DepositRaw  = { date: string; amount: number; bank_name: string | null }
 type TransferRaw = { date: string; amount: number; from_bank_name: string | null; to_bank_name: string | null }
 
+// Trailing 6 calendar months up to today, zero-filled — a fixed-width window
+// so a new org with one month of history still renders 6 evenly-spaced
+// months instead of one bar stranded on a wide, mostly-empty chart.
+function last6MonthKeys(): string[] {
+  const now = new Date()
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+}
+
 const isRootOrUntagged = (r: { offset_role: string | null }) => r.offset_role !== 'offset'
 
 export function useBankMovementSummary(): BankMovementSummary {
@@ -93,10 +104,7 @@ export function useBankMovementSummary(): BankMovementSummary {
       const ym = r.date.slice(0, 7)
       monthMap.set(ym, (monthMap.get(ym) ?? 0) + amt)
     }
-    const monthly = Array.from(monthMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, amount]) => ({ month, amount }))
-      .slice(-6)
+    const monthly = last6MonthKeys().map(month => ({ month, amount: monthMap.get(month) ?? 0 }))
 
     const txBankEvents = (txRes.data as TransferRaw[])
     const txInEvents   = (txInRes.data  as TaggedRaw[]).filter(isRootOrUntagged)
