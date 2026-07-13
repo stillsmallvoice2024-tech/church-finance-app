@@ -140,7 +140,7 @@ Pipeline stages (all before Step 4 opens):
 2. **Normalize descriptions** — `normalizeId()` on every description cell; stored in `processedRows`
 3. **Pre-populate `rowStageCodes`** — seed stage codes from mapped spreadsheet columns for debit rows
 4. **Generate fallback IDs AFTER normalization** — SHA-256 hashes from normalized description + date + amount + bank; stored in `precomputedInflowIds` / `precomputedOutflowIds` (separate maps for inflow `transaction_ref` and outflow `transaction_id`)
-5. **Query DB** — `Promise.all` over `inflow_transactions.transaction_ref IN (...)` and `outflow_transactions.transaction_id IN (...)` for all computed IDs
+5. **Query DB** — `fetchExistingTransactionIds()` (`src/utils/dedupQuery.ts`) over `inflow_transactions.transaction_ref` and `outflow_transactions.transaction_id` for all computed IDs
 6. **Merge `skipTxnIds`** from `Import.tsx` pre-stage into existing-ID sets
 7. **Build `duplicateRis: Set<number>`** — row indices confirmed as DB duplicates
 8. **Compute `dupStats`** — `{ total, newCount, dupCount }` shown in Step 4 summary banner
@@ -157,6 +157,14 @@ Pipeline stages (all before Step 4 opens):
 | `dupCheckLoading` | `boolean` | Loading spinner on Step 3 NavButton during DB check |
 
 **Step 4 filtering:** `creditRows` and `debitRows` in the Step 4 IIFE filter `!duplicateRis.has(r.ri)` — duplicates are not rendered, not configurable, not counted.
+
+### Dedup DB queries — MUST be chunked + error-checked
+
+- **Never pass a full ID list to one `.in()` filter.** PostgREST sends `.in()` in the GET query string; ~800 fallback SHA-256 IDs (64 hex chars) ≈ 50KB URL → exceeds server URL limits → request fails. If the error is ignored, `data ?? []` = empty set → **every existing transaction reported as new** (July 2026 bug: 772/800 "new" on re-import).
+- **Sole helper:** `fetchExistingTransactionIds(table, column, ids, bankName)` in `src/utils/dedupQuery.ts` — chunks via `chunkIds()` (`src/utils/chunkIds.ts`, 100 IDs/chunk), normalizes results, **throws on any query error**.
+- Both dedup call sites use it: `ImportModal.tsx` `proceedToRowConfig` Stage 4 and `Import.tsx` pre-modal check.
+- **On error:** `proceedToRowConfig` catches → sets `dupCheckError` → stays on Step 3 (red banner, retry via NavButton). `Import.tsx` catch → `dupError` state → red banner; green "no duplicates" banner is gated on `!dupError`.
+- Tests: `src/utils/__tests__/chunkIds.test.ts`.
 
 **`runImport` integration:**
 - Skips `duplicateRis.has(ri)` rows (`skipped++; continue`) at loop entry

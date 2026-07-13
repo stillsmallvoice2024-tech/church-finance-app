@@ -24,6 +24,7 @@ import {
   type RowResolverState,
 } from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
+import { fetchExistingTransactionIds } from '../../utils/dedupQuery'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
@@ -453,6 +454,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // Row indices identified as DB duplicates — excluded from Step 4 configuration entirely.
   const [duplicateRis,    setDuplicateRis]    = useState<Set<number>>(new Set())
   const [dupCheckLoading, setDupCheckLoading] = useState(false)
+  const [dupCheckError,   setDupCheckError]   = useState<string | null>(null)
   const [dupStats,        setDupStats]        = useState<{ total: number; newCount: number; dupCount: number } | null>(null)
   const [dupSkipOpen,     setDupSkipOpen]     = useState(false)
 
@@ -564,6 +566,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setPrecomputedOutflowIds({})
     setDuplicateRis(new Set())
     setDupCheckLoading(false)
+    setDupCheckError(null)
     setDupStats(null)
     setDupSkipOpen(false)
     setStmtBalance('')
@@ -859,6 +862,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const proceedToRowConfig = useCallback(async () => {
     if (!sheet || !config || targetTable !== 'bank_statement') return
     setDupCheckLoading(true)
+    setDupCheckError(null)
 
     try {
       const s1ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
@@ -1006,29 +1010,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       // ── Stage 4: Duplicate detection against the database ─────────────────
       // Scoped to the selected bank (bank_name) so that the same transaction ID
       // in a different bank is not treated as a duplicate.
-      const uniqueInflowIds  = [...new Set(inflowIdList)].filter(Boolean)
-      const uniqueOutflowIds = [...new Set(outflowIdList)].filter(Boolean)
+      // Chunked queries + thrown errors — a large ID list (long fallback hashes)
+      // must never overflow the URL or silently report every row as new.
       const bankName = internalBank?.name ?? null
 
-      const [inflowRes, outflowRes] = await Promise.all([
-        uniqueInflowIds.length > 0
-          ? (bankName
-              ? supabase.from('inflow_transactions').select('transaction_ref').eq('bank_name', bankName).in('transaction_ref', uniqueInflowIds)
-              : supabase.from('inflow_transactions').select('transaction_ref').in('transaction_ref', uniqueInflowIds))
-          : Promise.resolve({ data: [] as { transaction_ref: string }[], error: null }),
-        uniqueOutflowIds.length > 0
-          ? (bankName
-              ? supabase.from('outflow_transactions').select('transaction_id').eq('bank_name', bankName).in('transaction_id', uniqueOutflowIds)
-              : supabase.from('outflow_transactions').select('transaction_id').in('transaction_id', uniqueOutflowIds))
-          : Promise.resolve({ data: [] as { transaction_id: string }[], error: null }),
+      const [existingInflowRefs, existingOutflowIds] = await Promise.all([
+        fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', inflowIdList, bankName),
+        fetchExistingTransactionIds('outflow_transactions', 'transaction_id', outflowIdList, bankName),
       ])
-
-      const existingInflowRefs = new Set(
-        (inflowRes.data ?? []).map(r => normalizeId(r.transaction_ref ?? '')).filter(Boolean)
-      )
-      const existingOutflowIds = new Set(
-        (outflowRes.data ?? []).map(r => normalizeId(r.transaction_id ?? '')).filter(Boolean)
-      )
 
       // Merge in skipTxnIds from Import.tsx pre-stage (when user chose "Skip Duplicates").
       // Only apply if the pre-stage was scoped to the same bank — prevents cross-bank
@@ -1066,6 +1055,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       setDuplicateRis(newDuplicateRis)
       setDupStats({ total: totalCount, newCount: totalCount - dupCount, dupCount })
       setStep(4)
+    } catch (e) {
+      // Stay on Step 3 — advancing without a completed duplicate check would
+      // re-import every existing transaction.
+      setDupCheckError(friendlyError(e, 'check for duplicates'))
     } finally {
       setDupCheckLoading(false)
     }
@@ -1900,6 +1893,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                 </div>
               ) : null
             })()}
+
+            {dupCheckError && (
+              <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{dupCheckError} No rows were imported — press the button below to retry.</span>
+              </div>
+            )}
 
             <NavButtons
               step={step}
