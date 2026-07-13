@@ -30,6 +30,7 @@ import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
 import { normalizeId } from '../utils/normalizeId'
+import { fetchExistingTransactionIds } from '../utils/dedupQuery'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
@@ -93,6 +94,7 @@ export default function Import() {
   const [dupLoading, setDupLoading]   = useState(false)
   const [duplicates, setDuplicates]   = useState<DupRecord[]>([])
   const [dupChecked, setDupChecked]   = useState(false)
+  const [dupError,   setDupError]     = useState<string | null>(null)
   const [parseError, setParseError]       = useState<string | null>(null)
   const [selectedBankId, setSelectedBankId] = useState('')
   const [selectedFile, setSelectedFile]   = useState<File | null>(null)
@@ -115,6 +117,7 @@ export default function Import() {
     setParseResult(null)
     setDuplicates([])
     setDupChecked(false)
+    setDupError(null)
     setParseError(null)
     setDupLoading(false)
     setSkipDups(false)
@@ -190,34 +193,32 @@ export default function Import() {
     const runCheck = async () => {
       setDupLoading(true)
       setDupChecked(false)
-      const uniqueIds = [...new Set(parseResult.ids)]
+      setDupError(null)
 
-      const [inflowRes, outflowRes] = await Promise.all([
-        selectedBankName
-          ? supabase.from('inflow_transactions').select('transaction_ref').eq('bank_name', selectedBankName).in('transaction_ref', uniqueIds)
-          : supabase.from('inflow_transactions').select('transaction_ref').in('transaction_ref', uniqueIds),
-        selectedBankName
-          ? supabase.from('outflow_transactions').select('transaction_id').eq('bank_name', selectedBankName).in('transaction_id', uniqueIds)
-          : supabase.from('outflow_transactions').select('transaction_id').in('transaction_id', uniqueIds),
-      ])
+      try {
+        // Chunked queries — a large ID list must never overflow the URL limit,
+        // and a failed query must surface instead of reporting zero duplicates.
+        const [inflowSet, outflowSet] = await Promise.all([
+          fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', parseResult.ids, selectedBankName),
+          fetchExistingTransactionIds('outflow_transactions', 'transaction_id', parseResult.ids, selectedBankName),
+        ])
 
-      if (!isCurrent) return
+        if (!isCurrent) return
 
-      const found: DupRecord[] = []
-      if (!inflowRes.error && inflowRes.data) {
-        for (const r of inflowRes.data) {
-          if (r.transaction_ref) found.push({ id: normalizeId(r.transaction_ref), table: 'inflow_transactions' })
+        const found: DupRecord[] = []
+        for (const id of inflowSet)  found.push({ id, table: 'inflow_transactions' })
+        for (const id of outflowSet) found.push({ id, table: 'outflow_transactions' })
+        setDuplicates(found)
+      } catch (e) {
+        if (!isCurrent) return
+        setDuplicates([])
+        setDupError(friendlyError(e, 'check for duplicates'))
+      } finally {
+        if (isCurrent) {
+          setDupChecked(true)
+          setDupLoading(false)
         }
       }
-      if (!outflowRes.error && outflowRes.data) {
-        for (const r of outflowRes.data) {
-          if (r.transaction_id) found.push({ id: normalizeId(r.transaction_id), table: 'outflow_transactions' })
-        }
-      }
-
-      setDuplicates(found)
-      setDupChecked(true)
-      setDupLoading(false)
     }
 
     runCheck()
@@ -425,8 +426,18 @@ export default function Import() {
                   </div>
                 )}
 
+                {/* Duplicate check failed — do NOT show the green "all new" banner */}
+                {dupChecked && dupError && !dupLoading && (
+                  <div className="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      {dupError} The wizard will re-check for duplicates before anything is imported.
+                    </span>
+                  </div>
+                )}
+
                 {/* No duplicates */}
-                {dupChecked && parseResult.txnIdCol && duplicates.length === 0 && !dupLoading && (
+                {dupChecked && !dupError && parseResult.txnIdCol && duplicates.length === 0 && !dupLoading && (
                   <div className="flex items-center gap-3 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>
