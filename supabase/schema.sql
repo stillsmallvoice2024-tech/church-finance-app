@@ -245,9 +245,10 @@ create trigger on_auth_user_created
 
 -- ── Special Config Groups (referenced by allocation_configs) ──────────────────
 create table public.special_config_groups (
-  id         uuid        primary key default gen_random_uuid(),
-  name       text        not null,
-  is_default boolean     not null default false,
+  id          uuid       primary key default gen_random_uuid(),
+  name        text       not null,
+  is_default  boolean    not null default false,
+  is_archived boolean    not null default false,
   org_id     uuid        not null default public.get_current_org_id()
              references public.organizations(id) on delete set null,
   created_at timestamptz not null default now()
