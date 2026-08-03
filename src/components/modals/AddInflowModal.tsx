@@ -24,6 +24,8 @@ import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import { SearchableSelect } from '../ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../ui/RootTransactionSearch'
 import { isOffsetableType } from '../../utils/transactionTypes'
+import { autoTagReversalRoot } from '../../utils/autoTagReversalRoot'
+import { useToastStore } from '../../store/toastStore'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
@@ -77,8 +79,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const { incomeTypes } = useIncomeTypes()
 
-  const addMutation    = useAddInflow()
-  const updateMutation = useUpdateTransaction('inflow_transactions')
+  const addMutation       = useAddInflow()
+  const updateMutation    = useUpdateTransaction('inflow_transactions')
+  const updateRootOutflow = useUpdateTransaction('outflow_transactions')
+  const { push: toast }   = useToastStore()
 
   const { mutate: add,    loading: adding,   error: addError,    reset: resetAdd    } = addMutation
   const { mutate: update, loading: updating, error: updateError, reset: resetUpdate } = updateMutation
@@ -323,6 +327,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
         }
         await add(input)
+      }
+      try {
+        await autoTagReversalRoot(values.transaction_type, values.offset_role, rootTxnLink, update, updateRootOutflow.mutate)
+      } catch (e) {
+        console.warn('[reversal-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the reversal root. Link it manually if needed.', 'warning')
       }
       onSuccess?.()
       onClose()

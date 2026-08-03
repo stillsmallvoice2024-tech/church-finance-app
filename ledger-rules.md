@@ -431,3 +431,13 @@ Pages that show type-filtered views of `inflow_transactions` / `outflow_transact
 | `'balance_brought_forward'` | BankLedger (blue row, no edit), Inflows (blue badge, no edit/delete) | synthetic; managed by `src/utils/bankOpeningBalance.ts` |
 
 > If Reversals or Refunds pages show an error or empty results: verify the `transaction_type` column exists in the live DB (see `db-rules.md`). The application query logic is correct.
+
+### Reversal Root Auto-Tagging
+
+Reversals ONLY: when an offset row (`transaction_type='reversal'`, `offset_role='offset'`) is linked to a root via `RootTransactionSearch`, the root is auto-promoted to `offset_role='root'` + `transaction_type='reversal'` — no manual root edit needed, and it now satisfies the Reversals page's `.eq('transaction_type','reversal')` fetch on both tables so `groupRows()` nests it correctly.
+
+- Shared helper: `autoTagReversalRoot()` in `src/utils/autoTagReversalRoot.ts` — no-ops unless `transactionType==='reversal' && offsetRole==='offset' && rootTxnLink`; picks the target-table `useUpdateTransaction` mutate fn by `rootTxnLink.table`.
+- Wired into the three places `RootTransactionSearch` creates a root link: `AddInflowModal`/`AddOutflowModal` (post-save, both add & edit branches) and `Import.tsx` `ManualEntryForm` (`doSaveInflow`/`doSaveOutflow`).
+- Best-effort: failure doesn't roll back the already-saved offset row — surfaces via a warning toast instead (mirrors `AddBankModal`'s B/F propagation pattern).
+- `ImportModal.tsx` batch wizard's `batchOffsetRole` is unaffected — it bulk-labels rows within one import batch with no per-row `root_transaction_id`, so there's no discrete root to promote.
+- Pre-existing offset rows already linked to a root before this fix was added are not backfilled — this only fires on new saves.
