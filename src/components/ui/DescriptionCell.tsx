@@ -7,6 +7,8 @@ interface DescriptionCellProps {
   tooltip: TooltipState | null
   setTooltip: (t: TooltipState | null) => void
   textCls?: string
+  /** When true, shows up to 2 lines instead of single-line ellipsis truncation. */
+  wrap?: boolean
 }
 
 export function DescriptionCell({
@@ -14,6 +16,7 @@ export function DescriptionCell({
   text,
   setTooltip,
   textCls = 'text-gray-700',
+  wrap = false,
 }: DescriptionCellProps) {
   if (!text) return <span className={`${textCls} select-none`}>—</span>
 
@@ -28,7 +31,7 @@ export function DescriptionCell({
         role="button"
         tabIndex={0}
         aria-label={text}
-        className={`${textCls} truncate cursor-pointer select-text rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50`}
+        className={`${textCls} ${wrap ? 'line-clamp-2' : 'truncate'} cursor-pointer select-text rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50`}
         style={{ touchAction: 'manipulation' }}
         onPointerEnter={e => { if (e.pointerType === 'mouse') show(e.currentTarget) }}
         onPointerLeave={e => { if (e.pointerType === 'mouse') setTooltip(null) }}

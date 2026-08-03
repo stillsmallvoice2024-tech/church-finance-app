@@ -824,10 +824,10 @@ function TransfersPanel() {
                   </div>
                   {row.description && (
                     <div className="text-sm mt-1.5">
-                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" />
+                      <DescriptionCell id={`card-desc-${row.id}`} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} textCls="text-gray-600" wrap />
                     </div>
                   )}
-                  {row.transaction_ref && <p className="text-xs text-gray-500 font-mono mt-1">{row.transaction_ref}</p>}
+                  {row.transaction_ref && <p className="text-xs text-gray-500 font-mono mt-1 break-all">{row.transaction_ref}</p>}
                 </div>
                 <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/40 px-4 py-3">
                   <div className="min-w-0">
@@ -882,10 +882,10 @@ function TransfersPanel() {
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.from_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.to_bank_name ?? '—'}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(row.amount, baseCurrencyCode)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 max-w-[180px]">
-                        <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} />
+                      <td className="px-4 py-3 text-sm text-gray-800 max-w-[340px]">
+                        <DescriptionCell id={row.id} text={row.description} tooltip={descTooltip} setTooltip={setDescTooltip} wrap />
                       </td>
-                      <td className="px-4 py-3 text-sm font-mono text-gray-500 whitespace-nowrap">{row.transaction_ref ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-500 max-w-[90px] break-all">{row.transaction_ref ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 max-w-[140px]">
                         <DescriptionCell id={`rem-${row.id}`} text={row.remarks} tooltip={descTooltip} setTooltip={setDescTooltip} />
                       </td>

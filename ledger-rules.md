@@ -460,12 +460,13 @@ Pages that show type-filtered views of `inflow_transactions` / `outflow_transact
 
 > If Reversals or Refunds pages show an error or empty results: verify the `transaction_type` column exists in the live DB (see `db-rules.md`). The application query logic is correct.
 
-### Reversal Root Auto-Tagging
+### Offset Root Auto-Tagging
 
-Reversals ONLY: when an offset row (`transaction_type='reversal'`, `offset_role='offset'`) is linked to a root via `RootTransactionSearch`, the root is auto-promoted to `offset_role='root'` + `transaction_type='reversal'` — no manual root edit needed, and it now satisfies the Reversals page's `.eq('transaction_type','reversal')` fetch on both tables so `groupRows()` nests it correctly.
+Scoped to `transaction_type` in `{'reversal', 'intrabank_transfer'}` only (not refund/bank_deposit): when an offset row is linked to a root via `RootTransactionSearch`, the root is auto-promoted to `offset_role='root'` + `transaction_type=<same as the offset's own type>` — no manual root edit needed. This satisfies the Reversals/Intrabank-Transfers pages' `.eq('transaction_type', ...)` fetch on both tables, so the root shows up correctly (grouped, for Reversals via `groupRows()`; flat-listed with an "R" badge, for the Intrabank Transfers tab in `BankMovement.tsx`).
 
-- Shared helper: `autoTagReversalRoot()` in `src/utils/autoTagReversalRoot.ts` — no-ops unless `transactionType==='reversal' && offsetRole==='offset' && rootTxnLink`; picks the target-table `useUpdateTransaction` mutate fn by `rootTxnLink.table`.
+- Shared helper: `autoTagOffsetRoot()` in `src/utils/autoTagOffsetRoot.ts` — no-ops unless `transactionType` is in the scoped set above `&& offsetRole==='offset' && rootTxnLink`; picks the target-table `useUpdateTransaction` mutate fn by `rootTxnLink.table`.
 - Wired into the three places `RootTransactionSearch` creates a root link: `AddInflowModal`/`AddOutflowModal` (post-save, both add & edit branches) and `Import.tsx` `ManualEntryForm` (`doSaveInflow`/`doSaveOutflow`).
 - Best-effort: failure doesn't roll back the already-saved offset row — surfaces via a warning toast instead (mirrors `AddBankModal`'s B/F propagation pattern).
 - `ImportModal.tsx` batch wizard's `batchOffsetRole` is unaffected — it bulk-labels rows within one import batch with no per-row `root_transaction_id`, so there's no discrete root to promote.
 - Pre-existing offset rows already linked to a root before this fix was added are not backfilled — this only fires on new saves.
+- To extend to another offsetable type (e.g. refund, bank_deposit), add it to `AUTO_TAG_ROOT_TYPES` in `autoTagOffsetRoot.ts` — no other changes needed, the 3 call sites are already type-agnostic.
