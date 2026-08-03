@@ -19,7 +19,7 @@ import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useCategories } from '../hooks/useCategories'
 import { useAddInflow, useAddOutflow, useUpdateTransaction, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
-import { autoTagReversalRoot } from '../utils/autoTagReversalRoot'
+import { autoTagOffsetRoot } from '../utils/autoTagOffsetRoot'
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
@@ -811,10 +811,10 @@ function ManualEntryForm() {
         }
       }
       try {
-        await autoTagReversalRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
+        await autoTagOffsetRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
       } catch (e) {
-        console.warn('[reversal-root] auto-tag failed', e)
-        toast('Saved — but the original transaction could not be auto-tagged as the reversal root. Link it manually if needed.', 'warning')
+        console.warn('[offset-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the root. Link it manually if needed.', 'warning')
       }
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
@@ -878,10 +878,10 @@ function ManualEntryForm() {
         }
       }
       try {
-        await autoTagReversalRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
+        await autoTagOffsetRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
       } catch (e) {
-        console.warn('[reversal-root] auto-tag failed', e)
-        toast('Saved — but the original transaction could not be auto-tagged as the reversal root. Link it manually if needed.', 'warning')
+        console.warn('[offset-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the root. Link it manually if needed.', 'warning')
       }
       toast('Outflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })

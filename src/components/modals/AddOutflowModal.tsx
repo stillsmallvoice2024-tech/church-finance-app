@@ -22,7 +22,7 @@ import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import { SearchableSelect } from '../ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../ui/RootTransactionSearch'
 import { isOffsetableType } from '../../utils/transactionTypes'
-import { autoTagReversalRoot } from '../../utils/autoTagReversalRoot'
+import { autoTagOffsetRoot } from '../../utils/autoTagOffsetRoot'
 import { useToastStore } from '../../store/toastStore'
 
 const TXN_TYPES = [
@@ -267,10 +267,10 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         await add(input)
       }
       try {
-        await autoTagReversalRoot(values.transaction_type, values.offset_role, rootTxnLink, updateRootInflow.mutate, update)
+        await autoTagOffsetRoot(values.transaction_type, values.offset_role, rootTxnLink, updateRootInflow.mutate, update)
       } catch (e) {
-        console.warn('[reversal-root] auto-tag failed', e)
-        toast('Saved — but the original transaction could not be auto-tagged as the reversal root. Link it manually if needed.', 'warning')
+        console.warn('[offset-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the root. Link it manually if needed.', 'warning')
       }
       onSuccess?.()
       onClose()
