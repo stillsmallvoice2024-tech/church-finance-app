@@ -258,6 +258,20 @@ describe('H2: ILIKE search escapes wildcard characters', () => {
     expect(searchSection).toContain('safeSearch')
     expect(searchSection).not.toMatch(/`%\$\{search\}%`/)
   })
+
+  it('RootTransactionSearch escapes % _ and backslash in safeSearch', () => {
+    const code = src('components/ui/RootTransactionSearch.tsx')
+    const safeSearchPattern = code.match(/const safeSearch = rawQuery\.trim\(\)\.replace\(([^)]+)\)/)?.[1]
+    expect(safeSearchPattern).toBeTruthy()
+    expect(safeSearchPattern).toContain('%')
+    expect(safeSearchPattern).toContain('_')
+    expect(safeSearchPattern).toContain('\\\\')
+  })
+
+  it('RootTransactionSearch does not build the ILIKE pattern from an unescaped query', () => {
+    const code = src('components/ui/RootTransactionSearch.tsx')
+    expect(code).not.toMatch(/`%\$\{(query|rawQuery)\.trim\(\)\}%`/)
+  })
 })
 
 // ── H3: send-invite-email verifies admin of invitation's org ──────────────────

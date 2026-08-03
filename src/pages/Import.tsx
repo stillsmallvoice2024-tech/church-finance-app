@@ -18,7 +18,8 @@ import { ImportModeChooser, getDefaultImportMode, type ImportMode } from '../com
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useCategories } from '../hooks/useCategories'
-import { useAddInflow, useAddOutflow, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
+import { useAddInflow, useAddOutflow, useUpdateTransaction, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
+import { autoTagReversalRoot } from '../utils/autoTagReversalRoot'
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
@@ -619,6 +620,8 @@ function ManualEntryForm() {
   const { configs, groups: allocGroups, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
   const addInflow  = useAddInflow()
   const addOutflow = useAddOutflow()
+  const updateInflowRoot  = useUpdateTransaction('inflow_transactions')
+  const updateOutflowRoot = useUpdateTransaction('outflow_transactions')
 
   useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
@@ -807,6 +810,12 @@ function ManualEntryForm() {
           throw firstErr
         }
       }
+      try {
+        await autoTagReversalRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
+      } catch (e) {
+        console.warn('[reversal-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the reversal root. Link it manually if needed.', 'warning')
+      }
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setIncomeTypeId('')
@@ -867,6 +876,12 @@ function ManualEntryForm() {
         } else {
           throw firstErr
         }
+      }
+      try {
+        await autoTagReversalRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
+      } catch (e) {
+        console.warn('[reversal-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the reversal root. Link it manually if needed.', 'warning')
       }
       toast('Outflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
