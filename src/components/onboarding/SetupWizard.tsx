@@ -951,6 +951,73 @@ function buildDistributionTemplates(catNames: string[]): DistTemplate[] {
   return templates
 }
 
+type SplitRow = { category_name: string; percentage: number }
+
+const SPLIT_GRID = 'grid grid-cols-[minmax(0,1fr)_4.5rem_1.25rem] gap-2 items-center'
+
+/** Fund + share editor. Select can shrink/ellipsize, and picks are echoed as chips. */
+function FundSplitRows({ rows, catNames, onChange }: {
+  rows: SplitRow[]
+  catNames: string[]
+  onChange: (rows: SplitRow[]) => void
+}) {
+  const patch    = (i: number, p: Partial<SplitRow>) => onChange(rows.map((r, j) => j === i ? { ...r, ...p } : r))
+  const selected = rows.filter(r => r.category_name)
+
+  return (
+    <div className="space-y-1">
+      <div className={`${SPLIT_GRID} pb-0.5`}>
+        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
+        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
+        <span />
+      </div>
+      {rows.map((row, i) => (
+        <div key={i} className={SPLIT_GRID}>
+          <select
+            value={row.category_name}
+            title={row.category_name || undefined}
+            onChange={e => patch(i, { category_name: e.target.value })}
+            className={`${inputCls} min-w-0 truncate`}
+          >
+            <option value="">Select fund…</option>
+            {catNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={row.percentage}
+            onChange={e => patch(i, { percentage: Number(e.target.value) })}
+            className={`${inputCls} min-w-0 px-1 text-center`}
+          />
+          {rows.length > 1 ? (
+            <button
+              type="button"
+              aria-label={`Remove ${row.category_name || 'fund'}`}
+              onClick={() => onChange(rows.filter((_, j) => j !== i))}
+              className="text-red-400 hover:text-red-500"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          ) : <span />}
+        </div>
+      ))}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 pt-1.5">
+          {selected.map((r, i) => (
+            <span
+              key={i}
+              className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary dark:bg-primary/20"
+            >
+              {r.category_name} · {r.percentage}%
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { categories }         = useCategories()
   const configs                = useAllocationStore(s => s.configs)
@@ -1096,42 +1163,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
               placeholder="Rule name (e.g. My Custom Split)"
               className={inputCls}
             />
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 pb-0.5">
-                <span className="flex-1 text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
-                <span className="w-20 text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
-                {customRows.length > 1 && <span className="w-4" />}
-              </div>
-              {customRows.map((row, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    value={row.category_name}
-                    onChange={e => setCustomRows(rows => rows.map((r, j) => j === i ? { ...r, category_name: e.target.value } : r))}
-                    className={`${inputCls} flex-1`}
-                  >
-                    <option value="">Select fund…</option>
-                    {catNames.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={row.percentage}
-                    onChange={e => setCustomRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
-                    className={`${inputCls} w-20 text-center`}
-                  />
-                  {customRows.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setCustomRows(rows => rows.filter((_, j) => j !== i))}
-                      className="text-red-400 hover:text-red-500 flex-shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+            <FundSplitRows rows={customRows} catNames={catNames} onChange={setCustomRows} />
             {(() => {
               const total = customRows.reduce((s, r) => s + r.percentage, 0)
               return total !== 100 ? (
@@ -1378,42 +1410,7 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">How to split it</label>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 pb-0.5">
-                  <span className="flex-1 text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
-                  <span className="w-20 text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
-                  {customSpecialRows.length > 1 && <span className="w-4" />}
-                </div>
-                {customSpecialRows.map((row, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <select
-                      value={row.category_name}
-                      onChange={e => setCustomSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, category_name: e.target.value } : r))}
-                      className={`${inputCls} flex-1`}
-                    >
-                      <option value="">Select fund…</option>
-                      {catNames.map(n => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={row.percentage}
-                      onChange={e => setCustomSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
-                      className={`${inputCls} w-20 text-center`}
-                    />
-                    {customSpecialRows.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setCustomSpecialRows(rows => rows.filter((_, j) => j !== i))}
-                        className="text-red-400 hover:text-red-500 flex-shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <FundSplitRows rows={customSpecialRows} catNames={catNames} onChange={setCustomSpecialRows} />
             </div>
             {(() => {
               const total = customSpecialRows.reduce((s, r) => s + r.percentage, 0)
