@@ -33,6 +33,76 @@ interface Props {
   excludeId?: string
 }
 
+const PAGE_SIZE = 8
+
+// Same escaping used by useTransactions.ts — neutralizes ILIKE wildcards
+// (%, _) and characters that break PostgREST .or() filter syntax.
+function toLikePattern(rawQuery: string): string {
+  const safeSearch = rawQuery.trim().replace(/[%_\\()[\],{}]/g, '')
+  return `%${safeSearch}%`
+}
+
+interface RootQueryParams {
+  orgId: string
+  likeQ: string
+  scopeBank: boolean
+  bankName?: string | null
+  excludeId?: string
+  limit: number
+}
+
+function fetchRootInflows({ orgId, likeQ, scopeBank, bankName, excludeId, limit }: RootQueryParams) {
+  let q = supabase
+    .from('inflow_transactions')
+    .select('id, date, amount, description, bank_name, transaction_ref, offset_role', { count: 'exact' })
+    .eq('org_id', orgId)
+    .or(`description.ilike.${likeQ},transaction_ref.ilike.${likeQ}`)
+    .order('date', { ascending: false })
+    .limit(limit)
+  if (scopeBank) q = q.eq('bank_name', bankName!)
+  if (excludeId) q = q.neq('id', excludeId)
+  return q
+}
+
+function fetchRootOutflows({ orgId, likeQ, scopeBank, bankName, excludeId, limit }: RootQueryParams) {
+  let q = supabase
+    .from('outflow_transactions')
+    .select('id, date, amount_disbursed, description, bank_description, bank_name, transaction_id, offset_role', { count: 'exact' })
+    .eq('org_id', orgId)
+    .or(`description.ilike.${likeQ},bank_description.ilike.${likeQ},transaction_id.ilike.${likeQ}`)
+    .order('date', { ascending: false })
+    .limit(limit)
+  if (scopeBank) q = q.eq('bank_name', bankName!)
+  if (excludeId) q = q.neq('id', excludeId)
+  return q
+}
+
+function mapInflowRow(r: Record<string, unknown>): SearchResult {
+  return {
+    id:          r.id as string,
+    date:        r.date as string,
+    amount:      r.amount as number,
+    description: r.description as string | null,
+    bank_name:   r.bank_name as string | null,
+    direction:   'in' as const,
+    txnRef:      r.transaction_ref as string | null,
+    offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
+  }
+}
+
+function mapOutflowRow(r: Record<string, unknown>): SearchResult {
+  return {
+    id:          r.id as string,
+    date:        r.date as string,
+    amount:      (r.amount_disbursed ?? 0) as number,
+    description: (r.description ?? r.bank_description) as string | null,
+    bank_name:   r.bank_name as string | null,
+    direction:   'out' as const,
+    txnRef:      r.transaction_id as string | null,
+    offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
+  }
+}
+
 export function RootTransactionSearch({ value, onChange, bankName, excludeId }: Props) {
   const orgId = useOrgStore((s) => s.orgId)
   const { baseCurrencyCode } = useOrgCurrency()
@@ -40,7 +110,11 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
   const [query,         setQuery]         = useState('')
   const [inflows,       setInflows]       = useState<SearchResult[]>([])
   const [outflows,      setOutflows]      = useState<SearchResult[]>([])
+  const [inflowTotal,   setInflowTotal]   = useState(0)
+  const [outflowTotal,  setOutflowTotal]  = useState(0)
   const [loading,       setLoading]       = useState(false)
+  const [loadingMoreIn,  setLoadingMoreIn]  = useState(false)
+  const [loadingMoreOut, setLoadingMoreOut] = useState(false)
   const [open,          setOpen]          = useState(false)
   const [allBanks,      setAllBanks]      = useState(!bankName)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
@@ -48,6 +122,10 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
   const containerRef  = useRef<HTMLDivElement>(null)
   const dropdownRef   = useRef<HTMLUListElement>(null)
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>()
+  // Guards against out-of-order async responses: bumped whenever a fresh
+  // debounced search starts, read (not bumped) when a "load more" click
+  // starts. A response is only committed if this hasn't changed since.
+  const searchGenRef  = useRef(0)
 
   useEffect(() => { setAllBanks(!bankName) }, [bankName])
 
@@ -91,73 +169,77 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Debounced search
+  // Debounced search — always starts a fresh page-1 fetch for both tables
   useEffect(() => {
     clearTimeout(searchTimeout.current)
-    if (!query.trim() || !orgId) { setInflows([]); setOutflows([]); setOpen(false); return }
+    if (!query.trim() || !orgId) {
+      searchGenRef.current++
+      setInflows([]); setOutflows([])
+      setInflowTotal(0); setOutflowTotal(0)
+      setLoadingMoreIn(false); setLoadingMoreOut(false)
+      setOpen(false)
+      return
+    }
 
     searchTimeout.current = setTimeout(async () => {
+      const myGen = ++searchGenRef.current
       setLoading(true)
-      const likeQ     = `%${query.trim()}%`
+      setLoadingMoreIn(false); setLoadingMoreOut(false)
+      const likeQ     = toLikePattern(query)
       const scopeBank = !allBanks && !!bankName
+      const params     = { orgId, likeQ, scopeBank, bankName, excludeId, limit: PAGE_SIZE }
 
       const [inflowRes, outflowRes] = await Promise.all([
-        (() => {
-          let q = supabase
-            .from('inflow_transactions')
-            .select('id, date, amount, description, bank_name, transaction_ref, offset_role')
-            .eq('org_id', orgId)
-            .or(`description.ilike.${likeQ},transaction_ref.ilike.${likeQ}`)
-            .order('date', { ascending: false })
-            .limit(8)
-          if (scopeBank) q = q.eq('bank_name', bankName!)
-          if (excludeId) q = q.neq('id', excludeId)
-          return q
-        })(),
-        (() => {
-          let q = supabase
-            .from('outflow_transactions')
-            .select('id, date, amount_disbursed, description, bank_description, bank_name, transaction_id, offset_role')
-            .eq('org_id', orgId)
-            .or(`description.ilike.${likeQ},bank_description.ilike.${likeQ},transaction_id.ilike.${likeQ}`)
-            .order('date', { ascending: false })
-            .limit(8)
-          if (scopeBank) q = q.eq('bank_name', bankName!)
-          if (excludeId) q = q.neq('id', excludeId)
-          return q
-        })(),
+        fetchRootInflows(params),
+        fetchRootOutflows(params),
       ])
 
-      const mappedInflows: SearchResult[] = (inflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-        id:          r.id as string,
-        date:        r.date as string,
-        amount:      r.amount as number,
-        description: r.description as string | null,
-        bank_name:   r.bank_name as string | null,
-        direction:   'in' as const,
-        txnRef:      r.transaction_ref as string | null,
-        offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
-      }))
+      if (searchGenRef.current !== myGen) return   // superseded by a newer search
 
-      const mappedOutflows: SearchResult[] = (outflowRes.data ?? []).map((r: Record<string, unknown>) => ({
-        id:          r.id as string,
-        date:        r.date as string,
-        amount:      (r.amount_disbursed ?? 0) as number,
-        description: (r.description ?? r.bank_description) as string | null,
-        bank_name:   r.bank_name as string | null,
-        direction:   'out' as const,
-        txnRef:      r.transaction_id as string | null,
-        offsetRole:  (r.offset_role as 'root' | 'offset' | null) ?? null,
-      }))
+      const mappedInflows  = (inflowRes.data  ?? []).map(mapInflowRow)
+      const mappedOutflows = (outflowRes.data ?? []).map(mapOutflowRow)
 
       setInflows(mappedInflows)
       setOutflows(mappedOutflows)
+      setInflowTotal(inflowRes.count ?? mappedInflows.length)
+      setOutflowTotal(outflowRes.count ?? mappedOutflows.length)
       setOpen(mappedInflows.length > 0 || mappedOutflows.length > 0)
       setLoading(false)
     }, 300)
 
     return () => clearTimeout(searchTimeout.current)
   }, [query, orgId, bankName, allBanks, excludeId])
+
+  // Load more — re-fetches the same search at a bigger limit, replacing the
+  // section's results. Superseded automatically if a fresh search starts
+  // while this is in flight (searchGenRef check below).
+  const loadMoreInflows = async () => {
+    if (!orgId || !query.trim() || loadingMoreIn) return
+    const myGen = searchGenRef.current
+    setLoadingMoreIn(true)
+    const res = await fetchRootInflows({
+      orgId, likeQ: toLikePattern(query), scopeBank: !allBanks && !!bankName,
+      bankName, excludeId, limit: inflows.length + PAGE_SIZE,
+    })
+    if (searchGenRef.current !== myGen) return
+    setInflows((res.data ?? []).map(mapInflowRow))
+    setInflowTotal(res.count ?? inflows.length)
+    setLoadingMoreIn(false)
+  }
+
+  const loadMoreOutflows = async () => {
+    if (!orgId || !query.trim() || loadingMoreOut) return
+    const myGen = searchGenRef.current
+    setLoadingMoreOut(true)
+    const res = await fetchRootOutflows({
+      orgId, likeQ: toLikePattern(query), scopeBank: !allBanks && !!bankName,
+      bankName, excludeId, limit: outflows.length + PAGE_SIZE,
+    })
+    if (searchGenRef.current !== myGen) return
+    setOutflows((res.data ?? []).map(mapOutflowRow))
+    setOutflowTotal(res.count ?? outflows.length)
+    setLoadingMoreOut(false)
+  }
 
   const select = (r: SearchResult) => {
     const table = r.direction === 'in'
@@ -247,17 +329,49 @@ export function RootTransactionSearch({ value, onChange, bankName, excludeId }: 
           {inflows.length > 0 && (
             <>
               <li className="px-3 py-1 text-xs font-semibold text-green-700 bg-green-50 border-b border-green-100 sticky top-0">
-                Inflows ({inflows.length})
+                Inflows ({inflowTotal > inflows.length ? `${inflows.length} of ${inflowTotal}` : inflows.length})
               </li>
               {inflows.map(renderRow)}
+              {inflowTotal > inflows.length && (
+                <li>
+                  <button
+                    type="button"
+                    disabled={loadingMoreIn}
+                    onMouseDown={e => { e.preventDefault(); loadMoreInflows() }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingMoreIn ? (
+                      <span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    ) : (
+                      `Show ${Math.min(PAGE_SIZE, inflowTotal - inflows.length)} more`
+                    )}
+                  </button>
+                </li>
+              )}
             </>
           )}
           {outflows.length > 0 && (
             <>
               <li className={`px-3 py-1 text-xs font-semibold text-red-700 bg-red-50 border-b border-red-100 sticky top-0 ${inflows.length > 0 ? 'border-t border-gray-100 mt-1' : ''}`}>
-                Outflows ({outflows.length})
+                Outflows ({outflowTotal > outflows.length ? `${outflows.length} of ${outflowTotal}` : outflows.length})
               </li>
               {outflows.map(renderRow)}
+              {outflowTotal > outflows.length && (
+                <li>
+                  <button
+                    type="button"
+                    disabled={loadingMoreOut}
+                    onMouseDown={e => { e.preventDefault(); loadMoreOutflows() }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingMoreOut ? (
+                      <span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    ) : (
+                      `Show ${Math.min(PAGE_SIZE, outflowTotal - outflows.length)} more`
+                    )}
+                  </button>
+                </li>
+              )}
             </>
           )}
         </ul>,
