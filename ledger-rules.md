@@ -308,6 +308,22 @@ Same intra_flows logic now applied in both report engines — `balances` from `u
 
 ---
 
+## Dashboard Totals ↔ Inflows/Outflows Page Totals
+
+`useDashboard` headline totals must equal `useInflowSummary` / `useOutflowSummary` for the same period.
+
+**Same-table offsets** (`offset_role='offset'` and `root_transaction_table` = the row's own table — e.g. an outflow reversing an outflow) are excluded from **both** headline totals and applied to the net figure only, signed:
+- outflow offset w/ outflow root → `+amount_disbursed` (money back in)
+- inflow offset w/ inflow root → `−amount` (money back out)
+
+`netBalance = totalInflow + openingBalance − totalOutflow + offsetAdjustment`; `MonthlyTotal.net = inflow − outflow + adjust`. Root + offset still nets to zero.
+
+> Previously the dashboard *flipped* same-table offsets into the opposite column, so `Total Inflows (year)` included outflow reversals and diverged from the Inflows page hero total, which reads `inflow_transactions` only.
+
+**`fetchAllRows` ordering:** the helper appends `.order('id', { ascending: true })` (override via 2nd arg) to every page request. Paging with `.range()` over a query with no total ORDER BY lets Postgres return rows in any order per request — rows silently duplicate or vanish past the first 1000-row page. Caller-supplied `.order()` calls are preserved; the key is only a tiebreaker.
+
+---
+
 ## Outflow Amount Calculation
 
 `outflow_transactions.actual_amount` has `DEFAULT 0` — it is **never NULL** for rows inserted without that field (manual entry via `AddOutflowModal` never sets it).
