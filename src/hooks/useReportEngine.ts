@@ -88,7 +88,8 @@ export function useReportEngine(
         .lte(dateField, reportBasis === 'recorded_at' ? endOfDay : reportDate)),
       supabase
         .from('category_opening_balances')
-        .select('budget_portion, amount, categories(name)'),
+        .select('budget_portion, amount, categories(name)')
+        .eq('org_id', orgId),
       // Operational inflow by income_type: exact day, respects basis
       fetchAllRows(() => supabase
         .from('inflow_transactions')

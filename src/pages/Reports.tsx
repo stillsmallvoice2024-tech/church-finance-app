@@ -945,6 +945,7 @@ interface DrillTxn {
 function DepartmentBreakdownPanel() {
   const { baseCurrencySymbol: sym, formatLocale } = useOrgCurrency()
   const activeYear = useAccountingYearStore(s => s.year)
+  const orgId = useOrgStore(s => s.orgId)
   const { departments } = useDepartments()
   const { outflowTypes } = useOutflowTypes()
 
@@ -967,12 +968,14 @@ function DepartmentBreakdownPanel() {
   const [crossError,   setCrossError]     = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!orgId) { setRows([]); setLoading(false); return }
     setLoading(true); setError(null)
     const { lo, queryHi, col } = filter.range
 
     const { data, error: err } = await fetchAllRows(() => supabase
       .from('outflow_transactions')
       .select('amount_disbursed, department_id')
+      .eq('org_id', orgId)
       .gte(col, lo)
       .lte(col, queryHi))
 
@@ -1001,17 +1004,19 @@ function DepartmentBreakdownPanel() {
     result.sort((a, b) => b.amount - a.amount)
     setRows(result)
     setLoading(false)
-  }, [filter.range, departments])
+  }, [filter.range, departments, orgId])
 
   useEffect(() => { load() }, [load])
 
   // Drill-down: load transactions for selected department (+ optional outflow type filter)
   const loadDrill = useCallback(async (deptId: string | null, typeId: string | null) => {
+    if (!orgId) { setDrillTxns([]); return }
     setDrillLoading(true)
     const { lo, queryHi, col } = filter.range
     let q = supabase
       .from('outflow_transactions')
       .select('id, date, description, bank_description, amount_disbursed, outflow_type_id, department_id')
+      .eq('org_id', orgId)
       .gte(col, lo)
       .lte(col, queryHi)
       .order('date', { ascending: false })
@@ -1027,7 +1032,7 @@ function DepartmentBreakdownPanel() {
     const { data } = await q
     setDrillTxns((data ?? []) as DrillTxn[])
     setDrillLoading(false)
-  }, [filter.range])
+  }, [filter.range, orgId])
 
   const handleRowClick = (deptId: string | null) => {
     if (drillDeptId === deptId) {
@@ -1046,12 +1051,13 @@ function DepartmentBreakdownPanel() {
 
   // Cross-filter load
   const loadCross = useCallback(async () => {
-    if (!filterDeptId && !filterTypeId) { setCrossTxns([]); return }
+    if (!orgId || (!filterDeptId && !filterTypeId)) { setCrossTxns([]); return }
     setCrossLoading(true); setCrossError(null)
     const { lo, queryHi, col } = filter.range
     let q = supabase
       .from('outflow_transactions')
       .select('id, date, description, bank_description, amount_disbursed, outflow_type_id, department_id')
+      .eq('org_id', orgId)
       .gte(col, lo)
       .lte(col, queryHi)
       .order('date', { ascending: false })
@@ -1064,7 +1070,7 @@ function DepartmentBreakdownPanel() {
     if (err) setCrossError(err.message)
     else setCrossTxns((data ?? []) as DrillTxn[])
     setCrossLoading(false)
-  }, [filterDeptId, filterTypeId, filter.range])
+  }, [filterDeptId, filterTypeId, filter.range, orgId])
 
   useEffect(() => { loadCross() }, [loadCross])
 
