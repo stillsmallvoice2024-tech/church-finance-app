@@ -93,8 +93,10 @@ BEGIN
       USING ERRCODE = 'unique_violation';
   END IF;
 
-  v_slug := lower(regexp_replace(v_name, '[^a-z0-9]+', '-', 'g'));
-  v_slug := btrim(both '-' from v_slug);
+  -- lower() must run BEFORE the character class, otherwise every capital
+  -- matches [^a-z0-9] and is eaten ("Living Word" -> "iving-ord").
+  v_slug := regexp_replace(lower(v_name), '[^a-z0-9]+', '-', 'g');
+  v_slug := btrim(v_slug, '-');
   IF v_slug = '' OR v_slug = 'primary' THEN v_slug := 'org'; END IF;
 
   LOOP

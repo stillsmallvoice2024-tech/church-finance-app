@@ -2000,8 +2000,10 @@ begin
       using errcode = 'unique_violation';
   end if;
 
-  v_slug := lower(regexp_replace(v_name, '[^a-z0-9]+', '-', 'g'));
-  v_slug := btrim(both '-' from v_slug);
+  -- lower() must run BEFORE the character class, otherwise every capital
+  -- matches [^a-z0-9] and is eaten ("Living Word" -> "iving-ord").
+  v_slug := regexp_replace(lower(v_name), '[^a-z0-9]+', '-', 'g');
+  v_slug := btrim(v_slug, '-');
   if v_slug = '' or v_slug = 'primary' then v_slug := 'org'; end if;
 
   loop
