@@ -2,11 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
 import { fetchAllRows } from '../utils/fetchAllRows'
+import { aggregateFlow, isSameTableOffset, type FlowRow } from '../utils/flowAggregate'
 
 // Aggregates for the Outflows "Simple" view: monthly totals, outflow-type
 // breakdown, period total/count, and the prior equal-length period total
 // (for a trend delta). Mirrors the outflow inclusion rules used by the
-// dashboard so numbers stay consistent.
+// dashboard so numbers stay consistent — including the directional flip of
+// same-table offsets (see src/utils/flowAggregate.ts):
+//   • outflow offsets whose root is also an outflow → money back in, excluded
+//   • inflow offsets whose root is also an inflow    → money back out, counted here
 
 export interface MonthPoint { month: string; amount: number } // month = 'YYYY-MM'
 export interface TypeSlice  { outflowTypeId: string | null; amount: number }
@@ -30,11 +34,24 @@ type Raw = {
   root_transaction_table: string | null
 }
 
-// Excludes outflow offsets whose root is also an outflow (avoids double counting).
-const included = (r: Raw) =>
-  !(r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions')
+type FlippedRaw = {
+  date: string
+  amount: number
+}
 
 const TYPE_EXCLUDE = 'transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer)'
+// Inflow-side exclusion list — matches the dashboard's inflow query so the
+// flipped set is identical on both screens.
+const IN_TYPE_EXCLUDE = 'transaction_type.is.null,transaction_type.not.in.(bank_deposit,intrabank_transfer,balance_brought_forward)'
+
+const toFlowRows = (rows: Raw[]): FlowRow[] =>
+  rows
+    .filter(r => !isSameTableOffset(r, 'outflow_transactions'))
+    .map(r => ({ date: r.date, amount: Number(r.amount_disbursed), typeId: r.outflow_type_id }))
+
+// Inflow offsets reversing an inflow — cash back out, so they count as outflows.
+const flippedToFlowRows = (rows: FlippedRaw[]): FlowRow[] =>
+  rows.map(r => ({ date: r.date, amount: Number(r.amount), typeId: null }))
 
 function shiftBack(dateFrom: string, dateTo: string): { from: string; to: string } {
   const from = new Date(dateFrom)
@@ -64,7 +81,17 @@ export function useOutflowSummary(dateFrom: string, dateTo: string): OutflowSumm
 
     const prev = shiftBack(dateFrom, dateTo)
 
-    const [curRes, prevRes] = await Promise.all([
+    const flippedQuery = (from: string, to: string) => supabase
+      .from('inflow_transactions')
+      .select('date, amount')
+      .eq('org_id', orgId)
+      .gte('date', from)
+      .lte('date', to)
+      .eq('offset_role', 'offset')
+      .eq('root_transaction_table', 'inflow_transactions')
+      .or(IN_TYPE_EXCLUDE)
+
+    const [curRes, prevRes, curFlipRes, prevFlipRes] = await Promise.all([
       fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('date, amount_disbursed, outflow_type_id, offset_role, root_transaction_table')
@@ -74,47 +101,39 @@ export function useOutflowSummary(dateFrom: string, dateTo: string): OutflowSumm
         .or(TYPE_EXCLUDE)),
       fetchAllRows(() => supabase
         .from('outflow_transactions')
-        .select('date, amount_disbursed, offset_role, root_transaction_table')
+        .select('date, amount_disbursed, outflow_type_id, offset_role, root_transaction_table')
         .eq('org_id', orgId)
         .gte('date', prev.from)
         .lte('date', prev.to)
         .or(TYPE_EXCLUDE)),
+      fetchAllRows(() => flippedQuery(dateFrom, dateTo)),
+      fetchAllRows(() => flippedQuery(prev.from, prev.to)),
     ])
 
-    if (curRes.error || prevRes.error) {
-      setError((curRes.error ?? prevRes.error)!.message)
+    const firstError = [curRes.error, prevRes.error, curFlipRes.error, prevFlipRes.error].find(Boolean)
+    if (firstError) {
+      setError(firstError.message)
       setLoading(false)
       return
     }
 
-    const rows = ((curRes.data ?? []) as Raw[]).filter(included)
+    const rows = [
+      ...toFlowRows((curRes.data ?? []) as Raw[]),
+      ...flippedToFlowRows((curFlipRes.data ?? []) as FlippedRaw[]),
+    ]
+    const prevRows = [
+      ...toFlowRows((prevRes.data ?? []) as Raw[]),
+      ...flippedToFlowRows((prevFlipRes.data ?? []) as FlippedRaw[]),
+    ]
 
-    const monthMap = new Map<string, number>()
-    const typeMap  = new Map<string | null, number>()
-    let sum = 0
-    for (const r of rows) {
-      const amt = Number(r.amount_disbursed)
-      sum += amt
-      monthMap.set(r.date.slice(0, 7), (monthMap.get(r.date.slice(0, 7)) ?? 0) + amt)
-      typeMap.set(r.outflow_type_id, (typeMap.get(r.outflow_type_id) ?? 0) + amt)
-    }
+    const agg     = aggregateFlow(rows)
+    const prevAgg = aggregateFlow(prevRows)
 
-    const prevRows = ((prevRes.data ?? []) as Raw[]).filter(included)
-    const prevSum  = prevRows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
-
-    setMonthly(
-      Array.from(monthMap.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([month, amount]) => ({ month, amount })),
-    )
-    setByType(
-      Array.from(typeMap.entries())
-        .map(([outflowTypeId, amount]) => ({ outflowTypeId, amount }))
-        .sort((a, b) => b.amount - a.amount),
-    )
-    setTotal(sum)
-    setCount(rows.length)
-    setPrevTotal(prevRows.length > 0 ? prevSum : null)
+    setMonthly(agg.monthly)
+    setByType(agg.byType.map(({ typeId, amount }) => ({ outflowTypeId: typeId, amount })))
+    setTotal(agg.total)
+    setCount(agg.count)
+    setPrevTotal(prevAgg.count > 0 ? prevAgg.total : null)
     setLoading(false)
   }, [orgId, dateFrom, dateTo])
 

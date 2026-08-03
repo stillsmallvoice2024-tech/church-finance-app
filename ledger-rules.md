@@ -308,6 +308,34 @@ Same intra_flows logic now applied in both report engines — `balances` from `u
 
 ---
 
+## Dashboard Totals ↔ Inflows/Outflows Page Totals
+
+`useDashboard` headline totals must equal `useInflowSummary` / `useOutflowSummary` for the same period.
+
+**Same-table offset flip** — a row with `offset_role='offset'` whose `root_transaction_table` is its **own** table is money moving the other way, so it counts on the **opposite** side. This is deliberate: a refund reversing an outflow is cash the church actually received, and the headline should show what the user experienced.
+
+| Row | Counted as | Excluded from |
+|---|---|---|
+| outflow offset, root = outflow | inflow (`amount_disbursed`) | outflow total |
+| inflow offset, root = inflow | outflow (`amount`) | inflow total |
+
+Root + offset nets to zero while both amounts stay visible.
+
+**All three surfaces apply it:**
+- `useDashboard` — filters + flips in one pass over the year's inflow and outflow rows
+- `useInflowSummary` — 4 queries: own rows (+ prior period) and the flipped outflow offsets (+ prior period)
+- `useOutflowSummary` — mirror image
+
+Shared logic lives in `src/utils/flowAggregate.ts` (`isSameTableOffset`, `aggregateFlow`). Flipped rows come from the other table and carry no `income_type_id` / `outflow_type_id`, so they land in the `null` **Unclassified** slice — required for the type-breakdown percentages to sum to the headline total.
+
+> The flipped queries must reuse the *other* table's `transaction_type` exclusion list (inflows also exclude `balance_brought_forward`) or the two screens select different row sets.
+
+> Prior divergence: only the dashboard flipped, so `Total Inflows (year)` ran high by the sum of outflow reversals versus the Inflows hero total, which read `inflow_transactions` alone.
+
+**`fetchAllRows` ordering:** the helper appends `.order('id', { ascending: true })` (override via 2nd arg) to every page request. Paging with `.range()` over a query with no total ORDER BY lets Postgres return rows in any order per request — rows silently duplicate or vanish past the first 1000-row page. Caller-supplied `.order()` calls are preserved; the key is only a tiebreaker.
+
+---
+
 ## Outflow Amount Calculation
 
 `outflow_transactions.actual_amount` has `DEFAULT 0` — it is **never NULL** for rows inserted without that field (manual entry via `AddOutflowModal` never sets it).
