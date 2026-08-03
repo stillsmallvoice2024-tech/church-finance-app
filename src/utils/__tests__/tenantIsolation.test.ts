@@ -879,6 +879,120 @@ describe('LB-11: useOutflowTransactions supports server-side outflowTypeId filte
   })
 })
 
+// ── Reports: department breakdown org scoping ────────────────────────────────
+
+describe('Reports DepartmentBreakdownPanel org scoping', () => {
+  const code = src('pages/Reports.tsx')
+  const panel = code.slice(
+    code.indexOf('function DepartmentBreakdownPanel'),
+    code.indexOf('function FXHoldingsPanel'),
+  )
+
+  it('panel reads orgId from the org store', () => {
+    expect(panel).toContain('useOrgStore(s => s.orgId)')
+  })
+
+  it('every outflow_transactions query in the panel filters by org_id', () => {
+    const queries = (panel.match(/\.from\('outflow_transactions'\)/g) ?? []).length
+    const filters = (panel.match(/\.eq\('org_id', orgId\)/g) ?? []).length
+    expect(queries).toBeGreaterThanOrEqual(3)
+    expect(filters).toBe(queries)
+  })
+
+  it('summary, drill-down and cross-filter loaders guard on orgId', () => {
+    expect(panel).toContain('if (!orgId) { setRows([]); setLoading(false); return }')
+    expect(panel).toContain('if (!orgId) { setDrillTxns([]); return }')
+    expect(panel).toContain('if (!orgId || (!filterDeptId && !filterTypeId))')
+  })
+
+  it('orgId is in the loader useCallback dependencies', () => {
+    expect(panel).toContain('[filter.range, departments, orgId]')
+    expect(panel).toContain('[filter.range, orgId]')
+    expect(panel).toContain('[filterDeptId, filterTypeId, filter.range, orgId]')
+  })
+})
+
+describe('useReportEngine category_opening_balances org scoping', () => {
+  const code = src('hooks/useReportEngine.ts')
+
+  it('category_opening_balances query filters by org_id', () => {
+    const idx = code.indexOf(".from('category_opening_balances')")
+    expect(idx).toBeGreaterThanOrEqual(0)
+    expect(code.slice(idx, idx + 200)).toContain(".eq('org_id', orgId)")
+  })
+
+  it('no report-engine query is left unscoped', () => {
+    const fetchSection = code.slice(
+      code.indexOf('const load'),
+      code.indexOf('}, [orgId, reportDate'),
+    )
+    const queries = (fetchSection.match(/\.from\('/g) ?? []).length
+    const filters = (fetchSection.match(/\.eq\('org_id', orgId\)/g) ?? []).length
+    expect(filters).toBe(queries)
+  })
+})
+
+// ── Unique organisation names ────────────────────────────────────────────────
+
+describe('unique organisation name migration', () => {
+  const migration = readFileSync(
+    resolve(ROOT, 'supabase/migrations/20260803000001_unique_organization_name.sql'),
+    'utf-8',
+  )
+
+  it('adds an IMMUTABLE normalisation helper', () => {
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.normalize_org_name(p_name text)')
+    expect(migration).toContain('IMMUTABLE')
+  })
+
+  it('de-duplicates existing names before creating the index', () => {
+    const dedupeIdx = migration.indexOf('UPDATE public.organizations')
+    const indexIdx  = migration.indexOf('CREATE UNIQUE INDEX IF NOT EXISTS organizations_name_unique')
+    expect(dedupeIdx).toBeGreaterThanOrEqual(0)
+    expect(indexIdx).toBeGreaterThan(dedupeIdx)
+  })
+
+  it('creates a case-insensitive unique index excluding pending deletions', () => {
+    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS organizations_name_unique')
+    expect(migration).toContain('public.normalize_org_name(name)')
+    expect(migration).toContain("WHERE status <> 'pending_deletion'")
+  })
+
+  it('create_organization rejects duplicate names with a readable error', () => {
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.create_organization(p_name text)')
+    expect(migration).toContain('already exists. Please choose a different name.')
+  })
+
+  it('slug retry loop no longer swallows name collisions', () => {
+    expect(migration).toContain('GET STACKED DIAGNOSTICS')
+    expect(migration).toContain("v_constraint = 'organizations_name_unique'")
+  })
+
+  it('create_organization keeps a search_path guard', () => {
+    expect(migration).toContain('SET search_path = public')
+  })
+})
+
+describe('unique organisation name in schema.sql', () => {
+  const schema = readFileSync(resolve(ROOT, 'supabase/schema.sql'), 'utf-8')
+
+  it('declares normalize_org_name before the unique index', () => {
+    const fnIdx    = schema.indexOf('create or replace function public.normalize_org_name')
+    const indexIdx = schema.indexOf('create unique index if not exists organizations_name_unique')
+    expect(fnIdx).toBeGreaterThanOrEqual(0)
+    expect(indexIdx).toBeGreaterThan(fnIdx)
+  })
+
+  it('create_organization pre-checks the name', () => {
+    const fn = schema.slice(
+      schema.indexOf('create or replace function public.create_organization'),
+      schema.indexOf('grant execute on function public.create_organization'),
+    )
+    expect(fn).toContain('public.normalize_org_name(v_name)')
+    expect(fn).toContain('already exists. Please choose a different name.')
+  })
+})
+
 describe('LB-11: paginatedExport utility prevents silent truncation', () => {
   const code = src('utils/paginatedExport.ts')
 

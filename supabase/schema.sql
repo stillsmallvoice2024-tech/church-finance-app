@@ -70,6 +70,18 @@ create index if not exists idx_organizations_created_by on public.organizations(
 create index if not exists idx_organizations_status     on public.organizations(status);
 create index if not exists idx_organizations_purge_at   on public.organizations(purge_at);
 
+-- Organisation names are globally unique, case- and whitespace-insensitive.
+-- Identically named orgs would disguise any cross-org leak as correct data.
+-- Orgs queued for deletion are excluded so their names are reusable.
+create or replace function public.normalize_org_name(p_name text)
+returns text language sql immutable set search_path = public as $$
+  select lower(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')));
+$$;
+
+create unique index if not exists organizations_name_unique
+  on public.organizations (public.normalize_org_name(name))
+  where status <> 'pending_deletion';
+
 create table public.org_members (
   id         uuid        primary key default gen_random_uuid(),
   org_id     uuid        not null references public.organizations(id) on delete cascade,
@@ -1964,25 +1976,39 @@ create trigger trg_audit_log_no_delete
 -- ── Org management RPCs ───────────────────────────────────────────────────────
 
 create or replace function public.create_organization(p_name text)
-returns uuid language plpgsql security definer as $$
+returns uuid language plpgsql security definer
+set search_path = public as $$
 declare
-  v_user_id  uuid := auth.uid();
-  v_org_id   uuid;
-  v_slug     text;
-  v_attempt  int  := 0;
+  v_user_id    uuid := auth.uid();
+  v_org_id     uuid;
+  v_name       text;
+  v_slug       text;
+  v_attempt    int  := 0;
+  v_constraint text;
 begin
   if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if length(trim(p_name)) = 0 then raise exception 'Organisation name cannot be empty'; end if;
 
-  v_slug := lower(regexp_replace(trim(p_name), '[^a-z0-9]+', '-', 'g'));
-  v_slug := trim(both '-' from v_slug);
+  v_name := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g'));
+  if length(v_name) = 0 then raise exception 'Organisation name cannot be empty'; end if;
+
+  if exists (
+    select 1 from public.organizations
+    where  public.normalize_org_name(name) = public.normalize_org_name(v_name)
+      and  status <> 'pending_deletion'
+  ) then
+    raise exception 'An organisation named "%" already exists. Please choose a different name.', v_name
+      using errcode = 'unique_violation';
+  end if;
+
+  v_slug := lower(regexp_replace(v_name, '[^a-z0-9]+', '-', 'g'));
+  v_slug := btrim(both '-' from v_slug);
   if v_slug = '' or v_slug = 'primary' then v_slug := 'org'; end if;
 
   loop
     begin
       insert into public.organizations (name, slug, created_by, onboarding_complete)
       values (
-        trim(p_name),
+        v_name,
         case when v_attempt = 0 then v_slug else v_slug || '-' || v_attempt end,
         v_user_id,
         false
@@ -1990,8 +2016,14 @@ begin
       returning id into v_org_id;
       exit;
     exception when unique_violation then
+      get stacked diagnostics v_constraint = constraint_name;
+      -- Lost a race on the name — surface it instead of retrying the slug.
+      if v_constraint = 'organizations_name_unique' then
+        raise exception 'An organisation named "%" already exists. Please choose a different name.', v_name
+          using errcode = 'unique_violation';
+      end if;
       v_attempt := v_attempt + 1;
-      if v_attempt > 9 then raise exception 'Could not generate a unique slug for: %', p_name; end if;
+      if v_attempt > 9 then raise exception 'Could not generate a unique slug for: %', v_name; end if;
     end;
   end loop;
 
@@ -2010,6 +2042,7 @@ end;
 $$;
 
 grant execute on function public.create_organization(text) to authenticated;
+grant execute on function public.normalize_org_name(text) to authenticated;
 
 create or replace function public.complete_org_onboarding(
   p_org_id            uuid,
