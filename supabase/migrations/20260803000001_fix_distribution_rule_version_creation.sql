@@ -242,7 +242,7 @@ GRANT  EXECUTE ON FUNCTION public.approve_config_version(uuid) TO authenticated;
 -- empty rows array, despite its own comment saying "Auto-lock a default
 -- version: 100% → General category". A draft with no rows resolves to nothing,
 -- so a brand-new org had no fallback rule at all. Seed it locked and populated;
--- the wizard's rule supersedes it once approved.
+-- the wizard replaces it as soon as the user picks a split.
 
 CREATE OR REPLACE FUNCTION public.complete_org_onboarding(
   p_org_id            uuid,
