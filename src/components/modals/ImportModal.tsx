@@ -30,20 +30,18 @@ import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
 import { isOffsetableType } from '../../utils/transactionTypes'
 import { friendlyError } from '../../utils/friendlyError'
-
-// ── ID normalization ──────────────────────────────────────────────────────────
-// Strips invisible characters (zero-width spaces, soft hyphen, BOM, NBSP, etc.),
-// applies Unicode NFC, collapses whitespace, and trims.
-// Case is preserved — bank-provided IDs are case-sensitive.
-function normalizeId(raw: string): string {
-  // U+00AD soft-hyphen, U+00A0 NBSP, U+200B–U+200D zero-width chars,
-  // U+2028–U+2029 line/para separators, U+FEFF BOM
-  return raw
-    .normalize('NFC')
-    .replace(/\u00ad|\u00a0|\u200b|\u200c|\u200d|\u2028|\u2029|\ufeff/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+// Shared with Import.tsx — a divergent second copy would break dedup silently,
+// since Set.has() is byte-exact.
+import { normalizeId } from '../../utils/normalizeId'
+import {
+  deriveColumnIndices,
+  mergeContinuationRows,
+  buildImportRows,
+  markDuplicates,
+  parseNumber,
+  parseDebitAmount,
+} from '../../utils/buildImportRows'
+import type { ImportRow } from '../../types/importRow'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -82,27 +80,9 @@ const SKIP = '__skip__'
 const SESSION_KEY = 'church-import-session'
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
-// parseDate and DateFormat are imported from ../../utils/parseDate
-
-function parseNumber(raw: unknown): number {
-  if (raw == null || raw === '') return 0
-  if (typeof raw === 'number') return isNaN(raw) ? 0 : raw
-  const cleaned = String(raw).replace(/,/g, '').replace(/\s/g, '').trim()
-  const n = parseFloat(cleaned)
-  return isNaN(n) ? 0 : n
-}
-
-// Debit-specific parser: always returns unsigned magnitude.
-// Handles banks that store debits as negative numbers (-1000) or accounting
-// notation (1,000.00) — both of which would silently fail a plain `> 0` check.
-function parseDebitAmount(raw: unknown): number {
-  if (raw == null || raw === '') return 0
-  if (typeof raw === 'number') return isNaN(raw) ? 0 : Math.abs(raw)
-  let s = String(raw).replace(/,/g, '').replace(/\s/g, '').trim()
-  if (s.startsWith('(') && s.endsWith(')')) s = s.slice(1, -1)   // (1000.00) → 1000.00
-  const n = parseFloat(s)
-  return isNaN(n) ? 0 : Math.abs(n)
-}
+// parseDate / DateFormat come from ../../utils/parseDate.
+// parseNumber / parseDebitAmount come from ../../utils/buildImportRows so the
+// row model and this component can never drift apart on cell parsing.
 
 // ── Auto-mapping ───────────────────────────────────────────────────────────────
 
@@ -430,21 +410,6 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // ── Row-level memoized auto-classification ────────────────────────────────
   // Pre-compute keyword-matched income types for all inflow rows once, keyed by ri.
   // Avoids re-running classifyIncomeType for every row on every render (critical for 500+ rows).
-  const autoClassifiedTypes = useMemo(() => {
-    if (!processedRows || incomeTypes.length === 0) return {} as Record<number, import('../../hooks/useIncomeTypes').IncomeType | null>
-    const descIdx   = sheet?.headers.findIndex(h => mapping[h] === 'description') ?? -1
-    const creditIdx = sheet?.headers.findIndex(h => mapping[h] === 'credit') ?? -1
-    const result: Record<number, import('../../hooks/useIncomeTypes').IncomeType | null> = {}
-    for (let ri = 0; ri < processedRows.length; ri++) {
-      const raw    = processedRows[ri]
-      const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx] as unknown) : 0
-      if (credit <= 0) continue
-      const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-      result[ri] = desc ? resolveDefaultIncomeType(desc, '', incomeTypes) : null
-    }
-    return result
-  }, [processedRows, incomeTypes, sheet?.headers, mapping])
-
   // ── Import pipeline: pre-computed IDs + duplicate detection ──────────────
   // Set during proceedToRowConfig (Step 3→4 transition), BEFORE Step 4 opens.
   // IDs are generated after description normalization so they are stable and
@@ -457,6 +422,49 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const [dupCheckError,   setDupCheckError]   = useState<string | null>(null)
   const [dupStats,        setDupStats]        = useState<{ total: number; newCount: number; dupCount: number } | null>(null)
   const [dupSkipOpen,     setDupSkipOpen]     = useState(false)
+
+  // Step 3→4 progress. Hashing 10k rows takes tens of seconds; without a counter
+  // the NavButton spinner looks indistinguishable from a hang.
+  const [dupProgress, setDupProgress] = useState<{ phase: 'hashing' | 'querying'; done: number; total: number } | null>(null)
+
+  // ── Row model ──────────────────────────────────────────────────────────────
+  // One object per (row, kind), built in proceedToRowConfig. Replaces the
+  // parallel Record<number, T> maps; those are still derived from it while the
+  // Step 4 and runImport call sites are migrated across.
+  const [importRows, setImportRows] = useState<ImportRow[]>([])
+
+  // Auto-classified income type per credit row. Computed once from the model so
+  // Step 4 display and runImport read the SAME classification rather than each
+  // calling resolveDefaultIncomeType independently.
+  const autoClassifiedTypes = useMemo(() => {
+    const result: Record<number, import('../../hooks/useIncomeTypes').IncomeType | null> = {}
+    if (incomeTypes.length === 0) return result
+    for (const row of importRows) {
+      if (row.kind !== 'inflow') continue
+      result[row.ri] = row.description
+        ? resolveDefaultIncomeType(row.description, '', incomeTypes)
+        : null
+    }
+    return result
+  }, [importRows, incomeTypes])
+
+  // Step 4 row lists, split by kind and stripped of DB duplicates.
+  // Memoized: this previously rebuilt and re-parsed every row on every render.
+  const step4Rows = useMemo(() => {
+    const rows = processedRows ?? []
+    const shape = (r: ImportRow) => ({
+      ri:     r.ri,
+      raw:    (rows[r.ri] ?? []) as unknown[],
+      credit: r.kind === 'inflow'  ? r.amount : 0,
+      debit:  r.kind === 'outflow' ? r.amount : 0,
+      row:    r,
+    })
+    return {
+      creditRows: importRows.filter(r => r.kind === 'inflow'  && !r.isDuplicate).map(shape),
+      debitRows:  importRows.filter(r => r.kind === 'outflow' && !r.isDuplicate).map(shape),
+    }
+  }, [importRows, processedRows])
+
 
   // ── Dismiss-guard state ────────────────────────────────────────────────────
   const [confirmingReset, setConfirmingReset] = useState(false)
@@ -569,6 +577,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setDupCheckError(null)
     setDupStats(null)
     setDupSkipOpen(false)
+    setDupProgress(null)
+    setImportRows([])
     setStmtBalance('')
     setStmtDate('')
     setStmtSaving(false)
@@ -885,145 +895,61 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setDupCheckError(null)
 
     try {
-      const s1ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_1')
-      const s2ColIdx  = sheet.headers.findIndex(h => mapping[h] === 'stage_code_2')
-      const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
-      const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
-      const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
-      const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
-      const refIdx    = sheet.headers.findIndex(h => mapping[h] === 'reference')
+      // Column indices are derived ONCE here and carried on the row model.
+      // They were previously recomputed at seven independent sites.
+      const idx = deriveColumnIndices(sheet.headers, mapping)
 
       // ── Stage 1: Merge continuation rows + normalize descriptions ─────────
-      // runImport reuses processedRows — no second normalization pass needed.
-      const merged = (sheet.rows as unknown[][]).map(r => [...r])
-
-      // Remove repeated header rows before any stage processes merged.
-      // Some statements contain multiple sub-tables and repeat the exact header
-      // row mid-file; without this they reach continuation-row logic and get
-      // appended to the preceding transaction's description.
-      const normCell = (c: unknown) => String(c ?? '').toLowerCase().replace(/[\s_\-()\[\]]+/g, '')
-      const headerSig = sheet.headers.map(normCell).filter(Boolean).join('\0')
-      if (headerSig) {
-        for (let ri = merged.length - 1; ri >= 0; ri--) {
-          if (merged[ri].map(normCell).filter(Boolean).join('\0') === headerSig) {
-            merged.splice(ri, 1)
-          }
-        }
-      }
-
-      for (let ri = 1; ri < merged.length; ri++) {
-        const row = merged[ri]
-        if (parseDate(row[dateIdx], dateFormat) !== null) continue
-        if ((creditIdx >= 0 && parseNumber(row[creditIdx]) > 0) || (debitIdx >= 0 && parseDebitAmount(row[debitIdx]) > 0)) continue
-        const hasDesc = descIdx >= 0 && row[descIdx] != null && String(row[descIdx]).trim() !== ''
-        const hasRef  = refIdx  >= 0 && row[refIdx]  != null && String(row[refIdx]).trim()  !== ''
-        if (!hasDesc && !hasRef) continue
-        let prevRi = ri - 1
-        while (prevRi >= 0 && parseDate(merged[prevRi][dateIdx], dateFormat) === null) prevRi--
-        if (prevRi < 0) continue
-        const prev = merged[prevRi]
-        if (hasDesc) prev[descIdx] = (String(prev[descIdx] ?? '').trim() + ' ' + String(row[descIdx]).trim()).replace(/\s+/g, ' ').trim()
-        if (hasRef)  prev[refIdx]  = (String(prev[refIdx]  ?? '').trim() + ' ' + String(row[refIdx]).trim()).replace(/\s+/g, ' ').trim()
-      }
-      if (descIdx >= 0) {
-        for (const row of merged) {
-          const raw = row[descIdx]
-          if (raw != null && raw !== '') row[descIdx] = normalizeId(String(raw)) || raw
-        }
-      }
+      // Also strips repeated mid-file header rows. Row indices are preserved.
+      const merged = mergeContinuationRows(sheet.rows as unknown[][], sheet.headers, idx, dateFormat)
       setProcessedRows(merged)
 
-      // ── Stage 2: Pre-populate rowStageCodes for debit rows ───────────────
-      const initial: Record<number, { s1: string; s2: string }> = {}
-      for (let ri = 0; ri < merged.length; ri++) {
-        const raw   = merged[ri]
-        const debit = debitIdx >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
-        if (debit <= 0) continue
-        const s1 = s1ColIdx >= 0 && raw[s1ColIdx] != null && raw[s1ColIdx] !== ''
-          ? String(raw[s1ColIdx]).trim() : ''
-        const s2 = s2ColIdx >= 0 && raw[s2ColIdx] != null && raw[s2ColIdx] !== ''
-          ? String(raw[s2ColIdx]).trim() : ''
-        initial[ri] = { s1, s2 }
-      }
-      setRowStageCodes(initial)
+      // ── Stage 2 + 3: Build the row model and generate transaction IDs ─────
+      // IDs are generated after description normalization and are the same
+      // values used for BOTH duplicate detection and insert — computing them
+      // once is what prevents dedup/insert drift.
+      setDupProgress({ phase: 'hashing', done: 0, total: merged.length })
+      const rows = await buildImportRows(merged, idx, dateFormat, internalBank?.name ?? '', {
+        onProgress: (done, total) => setDupProgress({ phase: 'hashing', done, total }),
+      })
+      setDupProgress({ phase: 'querying', done: merged.length, total: merged.length })
 
-      // Also initialize outflow types from category mapping for pre-populated stage codes
+      // Seed outflow types from the category mapping for pre-populated stage codes.
       if (outflowTypeOptions.length > 0) {
-        const initialOt: Record<number, string> = {}
-        for (const riKey of Object.keys(initial)) {
-          const ri = Number(riKey)
-          const sc = initial[ri]
-          if (!sc.s1) continue
-          const cat = categories.find((c: { name: string }) => c.name === sc.s1)
+        for (const row of rows) {
+          if (row.kind !== 'outflow' || !row.config.stageCode1) continue
+          const s1 = row.config.stageCode1
+          const cat = categories.find((c: { name: string }) => c.name === s1)
           if (cat) {
             const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
-            if (suggested) { initialOt[ri] = suggested.id; continue }
+            if (suggested) { row.config.outflowTypeId = suggested.id; continue }
           }
-          const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
-          if (match) initialOt[ri] = match.id
+          const match = outflowTypeOptions.find(t => t.name.toLowerCase() === s1.toLowerCase())
+          if (match) row.config.outflowTypeId = match.id
         }
-        setRowOutflowTypes(initialOt)
       }
 
-      // ── Stage 3: Generate fallback IDs AFTER normalization ────────────────
-      // Separate maps for inflow (transaction_ref) and outflow (transaction_id).
-      // Fallback IDs use normalized descriptions so they match on re-import.
-      // Bank-provided refs are used directly (no hashing needed).
-      // Within-batch collision suffix (-1, -2, …) mirrors runImport logic so that
-      // two identical rows in the same file only mark ONE as a duplicate.
+      // Legacy per-row maps are derived from the model so the existing Step 4
+      // and runImport code paths keep working while they are migrated over.
       const newInflowIds:  Record<number, string> = {}
       const newOutflowIds: Record<number, string> = {}
+      const initialStage:  Record<number, { s1: string; s2: string }> = {}
+      const initialOt:     Record<number, string> = {}
       const inflowIdList:  string[] = []
       const outflowIdList: string[] = []
-      const inflowIdCounts  = new Map<string, number>()
-      const outflowIdCounts = new Map<string, number>()
-
-      for (let ri = 0; ri < merged.length; ri++) {
-        const raw    = merged[ri]
-        const date   = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
-        if (!date) continue
-        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
-        const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
-        const desc   = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).trim() : ''
-        const ref    = refIdx >= 0 && raw[refIdx] != null && raw[refIdx] !== ''
-                         ? normalizeId(String(raw[refIdx])) || null : null
-
-        if (credit > 0) {
-          let id: string
-          if (ref) {
-            id = ref
-          } else {
-            const baseId = await generateFallbackTransactionId(
-              String(date), String(credit), desc, internalBank?.name ?? ''
-            )
-            const count = inflowIdCounts.get(baseId) ?? 0
-            inflowIdCounts.set(baseId, count + 1)
-            id = count === 0 ? baseId : `${baseId}-${count}`
-          }
-          newInflowIds[ri] = id
-          inflowIdList.push(id)
-        }
-        if (debit > 0) {
-          let id: string
-          if (ref) {
-            // Some banks reuse the main transaction's ref for associated charges;
-            // suffix distinguishes COMM/VAT rows so dedup treats them as distinct.
-            const chargeTag = /^COMM(?:ISSION)?\b/i.test(desc) ? '-comm'
-                            : /^VAT\b/i.test(desc)              ? '-vat'
-                            : ''
-            id = chargeTag ? `${ref}${chargeTag}` : ref
-          } else {
-            const baseId = await generateFallbackTransactionId(
-              String(date), String(debit), desc, internalBank?.name ?? ''
-            )
-            const count = outflowIdCounts.get(baseId) ?? 0
-            outflowIdCounts.set(baseId, count + 1)
-            id = count === 0 ? baseId : `${baseId}-${count}`
-          }
-          newOutflowIds[ri] = id
-          outflowIdList.push(id)
+      for (const row of rows) {
+        if (row.kind === 'inflow') {
+          newInflowIds[row.ri] = row.txnId
+          inflowIdList.push(row.txnId)
+        } else {
+          newOutflowIds[row.ri] = row.txnId
+          outflowIdList.push(row.txnId)
+          initialStage[row.ri] = { s1: row.config.stageCode1, s2: row.config.stageCode2 }
+          if (row.config.outflowTypeId) initialOt[row.ri] = row.config.outflowTypeId
         }
       }
+      setRowStageCodes(initialStage)
+      if (outflowTypeOptions.length > 0) setRowOutflowTypes(initialOt)
       setPrecomputedInflowIds(newInflowIds)
       setPrecomputedOutflowIds(newOutflowIds)
 
@@ -1051,29 +977,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
 
       // ── Stage 5: Mark duplicate rows + compute stats ──────────────────────
-      // Only rows with valid dates and amounts are counted.
-      const newDuplicateRis = new Set<number>()
-      let totalCount = 0, dupCount = 0
+      const stats = markDuplicates(rows, existingInflowRefs, existingOutflowIds)
+      const newDuplicateRis = new Set<number>(rows.filter(r => r.isDuplicate).map(r => r.ri))
 
-      for (let ri = 0; ri < merged.length; ri++) {
-        const raw    = merged[ri]
-        const date   = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
-        if (!date) continue
-        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
-        const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
-        if (credit === 0 && debit === 0) continue
-
-        totalCount++
-        let isDup = false
-        const inflowId  = newInflowIds[ri]
-        const outflowId = newOutflowIds[ri]
-        if (credit > 0 && inflowId  && existingInflowRefs.has(normalizeId(inflowId)))  isDup = true
-        if (debit  > 0 && outflowId && existingOutflowIds.has(normalizeId(outflowId))) isDup = true
-        if (isDup) { newDuplicateRis.add(ri); dupCount++ }
-      }
-
+      setImportRows(rows)
       setDuplicateRis(newDuplicateRis)
-      setDupStats({ total: totalCount, newCount: totalCount - dupCount, dupCount })
+      setDupStats(stats)
       setStep(4)
     } catch (e) {
       // Stay on Step 3 — advancing without a completed duplicate check would
@@ -1945,7 +1854,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               nextLoading={dupCheckLoading}
               nextLabel={targetTable === 'bank_statement'
                 ? dupCheckLoading
-                  ? 'Checking for duplicates…'
+                  // Hashing a large statement takes tens of seconds — show the
+                  // running count so a long wait is legible as progress.
+                  ? dupProgress && dupProgress.phase === 'hashing' && dupProgress.total > 0
+                    ? `Preparing ${dupProgress.done.toLocaleString()} / ${dupProgress.total.toLocaleString()}…`
+                    : 'Checking for duplicates…'
                   : `Configure Rows (${sheet.rowCount.toLocaleString()})`
                 : `Preview & Import (${sheet.rowCount.toLocaleString()} rows)`}
             />
@@ -2062,25 +1975,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             {(() => {
               const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
               const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
-              const creditIdx = sheet.headers.findIndex(h => mapping[h] === 'credit')
-              const debitIdx  = sheet.headers.findIndex(h => mapping[h] === 'debit')
 
               const availableInflowTypes  = TXN_TYPE_OPTIONS
               const availableOutflowTypes = TXN_TYPE_OPTIONS
 
-              const allRows = (processedRows ?? sheet.rows).map((raw, ri) => {
-                const r = raw as unknown[]
-                return {
-                  ri,
-                  raw: r,
-                  credit: creditIdx >= 0 ? parseNumber(r[creditIdx])      : 0,
-                  debit:  debitIdx  >= 0 ? parseDebitAmount(r[debitIdx]) : 0,
-                }
-              })
-              // Exclude duplicate rows — identified by DB check before Step 4 opened.
-              // Only genuinely new transactions are shown for configuration.
-              const creditRows = allRows.filter(r => r.credit > 0 && !duplicateRis.has(r.ri))
-              const debitRows  = allRows.filter(r => r.debit  > 0 && !duplicateRis.has(r.ri))
+              // Rows come from the model built at Step 3→4 and are memoized —
+              // previously this remapped and re-parsed every row on every
+              // render, so one keystroke in the filter box re-ran
+              // parseDebitAmount across the whole file.
+              const { creditRows, debitRows } = step4Rows
 
               // ── Inflow tab ───────────────────────────────────────────────
               if (bsConfigTab === 'inflow') {
