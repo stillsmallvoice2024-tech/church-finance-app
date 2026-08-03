@@ -37,6 +37,43 @@ async function approveDraft(v: AllocationConfig): Promise<boolean> {
   }
 }
 
+/**
+ * Drafts are easy to miss — they only appear inside the collapsed version
+ * history — yet a group full of drafts and no locked version applies to
+ * nothing. Surfaced inline on the card so approving is always one click away.
+ */
+function PendingDraftsBanner({ versions, onApproved }: {
+  versions:   AllocationConfig[]
+  onApproved: () => void
+}) {
+  const drafts = versions.filter(v => v.status === 'draft' && v.rows.length > 0)
+  if (drafts.length === 0) return null
+
+  return (
+    <div className="border-t border-gray-100 bg-amber-50/60 px-4 py-3">
+      <p className="text-xs font-medium text-amber-800">
+        {drafts.length} draft{drafts.length !== 1 ? 's' : ''} waiting for approval — a draft applies to nothing until you approve it.
+      </p>
+      <div className="mt-2 space-y-1.5">
+        {drafts.map(v => (
+          <div key={v.id} className="flex items-center gap-3 text-xs">
+            <span className="text-gray-700 truncate">
+              v{v.version_number} &middot; {v.effective_from ?? '—'} &middot;{' '}
+              {v.rows.map(r => `${r.category_name} ${r.percentage ?? r.amount ?? 0}${v.allocation_type === 'amount' ? '' : '%'}`).join(', ')}
+            </span>
+            <button
+              onClick={async () => { if (await approveDraft(v)) onApproved() }}
+              className="ml-auto shrink-0 flex items-center gap-1 px-2 py-1 font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors"
+            >
+              <CheckCircle2 className="w-3 h-3" /> Approve
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── General Distribution Rule panel ───────────────────────────────────────────
 
 function GeneralGroupPanel({
@@ -124,10 +161,9 @@ function GeneralGroupPanel({
     </div>
   )
 
-  const av     = group.active_version
-  const isAmt  = av?.allocation_type === 'amount'
-  const today  = new Date().toISOString().slice(0, 10)
-  const drafts = group.versions.filter(v => v.status === 'draft' && v.rows.length > 0)
+  const av    = group.active_version
+  const isAmt = av?.allocation_type === 'amount'
+  const today = new Date().toISOString().slice(0, 10)
 
   return (
     <>
@@ -176,29 +212,7 @@ function GeneralGroupPanel({
       </div>
 
       {/* Pending drafts — e.g. rules created during onboarding */}
-      {drafts.length > 0 && (
-        <div className="border-t border-gray-100 bg-amber-50/60 px-4 py-3">
-          <p className="text-xs font-medium text-amber-800">
-            {drafts.length} draft{drafts.length !== 1 ? 's' : ''} waiting for approval — a draft applies to nothing until you approve it.
-          </p>
-          <div className="mt-2 space-y-1.5">
-            {drafts.map(v => (
-              <div key={v.id} className="flex items-center gap-3 text-xs">
-                <span className="text-gray-700 truncate">
-                  v{v.version_number} &middot; {v.effective_from ?? '—'} &middot;{' '}
-                  {v.rows.map(r => `${r.category_name} ${r.percentage ?? r.amount ?? 0}${v.allocation_type === 'amount' ? '' : '%'}`).join(', ')}
-                </span>
-                <button
-                  onClick={async () => { if (await approveDraft(v)) onRefetch() }}
-                  className="ml-auto shrink-0 flex items-center gap-1 px-2 py-1 font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors"
-                >
-                  <CheckCircle2 className="w-3 h-3" /> Approve
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <PendingDraftsBanner versions={group.versions} onApproved={onRefetch} />
 
       {/* Active version rows preview */}
       {av && (
@@ -634,6 +648,9 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                     )}
                   </div>
                 </div>
+
+                {/* Pending drafts — e.g. special rules created during onboarding */}
+                <PendingDraftsBanner versions={g.versions} onApproved={onRefetch} />
 
                 {/* Version history */}
                 {isExpanded && (
