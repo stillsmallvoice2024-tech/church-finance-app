@@ -31,7 +31,6 @@ export interface DashboardStats {
   monthlyTotals: MonthlyTotal[]
   totalInflow: number
   totalOutflow: number
-  offsetAdjustment: number   // signed net effect of same-table offsets (excluded from the two totals above)
   netBalance: number
   openingBalanceTotal: number
   fxBalances: FXBalance[]
@@ -43,19 +42,14 @@ export interface DashboardStats {
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
-// `inflows` / `outflows` are the headline sets — exactly the rows the Inflows
-// and Outflows pages count. `netAdjust` carries same-table offsets (signed:
-// positive = money back in, negative = money back out); they belong to the net
-// figure only, never to the two headline columns.
 function buildMonthlyTotals(
-  inflows:   { date: string; amount: number }[],
-  outflows:  { date: string; amount_disbursed: number }[],
-  netAdjust: { date: string; amount: number }[] = [],
+  inflows:  { date: string; amount: number }[],
+  outflows: { date: string; amount_disbursed: number }[],
 ): MonthlyTotal[] {
-  const map = new Map<string, { inflow: number; outflow: number; adjust: number }>()
+  const map = new Map<string, { inflow: number; outflow: number }>()
 
   const ensure = (month: string) => {
-    if (!map.has(month)) map.set(month, { inflow: 0, outflow: 0, adjust: 0 })
+    if (!map.has(month)) map.set(month, { inflow: 0, outflow: 0 })
     return map.get(month)!
   }
 
@@ -65,17 +59,14 @@ function buildMonthlyTotals(
   for (const tx of outflows) {
     ensure(tx.date.slice(0, 7)).outflow += Number(tx.amount_disbursed)
   }
-  for (const tx of netAdjust) {
-    ensure(tx.date.slice(0, 7)).adjust += Number(tx.amount)
-  }
 
   return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, { inflow, outflow, adjust }]) => ({
+    .map(([month, { inflow, outflow }]) => ({
       month,
       inflow,
       outflow,
-      net: inflow - outflow + adjust,
+      net: inflow - outflow,
     }))
 }
 
@@ -105,7 +96,6 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
   const [monthlyTotals,       setMonthlyTotals]       = useState<MonthlyTotal[]>([])
   const [totalInflow,         setTotalInflow]          = useState(0)
   const [totalOutflow,        setTotalOutflow]          = useState(0)
-  const [offsetAdjustment,    setOffsetAdjustment]     = useState(0)
   const [openingBalanceTotal, setOpeningBalanceTotal]  = useState(0)
   const [fxBalances,          setFxBalances]            = useState<FXBalance[]>([])
   const [recentTxns,          setRecentTxns]            = useState<RecentInflowRow[]>([])
@@ -179,37 +169,35 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
       return
     }
 
-    // ── Aggregate ─────────────────────────────────────────────────────────────
-    // Same-table offsets (an offset whose root lives in the same table, e.g. an
-    // outflow reversing another outflow) are excluded from BOTH headline totals
-    // and applied to the net figure instead, signed by direction. This keeps
-    // root + offset netting to zero while Total Inflows / Total Outflows stay
-    // identical to useInflowSummary / useOutflowSummary — the numbers the
-    // Inflows and Outflows pages show for the same period.
+    // ── Aggregate with directional flipping for same-table offsets ──────────
+    // When an offset's root lives in the same table (e.g. both outflows), the
+    // offset flips to the opposite column so root + offset nets to zero while
+    // both amounts remain visible in the totals.
     type InflowRaw  = { date: string; amount: number; offset_role: string | null; root_transaction_table: string | null }
     type OutflowRaw = { date: string; amount_disbursed: number; offset_role: string | null; root_transaction_table: string | null }
 
     const inflowData  = (inflowRes.data  ?? []) as InflowRaw[]
     const outflowData = (outflowRes.data ?? []) as OutflowRaw[]
 
-    const isSameTableOffset = (role: string | null, rootTable: string | null, table: string) =>
-      role === 'offset' && rootTable === table
+    // Outflow offsets whose root is also an outflow → flip into inflow column
+    const outOffsetFlipped = outflowData.filter(
+      r => r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions'
+    )
+    // Inflow offsets whose root is also an inflow → flip into outflow column
+    const inOffsetFlipped = inflowData.filter(
+      r => r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions'
+    )
 
-    const inflows  = inflowData.filter(r  => !isSameTableOffset(r.offset_role, r.root_transaction_table, 'inflow_transactions'))
-    const outflows = outflowData.filter(r => !isSameTableOffset(r.offset_role, r.root_transaction_table, 'outflow_transactions'))
-
-    const netAdjust = [
-      // Outflow reversing an outflow → money back in
-      ...outflowData
-        .filter(r => isSameTableOffset(r.offset_role, r.root_transaction_table, 'outflow_transactions'))
-        .map(r => ({ date: r.date, amount: Number(r.amount_disbursed) })),
-      // Inflow reversing an inflow → money back out
-      ...inflowData
-        .filter(r => isSameTableOffset(r.offset_role, r.root_transaction_table, 'inflow_transactions'))
-        .map(r => ({ date: r.date, amount: -Number(r.amount) })),
+    const inflows = [
+      ...inflowData.filter(r => !(r.offset_role === 'offset' && r.root_transaction_table === 'inflow_transactions')),
+      ...outOffsetFlipped.map(r => ({ date: r.date, amount: r.amount_disbursed })),
+    ]
+    const outflows = [
+      ...outflowData.filter(r => !(r.offset_role === 'offset' && r.root_transaction_table === 'outflow_transactions')),
+      ...inOffsetFlipped.map(r => ({ date: r.date, amount_disbursed: r.amount })),
     ]
 
-    const totals    = buildMonthlyTotals(inflows, outflows, netAdjust)
+    const totals    = buildMonthlyTotals(inflows, outflows)
     const openingIn = (openingBalRes.data ?? []).reduce(
       (s, r) => s + Number((r as { starting_balance: number | null }).starting_balance ?? 0), 0,
     )
@@ -217,7 +205,6 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     // Total Inflows must reflect actual period inflows so it visibly increases on import.
     const totalIn   = inflows.reduce((s, r)  => s + Number(r.amount),          0)
     const totalOut  = outflows.reduce((s, r) => s + Number(r.amount_disbursed), 0)
-    const offsetAdj = netAdjust.reduce((s, r) => s + r.amount, 0)
     const fxBals    = latestFXBalances(
       (fxRes.data ?? []) as { currency: string; running_balance: number }[],
     )
@@ -225,7 +212,6 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     setMonthlyTotals(totals)
     setTotalInflow(totalIn)
     setTotalOutflow(totalOut)
-    setOffsetAdjustment(offsetAdj)
     setOpeningBalanceTotal(openingIn)
     setFxBalances(fxBals)
     setRecentTxns(
@@ -243,8 +229,7 @@ export function useDashboardStats(year: number = new Date().getFullYear()): Dash
     monthlyTotals,
     totalInflow,
     totalOutflow,
-    offsetAdjustment,
-    netBalance: totalInflow + openingBalanceTotal - totalOutflow + offsetAdjustment,
+    netBalance: totalInflow + openingBalanceTotal - totalOutflow,
     openingBalanceTotal,
     fxBalances,
     recentTransactions: recentTxns,
