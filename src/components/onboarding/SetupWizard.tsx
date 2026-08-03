@@ -21,7 +21,7 @@ import { useCategories } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
 import { useAllocationStore } from '../../store/allocationStore'
-import { createGroupWithFirstVersion, createGeneralVersion, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
+import { createGroupWithFirstVersion, setGeneralRuleLive, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import { useToastStore } from '../../store/toastStore'
 import { friendlyError } from '../../utils/friendlyError'
 import { WIZARD_STEPS } from '../../onboarding/wizard/definitions'
@@ -1050,11 +1050,10 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
 
   const saveGeneralRule = async (label: string, rows: SplitRow[]) => {
     const today = new Date().toISOString().slice(0, 10)
-    await createGeneralVersion({
+    await setGeneralRuleLive({
       name:           label,
       rows:           rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage', percentage: r.percentage })),
       effective_from: today,
-      status:         'draft',
     })
     await useAllocationStore.getState().reload()
   }
@@ -1064,7 +1063,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
     setCreating(idx); setError(null)
     try {
       await saveGeneralRule(t.label, t.rows)
-      toast(`"${t.label}" saved as a draft`, 'success')
+      toast(`"${t.label}" is now your live General rule`, 'success')
     } catch (err) {
       setError(friendlyError(err, 'save the rule'))
     } finally {
@@ -1079,7 +1078,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
     setSavingCustom(true); setError(null)
     try {
       await saveGeneralRule(customName.trim(), customRows)
-      toast(`"${customName.trim()}" saved as a draft`, 'success')
+      toast(`"${customName.trim()}" is now your live General rule`, 'success')
       setShowCustom(false); setCustomName(''); setCustomRows([{ category_name: '', percentage: 100 }])
     } catch (err) {
       setError(friendlyError(err, 'save the rule'))
@@ -1097,7 +1096,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
 
       <div className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <p>Rules created here are saved as <strong>drafts</strong> of your General rule. Approve one in Settings → Distribution Rules before it goes live.</p>
+        <p>The rule you pick here <strong>goes live immediately</strong> as your General rule. Pick a different one to replace it, or change it any time in Settings → Distribution Rules.</p>
       </div>
 
       {regularConfigs.length > 0 && (
@@ -1115,7 +1114,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
         </p>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Quick-start templates — tap any to create as a draft:</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Quick-start templates — tap any to make it your live rule:</p>
           {templates.map((t, idx) => {
             const alreadyCreated = regularConfigs.some(r => r.name === t.label)
             const isCreating     = creating === idx
@@ -1284,10 +1283,11 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         total_amount:    null,
         rows:            t.rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage' as const, percentage: r.percentage })),
         effective_from:  today,
-        status:          'draft',
+        status:          'locked',
         income_type_id:  t.incomeTypeId,
       })
-      toast(`"${t.label}" special rule created as a draft`, 'success')
+      toast(`"${t.label}" special rule is now live`, 'success')
+      await useAllocationStore.getState().reload()
       refetch()
     } catch (err) {
       setError(friendlyError(err, 'save the rule'))
@@ -1309,11 +1309,12 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         total_amount:    null,
         rows:            customSpecialRows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage' as const, percentage: r.percentage })),
         effective_from:  today,
-        status:          'draft',
+        status:          'locked',
         income_type_id:  customSpecialTypeId,
       })
-      toast(`"${customSpecialName.trim()}" special rule created as a draft`, 'success')
+      toast(`"${customSpecialName.trim()}" special rule is now live`, 'success')
       setShowCustomSpecial(false); setCustomSpecialName(''); setCustomSpecialTypeId(''); setCustomSpecialRows([{ category_name: '', percentage: 100 }])
+      await useAllocationStore.getState().reload()
       refetch()
     } catch (err) {
       setError(friendlyError(err, 'save the rule'))
@@ -1349,7 +1350,7 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         </p>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Example rules — tap any to create as a draft:</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Example rules — tap any to make it live:</p>
           {templates.map((t, idx) => {
             const alreadyCreated = groups.some(g => g.name === t.label)
             const isCreating     = creating === idx

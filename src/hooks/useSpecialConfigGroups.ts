@@ -233,6 +233,48 @@ export async function createGeneralVersion(params: {
 }
 
 /**
+ * Sets the org's live General rule — the onboarding wizard's "pick a split".
+ *
+ * Re-picking a template on the same day rewrites the version already starting
+ * that day rather than inserting a second one, which the partial unique index
+ * on (config_group_id, effective_from) WHERE status='locked' would reject. It
+ * also means the first pick replaces the 100% → General rule seeded at signup
+ * instead of stacking on top of it.
+ */
+export async function setGeneralRuleLive(params: {
+  rows:           AllocationConfig['rows']
+  effective_from: string
+  name?:          string
+}): Promise<string> {
+  const group = await ensureGeneralGroup()
+
+  const { data: sameDay, error: selErr } = await supabase
+    .from('allocation_configs')
+    .select('id')
+    .eq('config_group_id', group.id)
+    .eq('status', 'locked')
+    .eq('effective_from', params.effective_from)
+    .maybeSingle()
+  if (selErr) throw new Error(selErr.message)
+
+  if (sameDay) {
+    const { error } = await supabase
+      .from('allocation_configs')
+      .update({
+        name:            params.name ?? group.name,
+        rows:            params.rows,
+        allocation_type: 'percentage',
+        total_amount:    null,
+      })
+      .eq('id', (sameDay as { id: string }).id)
+    if (error) throw new Error(error.message)
+    return (sameDay as { id: string }).id
+  }
+
+  return createGeneralVersion({ ...params, status: 'locked' })
+}
+
+/**
  * Approves a draft version so it starts applying to transactions.
  *
  * Goes through an RPC rather than a status UPDATE: promoting a draft has to
