@@ -33,8 +33,12 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 
 ## Allocation Configs
 
+**Every config must belong to a group.** `buildVersionIndex()` skips any row with a null `config_group_id`, and the Distribution Rules tab only lists rows by group — so a config written without one is invisible everywhere and applies to nothing. The General (fallback) rule is the group with `special_config_groups.is_default = true`; write to it via `createGeneralVersion()`.
+
+**Drafts apply to nothing.** Only `status = 'locked'` versions resolve. Anything that creates drafts (the onboarding wizard) needs a reachable approve action — see `approveDraft` in `DistributionRulesTab.tsx`.
+
 **Regular configs** (`is_special = false`):
-- Held in `allocationStore` (fetched once on first use)
+- Held in `allocationStore` (fetched once on first use; `reload()` shares/awaits the in-flight fetch)
 - `getConfigForDate(configs, date)` → most recent **locked, non-special** config with `start_date` ≤ date
 - Draft configs are never applied
 - Special configs are explicitly excluded from date lookup

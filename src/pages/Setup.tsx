@@ -430,7 +430,7 @@ export default function SetupPage() {
       <CreateSpecialConfigModal
         open={specialModalOpen}
         onClose={() => { setSpecialModalOpen(false) }}
-        onSaved={() => { setSpecialModalOpen(false); setSpecialRefetch(n => n + 1) }}
+        onSaved={() => { setSpecialModalOpen(false); setSpecialRefetch(n => n + 1); reloadAllocs() }}
         mode={specialModalMode}
         group={selectedSpecialGroup}
         copyFromVersion={copyFromVersion}

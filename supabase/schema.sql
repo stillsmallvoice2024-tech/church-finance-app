@@ -2079,11 +2079,10 @@ begin
     returning id into v_group_id;
   end if;
 
-  -- Ensure a draft config exists in the group, independently of whether the group
-  -- was just created or already existed.
+  -- Seed a live fallback only when the group has no versions at all, so an org
+  -- that already configured its General rule is never touched.
   if not exists (
-    select 1 from public.allocation_configs
-    where config_group_id = v_group_id and status = 'draft'
+    select 1 from public.allocation_configs where config_group_id = v_group_id
   ) then
     insert into public.allocation_configs (
       org_id, config_group_id, name,
@@ -2092,8 +2091,8 @@ begin
     ) values (
       p_org_id, v_group_id, 'General Distribution Rule',
       v_org_date, v_org_date, null,
-      'draft', false, 'percentage',
-      '[]'::jsonb,
+      'locked', false, 'percentage',
+      '[{"category_name":"General","budget_portion":"Percentage","percentage":100}]'::jsonb,
       1
     );
   end if;
@@ -2101,6 +2100,226 @@ end;
 $$;
 
 grant execute on function public.complete_org_onboarding(uuid, text, text, int, text) to authenticated;
+
+-- ── Distribution rule versioning RPC ─────────────────────────────────────────
+-- Atomic creation of a new version of a distribution rule group.
+-- Drafts never close the covering (live) version.
+
+CREATE OR REPLACE FUNCTION public.create_special_config_version(
+  p_group_id       uuid,
+  p_org_id         uuid,
+  p_name           text,
+  p_allocation_type text,
+  p_total_amount   numeric(15,2),
+  p_rows           jsonb,
+  p_effective_from date,
+  p_status         text DEFAULT 'draft'
+)
+RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+SET lock_timeout = '5s'
+SET statement_timeout = '30s'
+AS $$
+DECLARE
+  v_covering_id   uuid;
+  v_next_from     date;
+  v_new_to        date;
+  v_max_ver       integer;
+  v_new_id        uuid;
+BEGIN
+  IF NOT public.is_org_admin(p_org_id) THEN
+    RAISE EXCEPTION 'create_special_config_version: caller must be an org admin';
+  END IF;
+
+  IF p_status NOT IN ('draft', 'locked') THEN
+    RAISE EXCEPTION 'create_special_config_version: invalid status %', p_status;
+  END IF;
+
+  -- Lock the group row to prevent concurrent version creation. lock_timeout
+  -- (set above) turns contention into a clear error rather than a hang.
+  BEGIN
+    PERFORM id FROM public.special_config_groups
+    WHERE id = p_group_id AND org_id = p_org_id
+    FOR UPDATE;
+  EXCEPTION WHEN lock_not_available THEN
+    RAISE EXCEPTION
+      'Another change to this distribution rule is still in progress. Wait a moment and try again.';
+  END;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'create_special_config_version: group % not found in org %', p_group_id, p_org_id;
+  END IF;
+
+  -- Compute next version number server-side (no client-supplied race window)
+  SELECT COALESCE(MAX(version_number), 0) INTO v_max_ver
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id AND org_id = p_org_id;
+
+  IF p_status = 'locked' THEN
+    -- Find the locked version whose range contains p_effective_from. Only
+    -- locked versions define the live timeline, and the latest-starting match
+    -- is the one actually in force.
+    SELECT id INTO v_covering_id
+    FROM   public.allocation_configs
+    WHERE  config_group_id = p_group_id
+      AND  org_id          = p_org_id
+      AND  status          = 'locked'
+      AND  superseded_by_id IS NULL
+      AND  effective_from <= p_effective_from
+      AND  (effective_to IS NULL OR effective_to >= p_effective_from)
+    ORDER BY effective_from DESC
+    LIMIT  1;
+
+    -- Find the immediately following locked version to bound the new range
+    SELECT effective_from INTO v_next_from
+    FROM   public.allocation_configs
+    WHERE  config_group_id = p_group_id
+      AND  org_id          = p_org_id
+      AND  status          = 'locked'
+      AND  superseded_by_id IS NULL
+      AND  effective_from  > p_effective_from
+    ORDER BY effective_from
+    LIMIT  1;
+
+    v_new_to := CASE WHEN v_next_from IS NOT NULL
+                     THEN v_next_from - 1
+                     ELSE NULL END;
+
+    -- Close the covering version. Skipped entirely for drafts: a draft must
+    -- never shorten the rule that is currently live.
+    IF v_covering_id IS NOT NULL THEN
+      UPDATE public.allocation_configs
+      SET    effective_to = p_effective_from - 1
+      WHERE  id = v_covering_id
+        AND  effective_from < p_effective_from;
+    END IF;
+  ELSE
+    v_new_to := NULL;
+  END IF;
+
+  INSERT INTO public.allocation_configs (
+    name, is_special, allocation_type, total_amount, rows,
+    effective_from, effective_to, version_number,
+    config_group_id, start_date, status, org_id
+  ) VALUES (
+    p_name,
+    -- The General (default) group is the org-wide fallback, not a special rule
+    NOT COALESCE((SELECT is_default FROM public.special_config_groups WHERE id = p_group_id), false),
+    p_allocation_type, p_total_amount, p_rows,
+    p_effective_from, v_new_to, v_max_ver + 1,
+    p_group_id, p_effective_from, p_status, p_org_id
+  )
+  RETURNING id INTO v_new_id;
+
+  RETURN v_new_id;
+END;
+$$;
+
+REVOKE ALL   ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) TO authenticated;
+
+-- ── approve_config_version — promote a draft to live ─────────────────────────
+-- Drafts (including every rule the onboarding wizard creates) resolve to
+-- nothing until locked. Flipping status with a bare UPDATE would leave two
+-- locked versions covering the same day, so approving has to close the version
+-- it supersedes and bound its own range — the same timeline arithmetic
+-- create_special_config_version does, in one transaction.
+
+CREATE OR REPLACE FUNCTION public.approve_config_version(p_version_id uuid)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+SET lock_timeout = '5s'
+SET statement_timeout = '30s'
+AS $$
+DECLARE
+  v_cfg         record;
+  v_covering_id uuid;
+  v_next_from   date;
+BEGIN
+  SELECT * INTO v_cfg FROM public.allocation_configs WHERE id = p_version_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'approve_config_version: version % not found', p_version_id;
+  END IF;
+
+  IF NOT public.is_org_admin(v_cfg.org_id) THEN
+    RAISE EXCEPTION 'approve_config_version: caller must be an org admin';
+  END IF;
+
+  IF v_cfg.status <> 'draft' THEN
+    RAISE EXCEPTION 'approve_config_version: version is already %', v_cfg.status;
+  END IF;
+
+  IF v_cfg.config_group_id IS NULL THEN
+    RAISE EXCEPTION 'approve_config_version: version does not belong to a rule group';
+  END IF;
+
+  IF v_cfg.rows IS NULL OR jsonb_array_length(v_cfg.rows) = 0 THEN
+    RAISE EXCEPTION 'approve_config_version: version has no category rows';
+  END IF;
+
+  BEGIN
+    PERFORM id FROM public.special_config_groups
+    WHERE id = v_cfg.config_group_id
+    FOR UPDATE;
+  EXCEPTION WHEN lock_not_available THEN
+    RAISE EXCEPTION
+      'Another change to this distribution rule is still in progress. Wait a moment and try again.';
+  END;
+
+  IF EXISTS (
+    SELECT 1 FROM public.allocation_configs
+    WHERE config_group_id = v_cfg.config_group_id
+      AND status          = 'locked'
+      AND effective_from  = v_cfg.effective_from
+      AND id             <> p_version_id
+  ) THEN
+    RAISE EXCEPTION
+      'A live version of this rule already starts on %. Change this draft''s start date first.',
+      v_cfg.effective_from;
+  END IF;
+
+  SELECT id INTO v_covering_id
+  FROM   public.allocation_configs
+  WHERE  config_group_id = v_cfg.config_group_id
+    AND  status          = 'locked'
+    AND  superseded_by_id IS NULL
+    AND  effective_from < v_cfg.effective_from
+    AND  (effective_to IS NULL OR effective_to >= v_cfg.effective_from)
+  ORDER BY effective_from DESC
+  LIMIT  1;
+
+  IF v_covering_id IS NOT NULL THEN
+    UPDATE public.allocation_configs
+    SET    effective_to = v_cfg.effective_from - 1
+    WHERE  id = v_covering_id;
+  END IF;
+
+  SELECT effective_from INTO v_next_from
+  FROM   public.allocation_configs
+  WHERE  config_group_id = v_cfg.config_group_id
+    AND  status          = 'locked'
+    AND  superseded_by_id IS NULL
+    AND  effective_from  > v_cfg.effective_from
+  ORDER BY effective_from
+  LIMIT  1;
+
+  UPDATE public.allocation_configs
+  SET    status       = 'locked',
+         effective_to = CASE
+                          WHEN v_next_from IS NOT NULL
+                            AND (effective_to IS NULL OR effective_to > v_next_from - 1)
+                          THEN v_next_from - 1
+                          ELSE effective_to
+                        END
+  WHERE  id = p_version_id;
+END;
+$$;
+
+REVOKE ALL   ON FUNCTION public.approve_config_version(uuid) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.approve_config_version(uuid) TO authenticated;
+
 
 create or replace function public.update_org_member_role(
   p_member_id uuid,

@@ -359,10 +359,11 @@ CREATE OR REPLACE FUNCTION public.create_special_config_version(
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
+SET lock_timeout = '5s'
+SET statement_timeout = '30s'
 AS $$
 DECLARE
   v_covering_id   uuid;
-  v_covering_from date;
   v_next_from     date;
   v_new_to        date;
   v_max_ver       integer;
@@ -376,42 +377,20 @@ BEGIN
     RAISE EXCEPTION 'create_special_config_version: invalid status %', p_status;
   END IF;
 
-  -- Lock the group row to prevent concurrent version creation
-  PERFORM id FROM public.special_config_groups
-  WHERE id = p_group_id AND org_id = p_org_id
-  FOR UPDATE;
+  -- Lock the group row to prevent concurrent version creation. lock_timeout
+  -- turns contention into a fast, readable error instead of a hang that the
+  -- browser eventually cancels with an opaque AbortError.
+  BEGIN
+    PERFORM id FROM public.special_config_groups
+    WHERE id = p_group_id AND org_id = p_org_id
+    FOR UPDATE;
+  EXCEPTION WHEN lock_not_available THEN
+    RAISE EXCEPTION
+      'Another change to this distribution rule is still in progress. Wait a moment and try again.';
+  END;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'create_special_config_version: group % not found in org %', p_group_id, p_org_id;
-  END IF;
-
-  -- Find covering version (the one whose date range contains p_effective_from)
-  SELECT id, effective_from INTO v_covering_id, v_covering_from
-  FROM   public.allocation_configs
-  WHERE  config_group_id = p_group_id
-    AND  org_id          = p_org_id
-    AND  effective_from <= p_effective_from
-    AND  (effective_to IS NULL OR effective_to >= p_effective_from)
-  LIMIT  1;
-
-  -- Find the immediately following version to determine new effective_to
-  SELECT effective_from INTO v_next_from
-  FROM   public.allocation_configs
-  WHERE  config_group_id = p_group_id
-    AND  org_id          = p_org_id
-    AND  effective_from  > p_effective_from
-  ORDER BY effective_from
-  LIMIT  1;
-
-  v_new_to := CASE WHEN v_next_from IS NOT NULL
-                   THEN v_next_from - 1
-                   ELSE NULL END;
-
-  -- Close the covering version
-  IF v_covering_id IS NOT NULL THEN
-    UPDATE public.allocation_configs
-    SET    effective_to = p_effective_from - 1
-    WHERE  id = v_covering_id;
   END IF;
 
   -- Compute next version number server-side
@@ -419,13 +398,55 @@ BEGIN
   FROM   public.allocation_configs
   WHERE  config_group_id = p_group_id AND org_id = p_org_id;
 
+  IF p_status = 'locked' THEN
+    -- Covering version = the locked version whose range contains the new
+    -- start date. Only locked versions define the live timeline.
+    SELECT id INTO v_covering_id
+    FROM   public.allocation_configs
+    WHERE  config_group_id = p_group_id
+      AND  org_id          = p_org_id
+      AND  status          = 'locked'
+      AND  superseded_by_id IS NULL
+      AND  effective_from <= p_effective_from
+      AND  (effective_to IS NULL OR effective_to >= p_effective_from)
+    ORDER BY effective_from DESC
+    LIMIT  1;
+
+    SELECT effective_from INTO v_next_from
+    FROM   public.allocation_configs
+    WHERE  config_group_id = p_group_id
+      AND  org_id          = p_org_id
+      AND  status          = 'locked'
+      AND  superseded_by_id IS NULL
+      AND  effective_from  > p_effective_from
+    ORDER BY effective_from
+    LIMIT  1;
+
+    v_new_to := CASE WHEN v_next_from IS NOT NULL
+                     THEN v_next_from - 1
+                     ELSE NULL END;
+
+    -- Close the covering version. Never done for drafts — a draft applies to
+    -- nothing and must not shorten the rule that is currently live.
+    IF v_covering_id IS NOT NULL THEN
+      UPDATE public.allocation_configs
+      SET    effective_to = p_effective_from - 1
+      WHERE  id = v_covering_id
+        AND  effective_from < p_effective_from;
+    END IF;
+  ELSE
+    v_new_to := NULL;
+  END IF;
+
   -- Insert new version
   INSERT INTO public.allocation_configs (
     name, is_special, allocation_type, total_amount, rows,
     effective_from, effective_to, version_number,
     config_group_id, start_date, status, org_id
   ) VALUES (
-    p_name, true, p_allocation_type, p_total_amount, p_rows,
+    p_name,
+    NOT COALESCE((SELECT is_default FROM public.special_config_groups WHERE id = p_group_id), false),
+    p_allocation_type, p_total_amount, p_rows,
     p_effective_from, v_new_to, v_max_ver + 1,
     p_group_id, p_effective_from, p_status, p_org_id
   )

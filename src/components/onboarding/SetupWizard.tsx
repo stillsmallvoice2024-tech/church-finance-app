@@ -14,15 +14,16 @@ import { useAuthStore } from '../../store/authStore'
 import { useRole } from '../../hooks/useRole'
 import { useDepartments, saveDepartment, deleteDepartment } from '../../hooks/useDepartments'
 import { useBanks } from '../../hooks/useBanks'
-import { useAddBank, useAddAllocationConfig, useAddCategory, useDeleteCategory } from '../../hooks/useMutations'
+import { useAddBank, useAddCategory, useDeleteCategory } from '../../hooks/useMutations'
 import { useIncomeTypes, saveIncomeType, deleteIncomeType } from '../../hooks/useIncomeTypes'
 import { useOutflowTypes, saveOutflowType, deleteOutflowType } from '../../hooks/useOutflowTypes'
 import { useCategories } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
 import { useAllocationStore } from '../../store/allocationStore'
-import { createGroupWithFirstVersion, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
+import { createGroupWithFirstVersion, createGeneralVersion, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import { useToastStore } from '../../store/toastStore'
+import { friendlyError } from '../../utils/friendlyError'
 import { WIZARD_STEPS } from '../../onboarding/wizard/definitions'
 import { getOrgTypeContent } from '../../onboarding/wizard/orgTypeContent'
 import type { OrgType } from '../../onboarding/wizard/orgTypeContent'
@@ -306,7 +307,7 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -322,7 +323,7 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -432,7 +433,7 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
       setName(''); setAcctNum('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -565,7 +566,7 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -581,7 +582,7 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -692,7 +693,7 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -708,7 +709,7 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -833,7 +834,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -850,7 +851,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -1021,8 +1022,8 @@ function FundSplitRows({ rows, catNames, onChange }: {
 function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { categories }         = useCategories()
   const configs                = useAllocationStore(s => s.configs)
+  const groups                 = useAllocationStore(s => s.groups)
   const loaded                 = useAllocationStore(s => s.loaded)
-  const { mutate: addConfig }  = useAddAllocationConfig()
   const { push: toast }        = useToastStore()
   const [creating, setCreating]  = useState<number | null>(null)
   const [error, setError]        = useState<string | null>(null)
@@ -1036,18 +1037,36 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
 
   const catNames       = useMemo(() => categories.filter(c => !c.is_hidden).map(c => c.name), [categories])
   const templates      = useMemo(() => buildDistributionTemplates(catNames), [catNames])
-  const regularConfigs = useMemo(() => configs.filter(c => !c.is_special), [configs])
+
+  // Rules created here are versions of the General rule group. Configs written
+  // without a config_group_id are orphans: they never show up in Setup →
+  // Distribution Rules and are skipped by buildVersionIndex(), so they can
+  // never apply to a transaction.
+  const generalGroupId = useMemo(() => groups.find(g => g.is_default)?.id ?? null, [groups])
+  const regularConfigs = useMemo(
+    () => (generalGroupId ? configs.filter(c => c.config_group_id === generalGroupId) : []),
+    [configs, generalGroupId],
+  )
+
+  const saveGeneralRule = async (label: string, rows: SplitRow[]) => {
+    const today = new Date().toISOString().slice(0, 10)
+    await createGeneralVersion({
+      name:           label,
+      rows:           rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage', percentage: r.percentage })),
+      effective_from: today,
+      status:         'draft',
+    })
+    await useAllocationStore.getState().reload()
+  }
 
   const handleCreate = async (idx: number, t: DistTemplate) => {
     if (creating !== null) return
     setCreating(idx); setError(null)
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      await addConfig({ name: t.label, start_date: today, rows: t.rows })
+      await saveGeneralRule(t.label, t.rows)
       toast(`"${t.label}" saved as a draft`, 'success')
-      useAllocationStore.getState().reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setCreating(null)
     }
@@ -1059,13 +1078,11 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
     if (total !== 100 || customRows.some(r => !r.category_name)) return
     setSavingCustom(true); setError(null)
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      await addConfig({ name: customName.trim(), start_date: today, rows: customRows })
+      await saveGeneralRule(customName.trim(), customRows)
       toast(`"${customName.trim()}" saved as a draft`, 'success')
       setShowCustom(false); setCustomName(''); setCustomRows([{ category_name: '', percentage: 100 }])
-      useAllocationStore.getState().reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setSavingCustom(false)
     }
@@ -1080,7 +1097,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
 
       <div className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <p>Rules created here are saved as <strong>drafts</strong>. Approve them in Budget &amp; Allocation → Distribution Rules before they go live.</p>
+        <p>Rules created here are saved as <strong>drafts</strong> of your General rule. Approve one in Settings → Distribution Rules before it goes live.</p>
       </div>
 
       {regularConfigs.length > 0 && (
@@ -1203,7 +1220,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
         )}
       </div>
 
-      <EditLaterNote where="Budget & Allocation → Distribution Rules" />
+      <EditLaterNote where="Settings → Distribution Rules" />
     </div>
   )
 }
@@ -1273,7 +1290,7 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
       toast(`"${t.label}" special rule created as a draft`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setCreating(null)
     }
@@ -1299,7 +1316,7 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
       setShowCustomSpecial(false); setCustomSpecialName(''); setCustomSpecialTypeId(''); setCustomSpecialRows([{ category_name: '', percentage: 100 }])
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setSavingCustomSpecial(false)
     }

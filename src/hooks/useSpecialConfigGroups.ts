@@ -134,7 +134,13 @@ export async function createGroupWithFirstVersion(params: {
     })
     .select('*')
     .single()
-  if (vErr) throw new Error(vErr.message)
+  // These two inserts are not one transaction. If the version insert fails or
+  // times out, drop the group we just created — otherwise the Distribution
+  // Rules tab fills up with empty groups every time the user retries.
+  if (vErr) {
+    await supabase.from('special_config_groups').delete().eq('id', groupId)
+    throw new Error(vErr.message)
+  }
 
   if (params.income_type_id) {
     await setGroupIncomeTypeLink(groupId, params.income_type_id, params.prev_income_type_id ?? null)
@@ -166,6 +172,76 @@ export async function createNewVersion(params: {
   })
   if (error) throw new Error(error.message)
   return data as string
+}
+
+// ── General (default) rule group ───────────────────────────────────────────────
+
+/**
+ * Returns the org's General rule group — the fallback every income type without
+ * a custom rule resolves through. Created by `complete_org_onboarding()`; this
+ * creates it on demand for orgs provisioned before that migration so callers
+ * never have to deal with a missing General group.
+ */
+export async function ensureGeneralGroup(): Promise<{ id: string; name: string }> {
+  const org = orgPayload()
+  const { data: existing, error: selErr } = await supabase
+    .from('special_config_groups')
+    .select('id, name')
+    .eq('org_id', org.org_id)
+    .eq('is_default', true)
+    .maybeSingle()
+  if (selErr) throw new Error(selErr.message)
+  if (existing) return existing as { id: string; name: string }
+
+  const { data: created, error: insErr } = await supabase
+    .from('special_config_groups')
+    .insert({ name: 'General', is_default: true, ...org })
+    .select('id, name')
+    .single()
+  if (insErr) throw new Error(insErr.message)
+  return created as { id: string; name: string }
+}
+
+/**
+ * Creates a version of the General rule. Used by the onboarding wizard so the
+ * rules it creates land inside the General group — configs written without a
+ * `config_group_id` are invisible to both the Distribution Rules tab and
+ * `buildVersionIndex()`, so they never apply to any transaction.
+ */
+export async function createGeneralVersion(params: {
+  rows:           AllocationConfig['rows']
+  effective_from: string
+  status:         'draft' | 'locked'
+  name?:          string
+}): Promise<string> {
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) throw new Error('No active organisation.')
+  const group = await ensureGeneralGroup()
+
+  const { data, error } = await supabase.rpc('create_special_config_version', {
+    p_group_id:        group.id,
+    p_org_id:          orgId,
+    p_name:            params.name ?? group.name,
+    p_allocation_type: 'percentage',
+    p_total_amount:    null,
+    p_rows:            params.rows,
+    p_effective_from:  params.effective_from,
+    p_status:          params.status,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+/**
+ * Approves a draft version so it starts applying to transactions.
+ *
+ * Goes through an RPC rather than a status UPDATE: promoting a draft has to
+ * close the version it supersedes and bound its own range, or the group ends up
+ * with two locked versions covering the same day.
+ */
+export async function lockVersion(versionId: string): Promise<void> {
+  const { error } = await supabase.rpc('approve_config_version', { p_version_id: versionId })
+  if (error) throw new Error(error.message)
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────────────

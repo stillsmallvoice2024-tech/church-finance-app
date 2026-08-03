@@ -1,12 +1,41 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Pencil, Trash2, AlertCircle, Plus, Layers, Lock, FileEdit, ChevronDown, Info, Clock, EyeOff, Eye } from 'lucide-react'
-import { type AllocationConfig } from '../../store/allocationStore'
-import { useSpecialConfigGroups, archiveGroup, restoreGroup, type SpecialConfigGroupWithVersions } from '../../hooks/useSpecialConfigGroups'
+import { Pencil, Trash2, AlertCircle, Plus, Layers, Lock, FileEdit, ChevronDown, Info, Clock, EyeOff, Eye, CheckCircle2 } from 'lucide-react'
+import { useAllocationStore, type AllocationConfig } from '../../store/allocationStore'
+import { useSpecialConfigGroups, archiveGroup, restoreGroup, lockVersion, type SpecialConfigGroupWithVersions } from '../../hooks/useSpecialConfigGroups'
 import { Modal } from '../../components/ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import { useOrgStore } from '../../store/orgStore'
+import { friendlyError } from '../../utils/friendlyError'
 import { SetupSearchSort, applySetupSort, SPECIAL_SORT_OPTS, portionLabel } from './shared'
+
+// A draft version exists in the database but is skipped by buildVersionIndex(),
+// so it applies to nothing until it is locked. Onboarding creates drafts, which
+// is why approving has to be reachable from this tab.
+async function approveDraft(v: AllocationConfig): Promise<boolean> {
+  if (v.rows.length === 0) {
+    window.alert('This draft has no category rows — edit it before approving.')
+    return false
+  }
+  const total = v.rows.reduce((s, r) => s + (r.percentage ?? 0), 0)
+  const warn = v.allocation_type !== 'amount' && Math.abs(total - 100) >= 0.01
+    ? `\n\nWarning: the rows total ${total}%, not 100%.`
+    : ''
+  if (!window.confirm(
+    `Approve version #${v.version_number ?? '?'} and make it live from ${v.effective_from ?? '—'}?` +
+    `\n\nOnce approved it becomes read-only and starts applying to transactions.${warn}`,
+  )) return false
+  try {
+    await lockVersion(v.id)
+    // Refresh the shared store so Add Inflow / Import resolve the new rule
+    // immediately instead of after a page reload.
+    await useAllocationStore.getState().reload()
+    return true
+  } catch (e: unknown) {
+    window.alert(friendlyError(e, 'approve this version'))
+    return false
+  }
+}
 
 // ── General Distribution Rule panel ───────────────────────────────────────────
 
@@ -14,10 +43,12 @@ function GeneralGroupPanel({
   onNewVersion,
   onAmend,
   refetchKey,
+  onRefetch,
 }: {
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
   onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   refetchKey:   number
+  onRefetch:    () => void
 }) {
   const orgId = useOrgStore(s => s.orgId)
   const { baseCurrencySymbol } = useOrgCurrency()
@@ -93,9 +124,10 @@ function GeneralGroupPanel({
     </div>
   )
 
-  const av    = group.active_version
-  const isAmt = av?.allocation_type === 'amount'
-  const today = new Date().toISOString().slice(0, 10)
+  const av     = group.active_version
+  const isAmt  = av?.allocation_type === 'amount'
+  const today  = new Date().toISOString().slice(0, 10)
+  const drafts = group.versions.filter(v => v.status === 'draft' && v.rows.length > 0)
 
   return (
     <>
@@ -142,6 +174,31 @@ function GeneralGroupPanel({
           )}
         </div>
       </div>
+
+      {/* Pending drafts — e.g. rules created during onboarding */}
+      {drafts.length > 0 && (
+        <div className="border-t border-gray-100 bg-amber-50/60 px-4 py-3">
+          <p className="text-xs font-medium text-amber-800">
+            {drafts.length} draft{drafts.length !== 1 ? 's' : ''} waiting for approval — a draft applies to nothing until you approve it.
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {drafts.map(v => (
+              <div key={v.id} className="flex items-center gap-3 text-xs">
+                <span className="text-gray-700 truncate">
+                  v{v.version_number} &middot; {v.effective_from ?? '—'} &middot;{' '}
+                  {v.rows.map(r => `${r.category_name} ${r.percentage ?? r.amount ?? 0}${v.allocation_type === 'amount' ? '' : '%'}`).join(', ')}
+                </span>
+                <button
+                  onClick={async () => { if (await approveDraft(v)) onRefetch() }}
+                  className="ml-auto shrink-0 flex items-center gap-1 px-2 py-1 font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors"
+                >
+                  <CheckCircle2 className="w-3 h-3" /> Approve
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active version rows preview */}
       {av && (
@@ -254,13 +311,22 @@ function GeneralGroupPanel({
                               </button>
                             )}
                             {v.status === 'draft' && (
-                              <button
-                                onClick={() => handleDeleteVersion(v)}
-                                className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                title="Delete draft"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <button
+                                  onClick={async () => { if (await approveDraft(v)) onRefetch() }}
+                                  className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                  title="Approve — make this version live"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteVersion(v)}
+                                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete draft"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -358,7 +424,7 @@ export function DistributionRulesTab({
           <h3 className="text-sm font-semibold text-gray-800">General Rule</h3>
           <p className="text-xs text-gray-500 mt-0.5">The fallback rule applied when an income type has no custom rule.</p>
         </div>
-        <GeneralGroupPanel onNewVersion={onNewVersion} onAmend={onAmend} refetchKey={refetchKey} />
+        <GeneralGroupPanel onNewVersion={onNewVersion} onAmend={onAmend} refetchKey={refetchKey} onRefetch={onRefetch} />
       </div>
 
       {/* Divider */}
@@ -670,6 +736,15 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                                             title="About this past version"
                                           >
                                             <Info className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        {!vLocked && (
+                                          <button
+                                            onClick={async () => { if (await approveDraft(v)) onRefetch() }}
+                                            className="touch-target p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                                            title="Approve — make this version live"
+                                          >
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
                                           </button>
                                         )}
                                         {(!vLocked || isFuture) && (

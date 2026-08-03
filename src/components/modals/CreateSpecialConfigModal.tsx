@@ -15,6 +15,10 @@ import {
 } from '../../hooks/useSpecialConfigGroups'
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { friendlyError } from '../../utils/friendlyError'
+
+/** Raw Postgres text that means the DB is missing the unification migration. */
+const MIGRATION_HINT_RE = /is_special|allocation_type|total_amount|Could not find|config_group_id|effective_from/
 
 export const MIGRATION_SQL =
 `ALTER TABLE allocation_configs
@@ -236,7 +240,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         onSaved()
       }
     } catch (e: unknown) {
-      setError((e as { message?: string })?.message ?? 'Save failed')
+      const raw = (e as { message?: string })?.message ?? ''
+      // Migration hints below key off the raw Postgres text, so keep it for
+      // those; anything else gets translated into plain language.
+      setError(MIGRATION_HINT_RE.test(raw) ? raw : friendlyError(e, 'save this rule'))
     } finally {
       setSaving(false)
     }
@@ -529,7 +536,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         {/* Impact prompt (backdated new_version) */}
         {/* Error */}
         {error && (() => {
-          const isMigration = /is_special|allocation_type|total_amount|Could not find|config_group_id|effective_from/.test(error)
+          const isMigration = MIGRATION_HINT_RE.test(error)
           return (
             <div className="space-y-2">
               <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
