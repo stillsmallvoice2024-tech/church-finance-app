@@ -27,7 +27,10 @@ import { generateFallbackTransactionId } from '../../utils/generateTransactionId
 import { fetchExistingTransactionIds } from '../../utils/dedupQuery'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
+import { useToast } from '../../store/toastStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
+import { PaginationBar } from '../ui/PaginationBar'
+import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { isOffsetableType } from '../../utils/transactionTypes'
 import { friendlyError } from '../../utils/friendlyError'
 // Shared with Import.tsx — a divergent second copy would break dedup silently,
@@ -230,6 +233,12 @@ interface ImportResult {
   errors:          string[]
   fallbackIdCount: number
   collisions:      string[]
+  /**
+   * Rows whose insert batch failed. A 10k-row import is ~40 sequential round
+   * trips; without this a failure partway through left rows in the database
+   * and no way to finish the rest short of re-importing everything.
+   */
+  failedRows?:     { inflows: Record<string, unknown>[]; outflows: Record<string, unknown>[] }
 }
 
 interface ImportTemplate {
@@ -243,6 +252,7 @@ const TEMPLATES_KEY = 'church-import-templates'
 
 export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, preloadedFile, onPdfFile, onSuccess }: Props) {
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
+  const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const importCompletedRef = useRef(false)
   const { user } = useAuthStore.getState()
@@ -427,6 +437,33 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // the NavButton spinner looks indistinguishable from a hang.
   const [dupProgress, setDupProgress] = useState<{ phase: 'hashing' | 'querying'; done: number; total: number } | null>(null)
 
+  // Set when a previous session's configuration was recovered and the user
+  // needs to re-select the file to continue.
+  const [restoredSession, setRestoredSession] = useState<{ fileName: string; rowCount: number } | null>(null)
+
+  // ── Step 4 pagination ──────────────────────────────────────────────────────
+  // Step 4 previously mounted every non-duplicate row — each with a select, a
+  // SearchableSelect, a checkbox and hover handlers — inside a 340px scroller
+  // showing about ten. A 10k-row statement meant ~60k live DOM nodes per tab.
+  const [inflowPage,    setInflowPage]    = useState(0)
+  const [outflowPage,   setOutflowPage]   = useState(0)
+  const [step4PageSize, setStep4PageSize] = useState(50)
+
+  // ── Recorded date ──────────────────────────────────────────────────────────
+  // `recorded_at` was hardcoded to the moment of import. It is a first-class
+  // reporting axis (ReportBasis = 'transaction_date' | 'recorded_at'), so
+  // importing a January statement in August stamped every row as recorded in
+  // August and skewed every recorded-basis report.
+  //   'today'    — import timestamp (previous behaviour, still the default)
+  //   'specific' — one date for the whole import
+  //   'txn_date' — each row keeps its own transaction date
+  const [recordedMode, setRecordedMode] = useState<'today' | 'specific' | 'txn_date'>('today')
+  const [recordedDate, setRecordedDate] = useState('')
+  // Per-row override (set via the bulk apply bar) — wins over the import-level
+  // setting so a file spanning several months can be corrected in sections.
+  const [rowRecordedDates, setRowRecordedDates] = useState<Record<number, string>>({})
+  const [applyRecordedDate, setApplyRecordedDate] = useState('')
+
   // ── Row model ──────────────────────────────────────────────────────────────
   // One object per (row, kind), built in proceedToRowConfig. Replaces the
   // parallel Record<number, T> maps; those are still derived from it while the
@@ -447,6 +484,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     }
     return result
   }, [importRows, incomeTypes])
+
+  // A narrowed filter can leave the current page past the end of the results.
+  useEffect(() => { setInflowPage(0)  }, [inflowFilter])
+  useEffect(() => { setOutflowPage(0) }, [outflowFilter])
+  useEffect(() => { setInflowPage(0); setOutflowPage(0) }, [step4PageSize, bsConfigTab])
 
   // Step 4 row lists, split by kind and stripped of DB duplicates.
   // Memoized: this previously rebuilt and re-parsed every row on every render.
@@ -579,6 +621,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setDupSkipOpen(false)
     setDupProgress(null)
     setImportRows([])
+    setRestoredSession(null)
+    setInflowPage(0)
+    setOutflowPage(0)
+    setRecordedMode('today')
+    setRecordedDate('')
+    setRowRecordedDates({})
+    setApplyRecordedDate('')
     setStmtBalance('')
     setStmtDate('')
     setStmtSaving(false)
@@ -607,42 +656,64 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
   // ── Session autosave ───────────────────────────────────────────────────────
   // Saves progress to sessionStorage so accidental closes can be recovered.
-  // Only runs when dirty and no preloaded file (preloaded file re-parses on open).
+  //
+  // Bulk row data is deliberately NOT persisted. Writing `sheets` plus
+  // `processedRows` meant serializing two full copies of the file on every
+  // state change — over the ~5MB quota for a large statement, which threw
+  // QuotaExceededError into a swallowing catch, so crash recovery silently
+  // stopped working exactly when it was needed most. It also stalled the main
+  // thread on every checkbox click.
+  //
+  // What is expensive to recreate is the user's configuration, not the file, so
+  // only that is stored. On restore the user re-selects the file and the
+  // pipeline rebuilds the rows — transaction IDs are deterministic, so they
+  // come back identical.
+  const quotaWarnedRef = useRef(false)
   useEffect(() => {
-    if (!isDirty || preloadedFile) return
-    const state = {
-      step, fileName,
-      sheets,
-      selectedSheet, targetTable, mapping, dateFormat, fxCurrency,
-      bankId:   internalBank?.id   ?? null,
-      bankName: internalBank?.name ?? null,
-      rowConfigs,
-      rowStageCodes,
-      rowTxnTypes,
-      rowOrigTxnIds,
-      rowOutflowTypes,
-      rowIncomeTypes,
-      rowManualOverrides,
-      rowPendingDeductions: [...rowPendingDeductions],
-      processedRows:         step >= 4 ? processedRows        : null,
-      precomputedInflowIds:  step >= 4 ? precomputedInflowIds : {},
-      precomputedOutflowIds: step >= 4 ? precomputedOutflowIds : {},
-      duplicateRis:          [...duplicateRis],
-      dupStats,
-      bsConfigTab,
-      batchOffsetRole,
-    }
-    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(state)) } catch {}
+    if (!isDirty || preloadedFile || importing) return
+    const timer = setTimeout(() => {
+      const state = {
+        v: 2,
+        step, fileName,
+        rowCount: sheet?.rowCount ?? sheets[0]?.rowCount ?? 0,
+        selectedSheet, targetTable, mapping, dateFormat, fxCurrency,
+        bankId:   internalBank?.id   ?? null,
+        bankName: internalBank?.name ?? null,
+        rowConfigs,
+        rowStageCodes,
+        rowTxnTypes,
+        rowOrigTxnIds,
+        rowOutflowTypes,
+        rowIncomeTypes,
+        rowManualOverrides,
+        rowPendingDeductions: [...rowPendingDeductions],
+        bsConfigTab,
+        batchOffsetRole,
+        savedAt: new Date().toISOString(),
+      }
+      try {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(state))
+      } catch {
+        // Surface it once instead of failing silently — the user needs to know
+        // their progress is no longer being recovered.
+        if (!quotaWarnedRef.current) {
+          quotaWarnedRef.current = true
+          toast.warning('Could not save import progress for recovery — browser storage is full. Your current session still works; avoid closing this tab.')
+        }
+      }
+    }, 500)
+    return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty, step, fileName, sheets, selectedSheet, targetTable, mapping, dateFormat,
-      fxCurrency, internalBank, rowConfigs, rowStageCodes, rowTxnTypes, rowOrigTxnIds,
-      rowOutflowTypes, rowIncomeTypes, rowManualOverrides, rowPendingDeductions,
-      processedRows, precomputedInflowIds, precomputedOutflowIds, duplicateRis,
-      dupStats, bsConfigTab, preloadedFile])
+  }, [isDirty, importing, step, fileName, sheet?.rowCount, selectedSheet, targetTable, mapping,
+      dateFormat, fxCurrency, internalBank, rowConfigs, rowStageCodes, rowTxnTypes,
+      rowOrigTxnIds, rowOutflowTypes, rowIncomeTypes, rowManualOverrides,
+      rowPendingDeductions, bsConfigTab, batchOffsetRole, preloadedFile])
 
   // ── Session restore ────────────────────────────────────────────────────────
-  // Runs once per false→true open transition.
-  // Restores previously interrupted import sessions automatically.
+  // Runs once per false→true open transition. Restores the user's configuration
+  // and drops them at Step 1 to re-select the file, since row data is no longer
+  // persisted. Row indices are stable through the merge pipeline, so the
+  // restored per-row config realigns exactly once the same file is re-parsed.
   const prevOpenRef = useRef(false)
   useEffect(() => {
     const wasOpen = prevOpenRef.current
@@ -652,13 +723,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       const saved = sessionStorage.getItem(SESSION_KEY)
       if (!saved) return
       const s = JSON.parse(saved)
-      if (!s.sheets?.length || s.step < 2) return
+      // v1 sessions stored the whole file; they are not worth migrating.
+      if (s.v !== 2 || !s.fileName || s.step < 2) return
       // JSON.parse converts numeric object keys to strings; restore them as numbers
       const toNumRec = <T,>(obj: Record<string, T>): Record<number, T> =>
         Object.fromEntries(Object.entries(obj ?? {}).map(([k, v]) => [Number(k), v]))
-      setStep(s.step)
-      setFileName(s.fileName ?? '')
-      setSheets(s.sheets)
       setSelectedSheet(s.selectedSheet ?? '')
       setTargetTable(s.targetTable ?? '')
       setMapping(s.mapping ?? {})
@@ -673,15 +742,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       setRowIncomeTypes(toNumRec(s.rowIncomeTypes ?? {}))
       setRowManualOverrides(toNumRec(s.rowManualOverrides ?? {}))
       setRowPendingDeductions(new Set<number>(s.rowPendingDeductions ?? []))
-      if (s.processedRows) setProcessedRows(s.processedRows)
-      setPrecomputedInflowIds(toNumRec(s.precomputedInflowIds ?? {}))
-      setPrecomputedOutflowIds(toNumRec(s.precomputedOutflowIds ?? {}))
-      setDuplicateRis(new Set<number>(s.duplicateRis ?? []))
-      if (s.dupStats) setDupStats(s.dupStats)
       if (s.bsConfigTab) setBsConfigTab(s.bsConfigTab)
       if (s.batchOffsetRole) setBatchOffsetRole(s.batchOffsetRole)
+      setRestoredSession({ fileName: s.fileName, rowCount: s.rowCount ?? 0 })
     } catch {}
   }, [open, preloadedFile]) // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // ── beforeunload guard ─────────────────────────────────────────────────────
   // Prompts browser "Leave site?" on page refresh or tab close when dirty.
@@ -994,6 +1060,54 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   }, [sheet, config, targetTable, mapping, dateFormat, internalBank, skipTxnIds, skipTxnBankName,
       categories, categoryOutflowMaps, outflowTypeOptions])
 
+  // ── Retry failed insert batches ────────────────────────────────────────────
+  // Re-inserts ONLY the rows whose batch failed. Rows that already landed are
+  // never touched, so retrying cannot duplicate them. The rows are replayed
+  // exactly as built, so their transaction IDs — and therefore dedup — are
+  // unchanged.
+  const [retrying, setRetrying] = useState(false)
+  const retryFailedRows = useCallback(async () => {
+    const failed = result?.failedRows
+    if (!failed) return
+    setRetrying(true)
+    const errors: string[] = []
+    let imported = 0
+    const stillInflows:  Record<string, unknown>[] = []
+    const stillOutflows: Record<string, unknown>[] = []
+    const BATCH = 250
+    try {
+      for (const [table, rows, bucket] of [
+        ['inflow_transactions',  failed.inflows,  stillInflows]  as const,
+        ['outflow_transactions', failed.outflows, stillOutflows] as const,
+      ]) {
+        for (let i = 0; i < rows.length; i += BATCH) {
+          const batch = rows.slice(i, i + BATCH)
+          const { error } = await supabase.from(table).insert(batch)
+          if (error) { errors.push(`${table}: ${error.message}`); bucket.push(...batch) }
+          else imported += batch.length
+        }
+      }
+      if (imported > 0) {
+        if (failed.inflows.length  > stillInflows.length)  useTransactionSyncStore.getState().bumpInflow()
+        if (failed.outflows.length > stillOutflows.length) useTransactionSyncStore.getState().bumpOutflow()
+      }
+      setResult(prev => prev && ({
+        ...prev,
+        imported: prev.imported + imported,
+        skipped:  Math.max(0, prev.skipped - imported),
+        errors:   errors.length > 0 ? [...prev.errors, ...errors] : prev.errors,
+        failedRows: (stillInflows.length || stillOutflows.length)
+          ? { inflows: stillInflows, outflows: stillOutflows }
+          : undefined,
+      }))
+      if (errors.length === 0) toast.success(`Retried ${imported.toLocaleString()} row(s) successfully`)
+    } catch (e) {
+      setResult(prev => prev && ({ ...prev, errors: [...prev.errors, friendlyError(e, 'retry failed rows')] }))
+    } finally {
+      setRetrying(false)
+    }
+  }, [result, toast])
+
   const proceedToImport = useCallback(() => {
     if (!sheet || !config || !targetTable) return
     setStep(5)
@@ -1058,6 +1172,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       const inflowRows:  Record<string, unknown>[] = []
       const outflowRows: Record<string, unknown>[] = []
       const importTimestamp = new Date().toISOString()
+
+      // Resolve recorded_at for a row. Midnight-UTC format matches the
+      // convention already used by BulkEditInflowModal and the Add modals.
+      const resolveRecordedAt = (ri: number, txnDate: string): string => {
+        const perRow = rowRecordedDates[ri]
+        if (perRow) return `${perRow}T00:00:00.000Z`
+        if (recordedMode === 'specific' && recordedDate) return `${recordedDate}T00:00:00.000Z`
+        if (recordedMode === 'txn_date'  && txnDate)     return `${txnDate}T00:00:00.000Z`
+        return importTimestamp
+      }
       // Collision trackers for fallback IDs: hash → count of times seen this batch
       const inflowIdCounts  = new Map<string, number>()
       const outflowIdCounts = new Map<string, number>()
@@ -1126,7 +1250,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           if (isOffsetableType(txnType) && batchOffsetRole) row.offset_role = batchOffsetRole
-          row.recorded_at = importTimestamp
+          row.recorded_at = resolveRecordedAt(ri, date)
           inflowRows.push(row)
         }
         if (debit > 0) {
@@ -1173,7 +1297,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (txnType) row.transaction_type = txnType
           if (origId)  row.original_transaction_id = origId
           if (isOffsetableType(txnType) && batchOffsetRole) row.offset_role = batchOffsetRole
-          row.recorded_at = importTimestamp
+          row.recorded_at = resolveRecordedAt(ri, date)
           outflowRows.push(row)
         }
         if (credit === 0 && debit === 0) skipped++
@@ -1190,7 +1314,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
 
       const total = inflowToInsert.length + outflowToInsert.length
-      const BATCH = 100
+      // 250 rows/insert. This is a POST body, unlike the dedup query's
+      // DEDUP_CHUNK_SIZE of 100 — that one is bounded by GET URL length and
+      // must not be raised to match.
+      const BATCH = 250
+      // Rows from batches that failed, so the user can retry just those.
+      const failedInflows:  Record<string, unknown>[] = []
+      const failedOutflows: Record<string, unknown>[] = []
 
       const MISSING_COL_SQL: Record<string, string> = {
         allocation_config_id:
@@ -1230,6 +1360,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
             : `Inflow batch: ${err.message}`
           errors.push(msg); skipped += batch.length
+          failedInflows.push(...batch)
         } else imported += batch.length
         setProgress(total > 0 ? Math.round(((i + batch.length) / total) * 50) : 50)
       }
@@ -1250,6 +1381,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
             : `Outflow batch: ${err.message}`
           errors.push(msg); skipped += batch.length
+          failedOutflows.push(...batch)
         } else imported += batch.length
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
       }
@@ -1262,7 +1394,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
 
       importCompletedRef.current = true
-      setResult({ imported, skipped, errors, fallbackIdCount, collisions })
+      setResult({
+        imported, skipped, errors, fallbackIdCount, collisions,
+        failedRows: (failedInflows.length || failedOutflows.length)
+          ? { inflows: failedInflows, outflows: failedOutflows }
+          : undefined,
+      })
 
       // Auto-detect closing balance from the mapped balance column and save silently.
       // Falls back to a manual entry form if the column wasn't mapped or had no values.
@@ -1488,6 +1625,21 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         {/* ────────────────────────── STEP 1: Upload ───────────────────── */}
         {step === 1 && (
           <div className="space-y-4">
+            {restoredSession && (
+              <div className="flex items-start gap-2.5 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                <RefreshCw className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-800">
+                  <p className="font-medium">
+                    Recovered your setup for {restoredSession.fileName}
+                    {restoredSession.rowCount > 0 && ` (${restoredSession.rowCount.toLocaleString()} rows)`}
+                  </p>
+                  <p className="mt-0.5 text-blue-700">
+                    Column mapping and per-row configuration are restored. Re-select the same
+                    file to carry on from where you left off.
+                  </p>
+                </div>
+              </div>
+            )}
             <div
               onDragOver={e => { e.preventDefault(); setDragging(true) }}
               onDragLeave={() => setDragging(false)}
@@ -1891,6 +2043,50 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             )}
 
             {/* ── Duplicate detection summary ───────────────────────────── */}
+            {/* Recorded date — recorded_at is a reporting axis in its own right
+                (ReportBasis = 'transaction_date' | 'recorded_at'), so a
+                backdated statement imported today would otherwise land every
+                row in the current period. */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide shrink-0">
+                  Recorded date
+                </span>
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  {([
+                    ['today',    'Today'],
+                    ['specific', 'Specific date'],
+                    ['txn_date', "Match each transaction's date"],
+                  ] as const).map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-1.5 cursor-pointer text-gray-700">
+                      <input
+                        type="radio"
+                        name="import-recorded-mode"
+                        checked={recordedMode === value}
+                        onChange={() => setRecordedMode(value)}
+                        className="w-3.5 h-3.5 text-primary focus:ring-primary/30 cursor-pointer"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                  {recordedMode === 'specific' && (
+                    <input
+                      type="date"
+                      value={recordedDate}
+                      onChange={e => setRecordedDate(e.target.value)}
+                      className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                    />
+                  )}
+                </div>
+              </div>
+              <p className="mt-1.5 text-[11px] text-gray-500">
+                Controls the <span className="font-medium">Recorded</span> date used by recorded-basis
+                reports. It does not change each transaction&apos;s own date.
+                {Object.keys(rowRecordedDates).length > 0 &&
+                  ` ${Object.keys(rowRecordedDates).length} row(s) have a per-row override.`}
+              </p>
+            </div>
+
             {dupStats && (
               <div className={`rounded-lg border px-4 py-3 text-sm ${
                 dupStats.dupCount > 0
@@ -1997,6 +2193,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                 })
                 const isFiltered = filtered.length < creditRows.length
 
+                // Only the current page is rendered. Select-all and bulk apply
+                // deliberately keep targeting the FULL filtered set, not the
+                // page — narrowing them to what happens to be visible would
+                // silently change what a bulk action does.
+                const inflowTotalPages = Math.max(1, Math.ceil(filtered.length / step4PageSize))
+                const inflowSafePage   = Math.min(inflowPage, inflowTotalPages - 1)
+                const paged = filtered.slice(inflowSafePage * step4PageSize, (inflowSafePage + 1) * step4PageSize)
+
                 return (
                   <div className="space-y-3">
                     {/* Filter bar */}
@@ -2044,6 +2248,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
                           Apply to {inflowTargetLabel} rows:
                         </span>
+                        {incomeTypes.length > 0 && (
+                          <SearchableSelect value={applyIncomeType} onChange={setApplyIncomeType}
+                            options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
+                            placeholder="— Income Type —"
+                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                            wrapperClassName="flex-1 min-w-[110px]" />
+                        )}
                         <select value={applyInflowConfig} onChange={e => {
                             if (e.target.value === '__create__') { setCreateConfigPendingRow('apply'); setApplyInflowConfig('') }
                             else setApplyInflowConfig(e.target.value)
@@ -2054,13 +2265,6 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           {applyBarSpecialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           <option value="__create__">＋ Create New Rule…</option>
                         </select>
-                        {incomeTypes.length > 0 && (
-                          <SearchableSelect value={applyIncomeType} onChange={setApplyIncomeType}
-                            options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
-                            placeholder="— Income Type —"
-                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-                            wrapperClassName="flex-1 min-w-[110px]" />
-                        )}
                       </div>
                       {/* Row 2 — transaction type + apply */}
                       <div className="flex flex-wrap items-center gap-2 justify-end">
@@ -2077,9 +2281,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                             <option value="offset">Offset</option>
                           </select>
                         )}
+                        <input
+                          type="date"
+                          title="Override the recorded date for the targeted rows"
+                          value={applyRecordedDate}
+                          onChange={e => setApplyRecordedDate(e.target.value)}
+                          className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                        />
                         <button
                           type="button"
-                          disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType && !batchOffsetRole) || inflowTargetRis.length === 0}
+                          disabled={(!applyInflowConfig && !applyIncomeType && !batchTxnType && !batchOffsetRole && !applyRecordedDate) || inflowTargetRis.length === 0}
                           onClick={() => {
                             if (applyInflowConfig) {
                               // Explicit config selection → mark affected rows as manual overrides
@@ -2114,6 +2325,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                               setRowTxnTypes(prev => {
                                 const next = { ...prev }
                                 for (const ri of inflowTargetRis) next[ri] = batchTxnType
+                                return next
+                              })
+                            }
+                            if (applyRecordedDate) {
+                              setRowRecordedDates(prev => {
+                                const next = { ...prev }
+                                for (const ri of inflowTargetRis) next[ri] = applyRecordedDate
                                 return next
                               })
                             }
@@ -2172,12 +2390,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           }}
                           className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                         />
-                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Distribution Rule</span><span>Income Type</span><span>Txn Type</span>
+                        {/* Income Type precedes Distribution Rule: the income
+                            type's linked config determines the rule, and
+                            changing it clears any manual override. Showing the
+                            rule first put the effect before its cause. */}
+                        <span>#</span><span>Description / Date</span><span>Amount</span><span>Income Type</span><span>Distribution Rule</span><span>Txn Type</span>
                       </div>
                       <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                         {filtered.length === 0
                           ? <div className="py-8 text-center text-xs text-gray-500">No credit rows match the filter</div>
-                          : filtered.map(({ ri, raw, credit }) => {
+                          : paged.map(({ ri, raw, credit }) => {
                               const { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId } = buildInflowRowData(ri, raw)
                               const isInflowSelected = selectedInflowRis.has(ri)
                               return (
@@ -2213,28 +2435,6 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     </div>
                                     <span className="text-gray-700 font-medium">{baseCurrencySymbol}{credit.toLocaleString()}</span>
                                     {txnType ? (
-                                      <span className="text-xs text-gray-500 italic">N/A</span>
-                                    ) : (
-                                      <select value={displaySelId}
-                                        onChange={e => {
-                                          if (e.target.value === '__create__') {
-                                            setCreateConfigPendingRow(ri)
-                                          } else {
-                                            setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
-                                            setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
-                                          }
-                                        }}
-                                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
-                                        <option value="">General (date-based)</option>
-                                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
-                                          const extra = allocConfigs.find(c => c.id === displaySelId)
-                                          return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
-                                        })()}
-                                        <option value="__create__">＋ Create New Rule…</option>
-                                      </select>
-                                    )}
-                                    {txnType ? (
                                       <span className="text-xs text-gray-600 px-1">
                                         {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label ?? txnType}
                                       </span>
@@ -2265,6 +2465,28 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                         )}
                                       </div>
                                     )}
+                                    {txnType ? (
+                                      <span className="text-xs text-gray-500 italic">N/A</span>
+                                    ) : (
+                                      <select value={displaySelId}
+                                        onChange={e => {
+                                          if (e.target.value === '__create__') {
+                                            setCreateConfigPendingRow(ri)
+                                          } else {
+                                            setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                            setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
+                                          }
+                                        }}
+                                        className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
+                                        <option value="">General (date-based)</option>
+                                        {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
+                                          const extra = allocConfigs.find(c => c.id === displaySelId)
+                                          return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
+                                        })()}
+                                        <option value="__create__">＋ Create New Rule…</option>
+                                      </select>
+                                    )}
                                     <select value={txnType}
                                       onChange={e => setRowTxnTypes(prev => ({ ...prev, [ri]: e.target.value }))}
                                       disabled={isForeignCurrencyBank}
@@ -2287,6 +2509,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                             })
                         }
                       </div>
+                      <PaginationBar
+                        page={inflowSafePage}
+                        pageSize={step4PageSize}
+                        total={filtered.length}
+                        onPageChange={setInflowPage}
+                        onPageSizeChange={setStep4PageSize}
+                        pageSizeOptions={[25, 50, 100, 200]}
+                        variant="full"
+                      />
                     </div>
                       ) : (
                     /* ── Card view ── */
@@ -2319,7 +2550,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                       <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
                       {filtered.length === 0
                         ? <div className="py-8 text-center text-xs text-gray-500">No credit rows match the filter</div>
-                        : filtered.map(({ ri, raw, credit }) => {
+                        : paged.map(({ ri, raw, credit }) => {
                             const { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId } = buildInflowRowData(ri, raw)
                             const isInflowSelected = selectedInflowRis.has(ri)
                             const isExpanded = expandedInflowCardRis.has(ri)
@@ -2377,32 +2608,6 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     </button>
                                   ) : (
                                     <div className="px-4 py-3 bg-gray-50/40 space-y-3">
-                                      {/* Distribution Rule */}
-                                      <div>
-                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Distribution Rule</label>
-                                        {txnType ? (
-                                          <span className="text-xs text-gray-500 italic">N/A for {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label}</span>
-                                        ) : (
-                                          <select value={displaySelId}
-                                            onChange={e => {
-                                              if (e.target.value === '__create__') {
-                                                setCreateConfigPendingRow(ri)
-                                              } else {
-                                                setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
-                                                setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
-                                              }
-                                            }}
-                                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                                            <option value="">General (date-based)</option>
-                                            {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                            {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
-                                              const extra = allocConfigs.find(c => c.id === displaySelId)
-                                              return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
-                                            })()}
-                                            <option value="__create__">＋ Create New Rule…</option>
-                                          </select>
-                                        )}
-                                      </div>
                                       {/* Income Type */}
                                       {!txnType && (
                                         <div>
@@ -2434,6 +2639,32 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                           </div>
                                         </div>
                                       )}
+                                      {/* Distribution Rule */}
+                                      <div>
+                                        <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Distribution Rule</label>
+                                        {txnType ? (
+                                          <span className="text-xs text-gray-500 italic">N/A for {TXN_TYPE_OPTIONS.find(o => o.value === txnType)?.label}</span>
+                                        ) : (
+                                          <select value={displaySelId}
+                                            onChange={e => {
+                                              if (e.target.value === '__create__') {
+                                                setCreateConfigPendingRow(ri)
+                                              } else {
+                                                setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                                setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
+                                              }
+                                            }}
+                                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                                            <option value="">General (date-based)</option>
+                                            {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            {displaySelId && !specialConfigs.some(c => c.id === displaySelId) && (() => {
+                                              const extra = allocConfigs.find(c => c.id === displaySelId)
+                                              return extra ? <option key={extra.id} value={extra.id}>{extra.name}</option> : null
+                                            })()}
+                                            <option value="__create__">＋ Create New Rule…</option>
+                                          </select>
+                                        )}
+                                      </div>
                                       {/* Transaction Type */}
                                       <div>
                                         <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Transaction Type</label>
@@ -2471,6 +2702,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           })
                       }
                     </div>
+                    <PaginationBar
+                      page={inflowSafePage}
+                      pageSize={step4PageSize}
+                      total={filtered.length}
+                      onPageChange={setInflowPage}
+                      onPageSizeChange={setStep4PageSize}
+                      pageSizeOptions={[25, 50, 100, 200]}
+                      variant="full"
+                    />
                     </>
                       )
                     })()}
@@ -2488,6 +2728,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                 return true
               })
               const isFiltered = filtered.length < debitRows.length
+
+              // Page slice only — select-all and bulk apply stay on `filtered`.
+              const outflowTotalPages = Math.max(1, Math.ceil(filtered.length / step4PageSize))
+              const outflowSafePage   = Math.min(outflowPage, outflowTotalPages - 1)
+              const paged = filtered.slice(outflowSafePage * step4PageSize, (outflowSafePage + 1) * step4PageSize)
 
               return (
                 <div className="space-y-3">
@@ -2573,10 +2818,24 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           <option value="offset">Offset</option>
                         </select>
                       )}
+                      <input
+                        type="date"
+                        title="Override the recorded date for the targeted rows"
+                        value={applyRecordedDate}
+                        onChange={e => setApplyRecordedDate(e.target.value)}
+                        className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                      />
                       <button
                         type="button"
-                        disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType && !batchOffsetRole) || outflowTargetRis.length === 0}
+                        disabled={(!applyS1 && !applyS2 && !batchTxnType && !applyOutflowType && !batchOffsetRole && !applyRecordedDate) || outflowTargetRis.length === 0}
                         onClick={() => {
+                          if (applyRecordedDate) {
+                            setRowRecordedDates(prev => {
+                              const next = { ...prev }
+                              for (const ri of outflowTargetRis) next[ri] = applyRecordedDate
+                              return next
+                            })
+                          }
                           if (applyS1 || applyS2) {
                             setRowStageCodes(prev => {
                               const next = { ...prev }
@@ -2691,7 +2950,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                       {filtered.length === 0
                         ? <div className="py-8 text-center text-xs text-gray-500">No debit rows match the filter</div>
-                        : filtered.map(({ ri, raw, debit }) => {
+                        : paged.map(({ ri, raw, debit }) => {
                             const { date, desc, sc, txnType, origId } = buildOutflowRowData(ri, raw)
                             const isOutflowSelected = selectedOutflowRis.has(ri)
                             return (
@@ -2797,6 +3056,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           })
                       }
                     </div>
+                    <PaginationBar
+                      page={outflowSafePage}
+                      pageSize={step4PageSize}
+                      total={filtered.length}
+                      onPageChange={setOutflowPage}
+                      onPageSizeChange={setStep4PageSize}
+                      pageSizeOptions={[25, 50, 100, 200]}
+                      variant="full"
+                    />
                   </div>
                     ) : (
                   /* ── Card view ── */
@@ -2829,7 +3097,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                     <div className="space-y-3 max-h-[480px] overflow-y-auto pr-0.5">
                     {filtered.length === 0
                       ? <div className="py-8 text-center text-xs text-gray-500">No debit rows match the filter</div>
-                      : filtered.map(({ ri, raw, debit }) => {
+                      : paged.map(({ ri, raw, debit }) => {
                           const { date, desc, sc, txnType, origId } = buildOutflowRowData(ri, raw)
                           const isOutflowSelected = selectedOutflowRis.has(ri)
                           const isExpanded = expandedOutflowCardRis.has(ri)
@@ -2987,6 +3255,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         })
                     }
                   </div>
+                  <PaginationBar
+                    page={outflowSafePage}
+                    pageSize={step4PageSize}
+                    total={filtered.length}
+                    onPageChange={setOutflowPage}
+                    onPageSizeChange={setStep4PageSize}
+                    pageSizeOptions={[25, 50, 100, 200]}
+                    variant="full"
+                  />
                   </>
                     )
                   })()}
@@ -3157,6 +3434,27 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                     <div className="text-blue-600 dark:text-blue-400">ℹ {result.fallbackIdCount} fallback ID(s) auto-generated</div>
                   )}
                 </div>
+                {(() => {
+                  const failedCount = (result.failedRows?.inflows.length ?? 0) + (result.failedRows?.outflows.length ?? 0)
+                  if (failedCount === 0) return null
+                  return (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-100/70 px-3 py-2">
+                      <span className="text-xs text-amber-800">
+                        {failedCount.toLocaleString()} row(s) did not import. Rows that already
+                        landed are not affected — retrying will not duplicate them.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={retryFailedRows}
+                        disabled={retrying}
+                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {retrying && <ButtonSpinner />}
+                        {retrying ? 'Retrying…' : `Retry ${failedCount.toLocaleString()} failed row(s)`}
+                      </button>
+                    </div>
+                  )
+                })()}
                 {result.errors.length > 0 && (
                   <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
                     {result.errors.map((e, i) => <div key={i} className="whitespace-pre-wrap">{e}</div>)}
