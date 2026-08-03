@@ -808,8 +808,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const proceedToMapping = () => {
     if (!sheet || !config) return
     const initial: Record<string, string> = {}
+    // Each app field may be claimed by at most one spreadsheet column — first header wins.
+    const claimed = new Set<string>()
     for (const h of sheet.headers) {
-      initial[h] = autoMapColumn(h, config.fields)
+      const field = autoMapColumn(h, config.fields)
+      if (field === SKIP || claimed.has(field)) { initial[h] = SKIP; continue }
+      claimed.add(field)
+      initial[h] = field
     }
     setMapping(initial)
     setStep(3)
@@ -838,11 +843,26 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const handleApplyTemplate = useCallback((tpl: ImportTemplate) => {
     if (!sheet) return
     const available = new Set(sheet.headers)
-    const applied: Record<string, string> = {}
-    for (const [header, field] of Object.entries(tpl.mapping)) {
-      if (available.has(header)) applied[header] = field
-    }
-    setMapping(prev => ({ ...prev, ...applied }))
+    setMapping(prev => {
+      const merged: Record<string, string> = {}
+      const claimed = new Set<string>()
+      // Template entries win over the current selection; a field already claimed
+      // by an earlier header is dropped so no field maps to two columns.
+      for (const [header, field] of Object.entries(tpl.mapping)) {
+        if (!available.has(header) || !field || field === SKIP || claimed.has(field)) continue
+        claimed.add(field)
+        merged[header] = field
+      }
+      // Keep existing picks only where they don't collide with the template.
+      for (const h of sheet.headers) {
+        if (merged[h]) continue
+        const field = prev[h]
+        if (!field || field === SKIP || claimed.has(field)) { merged[h] = SKIP; continue }
+        claimed.add(field)
+        merged[h] = field
+      }
+      return merged
+    })
   }, [sheet])
 
   const handleDeleteTemplate = useCallback((id: string) => {
@@ -1836,25 +1856,34 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                 <span>App Field</span>
               </div>
               <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-                {sheet.headers.filter(h => h).map(h => (
-                  <div key={h} className="grid grid-cols-2 items-center px-4 py-2.5 gap-3">
-                    <div className="text-sm font-medium text-gray-700 truncate" title={h}>{h}</div>
-                    <select
-                      value={mapping[h] ?? SKIP}
-                      onChange={e => setMapping(prev => ({ ...prev, [h]: e.target.value }))}
-                      className={`text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
-                        mapping[h] && mapping[h] !== SKIP ? 'border-primary/40 text-gray-800' : 'border-gray-200 text-gray-400'
-                      }`}
-                    >
-                      <option value={SKIP}>— Skip this column —</option>
-                      {config.fields.map(f => (
-                        <option key={f.key} value={f.key}>
-                          {f.label}{f.required ? ' *' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
+                {(() => {
+                  // Each app field belongs to exactly one column — a field already taken
+                  // is hidden from every other dropdown (Skip stays available everywhere).
+                  const usedFields = new Set(
+                    Object.values(mapping).filter(v => v && v !== SKIP),
+                  )
+                  return sheet.headers.filter(h => h).map(h => (
+                    <div key={h} className="grid grid-cols-2 items-center px-4 py-2.5 gap-3">
+                      <div className="text-sm font-medium text-gray-700 truncate" title={h}>{h}</div>
+                      <select
+                        value={mapping[h] ?? SKIP}
+                        onChange={e => setMapping(prev => ({ ...prev, [h]: e.target.value }))}
+                        className={`text-xs px-2 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white ${
+                          mapping[h] && mapping[h] !== SKIP ? 'border-primary/40 text-gray-800' : 'border-gray-200 text-gray-400'
+                        }`}
+                      >
+                        <option value={SKIP}>— Skip this column —</option>
+                        {config.fields
+                          .filter(f => !usedFields.has(f.key) || mapping[h] === f.key)
+                          .map(f => (
+                            <option key={f.key} value={f.key}>
+                              {f.label}{f.required ? ' *' : ''}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  ))
+                })()}
               </div>
             </div>
 

@@ -42,7 +42,7 @@ All imported transactions appear immediately in **Daily Finance → Inflows** an
 ### Common issues
 
 - **Duplicate warning (amber or red box):** Click **Skip Duplicates & Import** to leave out already-imported rows. Only use **Import Anyway** if you are certain none of the flagged rows are real duplicates — importing duplicates inflates your totals.
-- **"No transaction ID column detected":** Your file has no reference column. Duplicate checking is disabled. Be careful not to import the same file twice.
+- **"No reference / transaction ID column":** Your file has no reference column, but duplicate checking still runs — the wizard fingerprints each row by date, description, amount and bank, and skips rows already in the database. Only caveat: two different transactions with an identical date, amount and description look the same to this check, so the second is flagged in the results panel for you to review.
 - **Wrong amounts after import:** The Debit and Credit columns were probably swapped in step 8. Find the affected rows in Inflows/Outflows and edit them, or re-import with the corrected mapping.
 - **Import page is not in the menu:** Your account role is Viewer. Ask an Admin or Accountant to import.
 - **PDF detected:** Column mapping is fully manual for PDFs — the system cannot read column headers from a PDF. You will need to identify each column yourself in step 8.

@@ -412,8 +412,14 @@ export default function Import() {
                   <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>
-                      No transaction ID column detected in this file.
-                      Duplicate checking requires a column named <strong>Transaction ID</strong>, <strong>Txn ID</strong>, or <strong>Reference</strong>.
+                      No reference / transaction ID column in this file — duplicate checking still runs.
+                      The import wizard builds a fingerprint for each row from its <strong>date, description,
+                      amount and bank</strong> and matches that against previously imported transactions.
+                      Rows already in the database are listed and skipped before anything is saved.
+                      <span className="block mt-1 text-amber-600/80">
+                        Two genuinely different transactions sharing the same date, amount and description look
+                        identical to this check — the wizard flags the second one in the results panel for review.
+                      </span>
                     </span>
                   </div>
                 )}
