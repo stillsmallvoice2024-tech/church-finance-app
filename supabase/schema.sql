@@ -359,6 +359,22 @@ create table public.outflow_types (
   unique (org_id, name)
 );
 
+-- Outflow counterpart to income_type_rules: auto-classifies debit rows during
+-- import. Matches against the RAW description, never a cleaned narration.
+create table public.outflow_classification_rules (
+  id              uuid        default gen_random_uuid() primary key,
+  rule_type       text        not null check (rule_type in ('keyword', 'stage_code')),
+  rule_value      text        not null,
+  stage_code_1    text,
+  stage_code_2    text,
+  outflow_type_id uuid        references public.outflow_types(id) on delete set null,
+  priority        int         not null default 0,
+  org_id          uuid        not null default public.get_current_org_id()
+                  references public.organizations(id) on delete set null,
+  created_at      timestamptz default now()
+);
+
+
 -- ── Category-Outflow Type Mapping ─────────────────────────────────────────────
 create table public.category_outflow_type_map (
   id              uuid        default gen_random_uuid() primary key,
@@ -861,6 +877,7 @@ alter table public.banks                          enable row level security;
 alter table public.allocation_configs             enable row level security;
 alter table public.income_types                   enable row level security;
 alter table public.income_type_rules              enable row level security;
+alter table public.outflow_classification_rules   enable row level security;
 alter table public.outflow_types                  enable row level security;
 alter table public.category_outflow_type_map      enable row level security;
 alter table public.accounts                       enable row level security;
@@ -1073,6 +1090,17 @@ create policy "income_type_rules_insert" on public.income_type_rules
 create policy "income_type_rules_update" on public.income_type_rules
   for update using (public.is_org_admin(org_id));
 create policy "income_type_rules_delete" on public.income_type_rules
+  for delete using (public.is_org_admin(org_id));
+
+-- ── outflow_classification_rules ───────────────────────────────────────────────
+
+create policy "outflow_classification_rules_select" on public.outflow_classification_rules
+  for select using (public.is_org_member(org_id));
+create policy "outflow_classification_rules_insert" on public.outflow_classification_rules
+  for insert with check (public.is_org_admin(org_id));
+create policy "outflow_classification_rules_update" on public.outflow_classification_rules
+  for update using (public.is_org_admin(org_id));
+create policy "outflow_classification_rules_delete" on public.outflow_classification_rules
   for delete using (public.is_org_admin(org_id));
 
 -- ── outflow_types ──────────────────────────────────────────────────────────────
@@ -1578,6 +1606,8 @@ create index if not exists idx_bank_deposits_org       on public.bank_deposits(o
 create index if not exists idx_category_groups_org     on public.category_groups(org_id);
 create index if not exists idx_income_types_org        on public.income_types(org_id);
 create index if not exists idx_income_type_rules_org   on public.income_type_rules(org_id);
+create index if not exists idx_outflow_classification_rules_org    on public.outflow_classification_rules(org_id);
+create index if not exists idx_outflow_classification_rules_lookup on public.outflow_classification_rules(org_id, priority, created_at);
 create index if not exists idx_intrabank_org           on public.intrabank_transfers(org_id);
 create index if not exists idx_accounts_org            on public.accounts(org_id);
 create index if not exists idx_ledger_entries_org      on public.ledger_entries(org_id);
@@ -2241,6 +2271,7 @@ begin
     'intrabank_transfers','fx_transactions','fx_conversions','banks','categories',
     'category_groups','category_opening_balances','category_outflow_type_map',
     'allocation_configs','income_types','income_type_rules','outflow_types',
+    'outflow_classification_rules',
     'special_config_groups','transaction_allocation_snapshots','recalculation_logs',
     'special_projects','project_entries','report_templates','dynamic_reports',
     'departments','receipts'
@@ -2463,6 +2494,7 @@ begin
   delete from public.inflow_transactions               where org_id = p_org_id;
   delete from public.income_type_rules                 where org_id = p_org_id;
   delete from public.income_types                      where org_id = p_org_id;
+  delete from public.outflow_classification_rules      where org_id = p_org_id;
   delete from public.category_outflow_type_map         where org_id = p_org_id;
   delete from public.outflow_types                     where org_id = p_org_id;
   delete from public.allocation_configs                where org_id = p_org_id;

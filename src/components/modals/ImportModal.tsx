@@ -7,7 +7,7 @@ import {
   CheckCircle2, AlertTriangle, RefreshCw, FileText, Sparkles,
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
-import { ViewToggle, useViewToggle } from '../ui/ViewToggle'
+import { ViewToggle, useViewToggle, type ViewMode } from '../ui/ViewToggle'
 import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
@@ -45,6 +45,12 @@ import {
   parseDebitAmount,
 } from '../../utils/buildImportRows'
 import type { ImportRow } from '../../types/importRow'
+import { needsAttention } from '../../types/importRow'
+import { classifyOutflow, resolveOutflowType } from '../../utils/classifyOutflow'
+import { classifyIncomeType } from '../../utils/classifyIncomeType'
+import type { ImportRowGroup } from '../../utils/groupImportRows'
+import { GroupedRowList } from './import/GroupedRowList'
+import { useOutflowClassificationRules } from '../../hooks/useOutflowClassificationRules'
 
 // ── Target table definitions ───────────────────────────────────────────────────
 
@@ -324,6 +330,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // Outflow types for auto-mapping from category-outflow map
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
   const { maps: categoryOutflowMaps }   = useCategoryOutflowTypeMaps()
+  const { rules: outflowRules, refetch: refetchOutflowRules } = useOutflowClassificationRules()
 
   // Sync bank prop → internalBank when parent provides/updates it (e.g. async bank data load)
   useEffect(() => {
@@ -385,8 +392,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const [bsConfigTab,     setBsConfigTab]     = useState<'inflow' | 'outflow'>('inflow')
 
   // Step 4 — filter bars
-  const [inflowFilter,  setInflowFilter]  = useState({ desc: '', amtFrom: '', amtTo: '' })
-  const [outflowFilter, setOutflowFilter] = useState({ desc: '', amtFrom: '', amtTo: '' })
+  // `needsOnly` narrows to rows the user still has to look at — unresolved, or
+  // resolved only by the generic catch-all. Table/card equivalent of the
+  // grouped view's "Needs attention" section.
+  const [inflowFilter,  setInflowFilter]  = useState({ desc: '', amtFrom: '', amtTo: '', needsOnly: false })
+  const [outflowFilter, setOutflowFilter] = useState({ desc: '', amtFrom: '', amtTo: '', needsOnly: false })
 
   // Step 4 — apply bar selections
   const [applyInflowConfig, setApplyInflowConfig] = useState('')
@@ -413,7 +423,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const [selectedOutflowRis, setSelectedOutflowRis] = useState<Set<number>>(new Set())
 
   // Step 4 — view toggle (table vs cards) + per-card expanded state
-  const { view: importRowView, setView: setImportRowView } = useViewToggle('import-step4-view')
+  const STEP4_VIEW_MODES: ViewMode[] = ['table', 'cards', 'grouped']
+  const { view: importRowView, setView: setImportRowView } = useViewToggle('import-step4-view', STEP4_VIEW_MODES)
   const [expandedInflowCardRis,  setExpandedInflowCardRis]  = useState<Set<number>>(new Set())
   const [expandedOutflowCardRis, setExpandedOutflowCardRis] = useState<Set<number>>(new Set())
 
@@ -599,8 +610,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setBatchOffsetRole('')
     setCreateConfigPendingRow(null)
     setBsConfigTab('inflow')
-    setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })
-    setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })
+    setInflowFilter({ desc: '', amtFrom: '', amtTo: '', needsOnly: false })
+    setOutflowFilter({ desc: '', amtFrom: '', amtTo: '', needsOnly: false })
     setApplyInflowConfig('')
     setApplyS1('')
     setApplyS2('')
@@ -980,18 +991,42 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       })
       setDupProgress({ phase: 'querying', done: merged.length, total: merged.length })
 
-      // Seed outflow types from the category mapping for pre-populated stage codes.
-      if (outflowTypeOptions.length > 0) {
-        for (const row of rows) {
-          if (row.kind !== 'outflow' || !row.config.stageCode1) continue
-          const s1 = row.config.stageCode1
-          const cat = categories.find((c: { name: string }) => c.name === s1)
-          if (cat) {
-            const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
-            if (suggested) { row.config.outflowTypeId = suggested.id; continue }
+      // ── Classify rows ─────────────────────────────────────────────────────
+      // Outflows: rule engine first, then the category → outflow-type map, then
+      // an exact category-name match (the previous sole behaviour, now last).
+      // Inflows: a real keyword/stage-code match counts as classified; landing
+      // on the catch-all fallback does not, so those rows stay in "Needs
+      // attention" rather than looking done.
+      for (const row of rows) {
+        if (row.kind === 'outflow') {
+          const hit = classifyOutflow(row.description, row.config.stageCode1, outflowRules)
+          if (hit) {
+            if (hit.stageCode1) row.config.stageCode1 = hit.stageCode1
+            if (hit.stageCode2) row.config.stageCode2 = hit.stageCode2
           }
-          const match = outflowTypeOptions.find(t => t.name.toLowerCase() === s1.toLowerCase())
-          if (match) row.config.outflowTypeId = match.id
+          if (outflowTypeOptions.length > 0 && row.config.stageCode1) {
+            row.config.outflowTypeId = resolveOutflowType(
+              row.config.stageCode1,
+              hit?.outflowTypeId ?? '',
+              categories,
+              outflowTypeOptions,
+              (catId) => getDefaultOutflowTypeForCategory(catId, categoryOutflowMaps, outflowTypeOptions) ?? null,
+            )
+          }
+          row.resolution = row.config.stageCode1 ? 'rule' : 'unresolved'
+          continue
+        }
+
+        // Inflow — distinguish a genuine rule match from the catch-all default.
+        if (incomeTypes.length === 0 || !row.description) { row.resolution = 'unresolved'; continue }
+        const matched = classifyIncomeType(row.description, '', incomeTypes)
+        if (matched) {
+          row.config.incomeTypeId = matched.id
+          row.resolution = 'rule'
+        } else {
+          const fallback = resolveDefaultIncomeType(row.description, '', incomeTypes)
+          row.config.incomeTypeId = fallback?.id ?? ''
+          row.resolution = fallback ? 'fallback' : 'unresolved'
         }
       }
 
@@ -1059,6 +1094,62 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     }
   }, [sheet, config, targetTable, mapping, dateFormat, internalBank, skipTxnIds, skipTxnBankName,
       categories, categoryOutflowMaps, outflowTypeOptions])
+
+  // ── Grouped view helpers ───────────────────────────────────────────────────
+
+  // Configuring a group promotes its rows out of "Needs attention" immediately,
+  // so the section counters track the user's progress as they work.
+  const markGroupResolved = useCallback((ris: number[]) => {
+    const target = new Set(ris)
+    setImportRows(prev => prev.map(r =>
+      target.has(r.ri) ? { ...r, resolution: 'manual' as const } : r,
+    ))
+  }, [])
+
+  const [savingRuleKey, setSavingRuleKey] = useState<string | null>(null)
+
+  // "Save as rule" persists a group's configuration so the NEXT import of the
+  // same statement shape classifies itself. rule_value is the group's RAW
+  // sample text, not the cleaned label, because matching runs on raw
+  // descriptions.
+  const saveOutflowGroupAsRule = useCallback(async (group: ImportRowGroup) => {
+    const first = group.ris[0]
+    const sc    = rowStageCodes[first]
+    if (!sc?.s1) { toast.warning('Set a category for this pattern before saving it as a rule'); return }
+    setSavingRuleKey(group.key)
+    const orgId = useOrgStore.getState().orgId
+    const { error } = await supabase.from('outflow_classification_rules').insert({
+      rule_type:       'keyword',
+      rule_value:      group.label,
+      stage_code_1:    sc.s1,
+      stage_code_2:    sc.s2 || null,
+      outflow_type_id: rowOutflowTypes[first] || null,
+      org_id:          orgId,
+    })
+    setSavingRuleKey(null)
+    if (error) toast.error(friendlyError(error, 'save classification rule'))
+    else {
+      toast.success(`Rule saved — "${group.label}" will classify itself next time`)
+      void refetchOutflowRules()
+    }
+  }, [rowStageCodes, rowOutflowTypes, toast, refetchOutflowRules])
+
+  const saveInflowGroupAsRule = useCallback(async (group: ImportRowGroup) => {
+    const first        = group.ris[0]
+    const incomeTypeId = rowIncomeTypes[first] ?? autoClassifiedTypes[first]?.id ?? ''
+    if (!incomeTypeId) { toast.warning('Set an income type for this pattern before saving it as a rule'); return }
+    setSavingRuleKey(group.key)
+    const orgId = useOrgStore.getState().orgId
+    const { error } = await supabase.from('income_type_rules').insert({
+      income_type_id: incomeTypeId,
+      rule_type:      'keyword',
+      rule_value:     group.label,
+      org_id:         orgId,
+    })
+    setSavingRuleKey(null)
+    if (error) toast.error(friendlyError(error, 'save income type rule'))
+    else toast.success(`Rule saved — "${group.label}" will classify itself next time`)
+  }, [rowIncomeTypes, autoClassifiedTypes, toast])
 
   // ── Retry failed insert batches ────────────────────────────────────────────
   // Re-inserts ONLY the rows whose batch failed. Rows that already landed are
@@ -2164,7 +2255,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                 ))}
               </div>
               <div className="pb-1 pr-1">
-                <ViewToggle storageKey="import-step4-view" value={importRowView} onChange={setImportRowView} />
+                <ViewToggle storageKey="import-step4-view" value={importRowView} onChange={setImportRowView} modes={STEP4_VIEW_MODES} />
               </div>
             </div>
 
@@ -2184,11 +2275,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               // ── Inflow tab ───────────────────────────────────────────────
               if (bsConfigTab === 'inflow') {
                 const f = inflowFilter
-                const filtered = creditRows.filter(({ raw, credit }) => {
+                const filtered = creditRows.filter(({ raw, credit, row }) => {
                   const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
                   if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
                   if (f.amtFrom && credit < parseFloat(f.amtFrom))       return false
                   if (f.amtTo   && credit > parseFloat(f.amtTo))         return false
+                  if (f.needsOnly && !needsAttention(row))               return false
                   return true
                 })
                 const isFiltered = filtered.length < creditRows.length
@@ -2221,7 +2313,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         onChange={e => setInflowFilter(p => ({ ...p, amtTo: e.target.value }))}
                         className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                       />
-                      <button type="button" onClick={() => setInflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
+                      <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={f.needsOnly}
+                          onChange={e => setInflowFilter(p => ({ ...p, needsOnly: e.target.checked }))}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                        />
+                        Needs attention only
+                      </label>
+                      <button type="button" onClick={() => setInflowFilter({ desc: '', amtFrom: '', amtTo: '', needsOnly: false })}
                         className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
                         Clear
                       </button>
@@ -2372,6 +2473,69 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         ) ?? ''
                         return { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId }
                       }
+
+                      if (importRowView === 'grouped') return (
+                        <GroupedRowList
+                          rows={filtered.map(r => r.row)}
+                          emptyLabel="No credit rows match the filter"
+                          selectedRis={selectedInflowRis}
+                          formatAmount={n => `${baseCurrencySymbol}${n.toLocaleString()}`}
+                          onToggleGroup={(ris, on) => setSelectedInflowRis(prev => {
+                            const next = new Set(prev)
+                            for (const ri of ris) on ? next.add(ri) : next.delete(ri)
+                            return next
+                          })}
+                          onSaveAsRule={saveInflowGroupAsRule}
+                          savingRuleKey={savingRuleKey}
+                          renderControls={group => (
+                            <>
+                              {/* Income type first — it determines the rule. */}
+                              <SearchableSelect
+                                value={rowIncomeTypes[group.ris[0]] ?? autoClassifiedTypes[group.ris[0]]?.id ?? ''}
+                                onChange={newId => {
+                                  setRowIncomeTypes(prev => {
+                                    const next = { ...prev }
+                                    for (const ri of group.ris) next[ri] = newId
+                                    return next
+                                  })
+                                  setRowManualOverrides(prev => {
+                                    const next = { ...prev }
+                                    for (const ri of group.ris) delete next[ri]
+                                    return next
+                                  })
+                                  markGroupResolved(group.ris)
+                                }}
+                                options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
+                                placeholder="— Income Type —"
+                                className="w-full text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                                wrapperClassName="min-w-[150px]"
+                              />
+                              <select
+                                value={rowConfigs[group.ris[0]] ?? ''}
+                                onChange={e => {
+                                  const val = e.target.value
+                                  if (val === '__create__') { setCreateConfigPendingRow(group.ris[0]); return }
+                                  setRowConfigs(prev => {
+                                    const next = { ...prev }
+                                    for (const ri of group.ris) next[ri] = val
+                                    return next
+                                  })
+                                  setRowManualOverrides(prev => {
+                                    const next = { ...prev }
+                                    for (const ri of group.ris) next[ri] = true
+                                    return next
+                                  })
+                                  markGroupResolved(group.ris)
+                                }}
+                                className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[150px]">
+                                <option value="">General (date-based)</option>
+                                {specialConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                <option value="__create__">＋ Create New Rule…</option>
+                              </select>
+                            </>
+                          )}
+                        />
+                      )
 
                       return importRowView === 'table' ? (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -2720,11 +2884,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
               // ── Outflow tab ──────────────────────────────────────────────
               const f = outflowFilter
-              const filtered = debitRows.filter(({ raw, debit }) => {
+              const filtered = debitRows.filter(({ raw, debit, row }) => {
                 const desc = descIdx >= 0 && raw[descIdx] != null ? String(raw[descIdx]).toLowerCase() : ''
                 if (f.desc    && !desc.includes(f.desc.toLowerCase())) return false
                 if (f.amtFrom && debit < parseFloat(f.amtFrom))        return false
                 if (f.amtTo   && debit > parseFloat(f.amtTo))          return false
+                if (f.needsOnly && !needsAttention(row))               return false
                 return true
               })
               const isFiltered = filtered.length < debitRows.length
@@ -2754,7 +2919,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                       onChange={e => setOutflowFilter(p => ({ ...p, amtTo: e.target.value }))}
                       className="w-24 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                     />
-                    <button type="button" onClick={() => setOutflowFilter({ desc: '', amtFrom: '', amtTo: '' })}
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={f.needsOnly}
+                        onChange={e => setOutflowFilter(p => ({ ...p, needsOnly: e.target.checked }))}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                      />
+                      Needs attention only
+                    </label>
+                    <button type="button" onClick={() => setOutflowFilter({ desc: '', amtFrom: '', amtTo: '', needsOnly: false })}
                       className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 border border-gray-200 rounded-lg bg-white">
                       Clear
                     </button>
@@ -2927,6 +3101,75 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                       const origId  = rowOrigTxnIds[ri] ?? ''
                       return { date, desc, sc, txnType, origId }
                     }
+
+                    if (importRowView === 'grouped') return (
+                      <GroupedRowList
+                        rows={filtered.map(r => r.row)}
+                        emptyLabel="No debit rows match the filter"
+                        selectedRis={selectedOutflowRis}
+                        formatAmount={n => `${baseCurrencySymbol}${n.toLocaleString()}`}
+                        onToggleGroup={(ris, on) => setSelectedOutflowRis(prev => {
+                          const next = new Set(prev)
+                          for (const ri of ris) on ? next.add(ri) : next.delete(ri)
+                          return next
+                        })}
+                        onSaveAsRule={saveOutflowGroupAsRule}
+                        savingRuleKey={savingRuleKey}
+                        renderControls={group => (
+                          <>
+                            <select
+                              value={rowStageCodes[group.ris[0]]?.s1 ?? ''}
+                              onChange={e => {
+                                const v = e.target.value
+                                setRowStageCodes(prev => {
+                                  const next = { ...prev }
+                                  for (const ri of group.ris) next[ri] = { s1: v, s2: prev[ri]?.s2 ?? '' }
+                                  return next
+                                })
+                                markGroupResolved(group.ris)
+                              }}
+                              className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[150px]">
+                              <option value="">— Category —</option>
+                              {filteredCategories.map((c: { id: string; name: string }) => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={rowStageCodes[group.ris[0]]?.s2 ?? ''}
+                              onChange={e => {
+                                const v = e.target.value
+                                setRowStageCodes(prev => {
+                                  const next = { ...prev }
+                                  for (const ri of group.ris) next[ri] = { s1: prev[ri]?.s1 ?? '', s2: v }
+                                  return next
+                                })
+                              }}
+                              className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[140px]">
+                              <option value="">— Budget Portion —</option>
+                              <option value="Percentage Allocation">Percentage Allocation</option>
+                              <option value="Specific Seed">Specific Seed</option>
+                              <option value="Savings">Savings</option>
+                            </select>
+                            {outflowTypeOptions.length > 0 && (
+                              <select
+                                value={rowOutflowTypes[group.ris[0]] ?? ''}
+                                onChange={e => {
+                                  const v = e.target.value
+                                  setRowOutflowTypes(prev => {
+                                    const next = { ...prev }
+                                    for (const ri of group.ris) next[ri] = v
+                                    return next
+                                  })
+                                }}
+                                className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[130px]">
+                                <option value="">— Outflow Type —</option>
+                                {outflowTypeOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                            )}
+                          </>
+                        )}
+                      />
+                    )
 
                     return importRowView === 'table' ? (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">

@@ -21,6 +21,79 @@ Also contains `ManualEntryForm` for single-transaction entry.
 
 ---
 
+## Import Row Model (`ImportRow`)
+
+**Types:** `src/types/importRow.ts` · **Builder:** `src/utils/buildImportRows.ts`
+
+Per-row import state is **one object per (row, kind)**, not the ~11 parallel `Record<number, T>` maps it replaced. Built once in `proceedToRowConfig`.
+
+```ts
+ImportRow { ri, kind: 'inflow'|'outflow', date, amount, description, ref, txnId, isDuplicate, config, resolution }
+```
+
+- **`description` is the RAW statement text.** It is what is displayed, what is stored, and what is hashed. `normalizeNarration` output is for grouping/labelling only and must never reach storage, dedup, or matching.
+- A row carrying both a credit and a debit produces **two** `ImportRow`s sharing one `ri` — mirroring the old separate inflow/outflow ID maps.
+- **`ri` is stable** across the whole pipeline; restored per-row config realigns on re-parse of the same file.
+- Legacy maps (`rowConfigs`, `rowStageCodes`, …) are still derived from the model for the Step 4 and `runImport` call sites not yet migrated. **Write to both when adding state.**
+
+**Column indices are derived once** via `deriveColumnIndices` and carried on the model. Previously recomputed at seven sites — which is why the "four debit read-sites" rule existed. Do not re-derive them.
+
+`parseNumber` / `parseDebitAmount` now live in `buildImportRows.ts`, shared with the component. `normalizeId` is imported from `src/utils/normalizeId.ts` — **there must not be a second local copy** (there was one; the copies matched, but divergence would have broken dedup silently).
+
+### `resolution` — drives the Step 4 split
+
+| Value | Meaning | Section |
+|---|---|---|
+| `unresolved` | Nothing resolved | Needs attention |
+| `fallback` | Matched only the generic catch-all (no rule fired) | Needs attention |
+| `rule` | A real keyword / stage-code rule matched | Sorted |
+| `manual` | User set it explicitly | Sorted |
+
+`resolveDefaultIncomeType` falls back to a catch-all income type, so nearly every credit row resolves to *something*. Counting that as sorted would swallow the whole file into "Sorted" on load — hence `fallback` is treated as still needing attention.
+
+**Golden test:** `src/utils/__tests__/importRowModel.golden.test.ts` reimplements the pre-refactor ID algorithm verbatim and asserts byte-identical output. Transaction IDs feed both dedup and insert; if this test fails, dedup has moved and the change must not ship.
+
+---
+
+## Step 4 Scale Rules
+
+- **Rows are paginated** (`PaginationBar`, 50/page). **Select-all and bulk apply target the full filtered set, never the visible page** — narrowing them silently changes what a bulk action does.
+- **Step 4 row lists are memoized** (`step4Rows`). They previously rebuilt and re-parsed every row on every render, so one keystroke in the filter box re-ran `parseDebitAmount` across the whole file.
+- **Insert `BATCH` is 250** (a POST body). **`DEDUP_CHUNK_SIZE` stays 100** — that one is bounded by GET URL length, not throughput. Do not "align" them.
+- Failed insert batches are collected into `ImportResult.failedRows` and offered as **Retry N failed row(s)**. Retry replays only those rows; already-inserted rows are untouched and IDs are unchanged, so retrying cannot duplicate.
+
+---
+
+## `recorded_at` at Import
+
+**Not hardcoded to import time.** `recorded_at` is a reporting axis (`ReportBasis = 'transaction_date' | 'recorded_at'`, `ReportDateFilter.tsx`), so stamping a backdated statement with "now" skews every recorded-basis report.
+
+Step 4 offers **Today** (default, previous behaviour) · **Specific date** · **Match each transaction's date**, plus a per-row override via the bulk apply bar (`rowRecordedDates`, which wins over the import-level setting).
+
+Format is `${date}T00:00:00.000Z`, matching `BulkEditInflowModal.tsx`, `AddInflowModal.tsx` and `AddOutflowModal.tsx`. Note `recorded_at` is `timestamptz`, so midnight UTC renders as the previous day west of UTC — the existing modals share this, and diverging would be worse.
+
+---
+
+## Grouped View & Classification Rules
+
+**Grouping:** `src/utils/groupImportRows.ts` · **UI:** `src/components/modals/import/GroupedRowList.tsx`
+
+Third mode on `useViewToggle('import-step4-view', STEP4_VIEW_MODES)`. Opt-in — table view is unchanged and remains the default.
+
+- Group key = `normalizeNarration(description)`. **Bucketing and labelling only.**
+- Header shows the cleaned label **with the full raw sample directly beneath it**; expanding lists rows each showing their **own** raw description.
+- A group's `configured` state is the **weakest** of its rows, so a group containing any unresolved row surfaces in Needs attention.
+- Table and card views get the same concept via the **Needs attention only** filter toggle.
+
+**Outflow rules:** `outflow_classification_rules` table (mirrors `income_type_rules`) + `src/utils/classifyOutflow.ts` + `src/hooks/useOutflowClassificationRules.ts`.
+
+- Precedence: rule match → `getDefaultOutflowTypeForCategory` (category map) → exact category-name match (the previous *sole* behaviour, now last).
+- **Rules match the RAW description**, like `classifyIncomeType`. `rule_value` saved by "Save as rule" is the group's raw sample text, not the cleaned label.
+- The hook degrades to an empty rule set if the table is missing, so an unmigrated org can still import.
+- Registered in `schema.sql` in **six** places: table, RLS enable, four policies, two indexes, the org-lifecycle table list, and the org delete cascade (before `outflow_types`, its FK target).
+
+---
+
 ## ImportModal Dismiss Guard & Session Autosave
 
 ### Dismiss guard
@@ -35,9 +108,11 @@ Also contains `ManualEntryForm` for single-transaction entry.
 
 ### Session autosave
 
-- Key: `church-import-session` in `sessionStorage` (auto-cleared on browser/tab close).
-- Saved on every meaningful state change when `isDirty && !preloadedFile`. Includes: step, fileName, sheets (parsed rows), mapping, dateFormat, fxCurrency, bankId/bankName, all per-row configs, processedRows (step ≥ 4), precomputed IDs, duplicateRis, dupStats, bsConfigTab.
-- **Restore:** runs once on `false→true` open transition (`prevOpenRef` guard). Only restores if `sheets.length > 0 && step >= 2`. Numeric-keyed `Record<number, T>` objects are re-keyed (JSON.parse coerces number keys to strings).
+- Key: `church-import-session` in `sessionStorage` (auto-cleared on browser/tab close). Payload is versioned — `v: 2`.
+- **Bulk row data is NEVER persisted.** Saving `sheets` + `processedRows` meant serializing two full copies of the file on every state change: past ~5MB that threw `QuotaExceededError` into a swallowing `catch {}`, so crash recovery silently stopped working exactly when it was needed, and every checkbox click stalled the main thread.
+- Saved: step, fileName, rowCount, mapping, dateFormat, fxCurrency, bankId/bankName, all per-row config maps, bsConfigTab, batchOffsetRole. **Debounced 500ms**, skipped while `importing`.
+- Quota failures raise a **one-time toast** — never fail silently.
+- **Restore:** runs once on `false→true` open transition (`prevOpenRef` guard), requires `v === 2 && fileName && step >= 2`. Applies mapping + per-row config, then shows a banner asking the user to re-select the file. Safe because `ri` is stable and fallback IDs are deterministic, so everything realigns on re-parse. Numeric-keyed `Record<number, T>` objects are re-keyed (JSON.parse coerces number keys to strings).
 - **Session cleared** on: deliberate close (`handleClose` → `reset()`), explicit `reset()`, route-blocker "Discard Changes".
 - **`preloadedFile` skips save/restore** — parent-provided file re-parses on open; session state would conflict.
 
@@ -209,6 +284,8 @@ resolveDefaultIncomeType(description, stageCode1, incomeTypes, userPrefs?) → I
 3. `incomeType.special_config_id` (direct linked config)
 4. `incomeType.special_config_group_id` → `resolveGroupConfig(groupId)` when provided
 5. `generalConfigId` (date-based general config)
+
+**Column order:** Step 4 shows **Income Type before Distribution Rule** (row grid, card view and apply bar). The income type's linked config determines the rule, and changing it clears `isManualOverride` — showing the rule first put the effect before its cause.
 
 **`isManualOverride` flag:**
 - Set to `true` only when the user explicitly changes the Allocation Config dropdown for a row
