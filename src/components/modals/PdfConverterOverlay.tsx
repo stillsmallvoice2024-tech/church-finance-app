@@ -139,11 +139,24 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
       const sheets = await parsePDF(f, password)
       const sheet  = sheets[0]
 
-      if (sheet && sheet.rows.length >= 5) {
+      // Trust the native text layer whenever a real transaction table was located —
+      // a short statement with two transactions is still a perfect extraction. Only
+      // fall through to OCR when the parser had to guess at the grid (no header
+      // found) and produced too little to be a credible table.
+      if (sheet && sheet.rows.length > 0 && (sheet.tableDetected || sheet.rows.length >= 5)) {
         const rawRows    = sheet.rows.map(r => r.map(c => String(c ?? '')))
         const confidence = rawRows.map(r => r.map(() => 1.0))
         lastPasswordRef.current = password
-        applyResult({ headers: sheet.headers, rawRows, confidence, warnings: [], method: 'native', pageCount: 1 })
+        applyResult({
+          headers: sheet.headers,
+          rawRows,
+          confidence,
+          warnings: sheet.tableDetected
+            ? []
+            : ['No column headers were recognised — columns were inferred from page layout. Please verify before continuing.'],
+          method: 'native',
+          pageCount: sheet.pageCount,
+        })
         return
       }
 
