@@ -35,6 +35,11 @@ interface GroupedRowListProps {
 
 const GROUPS_PER_PAGE = 25
 
+// Expanding a group is a preview, not a work surface — the group controls
+// configure every row regardless. Without a cap, expanding a 5,000-row group
+// would mount 5,000 rows and reintroduce the problem pagination just solved.
+const EXPANDED_ROW_CAP = 50
+
 export function GroupedRowList({
   rows,
   renderControls,
@@ -214,7 +219,13 @@ function GroupCard({
 
       {expanded && (
         <div className="border-t border-gray-100 bg-white/60 max-h-52 overflow-y-auto divide-y divide-gray-100">
-          {group.rows.map(row => (
+          {group.rows.length > EXPANDED_ROW_CAP && (
+            <div className="px-3 py-1.5 text-[11px] text-gray-500 bg-gray-50 sticky top-0">
+              Showing the first {EXPANDED_ROW_CAP} of {group.rows.length.toLocaleString()} rows.
+              Configuring the group applies to all of them.
+            </div>
+          )}
+          {group.rows.slice(0, EXPANDED_ROW_CAP).map(row => (
             <div key={`${row.kind}-${row.ri}`} className="flex items-center gap-2 px-3 py-1.5 text-[11px]">
               <input
                 type="checkbox"
