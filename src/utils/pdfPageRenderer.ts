@@ -14,10 +14,33 @@ export async function getPdfPageCount(file: File, password?: string): Promise<nu
   }
 }
 
+/**
+ * Longest edge, in pixels, that the OCR vision model accepts before it
+ * downscales the image itself. Rendering above this buys nothing and costs
+ * upload bandwidth; rendering below it throws away legibility on the small
+ * print that bank statements are made of.
+ */
+export const MAX_OCR_IMAGE_EDGE = 2576
+
+/** Never magnify a page beyond this, however small its media box claims to be. */
+const MAX_RENDER_SCALE = 4.0
+
+/**
+ * Scale that lands the page's longest edge as close to the model's limit as
+ * possible. Derived from the page's own dimensions rather than a fixed
+ * multiplier so Letter, A4 and any odd media box all arrive at full usable
+ * resolution — a fixed 2× left Letter pages at 1584px, well short of the cap.
+ */
+function fitScale(widthPt: number, heightPt: number): number {
+  const longestEdge = Math.max(widthPt, heightPt)
+  if (longestEdge <= 0) return 2.0
+  return Math.min(MAX_RENDER_SCALE, MAX_OCR_IMAGE_EDGE / longestEdge)
+}
+
 export async function renderPageToBase64(
   file: File,
   pageNumber: number,
-  scale = 2.0,
+  scale?: number,
   password?: string,
 ): Promise<string> {
   const buffer = await file.arrayBuffer()
@@ -28,8 +51,11 @@ export async function renderPageToBase64(
     throwAsPdfError(err, !!password)
   }
 
-  const page     = await pdf!.getPage(pageNumber)
-  const viewport = page.getViewport({ scale })
+  const page = await pdf!.getPage(pageNumber)
+  // Measure the page at 1:1 first, then pick the scale that fills the model's
+  // resolution budget.
+  const base     = page.getViewport({ scale: 1 })
+  const viewport = page.getViewport({ scale: scale ?? fitScale(base.width, base.height) })
 
   const canvas   = document.createElement('canvas')
   canvas.width   = viewport.width

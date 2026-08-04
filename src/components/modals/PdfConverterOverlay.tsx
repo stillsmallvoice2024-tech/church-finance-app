@@ -61,7 +61,8 @@ async function runOcrPipeline(
   for (let p = 1; p <= pageCount; p++) {
     onProgress({ current: p, total: pageCount, statusText: `OCR: page ${p} of ${pageCount}…` })
 
-    const base64 = await renderPageToBase64(file, p, 2.0, password)
+    // Scale omitted so the renderer fits each page to the model's resolution cap.
+    const base64 = await renderPageToBase64(file, p, undefined, password)
     const { data, error } = await supabase.functions.invoke('pdf-ocr', {
       body: { image: base64, mimeType: 'image/png', pageNumber: p },
     })

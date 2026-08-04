@@ -70,8 +70,17 @@ async function anthropicProvider(image: string, mimeType: string): Promise<OcrRe
       'content-type':       'application/json',
     },
     body: JSON.stringify({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      model: 'claude-sonnet-5',
+      // Adaptive thinking is the default on this model; stated explicitly because
+      // reading a statement table off a page image is exactly the kind of work it
+      // helps with — deciding which column a right-aligned figure belongs to, and
+      // whether a block below the last row is a transaction or a footer.
+      thinking:      { type: 'adaptive' },
+      output_config: { effort: 'high' },
+      // max_tokens caps thinking AND response text together. A full page of
+      // transactions plus its per-cell confidence array is already sizeable, so
+      // the previous 4096 would now truncate mid-JSON and fail the parse.
+      max_tokens: 16000,
       messages: [{
         role: 'user',
         content: [
