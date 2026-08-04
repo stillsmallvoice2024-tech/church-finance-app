@@ -184,7 +184,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
       setError('Total amount is required for amount-type configs'); return
     }
     const dbRows = buildDbRows()
-    if (dbRows.length === 0) { setError('Add at least one category row'); return }
+    if (dbRows.length === 0) { setError('Add at least one fund row'); return }
 
     const status: 'draft' | 'locked' = lockAfterSave ? 'locked' : 'draft'
     setSaving(true)
