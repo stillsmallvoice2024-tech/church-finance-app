@@ -62,7 +62,7 @@ You have a month-by-month summary of all financial activity for the year, ready 
 
 ## How to Build a Financial Report Layout
 
-**What you'll need:** Categories configured with transactions. Useful for board presentations and formal statements.
+**What you'll need:** Funds configured with transactions. Useful for board presentations and formal statements.
 
 **Where to go:** Reports → Financial Report
 

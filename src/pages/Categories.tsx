@@ -245,7 +245,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Category' : 'New Category'} size="max-w-md">
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Fund' : 'New Fund'} size="max-w-md">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {displayError && (
           <div className="space-y-2">
@@ -258,7 +258,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
 
         {/* Name */}
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Category Name *</label>
+          <label className="text-xs font-medium text-gray-600">Fund Name *</label>
           <input
             type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="e.g. Tithes, Offerings, Welfare" required
@@ -395,7 +395,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function Categories() {
-  usePageTitle('Categories')
+  usePageTitle('Fund Setup')
   useFirstVisitTour('categories')
   const { baseCurrencySymbol, formatLocale, foreignCurrencies } = useOrgCurrency()
 
@@ -491,7 +491,7 @@ export default function Categories() {
       toast.success(`"${deleteTarget.name}" deleted.`)
       refetch()
     } catch (err) {
-      toast.error(friendlyError(err, 'delete the category'))
+      toast.error(friendlyError(err, 'delete the fund'))
     } finally {
       setDeleteTarget(null)
     }
@@ -503,7 +503,7 @@ export default function Categories() {
       toast.success(hide ? `"${cat.name}" hidden.` : `"${cat.name}" restored.`)
       refetch()
     } catch (err) {
-      toast.error(friendlyError(err, 'update the category'))
+      toast.error(friendlyError(err, 'update the fund'))
     } finally {
       setHideTarget(null)
     }
@@ -588,9 +588,9 @@ export default function Categories() {
       {/* Header */}
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Categories</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Fund Setup</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {activeTab === 'fx' ? 'Foreign-currency categories and their opening balances' : 'Manage income and allocation categories'}
+            {activeTab === 'fx' ? 'Foreign-currency funds and their opening balances' : 'Manage income and allocation funds'}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -625,15 +625,15 @@ export default function Categories() {
           <button data-tour="add-button" onClick={openAdd}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
             <Plus className="w-4 h-4" />
-            Add Category
+            Add Fund
           </button>
         </div>
       </div>
 
-      <PageHelpBanner storageKey="help-dismissed-categories" title="Income & Allocation Categories">
-        Categories define how inflows are split and tracked. <strong>Local</strong> categories hold funds in
-        your base currency; <strong>FX</strong> categories handle foreign-currency holdings. Allocation rules
-        automatically distribute incoming funds across categories when transactions are imported.
+      <PageHelpBanner storageKey="help-dismissed-categories" title="Income & Allocation Funds">
+        Funds define how inflows are split and tracked. <strong>Local</strong> funds hold money in
+        your base currency; <strong>FX</strong> funds handle foreign-currency holdings. Allocation rules
+        automatically distribute incoming funds across these funds when transactions are imported.
       </PageHelpBanner>
 
       <div data-tour="data-controls">
@@ -648,7 +648,7 @@ export default function Categories() {
         onViewChange={catState.setView}
         search={catState.search}
         onSearchChange={catState.setSearch}
-        searchPlaceholder="Search by category or group name…"
+        searchPlaceholder="Search by fund or group name…"
         searchCol={catState.searchCol}
         onSearchColChange={catState.setSearchCol}
         advancedSort={catState.advancedSort}
@@ -680,12 +680,12 @@ export default function Categories() {
             <Layers className="w-8 h-8 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-gray-800">No categories yet</p>
-            <p className="text-sm text-gray-500 mt-1">Create your first category to use in distribution rules.</p>
+            <p className="font-semibold text-gray-800">No funds yet</p>
+            <p className="text-sm text-gray-500 mt-1">Create your first fund to use in distribution rules.</p>
           </div>
           <button onClick={openAdd}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
-            <Plus className="w-4 h-4" />Add Category
+            <Plus className="w-4 h-4" />Add Fund
           </button>
         </div>
       )}
@@ -708,7 +708,7 @@ export default function Categories() {
                     {displayBalances.length > 0 && (
                       <div className="flex flex-col items-end gap-0.5 shrink-0">
                         {displayBalances.map(b => (
-                          <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{b.budget_portion}</span>
+                          <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{BUDGET_PORTION_LABELS[b.budget_portion] ?? b.budget_portion}</span>
                         ))}
                       </div>
                     )}
@@ -855,7 +855,7 @@ export default function Categories() {
 
       <DeleteDialog
         open={!!deleteTarget}
-        label={deleteTarget?.name ?? 'this category'}
+        label={deleteTarget?.name ?? 'this fund'}
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}
       />
@@ -876,7 +876,7 @@ export default function Categories() {
               </button>
               <button onClick={() => handleToggleHide(hideTarget, true)}
                 className="px-4 py-2 text-sm text-white bg-amber-500 rounded-lg hover:bg-amber-600">
-                Hide Category
+                Hide Fund
               </button>
             </div>
           </div>
@@ -918,7 +918,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         {displayBalances.length > 0
           ? <div className="flex flex-col gap-0.5">
               {displayBalances.map(b => (
-                <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full w-fit">{b.budget_portion}</span>
+                <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full w-fit">{BUDGET_PORTION_LABELS[b.budget_portion] ?? b.budget_portion}</span>
               ))}
             </div>
           : <span className="text-gray-300">—</span>}

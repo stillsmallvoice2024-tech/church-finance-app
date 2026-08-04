@@ -75,9 +75,9 @@ export const FAQS: FAQEntry[] = [
   },
   {
     id: 'faq-categories-vs-departments',
-    question: 'What is the difference between categories and departments?',
+    question: 'What is the difference between funds and departments?',
     answer:
-      'Categories (income types / outflow types) classify *what* a transaction is — e.g. Tithes, Salaries. Departments classify *who* the transaction belongs to — e.g. Youth Ministry, Administration. A single transaction can have both a category and a department.',
+      'Funds (income types / outflow types) classify *what* a transaction is — e.g. Tithes, Salaries. Departments classify *who* the transaction belongs to — e.g. Youth Ministry, Administration. A single transaction can have both a fund and a department.',
     category: 'categories',
     tags: ['categories', 'departments', 'classification'],
   },

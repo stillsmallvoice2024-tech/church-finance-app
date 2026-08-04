@@ -915,7 +915,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
         </p>
       )}
 
-      <EditLaterNote where="Budget & Allocation → Categories" />
+      <EditLaterNote where="Budget & Allocation → Fund Setup" />
     </div>
   )
 }
@@ -1716,7 +1716,7 @@ function FinishStep({ onClose }: { onClose: () => void }) {
           { icon: Upload,        label: 'Import Statement',  desc: 'Upload your first bank statement',   href: '/import'      },
           { icon: Landmark,      label: 'Bank Ledger',       desc: 'View transactions by account',       href: '/bank-ledger' },
           { icon: ArrowDownCircle, label: 'Inflows',         desc: 'Browse income records',              href: '/inflows'     },
-          { icon: Tag,           label: 'Categories',        desc: 'Manage your funds and pots',         href: '/categories'  },
+          { icon: Tag,           label: 'Fund Setup',        desc: 'Manage your funds and pots',         href: '/categories'  },
         ].map(({ icon: Icon, label, desc, href }) => (
           <button
             key={href}
