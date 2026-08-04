@@ -193,24 +193,24 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
           </Field>
         </div>
 
-        {/* Category rows */}
+        {/* Fund rows */}
         <div className="space-y-2">
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] gap-2 px-0.5">
-            <span className="text-xs font-medium text-gray-600">Category <span aria-hidden="true" className="text-danger">*</span></span>
-            <span className="text-xs font-medium text-gray-600">Budget Portion <span aria-hidden="true" className="text-danger">*</span></span>
+            <span className="text-xs font-medium text-gray-600">Fund <span aria-hidden="true" className="text-danger">*</span></span>
+            <span className="text-xs font-medium text-gray-600">Fund Type <span aria-hidden="true" className="text-danger">*</span></span>
             <span className="text-xs font-medium text-gray-600 text-right">Percentage <span aria-hidden="true" className="text-danger">*</span></span>
             <span />
           </div>
 
           {categories.length === 0 && (
             <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              No categories found. Create categories on the Categories page first.
+              No funds found. Create funds on the Categories page first.
             </p>
           )}
 
           {fields.map((field, idx) => (
             <div key={field.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] gap-2 items-start">
-              {/* Category */}
+              {/* Fund */}
               <div>
                 <Controller
                   control={control}
@@ -236,7 +236,7 @@ export function AllocationConfigModal({ open, onClose, onSuccess, editRecord, ex
                   {...register(`rows.${idx}.budget_portion`)}
                   className={inputCls(!!errors.rows?.[idx]?.budget_portion)}
                 >
-                  <option value="">— Portion —</option>
+                  <option value="">— Fund Type —</option>
                   {BUDGET_PORTIONS.map(p => (
                     <option key={p} value={p}>{PORTION_LABELS[p]}</option>
                   ))}

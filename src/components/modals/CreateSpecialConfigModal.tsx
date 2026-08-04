@@ -393,10 +393,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           </div>
         )}
 
-        {/* Category rows */}
+        {/* Fund rows */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-gray-600">Category Rows</label>
+            <label className="text-xs font-medium text-gray-600">Fund Rows</label>
             <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
               {allocType === 'percentage'
                 ? `${runningTotal.toFixed(1)} / 100%`
@@ -406,8 +406,8 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
 
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
-              <span>Category</span>
-              <span>Budget Portion</span>
+              <span>Fund</span>
+              <span>Fund Type</span>
               <span>{allocType === 'percentage' ? '%' : `${baseCurrencySymbol} Amount`}</span>
               <span />
             </div>
@@ -426,7 +426,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     onChange={e => setRowField(i, 'budget_portion', e.target.value)}
                     className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                   >
-                    <option value="">— Portion —</option>
+                    <option value="">— Fund Type —</option>
                     <option value="Percentage">Regular Funds</option>
                     <option value="Specific Seed">Designated Gift</option>
                     <option value="Savings">Savings Funds</option>
