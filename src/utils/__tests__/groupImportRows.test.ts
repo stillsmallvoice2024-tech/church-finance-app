@@ -11,6 +11,19 @@ import type { ImportRow, RowResolution } from '../../types/importRow'
 import { emptyRowConfig } from '../../types/importRow'
 
 let nextRi = 0
+
+// A group counts as sorted only when its rows are actually COMPLETE, not merely
+// touched — so a fixture that wants a sorted row has to fill the fields in.
+// For outflows that means fund + fund type + outflow type.
+function completeOutflowConfig() {
+  return {
+    ...emptyRowConfig(),
+    stageCode1:    'Utilities',
+    stageCode2:    'Percentage Allocation',
+    outflowTypeId: 'type-1',
+  }
+}
+
 function row(
   description: string,
   amount = 1000,
@@ -18,10 +31,14 @@ function row(
   kind: 'inflow' | 'outflow' = 'outflow',
 ): ImportRow {
   const ri = nextRi++
+  const complete = resolution === 'rule' || resolution === 'manual'
   return {
     ri, kind, date: '2026-03-01', amount, description,
     ref: null, txnId: `id-${ri}`, isDuplicate: false,
-    config: emptyRowConfig(), resolution,
+    config: complete
+      ? (kind === 'outflow' ? completeOutflowConfig() : { ...emptyRowConfig(), incomeTypeId: 'income-1' })
+      : emptyRowConfig(),
+    resolution,
   }
 }
 
@@ -123,6 +140,81 @@ describe('splitGroups', () => {
       row('D', 100, 'manual'),
     ])
     const { needsAttention, sorted } = splitGroups(groups)
+    expect(needsAttention.length + sorted.length).toBe(groups.length)
+  })
+})
+
+describe('manual splitting', () => {
+  it('pulls overridden rows out of their narration group', () => {
+    const a = row('NIP TRANSFER TO JOHN DOE REF 1 SUCCESSFUL')
+    const b = row('NIP TRANSFER TO JOHN DOE REF 2 SUCCESSFUL')
+    const c = row('NIP TRANSFER TO JOHN DOE REF 3 SUCCESSFUL')
+    // Without an override all three bucket together.
+    expect(groupImportRows([a, b, c])).toHaveLength(1)
+
+    const overrides = new Map([[c.ri, 'split:abc']])
+    const labels    = new Map([['split:abc', 'Handled separately']])
+    const groups    = groupImportRows([a, b, c], overrides, labels)
+
+    expect(groups).toHaveLength(2)
+    const split = groups.find(g => g.isSplit)
+    expect(split?.count).toBe(1)
+    expect(split?.label).toBe('Handled separately')
+    expect(groups.find(g => !g.isSplit)?.count).toBe(2)
+  })
+
+  it('keeps the raw description on split rows', () => {
+    const raw = 'POS PAYMT SHOPRITE IKEJA TERMINAL 9'
+    const r = row(raw)
+    const groups = groupImportRows([r], new Map([[r.ri, 'split:x']]), new Map())
+    expect(groups[0].rows[0].description).toBe(raw)
+    expect(groups[0].sampleRaw).toBe(raw)
+  })
+
+  it('falls back to a generic label when none was supplied', () => {
+    const r = row('ANYTHING')
+    const groups = groupImportRows([r], new Map([[r.ri, 'split:y']]), new Map())
+    expect(groups[0].label).toBe('Split group')
+  })
+
+  it('marks only split groups as split', () => {
+    const a = row('AAA')
+    const b = row('BBB')
+    const groups = groupImportRows([a, b], new Map([[a.ri, 'split:z']]), new Map())
+    expect(groups.filter(g => g.isSplit)).toHaveLength(1)
+  })
+})
+
+describe('manual section overrides', () => {
+  it('forces an incomplete group into Sorted', () => {
+    const groups = groupImportRows([row('INCOMPLETE', 100, 'unresolved')])
+    expect(splitGroups(groups).sorted).toHaveLength(0)
+
+    const forced = splitGroups(groups, { [groups[0].key]: 'sorted' })
+    expect(forced.sorted).toHaveLength(1)
+    expect(forced.needsAttention).toHaveLength(0)
+  })
+
+  it('pulls a complete group back to Needs attention', () => {
+    const groups = groupImportRows([row('DONE', 100, 'manual')])
+    expect(splitGroups(groups).sorted).toHaveLength(1)
+
+    const forced = splitGroups(groups, { [groups[0].key]: 'attention' })
+    expect(forced.needsAttention).toHaveLength(1)
+    expect(forced.sorted).toHaveLength(0)
+  })
+
+  it('returns to the computed state once the override is cleared', () => {
+    const groups = groupImportRows([row('DONE', 100, 'manual')])
+    expect(splitGroups(groups, {}).sorted).toHaveLength(1)
+  })
+
+  it('still accounts for every group exactly once under overrides', () => {
+    const groups = groupImportRows([
+      row('A', 100, 'unresolved'),
+      row('B', 100, 'manual'),
+    ])
+    const { needsAttention, sorted } = splitGroups(groups, { [groups[0].key]: 'sorted' })
     expect(needsAttention.length + sorted.length).toBe(groups.length)
   })
 })

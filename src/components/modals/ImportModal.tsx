@@ -29,9 +29,10 @@ import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
-import { PaginationBar } from '../ui/PaginationBar'
+import { RowWindowBar } from '../ui/RowWindowBar'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { isOffsetableType } from '../../utils/transactionTypes'
+import { BUDGET_PORTIONS } from '../../utils/constants'
 import { friendlyError } from '../../utils/friendlyError'
 // Shared with Import.tsx — a divergent second copy would break dedup silently,
 // since Set.has() is byte-exact.
@@ -44,7 +45,7 @@ import {
   parseNumber,
   parseDebitAmount,
 } from '../../utils/buildImportRows'
-import type { ImportRow } from '../../types/importRow'
+import type { ImportRow, ImportRowConfig } from '../../types/importRow'
 import { needsAttention } from '../../types/importRow'
 import { classifyOutflow, resolveOutflowType } from '../../utils/classifyOutflow'
 import { classifyIncomeType } from '../../utils/classifyIncomeType'
@@ -635,6 +636,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setRestoredSession(null)
     setInflowPage(0)
     setOutflowPage(0)
+    setManualGroupSections({})
+    setGroupOverrides(new Map())
+    setGroupOverrideLabels(new Map())
     setRecordedMode('today')
     setRecordedDate('')
     setRowRecordedDates({})
@@ -1097,13 +1101,73 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
   // ── Grouped view helpers ───────────────────────────────────────────────────
 
-  // Configuring a group promotes its rows out of "Needs attention" immediately,
-  // so the section counters track the user's progress as they work.
-  const markGroupResolved = useCallback((ris: number[]) => {
+  /**
+   * Write a config change onto every row in a group.
+   *
+   * Per-row state still lives in two places — the legacy `Record<number, T>`
+   * maps that Step 4 and runImport read, and `importRows`. Grouped-view
+   * controls used to update only the legacy maps, so completeness could never
+   * be recomputed from the model. Every grouped control goes through here so
+   * both stay in step.
+   *
+   * `resolution` becomes 'manual' only for the fields the user actually set;
+   * whether the row is *finished* is decided by `isRowComplete`, not by this.
+   */
+  const applyToGroup = useCallback((ris: number[], patch: Partial<ImportRowConfig>) => {
     const target = new Set(ris)
     setImportRows(prev => prev.map(r =>
-      target.has(r.ri) ? { ...r, resolution: 'manual' as const } : r,
+      target.has(r.ri)
+        ? { ...r, config: { ...r.config, ...patch }, resolution: 'manual' as const }
+        : r,
     ))
+  }, [])
+
+  // ── Manual section overrides & group splitting ─────────────────────────────
+  // Sections were purely derived from completeness, so the user could not
+  // disagree with them in either direction.
+  const [manualGroupSections, setManualGroupSections] = useState<Record<string, 'sorted' | 'attention'>>({})
+  const setGroupSection = useCallback((key: string, section: 'sorted' | 'attention' | null) => {
+    setManualGroupSections(prev => {
+      const next = { ...prev }
+      if (section) next[key] = section
+      else delete next[key]
+      return next
+    })
+  }, [])
+
+  // Rows the user pulled out of their narration group so they can be handled
+  // separately. `ri → forced group key`; session-only, cleared on reset.
+  const [groupOverrides, setGroupOverrides] = useState<Map<number, string>>(new Map())
+  const [groupOverrideLabels, setGroupOverrideLabels] = useState<Map<string, string>>(new Map())
+
+  const splitRowsIntoGroup = useCallback((group: ImportRowGroup, ris: number[]) => {
+    if (ris.length === 0) return
+    const key = `split:${crypto.randomUUID()}`
+    setGroupOverrides(prev => {
+      const next = new Map(prev)
+      for (const ri of ris) next.set(ri, key)
+      return next
+    })
+    setGroupOverrideLabels(prev => new Map(prev).set(key, `${group.label} (split)`))
+    toast.success(`${ris.length} row(s) split into their own group`)
+  }, [toast])
+
+  const unsplitGroup = useCallback((key: string) => {
+    setGroupOverrides(prev => {
+      const next = new Map(prev)
+      for (const [ri, k] of prev) if (k === key) next.delete(ri)
+      return next
+    })
+    setGroupOverrideLabels(prev => {
+      const next = new Map(prev)
+      next.delete(key)
+      return next
+    })
+    setManualGroupSections(prev => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
   }, [])
 
   const [savingRuleKey, setSavingRuleKey] = useState<string | null>(null)
@@ -2487,6 +2551,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           })}
                           onSaveAsRule={saveInflowGroupAsRule}
                           savingRuleKey={savingRuleKey}
+                          manualSections={manualGroupSections}
+                          onSetSection={setGroupSection}
+                          overrides={groupOverrides}
+                          overrideLabels={groupOverrideLabels}
+                          onSplitRows={splitRowsIntoGroup}
+                          onUnsplit={unsplitGroup}
                           renderControls={group => (
                             <>
                               {/* Income type first — it determines the rule. */}
@@ -2503,7 +2573,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     for (const ri of group.ris) delete next[ri]
                                     return next
                                   })
-                                  markGroupResolved(group.ris)
+                                  applyToGroup(group.ris, { incomeTypeId: newId, isManualOverride: false })
                                 }}
                                 options={incomeTypes.map(t => ({ value: t.id, label: t.name }))}
                                 placeholder="— Income Type —"
@@ -2525,7 +2595,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     for (const ri of group.ris) next[ri] = true
                                     return next
                                   })
-                                  markGroupResolved(group.ris)
+                                  applyToGroup(group.ris, { allocationConfigId: val, isManualOverride: true })
                                 }}
                                 className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[150px]">
                                 <option value="">General (date-based)</option>
@@ -2608,6 +2678,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                           value={effIncomeTypeId}
                                           onChange={newId => {
                                             setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
+                                            applyToGroup([ri], { incomeTypeId: newId, isManualOverride: false })
                                             setRowManualOverrides(prev => {
                                               const next = { ...prev }
                                               delete next[ri]
@@ -2638,6 +2709,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                             setCreateConfigPendingRow(ri)
                                           } else {
                                             setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                            applyToGroup([ri], { allocationConfigId: e.target.value, isManualOverride: true })
                                             setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
                                           }
                                         }}
@@ -2673,14 +2745,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                             })
                         }
                       </div>
-                      <PaginationBar
+                      <RowWindowBar
                         page={inflowSafePage}
                         pageSize={step4PageSize}
                         total={filtered.length}
                         onPageChange={setInflowPage}
                         onPageSizeChange={setStep4PageSize}
-                        pageSizeOptions={[25, 50, 100, 200]}
-                        variant="full"
                       />
                     </div>
                       ) : (
@@ -2781,6 +2851,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                               value={effIncomeTypeId}
                                               onChange={newId => {
                                                 setRowIncomeTypes(prev => ({ ...prev, [ri]: newId }))
+                                                applyToGroup([ri], { incomeTypeId: newId, isManualOverride: false })
                                                 setRowManualOverrides(prev => {
                                                   const next = { ...prev }
                                                   delete next[ri]
@@ -2815,6 +2886,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                                 setCreateConfigPendingRow(ri)
                                               } else {
                                                 setRowConfigs(prev => ({ ...prev, [ri]: e.target.value }))
+                                                applyToGroup([ri], { allocationConfigId: e.target.value, isManualOverride: true })
                                                 setRowManualOverrides(prev => ({ ...prev, [ri]: true }))
                                               }
                                             }}
@@ -2866,14 +2938,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           })
                       }
                     </div>
-                    <PaginationBar
+                    <RowWindowBar
                       page={inflowSafePage}
                       pageSize={step4PageSize}
                       total={filtered.length}
                       onPageChange={setInflowPage}
                       onPageSizeChange={setStep4PageSize}
-                      pageSizeOptions={[25, 50, 100, 200]}
-                      variant="full"
                     />
                     </>
                       )
@@ -2961,11 +3031,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                         wrapperClassName="flex-1 min-w-[100px]" />
                       <SearchableSelect value={applyS2} onChange={setApplyS2}
-                        options={[
-                          { value: 'Percentage Allocation', label: 'Regular Funds' },
-                          { value: 'Specific Seed',         label: 'Designated Gift' },
-                          { value: 'Savings',               label: 'Savings' },
-                        ]}
+                        options={BUDGET_PORTIONS.map(p => ({ value: p.value, label: p.label }))}
                         placeholder="Fund Type"
                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                         wrapperClassName="flex-1 min-w-[100px]" />
@@ -3115,6 +3181,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         })}
                         onSaveAsRule={saveOutflowGroupAsRule}
                         savingRuleKey={savingRuleKey}
+                        manualSections={manualGroupSections}
+                        onSetSection={setGroupSection}
+                        overrides={groupOverrides}
+                        overrideLabels={groupOverrideLabels}
+                        onSplitRows={splitRowsIntoGroup}
+                        onUnsplit={unsplitGroup}
                         renderControls={group => (
                           <>
                             <select
@@ -3126,10 +3198,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                   for (const ri of group.ris) next[ri] = { s1: v, s2: prev[ri]?.s2 ?? '' }
                                   return next
                                 })
-                                markGroupResolved(group.ris)
+                                applyToGroup(group.ris, { stageCode1: v })
                               }}
                               className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[150px]">
-                              <option value="">— Category —</option>
+                              <option value="">— Fund —</option>
                               {filteredCategories.map((c: { id: string; name: string }) => (
                                 <option key={c.id} value={c.name}>{c.name}</option>
                               ))}
@@ -3143,12 +3215,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                   for (const ri of group.ris) next[ri] = { s1: prev[ri]?.s1 ?? '', s2: v }
                                   return next
                                 })
+                                applyToGroup(group.ris, { stageCode2: v })
                               }}
                               className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[140px]">
-                              <option value="">— Budget Portion —</option>
-                              <option value="Percentage Allocation">Percentage Allocation</option>
-                              <option value="Specific Seed">Specific Seed</option>
-                              <option value="Savings">Savings</option>
+                              <option value="">— Fund Type —</option>
+                              {BUDGET_PORTIONS.map(p => (
+                                <option key={p.value} value={p.value}>{p.label}</option>
+                              ))}
                             </select>
                             {outflowTypeOptions.length > 0 && (
                               <select
@@ -3160,6 +3233,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     for (const ri of group.ris) next[ri] = v
                                     return next
                                   })
+                                  applyToGroup(group.ris, { outflowTypeId: v })
                                 }}
                                 className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[130px]">
                                 <option value="">— Outflow Type —</option>
@@ -3188,7 +3262,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         }}
                         className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                       />
-                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Category</span><span>Fund Type</span><span>Pending</span><span>Txn Type</span>
+                      <span>#</span><span>Description / Date</span><span>Amount</span><span>Fund</span><span>Fund Type</span><span>Pending</span><span>Txn Type</span>
                     </div>
                     <div className="max-h-[340px] overflow-y-auto divide-y divide-gray-100">
                       {filtered.length === 0
@@ -3231,6 +3305,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                   <SearchableSelect value={sc.s1}
                                     onChange={s1 => {
                                       setRowStageCodes(prev => ({ ...prev, [ri]: { s1, s2: prev[ri]?.s2 ?? '' } }))
+                                      applyToGroup([ri], { stageCode1: s1 })
                                       const cat = categories.find((c: { name: string }) => c.name === s1)
                                       let suggestedId = ''
                                       if (cat) {
@@ -3241,17 +3316,18 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                         suggestedId = match?.id ?? ''
                                       }
                                       setRowOutflowTypes(prev => ({ ...prev, [ri]: suggestedId }))
+                                      applyToGroup([ri], { outflowTypeId: suggestedId })
                                     }}
                                     options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}
                                     placeholder="— None —"
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full" />
                                   <select value={sc.s2}
-                                    onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
+                                    onChange={e => { setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } })); applyToGroup([ri], { stageCode2: e.target.value }) }}
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                     <option value="">— None —</option>
-                                    <option value="Percentage Allocation">Regular Funds</option>
-                                    <option value="Specific Seed">Designated Gift</option>
-                                    <option value="Savings">Savings Funds</option>
+                                    {BUDGET_PORTIONS.map(p => (
+                                      <option key={p.value} value={p.value}>{p.label}</option>
+                                    ))}
                                   </select>
                                   <div className="flex justify-center">
                                     <input
@@ -3277,7 +3353,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                   <div className="px-3 pb-2 flex items-center gap-2">
                                     <span className="text-xs text-gray-500 w-28 shrink-0">Outflow Type:</span>
                                     <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
-                                      onChange={v => setRowOutflowTypes(prev => ({ ...prev, [ri]: v }))}
+                                      onChange={v => { setRowOutflowTypes(prev => ({ ...prev, [ri]: v })); applyToGroup([ri], { outflowTypeId: v }) }}
                                       options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
                                       placeholder="— None —"
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
@@ -3299,14 +3375,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           })
                       }
                     </div>
-                    <PaginationBar
+                    <RowWindowBar
                       page={outflowSafePage}
                       pageSize={step4PageSize}
                       total={filtered.length}
                       onPageChange={setOutflowPage}
                       onPageSizeChange={setStep4PageSize}
-                      pageSizeOptions={[25, 50, 100, 200]}
-                      variant="full"
                     />
                   </div>
                     ) : (
@@ -3403,11 +3477,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                   <div className="px-4 py-3 bg-gray-50/40 space-y-3">
                                     {/* Stage Code 1 */}
                                     <div>
-                                      <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Category</label>
+                                      <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Fund</label>
                                       <select value={sc.s1}
                                         onChange={e => {
                                           const s1 = e.target.value
                                           setRowStageCodes(prev => ({ ...prev, [ri]: { s1, s2: prev[ri]?.s2 ?? '' } }))
+                                          applyToGroup([ri], { stageCode1: s1 })
                                           const cat = categories.find((c: { name: string }) => c.name === s1)
                                           let suggestedId = ''
                                           if (cat) {
@@ -3418,6 +3493,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                             suggestedId = match?.id ?? ''
                                           }
                                           setRowOutflowTypes(prev => ({ ...prev, [ri]: suggestedId }))
+                                          applyToGroup([ri], { outflowTypeId: suggestedId })
                                         }}
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                         <option value="">— None —</option>
@@ -3428,12 +3504,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     <div>
                                       <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Fund Type</label>
                                       <select value={sc.s2}
-                                        onChange={e => setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } }))}
+                                        onChange={e => { setRowStageCodes(prev => ({ ...prev, [ri]: { s1: prev[ri]?.s1 ?? '', s2: e.target.value } })); applyToGroup([ri], { stageCode2: e.target.value }) }}
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                         <option value="">— None —</option>
-                                        <option value="Percentage Allocation">Regular Funds</option>
-                                        <option value="Specific Seed">Designated Gift</option>
-                                        <option value="Savings">Savings</option>
+                                        {BUDGET_PORTIONS.map(p => (
+                                          <option key={p.value} value={p.value}>{p.label}</option>
+                                        ))}
                                       </select>
                                     </div>
                                     {/* Outflow Type */}
@@ -3441,7 +3517,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                       <div>
                                         <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Outflow Type</label>
                                         <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
-                                          onChange={v => setRowOutflowTypes(prev => ({ ...prev, [ri]: v }))}
+                                          onChange={v => { setRowOutflowTypes(prev => ({ ...prev, [ri]: v })); applyToGroup([ri], { outflowTypeId: v }) }}
                                           options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
                                           placeholder="— None —"
                                           className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
@@ -3498,14 +3574,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                         })
                     }
                   </div>
-                  <PaginationBar
+                  <RowWindowBar
                     page={outflowSafePage}
                     pageSize={step4PageSize}
                     total={filtered.length}
                     onPageChange={setOutflowPage}
                     onPageSizeChange={setStep4PageSize}
-                    pageSizeOptions={[25, 50, 100, 200]}
-                    variant="full"
                   />
                   </>
                     )

@@ -81,7 +81,30 @@ export function emptyRowConfig(): ImportRowConfig {
   }
 }
 
+/**
+ * Is every field this row needs actually filled in?
+ *
+ * Completeness is read off the row's own config, never off the fact that an
+ * edit happened. Marking a row resolved the moment any control changed meant
+ * picking a fund alone promoted the whole group to Sorted with two fields
+ * still blank.
+ */
+export function isRowComplete(row: ImportRow): boolean {
+  // Non-Normal transaction types skip allocation entirely by design
+  // (import-rules.md → Non-Normal Transaction Import Rule), so they must not
+  // be held back for fields they will never have.
+  if (row.config.txnType) return true
+
+  if (row.kind === 'outflow') {
+    return !!(row.config.stageCode1 && row.config.stageCode2 && row.config.outflowTypeId)
+  }
+
+  // Inflow: an income type arrived at by a real rule or set by hand. A
+  // catch-all-only match stays `fallback` and still wants a look.
+  return !!row.config.incomeTypeId && row.resolution !== 'unresolved' && row.resolution !== 'fallback'
+}
+
 /** Rows still needing the user's attention — drives the Step 4 section split. */
 export function needsAttention(row: ImportRow): boolean {
-  return row.resolution === 'unresolved' || row.resolution === 'fallback'
+  return !isRowComplete(row)
 }

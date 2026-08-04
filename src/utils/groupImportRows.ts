@@ -33,6 +33,8 @@ export interface ImportRowGroup {
   total:     number
   /** True when every row in the group is resolved — drives the section split. */
   configured: boolean
+  /** True when this group exists because the user split rows out by hand. */
+  isSplit:    boolean
 }
 
 const NO_DESCRIPTION = '(no description)'
@@ -44,24 +46,36 @@ const NO_DESCRIPTION = '(no description)'
  * containing an unresolved or catch-all-only row surfaces in "Needs attention"
  * rather than hiding behind its already-configured siblings.
  */
-export function groupImportRows(rows: ImportRow[]): ImportRowGroup[] {
+export function groupImportRows(
+  rows: ImportRow[],
+  /**
+   * Manual overrides: `ri → forced group key`. Rows listed here bypass
+   * narration bucketing entirely, which is how "split these rows out" works
+   * without the splitting concern leaking into the narration logic.
+   */
+  overrides?: Map<number, string>,
+  /** Display labels for split groups, keyed by the forced group key. */
+  overrideLabels?: Map<string, string>,
+): ImportRowGroup[] {
   const byKey = new Map<string, ImportRowGroup>()
 
   for (const row of rows) {
+    const forced = overrides?.get(row.ri)
     const cleaned = row.description ? normalizeNarration(row.description) : ''
-    const key = cleaned || row.description || NO_DESCRIPTION
+    const key = forced ?? (cleaned || row.description || NO_DESCRIPTION)
 
     let group = byKey.get(key)
     if (!group) {
       group = {
         key,
-        label:      key,
+        label:      forced ? (overrideLabels?.get(forced) ?? 'Split group') : key,
         sampleRaw:  row.description || NO_DESCRIPTION,
         ris:        [],
         rows:       [],
         count:      0,
         total:      0,
         configured: true,
+        isSplit:    !!forced,
       }
       byKey.set(key, group)
     }
@@ -78,13 +92,28 @@ export function groupImportRows(rows: ImportRow[]): ImportRowGroup[] {
   )
 }
 
-/** Split groups into the two Step 4 sections. */
-export function splitGroups(groups: ImportRowGroup[]): {
+/**
+ * Split groups into the two Step 4 sections.
+ *
+ * A manual override wins over the computed state in BOTH directions: a group
+ * can be forced to Sorted while still incomplete, or pulled back to Needs
+ * attention after the fact. Without this the sections were purely derived and
+ * the user had no way to disagree with them.
+ */
+export function splitGroups(
+  groups: ImportRowGroup[],
+  manualSections?: Record<string, 'sorted' | 'attention'>,
+): {
   needsAttention: ImportRowGroup[]
   sorted:         ImportRowGroup[]
 } {
+  const isSorted = (g: ImportRowGroup) => {
+    const override = manualSections?.[g.key]
+    if (override) return override === 'sorted'
+    return g.configured
+  }
   return {
-    needsAttention: groups.filter(g => !g.configured),
-    sorted:         groups.filter(g =>  g.configured),
+    needsAttention: groups.filter(g => !isSorted(g)),
+    sorted:         groups.filter(g =>  isSorted(g)),
   }
 }
