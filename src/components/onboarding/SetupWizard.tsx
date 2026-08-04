@@ -1019,18 +1019,20 @@ function FundSplitRows({ rows, catNames, onChange }: {
   )
 }
 
+const CUSTOM_OPTION = '__custom__'
+
 function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { categories }         = useCategories()
   const configs                = useAllocationStore(s => s.configs)
   const groups                 = useAllocationStore(s => s.groups)
   const loaded                 = useAllocationStore(s => s.loaded)
   const { push: toast }        = useToastStore()
-  const [creating, setCreating]  = useState<number | null>(null)
+  const [saving, setSaving]      = useState(false)
   const [error, setError]        = useState<string | null>(null)
-  const [showCustom, setShowCustom]   = useState(false)
+  const [pickerOpen, setPickerOpen]   = useState(false)
+  const [selected, setSelected]       = useState<string | null>(null) // template label, or CUSTOM_OPTION
   const [customName, setCustomName]   = useState('')
   const [customRows, setCustomRows]   = useState<Array<{ category_name: string; percentage: number }>>([{ category_name: '', percentage: 100 }])
-  const [savingCustom, setSavingCustom] = useState(false)
 
   useEffect(() => { if (!loaded) useAllocationStore.getState().fetch() }, [loaded])
   useEffect(() => { onDataReady(true) }, [onDataReady])
@@ -1047,43 +1049,53 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
     () => (generalGroupId ? configs.filter(c => c.config_group_id === generalGroupId) : []),
     [configs, generalGroupId],
   )
+  // setGeneralRuleLive() rewrites the same-day row in place, so there is only ever
+  // one General rule active at a time — surface just the most recent one as "active".
+  const activeRule = useMemo(
+    () => regularConfigs.slice().sort((a, b) => (a.effective_from ?? '') < (b.effective_from ?? '') ? 1 : (a.effective_from ?? '') > (b.effective_from ?? '') ? -1 : 0)[0] ?? null,
+    [regularConfigs],
+  )
 
-  const saveGeneralRule = async (label: string, rows: SplitRow[]) => {
-    const today = new Date().toISOString().slice(0, 10)
-    await setGeneralRuleLive({
-      name:           label,
-      rows:           rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage', percentage: r.percentage })),
-      effective_from: today,
-    })
-    await useAllocationStore.getState().reload()
+  const selectedTemplate = templates.find(t => t.label === selected) ?? null
+  const isCustomSelected = selected === CUSTOM_OPTION
+  const customTotal      = customRows.reduce((s, r) => s + r.percentage, 0)
+  const customValid      = customName.trim() !== '' && customRows.every(r => r.category_name) && customTotal === 100
+  const canSave           = selectedTemplate !== null || (isCustomSelected && customValid)
+  const willOverride      = activeRule !== null && selected !== null
+
+  const openPicker = () => {
+    setPickerOpen(true)
+    setSelected(null)
+    setError(null)
   }
 
-  const handleCreate = async (idx: number, t: DistTemplate) => {
-    if (creating !== null) return
-    setCreating(idx); setError(null)
+  const cancelPicker = () => {
+    setPickerOpen(false)
+    setSelected(null)
+    setCustomName('')
+    setCustomRows([{ category_name: '', percentage: 100 }])
+    setError(null)
+  }
+
+  const handleSave = async () => {
+    if (!canSave || saving) return
+    const label = selectedTemplate ? selectedTemplate.label : customName.trim()
+    const rows  = selectedTemplate ? selectedTemplate.rows : customRows
+    setSaving(true); setError(null)
     try {
-      await saveGeneralRule(t.label, t.rows)
-      toast(`"${t.label}" is now your live General rule`, 'success')
+      const today = new Date().toISOString().slice(0, 10)
+      await setGeneralRuleLive({
+        name:           label,
+        rows:           rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage', percentage: r.percentage })),
+        effective_from: today,
+      })
+      await useAllocationStore.getState().reload()
+      toast(`"${label}" is now your live General rule`, 'success')
+      cancelPicker()
     } catch (err) {
       setError(friendlyError(err, 'save the rule'))
     } finally {
-      setCreating(null)
-    }
-  }
-
-  const handleCustomCreate = async () => {
-    if (!customName.trim() || savingCustom) return
-    const total = customRows.reduce((s, r) => s + r.percentage, 0)
-    if (total !== 100 || customRows.some(r => !r.category_name)) return
-    setSavingCustom(true); setError(null)
-    try {
-      await saveGeneralRule(customName.trim(), customRows)
-      toast(`"${customName.trim()}" is now your live General rule`, 'success')
-      setShowCustom(false); setCustomName(''); setCustomRows([{ category_name: '', percentage: 100 }])
-    } catch (err) {
-      setError(friendlyError(err, 'save the rule'))
-    } finally {
-      setSavingCustom(false)
+      setSaving(false)
     }
   }
 
@@ -1091,133 +1103,170 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
     <div className="space-y-4">
       <StepHeading
         title="How should income be split across your funds?"
-        description="A distribution rule tells Clariva how to divide incoming money — for example, 70% to General Fund, 20% to Building Fund, 10% to Welfare. These are your default rules for income that is general and not earmarked for a specific cause."
+        description="A distribution rule tells Clariva how to divide incoming money that isn't earmarked for anything specific — for example, 70% to General Fund, 20% to Building Fund, 10% to Welfare. Only one General rule can be active at a time."
       />
-
-      <div className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
-        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <p>The rule you pick here <strong>goes live immediately</strong> as your General rule. Pick a different one to replace it, or change it any time in Settings → Distribution Rules.</p>
-      </div>
-
-      {regularConfigs.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Created so far:</p>
-          <div className="flex flex-wrap gap-2">
-            {regularConfigs.map(r => <ItemBadge key={r.id} label={r.name} />)}
-          </div>
-        </div>
-      )}
 
       {catNames.length < 2 ? (
         <p className="text-xs text-gray-500 dark:text-gray-500 italic p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
           Add at least 2 funds in the previous step before setting up distribution rules.
         </p>
       ) : (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Quick-start templates — tap any to make it your live rule:</p>
-          {templates.map((t, idx) => {
-            const alreadyCreated = regularConfigs.some(r => r.name === t.label)
-            const isCreating     = creating === idx
-            return (
+        <>
+          {activeRule && !pickerOpen && (
+            <div className="flex items-start gap-3 p-3 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl">
+              <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Check className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Active General rule</p>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{activeRule.name}</p>
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {activeRule.rows.map(r => (
+                    <span key={r.category_name} className="text-xs px-1.5 py-0.5 bg-white/70 dark:bg-black/20 rounded text-gray-600 dark:text-gray-400">
+                      {r.category_name} {r.percentage}%
+                    </span>
+                  ))}
+                </div>
+              </div>
               <button
-                key={idx}
                 type="button"
-                disabled={alreadyCreated || creating !== null}
-                onClick={() => handleCreate(idx, t)}
-                className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-colors disabled:opacity-50 ${
-                  alreadyCreated
-                    ? 'border-primary/20 bg-primary/5 dark:bg-primary/10'
+                onClick={openPicker}
+                className="text-xs font-medium text-primary hover:underline flex-shrink-0 mt-1"
+              >
+                Change rule
+              </button>
+            </div>
+          )}
+
+          {(!activeRule || pickerOpen) && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                {activeRule ? 'Pick a replacement:' : 'Pick a starting point:'}
+              </p>
+
+              {templates.map((t) => {
+                const isSelected = selected === t.label
+                return (
+                  <button
+                    key={t.label}
+                    type="button"
+                    onClick={() => setSelected(t.label)}
+                    className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-colors ${
+                      isSelected
+                        ? 'border-primary bg-primary/5 dark:bg-primary/10'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                      isSelected ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                    }`}>
+                      <SlidersHorizontal className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold ${isSelected ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>{t.label}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.description}</p>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {t.rows.map(r => (
+                          <span key={r.category_name} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-400">
+                            {r.category_name} {r.percentage}%
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+
+              <button
+                type="button"
+                onClick={() => setSelected(CUSTOM_OPTION)}
+                className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-colors ${
+                  isCustomSelected
+                    ? 'border-primary bg-primary/5 dark:bg-primary/10'
                     : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50 dark:hover:bg-gray-800/50'
                 }`}
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                  alreadyCreated ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                  isCustomSelected ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
                 }`}>
-                  {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : alreadyCreated ? <Check className="w-4 h-4" /> : <SlidersHorizontal className="w-4 h-4" />}
+                  <Plus className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${alreadyCreated ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>{t.label}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.description}</p>
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {t.rows.map(r => (
-                      <span key={r.category_name} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-600 dark:text-gray-400">
-                        {r.category_name} {r.percentage}%
-                      </span>
-                    ))}
-                  </div>
+                  <p className={`text-sm font-semibold ${isCustomSelected ? 'text-primary' : 'text-gray-800 dark:text-gray-200'}`}>Custom</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Build your own split</p>
                 </div>
               </button>
-            )
-          })}
-        </div>
-      )}
 
-      {error && (
-        <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
-          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-          {error}
-        </div>
-      )}
+              {isCustomSelected && (
+                <div className="space-y-3 p-3 rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary/10">
+                  <input
+                    type="text"
+                    value={customName}
+                    onChange={e => setCustomName(e.target.value)}
+                    placeholder="Rule name (e.g. My Custom Split)"
+                    className={inputCls}
+                  />
+                  <FundSplitRows rows={customRows} catNames={catNames} onChange={setCustomRows} />
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setCustomRows(rows => [...rows, { category_name: '', percentage: 0 }])}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <Plus className="w-3 h-3" /> Add fund
+                    </button>
+                    <p className={`text-xs ${customTotal === 100 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      Total: {customTotal}% {customTotal === 100 ? '✓' : '— must equal 100%'}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-      <div className="border-t border-gray-100 dark:border-white/[0.07] pt-3 space-y-2">
-        {!showCustom ? (
-          <button
-            type="button"
-            onClick={() => setShowCustom(true)}
-            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Create a custom rule
-          </button>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Custom distribution rule</p>
-            <input
-              type="text"
-              value={customName}
-              onChange={e => setCustomName(e.target.value)}
-              placeholder="Rule name (e.g. My Custom Split)"
-              className={inputCls}
-            />
-            <FundSplitRows rows={customRows} catNames={catNames} onChange={setCustomRows} />
-            {(() => {
-              const total = customRows.reduce((s, r) => s + r.percentage, 0)
-              return total !== 100 ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400">Total: {total}% — must equal 100%</p>
-              ) : (
-                <p className="text-xs text-green-600 dark:text-green-400">Total: 100% ✓</p>
-              )
-            })()}
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setCustomRows(rows => [...rows, { category_name: '', percentage: 0 }])}
-                className="flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                <Plus className="w-3 h-3" /> Add fund
-              </button>
-              <div className="flex items-center gap-2">
+              {willOverride && canSave && (
+                <div className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <p>
+                    Only one General rule can be active. Saving this will replace <strong>"{activeRule?.name}"</strong>.
+                    Need a different split for a specific income type (e.g. a designated offering)? Set that up next in <strong>Special Rules</strong>.
+                  </p>
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                {activeRule && (
+                  <button
+                    type="button"
+                    onClick={cancelPicker}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    Cancel
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => { setShowCustom(false); setCustomName(''); setCustomRows([{ category_name: '', percentage: 100 }]) }}
-                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={!customName.trim() || customRows.some(r => !r.category_name) || customRows.reduce((s, r) => s + r.percentage, 0) !== 100 || savingCustom}
-                  onClick={handleCustomCreate}
+                  disabled={!canSave || saving}
+                  onClick={handleSave}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary-dark disabled:opacity-50 transition-colors"
                 >
-                  {savingCustom ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                  Save rule
+                  {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Save as active
                 </button>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+            Need different splits for specific income types? That's next — Special Rules.
+          </p>
+        </>
+      )}
 
       <EditLaterNote where="Settings → Distribution Rules" />
     </div>
