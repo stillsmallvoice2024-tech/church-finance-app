@@ -1,19 +1,33 @@
 name: Migration check
 
-# PR gate: spins up a full local Supabase stack (Postgres + Auth + Storage)
-# and applies every migration from scratch, so a broken migration fails CI
-# instead of failing the production push after merge.
+# PR gate for new/changed migrations.
+#
+# supabase/migrations/ has no migration that creates the base schema
+# (public.profiles, etc.) — that schema predates the migrations folder and
+# was applied to production by hand. Replaying every migration from an empty
+# database (the old approach here) fails on the very first file for that
+# reason, on every branch, regardless of what a PR actually changes.
+#
+# supabase/schema.sql is this repo's maintained "fresh install reference"
+# (see CLAUDE.md) and is expected to reflect every migration merged so far.
+# So instead of replaying history, this job seeds a fresh local stack from
+# schema.sql and applies only the migration file(s) this PR adds or changes
+# on top of it — which is the actual thing that needs validating before the
+# migrate.yml workflow pushes them to production.
 
 on:
   pull_request:
     paths:
       - 'supabase/migrations/**'
+  workflow_dispatch: {}
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: supabase/setup-cli@v1
         with:
@@ -31,5 +45,53 @@ jobs:
           done
           exit $status
 
-      - name: Apply all migrations against a fresh local stack
-        run: supabase start
+      - name: Determine migration files this PR adds or changes
+        id: diff
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          # workflow_dispatch (manual runs, used to test this workflow itself)
+          # has no PR base — fall back to diffing against main.
+          if [ -z "$base" ]; then
+            git fetch origin main
+            base="origin/main"
+          fi
+          changed=$(git diff --name-only --diff-filter=AM "$base"...HEAD -- 'supabase/migrations/*.sql' | sort)
+          if [ -z "$changed" ]; then
+            echo "No migration files added or changed by this PR — nothing to validate."
+            echo "has_new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_new=true" >> "$GITHUB_OUTPUT"
+            echo "New/changed migrations:"
+            echo "$changed"
+            printf '%s\n' "$changed" > /tmp/new_migrations.txt
+          fi
+
+      - name: Start local stack with an empty migration set
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          # Move every existing migration out of the way first so `supabase start`
+          # (which always replays supabase/migrations/ against a fresh database on
+          # first boot) has nothing broken to fail on. We load the equivalent state
+          # from schema.sql instead in the next step.
+          mkdir -p /tmp/migrations_stash
+          mv supabase/migrations/*.sql /tmp/migrations_stash/
+          supabase start
+
+      - name: Load schema.sql as the baseline
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          # Fixed local-dev connection defaults for the Supabase CLI, using this
+          # repo's configured db port (supabase/config.toml [db] port).
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+            -v ON_ERROR_STOP=1 -f supabase/schema.sql
+
+      - name: Apply this PR's new/changed migration(s) on top of the baseline
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          while IFS= read -r f; do
+            stashed="/tmp/migrations_stash/$(basename "$f")"
+            echo "::group::Applying $f"
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+              -v ON_ERROR_STOP=1 -f "$stashed"
+            echo "::endgroup::"
+          done < /tmp/new_migrations.txt
