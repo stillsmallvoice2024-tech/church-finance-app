@@ -25,8 +25,9 @@ export function resolveDefaultIncomeType(
   stageCode1: string,
   incomeTypes: IncomeType[],
   userPrefs?: { defaultIncomeTypeId?: string | null },
+  bankId?: string,
 ): IncomeType | null {
-  const matched = classifyIncomeType(description, stageCode1, incomeTypes)
+  const matched = classifyIncomeType(description, stageCode1, incomeTypes, bankId)
   if (matched) return matched
   if (userPrefs?.defaultIncomeTypeId) {
     const def = incomeTypes.find(t => t.id === userPrefs.defaultIncomeTypeId)

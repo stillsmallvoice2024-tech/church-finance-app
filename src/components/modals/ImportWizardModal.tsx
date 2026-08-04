@@ -674,7 +674,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
       let rowConfigId: string | null
 
       if (incomeTypeId === '__auto__') {
-        const matched = classifyIncomeType(row.description, '', incomeTypes)
+        const matched = classifyIncomeType(row.description, '', incomeTypes, bankId)
         rowIncomeTypeId = matched?.id ?? null
         rowConfigId = null  // resolved at query time via buildVersionIndex
       } else {

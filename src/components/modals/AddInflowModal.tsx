@@ -122,6 +122,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const watchedDate     = watch('date')
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
+  const watchedBankId   = banks.find(b => b.name === watchedBankName)?.id ?? ''
 
   const generalConfigId = useMemo(() => {
     if (!watchedDate) return null
@@ -167,7 +168,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     }
     if (incomeTypeId && !incomeTypeAutoSet) return   // manually set — leave it
     if (!incomeTypes.length) return
-    const match = classifyIncomeType(description ?? '', stageCode1 ?? '', incomeTypes)
+    const match = classifyIncomeType(description ?? '', stageCode1 ?? '', incomeTypes, watchedBankId)
     if (match) {
       setIncomeTypeId(match.id)
       setIncomeTypeAutoSet(true)
@@ -176,7 +177,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       setIncomeTypeId('')
       setIncomeTypeAutoSet(false)
     }
-  }, [description, stageCode1, incomeTypes, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [description, stageCode1, incomeTypes, transactionType, watchedBankId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear config state when switching away from Normal transaction type
   useEffect(() => {
