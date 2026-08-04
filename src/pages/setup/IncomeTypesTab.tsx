@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Pencil, Trash2, AlertCircle, Plus, Layers, Lock } from 'lucide-react'
 import { useIncomeTypes, type IncomeType } from '../../hooks/useIncomeTypes'
+import { useBanks } from '../../hooks/useBanks'
 import { supabase } from '../../lib/supabase'
 import { useOrgStore } from '../../store/orgStore'
 import { SetupSearchSort, applySetupSort, TYPE_SORT_OPTS } from './shared'
@@ -13,6 +14,8 @@ export function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
   onDelete: (t: IncomeType) => void
 }) {
   const { incomeTypes, loading, error, refetch } = useIncomeTypes()
+  const { banks } = useBanks()   // org-scoped — resolves a bank rule's id to its name
+  const bankNameById = useMemo(() => new Map(banks.map(b => [b.id, b.name])), [banks])
   const orgId = useOrgStore(s => s.orgId)
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
@@ -150,8 +153,10 @@ export function IncomeTypesTab({ onAdd, onEdit, onDelete }: {
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {t.rules.map(r => (
                           <span key={r.id} className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                            <span className="text-gray-400">{r.rule_type === 'keyword' ? 'kw:' : 'sc:'}</span>
-                            {r.rule_value}
+                            <span className="text-gray-400">
+                              {r.rule_type === 'keyword' ? 'kw:' : r.rule_type === 'bank' ? 'bank:' : 'sc:'}
+                            </span>
+                            {r.rule_type === 'bank' ? (bankNameById.get(r.rule_value) ?? r.rule_value) : r.rule_value}
                           </span>
                         ))}
                       </div>
