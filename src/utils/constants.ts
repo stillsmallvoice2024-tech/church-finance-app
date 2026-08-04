@@ -44,3 +44,21 @@ export const ACCOUNT_TYPES = [
   { value: 'foreign', label: 'Foreign Currency' },
   { value: 'special', label: 'Special Project' },
 ]
+
+// ── Budget portions (stage_code_2) ────────────────────────────────────────────
+//
+// The stored values are historical (`Percentage Allocation`, `Specific Seed`)
+// and MUST NOT change — they are written to inflow/outflow rows and read by the
+// allocation engine and reports. Only the labels are current.
+//
+// The same value→label mapping was previously copy-pasted into AddIntraFlowModal,
+// BulkEditIntraFlowModal, BulkEditOutflowModal, AddBankModal and Categories;
+// the import wizard shipped a sixth copy that showed the raw values instead.
+export const BUDGET_PORTIONS = [
+  { value: 'Percentage Allocation', label: 'Regular Funds'   },
+  { value: 'Specific Seed',         label: 'Designated Gift' },
+  { value: 'Savings',               label: 'Savings'         },
+] as const
+
+export const BUDGET_PORTION_LABELS: Record<string, string> =
+  Object.fromEntries(BUDGET_PORTIONS.map(p => [p.value, p.label]))
