@@ -44,7 +44,20 @@ Rules:
 - Empty cells must be ""
 - Set confidence < 0.7 for uncertain cells and add a warning entry for each such cell
 - Do NOT include the header row in the rows array
-- If no table is found, return empty arrays and add a descriptive warning`
+- If no table is found, return empty arrays and add a descriptive warning
+
+Page furniture — extract the table ONLY:
+- Everything outside the table's ruled body is page furniture: page numbers
+  ("Page 1 of 8"), support phone numbers, e-mail addresses, website URLs,
+  bank addresses, straplines, logos, and legal disclaimers
+- NEVER merge page furniture into a transaction row, even when it sits directly
+  beneath, above or beside the last row on the page
+- NEVER emit a row that consists of page furniture
+- A transaction row's cells come from that row's columns only. If the last row
+  on the page looks like it also contains a footer, the footer is NOT part of it
+- A cell may legitimately span several lines when its text wraps inside the
+  column — keep those wrapped lines together. Wrapped text stays within the
+  column's horizontal bounds; footers do not`
 
 async function anthropicProvider(image: string, mimeType: string): Promise<OcrResult> {
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured')

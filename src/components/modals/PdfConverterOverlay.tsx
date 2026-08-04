@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { parsePDF, PdfPasswordError, PdfDecryptError } from '../../utils/pdfParser'
 import { getPdfPageCount, renderPageToBase64 } from '../../utils/pdfPageRenderer'
+import { stripPageFurniture } from '../../utils/pageFurniture'
 import { supabase } from '../../lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -20,6 +21,9 @@ interface ExtractionResult {
   method:     'native' | 'ocr'
   pageCount:  number
 }
+
+/** Page each extracted row came from — evidence for the furniture scrubber. */
+type RowPages = number[] | undefined
 
 interface OcrProgress {
   current:    number
@@ -39,7 +43,10 @@ async function runOcrPipeline(
   file: File,
   onProgress: (p: OcrProgress) => void,
   password?: string,
-): Promise<Pick<ExtractionResult, 'headers' | 'rawRows' | 'confidence' | 'warnings' | 'pageCount'>> {
+): Promise<
+  Pick<ExtractionResult, 'headers' | 'rawRows' | 'confidence' | 'warnings' | 'pageCount'>
+  & { rowPages: number[] }
+> {
   const pageCount = await getPdfPageCount(file, password)
   onProgress({ current: 0, total: pageCount, statusText: 'Scanned PDF detected, starting OCR…' })
 
@@ -47,6 +54,9 @@ async function runOcrPipeline(
   const allRawRows:    string[][] = []
   const allConfidence: number[][] = []
   const allWarnings:   string[]   = []
+  // Which page each row came from — lets the furniture scrubber tell a repeating
+  // footer apart from a reference number that merely looks like one.
+  const allRowPages:   number[]   = []
 
   for (let p = 1; p <= pageCount; p++) {
     onProgress({ current: p, total: pageCount, statusText: `OCR: page ${p} of ${pageCount}…` })
@@ -73,13 +83,17 @@ async function runOcrPipeline(
         : rows.map(r => r.map(() => 0.9))
       allRawRows.push(...rows)
       allConfidence.push(...conf)
+      for (let i = 0; i < rows.length; i++) allRowPages.push(p)
       if (Array.isArray(data.warnings)) {
         allWarnings.push(...(data.warnings as string[]).map(w => `Page ${p}: ${w}`))
       }
     }
   }
 
-  return { headers: allHeaders, rawRows: allRawRows, confidence: allConfidence, warnings: allWarnings, pageCount }
+  return {
+    headers: allHeaders, rawRows: allRawRows, confidence: allConfidence,
+    warnings: allWarnings, pageCount, rowPages: allRowPages,
+  }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -112,9 +126,24 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
   // Retains the password that last unlocked the file so re-extract-with-OCR can reuse it
   const lastPasswordRef = useRef<string | undefined>(undefined)
 
-  const applyResult = (res: ExtractionResult) => {
-    setResult(res)
-    setEditedRows(res.rawRows.map(r => [...r]))
+  /**
+   * Single funnel for both extraction paths. Page furniture is scrubbed here so
+   * neither path can leak a footer into a transaction row, and so the removal is
+   * reported in the warnings panel rather than happening silently.
+   */
+  const applyResult = (res: ExtractionResult, rowPages?: RowPages) => {
+    const { rows, keptIndices, removedFragments } = stripPageFurniture(res.rawRows, rowPages)
+    const cleaned: ExtractionResult = {
+      ...res,
+      rawRows:    rows,
+      confidence: keptIndices.map(ri => res.confidence[ri] ?? []),
+      warnings:   removedFragments.length > 0
+        ? [...res.warnings, `Removed page furniture from ${keptIndices.length < res.rawRows.length
+            ? `${res.rawRows.length - keptIndices.length} row(s) and ` : ''}cell text: ${removedFragments.join(', ')}`]
+        : res.warnings,
+    }
+    setResult(cleaned)
+    setEditedRows(cleaned.rawRows.map(r => [...r]))
     setIsDirty(false)
     setSoftDeletedRows(new Set())
     setHardDeletedRows(new Set())
@@ -160,7 +189,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         return
       }
 
-      const { headers, rawRows, confidence, warnings, pageCount } =
+      const { headers, rawRows, confidence, warnings, pageCount, rowPages } =
         await runOcrPipeline(f, setOcrProgress, password)
 
       if (rawRows.length === 0) {
@@ -175,7 +204,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         : ['Date', 'Description', 'Credit', 'Debit', 'Balance', 'Reference']
 
       lastPasswordRef.current = password
-      applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount })
+      applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount }, rowPages)
     } catch (e) {
       if (e instanceof PdfPasswordError) {
         setPasswordError(
@@ -204,14 +233,14 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
     setPasswordError(null)
 
     try {
-      const { headers, rawRows, confidence, warnings, pageCount } =
+      const { headers, rawRows, confidence, warnings, pageCount, rowPages } =
         await runOcrPipeline(file, setOcrProgress, lastPasswordRef.current)
 
       const finalHeaders = headers.length > 0
         ? headers
         : (result?.headers ?? ['Date', 'Description', 'Credit', 'Debit', 'Balance', 'Reference'])
 
-      applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount })
+      applyResult({ headers: finalHeaders, rawRows, confidence, warnings, method: 'ocr', pageCount }, rowPages)
     } catch (e) {
       if (e instanceof PdfPasswordError) {
         setPasswordError(
