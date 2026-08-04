@@ -15,6 +15,8 @@ import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../..
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../../hooks/useOutflowTypes'
+import { useOutflowClassificationRules } from '../../hooks/useOutflowClassificationRules'
+import { classifyOutflow } from '../../utils/classifyOutflow'
 import { useDepartmentOptions } from '../../hooks/useDepartments'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
@@ -22,6 +24,8 @@ import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import { SearchableSelect } from '../ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../ui/RootTransactionSearch'
 import { isOffsetableType } from '../../utils/transactionTypes'
+import { autoTagOffsetRoot } from '../../utils/autoTagOffsetRoot'
+import { useToastStore } from '../../store/toastStore'
 
 const TXN_TYPES = [
   { value: '',                   label: 'Normal' },
@@ -70,6 +74,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const fxBanks    = banks.filter(b => b.is_foreign_currency)
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
+  const { rules: outflowClassificationRules } = useOutflowClassificationRules()
   const { maps: categoryOutflowMaps }  = useCategoryOutflowTypeMaps()
   const { options: departmentOptions } = useDepartmentOptions()
   const isEdit = !!editRecord
@@ -78,8 +83,10 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const [rootTxnLink,    setRootTxnLink]    = useState<RootTxnLink | null>(null)
   const [rootPropagated, setRootPropagated] = useState(false)
 
-  const addMutation    = useAddOutflow()
-  const updateMutation = useUpdateTransaction('outflow_transactions')
+  const addMutation      = useAddOutflow()
+  const updateMutation   = useUpdateTransaction('outflow_transactions')
+  const updateRootInflow = useUpdateTransaction('inflow_transactions')
+  const { push: toast }  = useToastStore()
 
   const { mutate: add,    loading: adding,   error: addError,    reset: resetAdd    } = addMutation
   const { mutate: update, loading: updating, error: updateError, reset: resetUpdate } = updateMutation
@@ -102,6 +109,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const stage1Watch     = useWatch({ control, name: 'stage_code_1' })
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
+  const watchedBankId   = banks.find(b => b.name === watchedBankName)?.id ?? ''
+  const descriptionWatch = useWatch({ control, name: 'description' })
 
   const filteredCategories = useMemo(
     () => categories.filter(c => !c.currency),
@@ -178,18 +187,30 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     if (!filteredCategories.some(c => c.name === stage1Value)) setValue('stage_code_1', '')
   }, [filteredCategories, stage1Value, setValue])
 
-  // Auto-suggest outflow type from the category-outflow map when stage_code_1 changes
-  // (only if user hasn't already picked a type; never forced — user can override)
+  // Auto-suggest outflow type when stage_code_1, description, or bank changes
+  // (only if user hasn't already picked a type; never forced — user can override).
+  // Recognition rules (bank beats description keyword) take priority; falls
+  // back to the existing category → outflow type mapping. A rule saved from
+  // the import grouped view also carries its own Fund/Fund Type — applied
+  // here too so the type and its distribution rule land together.
   const currentTypeId = useWatch({ control, name: 'outflow_type_id' })
   useEffect(() => {
     if (!open || isEdit || currentTypeId) return
+    const hit = classifyOutflow(descriptionWatch ?? '', stage1Watch ?? '', watchedBankId, outflowClassificationRules)
+    if (hit?.outflowTypeId) {
+      setValue('outflow_type_id', hit.outflowTypeId)
+      if (hit.stageCode1 && hit.stageCode1 !== stage1Watch) setValue('stage_code_1', hit.stageCode1)
+      if (hit.stageCode2) setValue('stage_code_2', hit.stageCode2)
+      return
+    }
     if (!stage1Watch) return
     const cat = categories.find(c => c.name === stage1Watch)
     if (cat) {
       const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
       if (suggested) setValue('outflow_type_id', suggested.id)
     }
-  }, [stage1Watch, categories, categoryOutflowMaps, outflowTypeOptions, open, isEdit, currentTypeId, setValue])
+  }, [stage1Watch, descriptionWatch, watchedBankId, categories, categoryOutflowMaps, outflowTypeOptions,
+      outflowClassificationRules, open, isEdit, currentTypeId, setValue])
 
   const onSubmit = async (values: FormValues) => {
     setDupError(null)
@@ -261,6 +282,12 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
         }
         await add(input)
+      }
+      try {
+        await autoTagOffsetRoot(values.transaction_type, values.offset_role, rootTxnLink, updateRootInflow.mutate, update)
+      } catch (e) {
+        console.warn('[offset-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the root. Link it manually if needed.', 'warning')
       }
       onSuccess?.()
       onClose()
@@ -415,12 +442,12 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         {rootPropagated && (
           <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800">
             <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-            <span>Category and fund type were auto-filled from the linked root transaction. <strong>Save to apply these to ledgers.</strong></span>
+            <span>Fund and fund type were auto-filled from the linked root transaction. <strong>Save to apply these to ledgers.</strong></span>
           </div>
         )}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Category" error={errors.stage_code_1?.message}
-            help="The fund or category this outflow is charged against. Used to match outflows to the correct budget line and fund balance.">
+          <Field label="Fund" error={errors.stage_code_1?.message}
+            help="The fund this outflow is charged against. Used to match outflows to the correct budget line and fund balance.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                 options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}

@@ -9,13 +9,13 @@ Look up any word you meet in the app or in this tutorial.
 | Transaction | One single money event — one gift, one payment |
 | Import | Loading a whole bank statement file into the app |
 | Bank statement | The list of transactions your bank gives you |
-| Category | A bucket for money, like "Building Fund" or "Welfare" |
-| Category group | A folder that holds related categories together |
-| Portion / Fund Type | A pocket inside a category: Regular Funds, Designated Gift, or Savings |
+| Fund | A bucket for money, like "Building Fund" or "Welfare" |
+| Fund group | A folder that holds related funds together |
+| Portion / Fund Type | A pocket inside a fund: Regular Funds, Designated Gift, or Savings |
 | Regular Funds | The pocket filled by percentage splitting of normal income |
 | Designated Gift (Specific Seed) | Money given for ONE stated purpose only |
 | Savings | Money set aside as a reserve — the rainy-day pocket |
-| Distribution rule (Allocation config) | The recipe that splits incoming money between categories |
+| Distribution rule (Allocation config) | The recipe that splits incoming money between funds |
 | Special config | A one-off splitting recipe for a special occasion |
 | Locked | Approved and in use; can no longer be edited |
 | Draft | Saved but not yet in use |
@@ -33,7 +33,7 @@ Look up any word you meet in the app or in this tutorial.
 | Offset | The partner transaction that cancels or adjusts the root |
 | Pending deduction | An approved payment that hasn't left the bank yet |
 | Resolve | Marking a pending deduction as actually paid |
-| Intra-flow / Fund transfer / Category fund transfer | Moving money between categories or pockets — nothing enters or leaves |
+| Intra-flow / Fund transfer / Category fund transfer | Moving money between funds or pockets — nothing enters or leaves |
 | Bulk reallocation | Many fund transfers done in one go |
 | FX / Foreign currency | Money in another currency, like dollars or pounds |
 | Conversion | Exchanging foreign money into your everyday currency |

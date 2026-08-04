@@ -18,7 +18,8 @@ import { ImportModeChooser, getDefaultImportMode, type ImportMode } from '../com
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabase'
 import { useCategories } from '../hooks/useCategories'
-import { useAddInflow, useAddOutflow, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
+import { useAddInflow, useAddOutflow, useUpdateTransaction, AddInflowInput, AddOutflowInput } from '../hooks/useMutations'
+import { autoTagOffsetRoot } from '../utils/autoTagOffsetRoot'
 import { useToastStore } from '../store/toastStore'
 import { useBanks } from '../hooks/useBanks'
 import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
@@ -32,7 +33,10 @@ import { classifyIncomeType } from '../utils/classifyIncomeType'
 import { normalizeId } from '../utils/normalizeId'
 import { fetchExistingTransactionIds } from '../utils/dedupQuery'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
+import { useOutflowClassificationRules } from '../hooks/useOutflowClassificationRules'
+import { classifyOutflow } from '../utils/classifyOutflow'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../components/ui/RootTransactionSearch'
 import { isOffsetableType } from '../utils/transactionTypes'
@@ -86,6 +90,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 
 export default function Import() {
   const { canImportTransactions } = useRole()
+  const orgId = useOrgStore(s => s.orgId)
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
   const [skipDups, setSkipDups]       = useState(false)
@@ -187,7 +192,7 @@ export default function Import() {
   // changes.  Scoped to bank_name so transactions in different banks with the
   // same ID are not treated as duplicates.
   useEffect(() => {
-    if (!parseResult?.ids?.length) return
+    if (!parseResult?.ids?.length || !orgId) return
     let isCurrent = true
 
     const runCheck = async () => {
@@ -199,8 +204,8 @@ export default function Import() {
         // Chunked queries — a large ID list must never overflow the URL limit,
         // and a failed query must surface instead of reporting zero duplicates.
         const [inflowSet, outflowSet] = await Promise.all([
-          fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', parseResult.ids, selectedBankName),
-          fetchExistingTransactionIds('outflow_transactions', 'transaction_id', parseResult.ids, selectedBankName),
+          fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', parseResult.ids, selectedBankName, orgId),
+          fetchExistingTransactionIds('outflow_transactions', 'transaction_id', parseResult.ids, selectedBankName, orgId),
         ])
 
         if (!isCurrent) return
@@ -223,7 +228,7 @@ export default function Import() {
 
     runCheck()
     return () => { isCurrent = false }
-  }, [parseResult, selectedBankName])
+  }, [parseResult, selectedBankName, orgId])
 
   // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
   if (!canImportTransactions()) return <Navigate to="/" replace />
@@ -412,8 +417,14 @@ export default function Import() {
                   <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>
-                      No transaction ID column detected in this file.
-                      Duplicate checking requires a column named <strong>Transaction ID</strong>, <strong>Txn ID</strong>, or <strong>Reference</strong>.
+                      No reference / transaction ID column in this file — duplicate checking still runs.
+                      The import wizard builds a fingerprint for each row from its <strong>date, description,
+                      amount and bank</strong> and matches that against previously imported transactions.
+                      Rows already in the database are listed and skipped before anything is saved.
+                      <span className="block mt-1 text-amber-600/80">
+                        Two genuinely different transactions sharing the same date, amount and description look
+                        identical to this check — the wizard flags the second one in the results panel for review.
+                      </span>
                     </span>
                   </div>
                 )}
@@ -607,18 +618,22 @@ export default function Import() {
 
 function ManualEntryForm() {
   const { baseCurrencySymbol } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
   const { categories }                                 = useCategories()
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
   const { configs, groups: allocGroups, fetch: fetchConfigs, loaded: cfgLoaded } = useAllocationStore()
   const addInflow  = useAddInflow()
   const addOutflow = useAddOutflow()
+  const updateInflowRoot  = useUpdateTransaction('inflow_transactions')
+  const updateOutflowRoot = useUpdateTransaction('outflow_transactions')
 
   useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
   const { incomeTypes } = useIncomeTypes()
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
   const { maps: categoryOutflowMaps }   = useCategoryOutflowTypeMaps()
+  const { rules: outflowClassificationRules } = useOutflowClassificationRules()
 
   // Direction toggle
   const [direction, setDirection] = useState<'inflow' | 'outflow'>('inflow')
@@ -638,6 +653,8 @@ function ManualEntryForm() {
   const [outflowS1,      setOutflowS1]      = useState('')
   const [outflowS2,      setOutflowS2]      = useState('')
   const [outflowTypeId,  setOutflowTypeId]  = useState('')
+  // true once the user picks an outflow type by hand — suppresses auto-assignment
+  const [outflowTypeManual, setOutflowTypeManual] = useState(false)
 
   // Form field values
   const [fields, setFields] = useState<Record<string, string>>({
@@ -656,8 +673,20 @@ function ManualEntryForm() {
     setFields(prev => {
       const next = { ...prev, [key]: val }
       if (!txnType && direction === 'inflow' && !incomeTypeAutoSet && key === 'description') {
-        const match = classifyIncomeType(val, '', incomeTypes)
+        const match = classifyIncomeType(val, '', incomeTypes, prev.bank_id ?? '')
         setIncomeTypeId(match ? match.id : '')
+      }
+      // Outflow twin: recognition rules classify the description. Only
+      // overwrites when a rule actually fires, so a type already derived from
+      // the category stays put when the description matches nothing. A rule
+      // saved from the import grouped view also carries a Fund — its actual
+      // distribution rule — which a type-only rule (from the outflow type's
+      // own editor) leaves blank and so never overwrites.
+      if (direction === 'outflow' && !outflowTypeManual && key === 'description') {
+        const hit = classifyOutflow(val, outflowS1, prev.bank_id ?? '', outflowClassificationRules)
+        if (hit?.outflowTypeId) setOutflowTypeId(hit.outflowTypeId)
+        if (hit?.stageCode1) setOutflowS1(hit.stageCode1)
+        if (hit?.stageCode2) setOutflowS2(hit.stageCode2)
       }
       return next
     })
@@ -679,8 +708,32 @@ function ManualEntryForm() {
     }
   }, [txnType])
 
-  // Auto-fill outflow type from category mapping when stage_code_1 changes
+  // Bank-triggered reclassification: a "Bank" recognition rule must fire even
+  // when the description was typed before the bank was picked — `set()` only
+  // reclassifies on a description keystroke, so bank changes need their own
+  // trigger. Same "still in auto mode" guard as `set()`.
   useEffect(() => {
+    if (txnType || direction !== 'inflow' || incomeTypeAutoSet) return
+    const match = classifyIncomeType(fields.description ?? '', '', incomeTypes, fields.bank_id ?? '')
+    setIncomeTypeId(match ? match.id : '')
+  // fields.description intentionally excluded — handled by `set()`; this
+  // effect exists only to react to the bank changing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields.bank_id, direction, txnType, incomeTypeAutoSet, incomeTypes])
+
+  // Auto-fill outflow type when stage_code_1 or bank changes.
+  // Recognition rules (bank beats description keyword) win; otherwise fall
+  // back to the category → outflow type mapping, then to a type named like
+  // the stage code. Skipped entirely once the user has chosen a type by hand.
+  useEffect(() => {
+    if (outflowTypeManual) return
+    const hit = classifyOutflow(fields.description ?? '', outflowS1, fields.bank_id ?? '', outflowClassificationRules)
+    if (hit?.outflowTypeId) {
+      setOutflowTypeId(hit.outflowTypeId)
+      if (hit.stageCode1 && hit.stageCode1 !== outflowS1) setOutflowS1(hit.stageCode1)
+      if (hit.stageCode2 && hit.stageCode2 !== outflowS2) setOutflowS2(hit.stageCode2)
+      return
+    }
     if (!outflowS1) { setOutflowTypeId(''); return }
     const cat = categories.find(c => c.name === outflowS1)
     if (cat) {
@@ -690,7 +743,10 @@ function ManualEntryForm() {
     }
     const match = outflowTypeOptions.find(t => t.name.toLowerCase() === outflowS1.toLowerCase())
     setOutflowTypeId(match?.id ?? '')
-  }, [outflowS1, categories, categoryOutflowMaps, outflowTypeOptions])
+  // fields.description intentionally excluded — description-driven matching is
+  // handled in `set()` so typing doesn't reset a category-derived selection.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outflowS1, outflowTypeManual, fields.bank_id, categories, categoryOutflowMaps, outflowTypeOptions, outflowClassificationRules])
 
   const handleDirectionChange = (d: 'inflow' | 'outflow') => {
     setDirection(d)
@@ -706,6 +762,7 @@ function ManualEntryForm() {
     setOutflowS1('')
     setOutflowS2('')
     setOutflowTypeId('')
+    setOutflowTypeManual(false)
     setDupWarning(null)
     setPendingSave(null)
   }
@@ -734,14 +791,14 @@ function ManualEntryForm() {
   // different bank is not treated as a duplicate.
 
   async function checkInflowDup(ref: string, bankName: string | null): Promise<boolean> {
-    let q = supabase.from('inflow_transactions').select('id').eq('transaction_ref', ref)
+    let q = supabase.from('inflow_transactions').select('id').eq('org_id', orgId).eq('transaction_ref', ref)
     if (bankName) q = q.eq('bank_name', bankName)
     const { data } = await q.limit(1)
     return (data?.length ?? 0) > 0
   }
 
   async function checkOutflowDup(txnId: string, bankName: string | null): Promise<boolean> {
-    let q = supabase.from('outflow_transactions').select('id').eq('transaction_id', txnId)
+    let q = supabase.from('outflow_transactions').select('id').eq('org_id', orgId).eq('transaction_id', txnId)
     if (bankName) q = q.eq('bank_name', bankName)
     const { data } = await q.limit(1)
     return (data?.length ?? 0) > 0
@@ -800,6 +857,12 @@ function ManualEntryForm() {
         } else {
           throw firstErr
         }
+      }
+      try {
+        await autoTagOffsetRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
+      } catch (e) {
+        console.warn('[offset-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the root. Link it manually if needed.', 'warning')
       }
       toast('Inflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
@@ -862,12 +925,19 @@ function ManualEntryForm() {
           throw firstErr
         }
       }
+      try {
+        await autoTagOffsetRoot(txnType, txnOffsetRole, rootTxnLink, updateInflowRoot.mutate, updateOutflowRoot.mutate)
+      } catch (e) {
+        console.warn('[offset-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the root. Link it manually if needed.', 'warning')
+      }
       toast('Outflow saved successfully', 'success')
       setFields({ date: new Date().toISOString().slice(0, 10) })
       setIsPending(false)
       setOutflowS1('')
       setOutflowS2('')
       setOutflowTypeId('')
+      setOutflowTypeManual(false)
       setTxnType('')
       setTxnOffsetRole('')
       setRootTxnLink(null)
@@ -1223,9 +1293,16 @@ function ManualEntryForm() {
             </div>
             {outflowTypeOptions.length > 0 && (
               <Field label="Outflow Type">
-                <SearchableSelect value={outflowTypeId} onChange={setOutflowTypeId}
+                <SearchableSelect value={outflowTypeId}
+                  onChange={v => { setOutflowTypeId(v); setOutflowTypeManual(true) }}
                   options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
                   placeholder="— None —" className={iCls} />
+                {outflowTypeId && !outflowTypeManual && (
+                  <p className="text-xs flex items-center gap-1 text-indigo-500 mt-1">
+                    <Sparkles className="w-3 h-3" />
+                    Auto-detected · change above to override
+                  </p>
+                )}
               </Field>
             )}
             <p className="text-xs text-gray-500">Links this outflow to the category ledger for tracking.</p>

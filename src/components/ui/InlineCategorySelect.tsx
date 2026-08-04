@@ -183,7 +183,7 @@ export function InlineCategorySelect({
               if (e.key === 'Enter')  { e.preventDefault(); handleSave() }
               if (e.key === 'Escape') handleCancel()
             }}
-            placeholder="New category name…"
+            placeholder="New fund name…"
             className="flex-1 px-2 py-1.5 text-sm border border-primary/60 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
           />
           <button
@@ -191,7 +191,7 @@ export function InlineCategorySelect({
             onClick={handleSave}
             disabled={saving || !newName.trim()}
             className="touch-target p-1.5 rounded-lg bg-primary text-white hover:bg-primary-light disabled:opacity-50 transition-colors"
-            title="Save category"
+            title="Save fund"
           >
             {saving
               ? <span className="block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -227,7 +227,7 @@ export function InlineCategorySelect({
         disabled={disabled}
         autoComplete="off"
         value={open ? query : value}
-        placeholder={open ? 'Type to search…' : 'Select category…'}
+        placeholder={open ? 'Type to search…' : 'Select fund…'}
         className={selectCls ?? DEFAULT_CLS}
         style={{ paddingRight: '2rem' }}
         onClick={() => { if (!open) openList() }}
@@ -251,7 +251,7 @@ export function InlineCategorySelect({
           ref={listRef}
           id={listId}
           role="listbox"
-          aria-label="Categories"
+          aria-label="Funds"
           style={{ position: 'fixed', top: dropRect.top, left: dropRect.left, width: dropRect.width, zIndex: 9999 }}
           className="max-h-60 overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >
@@ -292,7 +292,7 @@ export function InlineCategorySelect({
               highlighted === ADD_NEW_IDX ? 'bg-primary/10' : 'hover:bg-gray-50'
             }`}
           >
-            ＋ Add new category…
+            ＋ Add new fund…
           </li>
         </ul>,
         document.body

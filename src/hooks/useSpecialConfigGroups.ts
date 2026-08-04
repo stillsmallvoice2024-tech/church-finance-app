@@ -134,7 +134,13 @@ export async function createGroupWithFirstVersion(params: {
     })
     .select('*')
     .single()
-  if (vErr) throw new Error(vErr.message)
+  // These two inserts are not one transaction. If the version insert fails or
+  // times out, drop the group we just created — otherwise the Distribution
+  // Rules tab fills up with empty groups every time the user retries.
+  if (vErr) {
+    await supabase.from('special_config_groups').delete().eq('id', groupId)
+    throw new Error(vErr.message)
+  }
 
   if (params.income_type_id) {
     await setGroupIncomeTypeLink(groupId, params.income_type_id, params.prev_income_type_id ?? null)
@@ -166,6 +172,154 @@ export async function createNewVersion(params: {
   })
   if (error) throw new Error(error.message)
   return data as string
+}
+
+/**
+ * Updates a draft version in place — no new version, no supersession. Drafts
+ * apply to nothing until approved, so editing them directly is safe; only
+ * `amendVersion` (for locked/current versions) needs the supersession dance.
+ */
+export async function updateDraftVersion(params: {
+  id:              string
+  allocation_type: 'percentage' | 'amount'
+  total_amount?:   number | null
+  rows:            AllocationConfig['rows']
+  effective_from:  string
+  effective_to?:   string | null
+}): Promise<void> {
+  const { data: existing, error: selErr } = await supabase
+    .from('allocation_configs')
+    .select('status')
+    .eq('id', params.id)
+    .single()
+  if (selErr) throw new Error(selErr.message)
+  if ((existing as { status: string }).status !== 'draft') {
+    throw new Error('Only draft versions can be edited directly.')
+  }
+
+  const { error } = await supabase
+    .from('allocation_configs')
+    .update({
+      allocation_type: params.allocation_type,
+      total_amount:    params.total_amount ?? null,
+      rows:            params.rows,
+      effective_from:  params.effective_from,
+      effective_to:    params.effective_to ?? null,
+    })
+    .eq('id', params.id)
+  if (error) throw new Error(error.message)
+}
+
+// ── General (default) rule group ───────────────────────────────────────────────
+
+/**
+ * Returns the org's General rule group — the fallback every income type without
+ * a custom rule resolves through. Created by `complete_org_onboarding()`; this
+ * creates it on demand for orgs provisioned before that migration so callers
+ * never have to deal with a missing General group.
+ */
+export async function ensureGeneralGroup(): Promise<{ id: string; name: string }> {
+  const org = orgPayload()
+  const { data: existing, error: selErr } = await supabase
+    .from('special_config_groups')
+    .select('id, name')
+    .eq('org_id', org.org_id)
+    .eq('is_default', true)
+    .maybeSingle()
+  if (selErr) throw new Error(selErr.message)
+  if (existing) return existing as { id: string; name: string }
+
+  const { data: created, error: insErr } = await supabase
+    .from('special_config_groups')
+    .insert({ name: 'General', is_default: true, ...org })
+    .select('id, name')
+    .single()
+  if (insErr) throw new Error(insErr.message)
+  return created as { id: string; name: string }
+}
+
+/**
+ * Creates a version of the General rule. Used by the onboarding wizard so the
+ * rules it creates land inside the General group — configs written without a
+ * `config_group_id` are invisible to both the Distribution Rules tab and
+ * `buildVersionIndex()`, so they never apply to any transaction.
+ */
+export async function createGeneralVersion(params: {
+  rows:           AllocationConfig['rows']
+  effective_from: string
+  status:         'draft' | 'locked'
+  name?:          string
+}): Promise<string> {
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) throw new Error('No active organisation.')
+  const group = await ensureGeneralGroup()
+
+  const { data, error } = await supabase.rpc('create_special_config_version', {
+    p_group_id:        group.id,
+    p_org_id:          orgId,
+    p_name:            params.name ?? group.name,
+    p_allocation_type: 'percentage',
+    p_total_amount:    null,
+    p_rows:            params.rows,
+    p_effective_from:  params.effective_from,
+    p_status:          params.status,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+/**
+ * Sets the org's live General rule — the onboarding wizard's "pick a split".
+ *
+ * Re-picking a template on the same day rewrites the version already starting
+ * that day rather than inserting a second one, which the partial unique index
+ * on (config_group_id, effective_from) WHERE status='locked' would reject. It
+ * also means the first pick replaces the 100% → General rule seeded at signup
+ * instead of stacking on top of it.
+ */
+export async function setGeneralRuleLive(params: {
+  rows:           AllocationConfig['rows']
+  effective_from: string
+  name?:          string
+}): Promise<string> {
+  const group = await ensureGeneralGroup()
+
+  const { data: sameDay, error: selErr } = await supabase
+    .from('allocation_configs')
+    .select('id')
+    .eq('config_group_id', group.id)
+    .eq('status', 'locked')
+    .eq('effective_from', params.effective_from)
+    .maybeSingle()
+  if (selErr) throw new Error(selErr.message)
+
+  if (sameDay) {
+    const { error } = await supabase
+      .from('allocation_configs')
+      .update({
+        name:            params.name ?? group.name,
+        rows:            params.rows,
+        allocation_type: 'percentage',
+        total_amount:    null,
+      })
+      .eq('id', (sameDay as { id: string }).id)
+    if (error) throw new Error(error.message)
+    return (sameDay as { id: string }).id
+  }
+
+  return createGeneralVersion({ ...params, status: 'locked' })
+}
+
+/**
+ * Approves a draft version so it starts applying to transactions.
+ *
+ * Goes through an RPC rather than a status UPDATE: promoting a draft has to
+ * close the version it supersedes and bound its own range, or the group ends up
+ * with two locked versions covering the same day.
+ */
+export async function lockVersion(versionId: string): Promise<void> {
+  const { error } = await supabase.rpc('approve_config_version', { p_version_id: versionId })
+  if (error) throw new Error(error.message)
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────────────

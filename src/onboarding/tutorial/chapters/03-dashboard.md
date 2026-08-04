@@ -7,7 +7,7 @@ The Dashboard is the home page. It shows your organisation's money at a glance: 
 - **Greeting** — says hello with your name and today's date.
 - **Quick buttons** (only if you can edit data): **Add Inflow** (record money in), **Add Outflow** (record money out), and **Import** (load a bank statement).
 - **Record health banner** — tells you if your records match your bank. Green means "all good". Amber or red means "something needs your attention" — click **View issues** to see what (that takes you to the Reconciliation Center, Chapter 8).
-- **Four big number cards**: **Total Inflows** (all money in this year), **Total Outflows** (all money out this year), **Net Balance** (in minus out), and **Categories** (how many money buckets you have). Each card is a button — click it to go to that page.
+- **Four big number cards**: **Total Inflows** (all money in this year), **Total Outflows** (all money out this year), **Net Balance** (in minus out), and **Funds** (how many money buckets you have). Each card is a button — click it to go to that page.
 - **Monthly Inflows vs Outflows chart** — a picture of your money month by month. The green line is money in; the red line is money out. Touch or hover a month to see exact numbers.
 - **Recent Transactions** — the last 10 inflows recorded.
 - **Foreign Currency Holdings** — small cards showing money you hold in other currencies (like USD or GBP).

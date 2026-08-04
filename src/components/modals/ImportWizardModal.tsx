@@ -576,7 +576,8 @@ export function ImportWizardModal({ open, onClose }: Props) {
     setDupRefs(new Set())
 
     // Background dedup check — covers both file refs and generated fallback IDs
-    if (selectedBank) {
+    const orgId = useOrgStore.getState().orgId
+    if (selectedBank && orgId) {
       setDupLoading(true)
       try {
         const bankName = selectedBank.name
@@ -594,12 +595,14 @@ export function ImportWizardModal({ open, onClose }: Props) {
           const { data: existingInflows } = await supabase
             .from('inflow_transactions')
             .select('transaction_ref')
+            .eq('org_id', orgId)
             .eq('bank_name', bankName)
             .in('transaction_ref', uniqueIds)
 
           const { data: existingOutflows } = await supabase
             .from('outflow_transactions')
             .select('transaction_id')
+            .eq('org_id', orgId)
             .eq('bank_name', bankName)
             .in('transaction_id', uniqueIds)
 
@@ -671,7 +674,7 @@ export function ImportWizardModal({ open, onClose }: Props) {
       let rowConfigId: string | null
 
       if (incomeTypeId === '__auto__') {
-        const matched = classifyIncomeType(row.description, '', incomeTypes)
+        const matched = classifyIncomeType(row.description, '', incomeTypes, bankId)
         rowIncomeTypeId = matched?.id ?? null
         rowConfigId = null  // resolved at query time via buildVersionIndex
       } else {

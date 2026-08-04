@@ -51,21 +51,21 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
     notes: 'PK is code, not id',
   },
   {
-    key: 'category_groups', label: 'Category Groups', module: 'Configuration',
+    key: 'category_groups', label: 'Fund Groups', module: 'Configuration',
     restorePriority: 2, backupEnabled: true, restoreMode: 'replace',
     conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: [],
   },
   {
-    key: 'categories', label: 'Categories', module: 'Configuration',
+    key: 'categories', label: 'Funds', module: 'Configuration',
     restorePriority: 3, backupEnabled: true, restoreMode: 'replace',
     conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,
     dependencies: ['category_groups'],
   },
   {
-    key: 'category_opening_balances', label: 'Category Opening Balances', module: 'Configuration',
+    key: 'category_opening_balances', label: 'Fund Opening Balances', module: 'Configuration',
     restorePriority: 4, backupEnabled: true, restoreMode: 'replace',
     conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
@@ -661,10 +661,15 @@ async function insertBatch(
   }
 }
 
-async function deleteFull(table: string): Promise<void> {
+// orgId is required: RLS grants delete on every org the caller is a finance
+// user of, so an unscoped "replace" restore wipes the user's *other* orgs
+// along with this one.
+async function deleteFull(table: string, orgId: string): Promise<void> {
   const def = MANAGED_TABLES.find(t => t.key === table)
   const pk  = def?.conflictColumn ?? 'id'
-  const { error } = await supabase.from(table).delete().not(pk, 'is', null)
+  let q = supabase.from(table).delete().not(pk, 'is', null)
+  if (def?.orgScoped !== false) q = q.eq('org_id', orgId)
+  const { error } = await q
   if (error) throw new Error(error.message)
 }
 
@@ -678,6 +683,7 @@ export type RestoreProgressCallback = (
 export async function restoreFromBackup(
   backup: BackupFileV2,
   options: RestoreOptions,
+  orgId: string,
   onProgress?: RestoreProgressCallback,
 ): Promise<RestoreResultV2> {
   const managedRestored:   string[] = []
@@ -687,11 +693,13 @@ export async function restoreFromBackup(
   // ── Replace: delete in reverse dependency order ──────────────────────────────
   if (options.mode === 'replace') {
     for (const tableKey of DELETE_TABLES) {
-      try { await deleteFull(tableKey) } catch { /* non-fatal — table may be empty */ }
+      try { await deleteFull(tableKey, orgId) } catch { /* non-fatal — table may be empty */ }
     }
-    // Clear adjacent audit data too
+    // Clear adjacent audit data too — org-scoped for the same reason.
     for (const extra of ['receipts', 'audit_log', 'field_changes']) {
-      try { await supabase.from(extra).delete().not('id', 'is', null) } catch { /* non-fatal */ }
+      try {
+        await supabase.from(extra).delete().eq('org_id', orgId).not('id', 'is', null)
+      } catch { /* non-fatal */ }
     }
   }
 

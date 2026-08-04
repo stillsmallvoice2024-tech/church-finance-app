@@ -34,7 +34,7 @@ const NAV_ENTRIES: NavEntry[] = [
   { label: 'Designated Gifts',     sub: 'Earmarked donations',     href: '/funds?tab=designated',      icon: PiggyBank        },
   { label: 'Savings Funds',        sub: 'Reserve funds',          href: '/funds?tab=savings',      icon: PiggyBank        },
   { label: 'Category Ledger',      sub: 'Spending by category',    href: '/funds?tab=accounts',       icon: Layers           },
-  { label: 'Categories',           sub: 'Manage categories',       href: '/categories',            icon: Layers           },
+  { label: 'Fund Setup',           sub: 'Manage funds',            href: '/categories',            icon: Layers           },
   { label: 'Pending Deductions',   sub: 'Approved but unpaid',     href: '/adjustments?tab=upcoming',    icon: BarChart2        },
   { label: 'Refunds',              href: '/adjustments?tab=refunds',               icon: RefreshCcw               },
   { label: 'Reversals',            href: '/adjustments?tab=reversals',             icon: RotateCcw                },

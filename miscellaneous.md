@@ -90,3 +90,22 @@ Full table lives in `ledger-rules.md`. Summary of what is NOT wired:
 - Inflows with `fx_currency` don't auto-create `fx_transactions` rows
 - `project_entries` are a parallel ledger; not included in Reports or CategoryLedger totals
 - `useDashboard` uses INSERT-only Supabase subscription; deletes don't update KPI cards until page reload
+
+---
+
+## "AbortError: signal is aborted without reason"
+
+`src/lib/supabase.ts` wraps every PostgREST request in an `AbortController`. When
+its timer fired it called `controller.abort()` with no reason, and postgrest-js
+reports fetch failures as `` `${err.name}: ${err.message}` `` — producing that
+exact opaque string for *any* slow request, with no indication of which one.
+
+Now: reads time out at 20s, writes at 60s (aborting a write does not roll it
+back server-side — the user retries and hits duplicate-key or lock errors), the
+abort carries a reason naming the table, a caller-supplied `signal` is composed
+rather than discarded, and `friendlyError()` translates it.
+
+The server side matters too: `create_special_config_version` waited indefinitely
+on `SELECT ... FOR UPDATE`, so one abandoned request kept every retry blocked
+until the browser cancelled it as well. Both distribution-rule RPCs now set
+`lock_timeout = 5s` and `statement_timeout = 30s`.

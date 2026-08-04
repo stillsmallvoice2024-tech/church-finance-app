@@ -49,7 +49,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     iconName: 'Tag',
     required: true,
     completionCheck: (d) => d.hasCategories,
-    action: { label: 'Go to Categories', href: '/categories' },
+    action: { label: 'Go to Fund Setup', href: '/categories' },
   },
   {
     id: 'import-statement',

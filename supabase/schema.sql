@@ -70,6 +70,18 @@ create index if not exists idx_organizations_created_by on public.organizations(
 create index if not exists idx_organizations_status     on public.organizations(status);
 create index if not exists idx_organizations_purge_at   on public.organizations(purge_at);
 
+-- Organisation names are globally unique, case- and whitespace-insensitive.
+-- Identically named orgs would disguise any cross-org leak as correct data.
+-- Orgs queued for deletion are excluded so their names are reusable.
+create or replace function public.normalize_org_name(p_name text)
+returns text language sql immutable set search_path = public as $$
+  select lower(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')));
+$$;
+
+create unique index if not exists organizations_name_unique
+  on public.organizations (public.normalize_org_name(name))
+  where status <> 'pending_deletion';
+
 create table public.org_members (
   id         uuid        primary key default gen_random_uuid(),
   org_id     uuid        not null references public.organizations(id) on delete cascade,
@@ -245,9 +257,10 @@ create trigger on_auth_user_created
 
 -- ── Special Config Groups (referenced by allocation_configs) ──────────────────
 create table public.special_config_groups (
-  id         uuid        primary key default gen_random_uuid(),
-  name       text        not null,
-  is_default boolean     not null default false,
+  id          uuid       primary key default gen_random_uuid(),
+  name        text       not null,
+  is_default  boolean    not null default false,
+  is_archived boolean    not null default false,
   org_id     uuid        not null default public.get_current_org_id()
              references public.organizations(id) on delete set null,
   created_at timestamptz not null default now()
@@ -335,7 +348,7 @@ create table public.income_types (
 create table public.income_type_rules (
   id             uuid        default gen_random_uuid() primary key,
   income_type_id uuid        not null references public.income_types(id) on delete cascade,
-  rule_type      text        not null check (rule_type in ('keyword', 'stage_code')),
+  rule_type      text        not null check (rule_type in ('keyword', 'stage_code', 'bank')),
   rule_value     text        not null,
   org_id         uuid        not null default public.get_current_org_id()
                  references public.organizations(id) on delete set null,
@@ -358,6 +371,22 @@ create table public.outflow_types (
   updated_at       timestamptz default now(),
   unique (org_id, name)
 );
+
+-- Outflow counterpart to income_type_rules: auto-classifies debit rows during
+-- import. Matches against the RAW description, never a cleaned narration.
+create table public.outflow_classification_rules (
+  id              uuid        default gen_random_uuid() primary key,
+  rule_type       text        not null check (rule_type in ('keyword', 'stage_code', 'bank')),
+  rule_value      text        not null,
+  stage_code_1    text,
+  stage_code_2    text,
+  outflow_type_id uuid        references public.outflow_types(id) on delete set null,
+  priority        int         not null default 0,
+  org_id          uuid        not null default public.get_current_org_id()
+                  references public.organizations(id) on delete set null,
+  created_at      timestamptz default now()
+);
+
 
 -- ── Category-Outflow Type Mapping ─────────────────────────────────────────────
 create table public.category_outflow_type_map (
@@ -861,6 +890,7 @@ alter table public.banks                          enable row level security;
 alter table public.allocation_configs             enable row level security;
 alter table public.income_types                   enable row level security;
 alter table public.income_type_rules              enable row level security;
+alter table public.outflow_classification_rules   enable row level security;
 alter table public.outflow_types                  enable row level security;
 alter table public.category_outflow_type_map      enable row level security;
 alter table public.accounts                       enable row level security;
@@ -1073,6 +1103,17 @@ create policy "income_type_rules_insert" on public.income_type_rules
 create policy "income_type_rules_update" on public.income_type_rules
   for update using (public.is_org_admin(org_id));
 create policy "income_type_rules_delete" on public.income_type_rules
+  for delete using (public.is_org_admin(org_id));
+
+-- ── outflow_classification_rules ───────────────────────────────────────────────
+
+create policy "outflow_classification_rules_select" on public.outflow_classification_rules
+  for select using (public.is_org_member(org_id));
+create policy "outflow_classification_rules_insert" on public.outflow_classification_rules
+  for insert with check (public.is_org_admin(org_id));
+create policy "outflow_classification_rules_update" on public.outflow_classification_rules
+  for update using (public.is_org_admin(org_id));
+create policy "outflow_classification_rules_delete" on public.outflow_classification_rules
   for delete using (public.is_org_admin(org_id));
 
 -- ── outflow_types ──────────────────────────────────────────────────────────────
@@ -1578,6 +1619,8 @@ create index if not exists idx_bank_deposits_org       on public.bank_deposits(o
 create index if not exists idx_category_groups_org     on public.category_groups(org_id);
 create index if not exists idx_income_types_org        on public.income_types(org_id);
 create index if not exists idx_income_type_rules_org   on public.income_type_rules(org_id);
+create index if not exists idx_outflow_classification_rules_org    on public.outflow_classification_rules(org_id);
+create index if not exists idx_outflow_classification_rules_lookup on public.outflow_classification_rules(org_id, priority, created_at);
 create index if not exists idx_intrabank_org           on public.intrabank_transfers(org_id);
 create index if not exists idx_accounts_org            on public.accounts(org_id);
 create index if not exists idx_ledger_entries_org      on public.ledger_entries(org_id);
@@ -1964,25 +2007,41 @@ create trigger trg_audit_log_no_delete
 -- ── Org management RPCs ───────────────────────────────────────────────────────
 
 create or replace function public.create_organization(p_name text)
-returns uuid language plpgsql security definer as $$
+returns uuid language plpgsql security definer
+set search_path = public as $$
 declare
-  v_user_id  uuid := auth.uid();
-  v_org_id   uuid;
-  v_slug     text;
-  v_attempt  int  := 0;
+  v_user_id    uuid := auth.uid();
+  v_org_id     uuid;
+  v_name       text;
+  v_slug       text;
+  v_attempt    int  := 0;
+  v_constraint text;
 begin
   if v_user_id is null then raise exception 'Not authenticated'; end if;
-  if length(trim(p_name)) = 0 then raise exception 'Organisation name cannot be empty'; end if;
 
-  v_slug := lower(regexp_replace(trim(p_name), '[^a-z0-9]+', '-', 'g'));
-  v_slug := trim(both '-' from v_slug);
+  v_name := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g'));
+  if length(v_name) = 0 then raise exception 'Organisation name cannot be empty'; end if;
+
+  if exists (
+    select 1 from public.organizations
+    where  public.normalize_org_name(name) = public.normalize_org_name(v_name)
+      and  status <> 'pending_deletion'
+  ) then
+    raise exception 'An organisation named "%" already exists. Please choose a different name.', v_name
+      using errcode = 'unique_violation';
+  end if;
+
+  -- lower() must run BEFORE the character class, otherwise every capital
+  -- matches [^a-z0-9] and is eaten ("Living Word" -> "iving-ord").
+  v_slug := regexp_replace(lower(v_name), '[^a-z0-9]+', '-', 'g');
+  v_slug := btrim(v_slug, '-');
   if v_slug = '' or v_slug = 'primary' then v_slug := 'org'; end if;
 
   loop
     begin
       insert into public.organizations (name, slug, created_by, onboarding_complete)
       values (
-        trim(p_name),
+        v_name,
         case when v_attempt = 0 then v_slug else v_slug || '-' || v_attempt end,
         v_user_id,
         false
@@ -1990,8 +2049,14 @@ begin
       returning id into v_org_id;
       exit;
     exception when unique_violation then
+      get stacked diagnostics v_constraint = constraint_name;
+      -- Lost a race on the name — surface it instead of retrying the slug.
+      if v_constraint = 'organizations_name_unique' then
+        raise exception 'An organisation named "%" already exists. Please choose a different name.', v_name
+          using errcode = 'unique_violation';
+      end if;
       v_attempt := v_attempt + 1;
-      if v_attempt > 9 then raise exception 'Could not generate a unique slug for: %', p_name; end if;
+      if v_attempt > 9 then raise exception 'Could not generate a unique slug for: %', v_name; end if;
     end;
   end loop;
 
@@ -2010,6 +2075,7 @@ end;
 $$;
 
 grant execute on function public.create_organization(text) to authenticated;
+grant execute on function public.normalize_org_name(text) to authenticated;
 
 create or replace function public.complete_org_onboarding(
   p_org_id            uuid,
@@ -2079,11 +2145,10 @@ begin
     returning id into v_group_id;
   end if;
 
-  -- Ensure a draft config exists in the group, independently of whether the group
-  -- was just created or already existed.
+  -- Seed a live fallback only when the group has no versions at all, so an org
+  -- that already configured its General rule is never touched.
   if not exists (
-    select 1 from public.allocation_configs
-    where config_group_id = v_group_id and status = 'draft'
+    select 1 from public.allocation_configs where config_group_id = v_group_id
   ) then
     insert into public.allocation_configs (
       org_id, config_group_id, name,
@@ -2092,8 +2157,8 @@ begin
     ) values (
       p_org_id, v_group_id, 'General Distribution Rule',
       v_org_date, v_org_date, null,
-      'draft', false, 'percentage',
-      '[]'::jsonb,
+      'locked', false, 'percentage',
+      '[{"category_name":"General","budget_portion":"Percentage","percentage":100}]'::jsonb,
       1
     );
   end if;
@@ -2101,6 +2166,226 @@ end;
 $$;
 
 grant execute on function public.complete_org_onboarding(uuid, text, text, int, text) to authenticated;
+
+-- ── Distribution rule versioning RPC ─────────────────────────────────────────
+-- Atomic creation of a new version of a distribution rule group.
+-- Drafts never close the covering (live) version.
+
+CREATE OR REPLACE FUNCTION public.create_special_config_version(
+  p_group_id       uuid,
+  p_org_id         uuid,
+  p_name           text,
+  p_allocation_type text,
+  p_total_amount   numeric(15,2),
+  p_rows           jsonb,
+  p_effective_from date,
+  p_status         text DEFAULT 'draft'
+)
+RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+SET lock_timeout = '5s'
+SET statement_timeout = '30s'
+AS $$
+DECLARE
+  v_covering_id   uuid;
+  v_next_from     date;
+  v_new_to        date;
+  v_max_ver       integer;
+  v_new_id        uuid;
+BEGIN
+  IF NOT public.is_org_admin(p_org_id) THEN
+    RAISE EXCEPTION 'create_special_config_version: caller must be an org admin';
+  END IF;
+
+  IF p_status NOT IN ('draft', 'locked') THEN
+    RAISE EXCEPTION 'create_special_config_version: invalid status %', p_status;
+  END IF;
+
+  -- Lock the group row to prevent concurrent version creation. lock_timeout
+  -- (set above) turns contention into a clear error rather than a hang.
+  BEGIN
+    PERFORM id FROM public.special_config_groups
+    WHERE id = p_group_id AND org_id = p_org_id
+    FOR UPDATE;
+  EXCEPTION WHEN lock_not_available THEN
+    RAISE EXCEPTION
+      'Another change to this distribution rule is still in progress. Wait a moment and try again.';
+  END;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'create_special_config_version: group % not found in org %', p_group_id, p_org_id;
+  END IF;
+
+  -- Compute next version number server-side (no client-supplied race window)
+  SELECT COALESCE(MAX(version_number), 0) INTO v_max_ver
+  FROM   public.allocation_configs
+  WHERE  config_group_id = p_group_id AND org_id = p_org_id;
+
+  IF p_status = 'locked' THEN
+    -- Find the locked version whose range contains p_effective_from. Only
+    -- locked versions define the live timeline, and the latest-starting match
+    -- is the one actually in force.
+    SELECT id INTO v_covering_id
+    FROM   public.allocation_configs
+    WHERE  config_group_id = p_group_id
+      AND  org_id          = p_org_id
+      AND  status          = 'locked'
+      AND  superseded_by_id IS NULL
+      AND  effective_from <= p_effective_from
+      AND  (effective_to IS NULL OR effective_to >= p_effective_from)
+    ORDER BY effective_from DESC
+    LIMIT  1;
+
+    -- Find the immediately following locked version to bound the new range
+    SELECT effective_from INTO v_next_from
+    FROM   public.allocation_configs
+    WHERE  config_group_id = p_group_id
+      AND  org_id          = p_org_id
+      AND  status          = 'locked'
+      AND  superseded_by_id IS NULL
+      AND  effective_from  > p_effective_from
+    ORDER BY effective_from
+    LIMIT  1;
+
+    v_new_to := CASE WHEN v_next_from IS NOT NULL
+                     THEN v_next_from - 1
+                     ELSE NULL END;
+
+    -- Close the covering version. Skipped entirely for drafts: a draft must
+    -- never shorten the rule that is currently live.
+    IF v_covering_id IS NOT NULL THEN
+      UPDATE public.allocation_configs
+      SET    effective_to = p_effective_from - 1
+      WHERE  id = v_covering_id
+        AND  effective_from < p_effective_from;
+    END IF;
+  ELSE
+    v_new_to := NULL;
+  END IF;
+
+  INSERT INTO public.allocation_configs (
+    name, is_special, allocation_type, total_amount, rows,
+    effective_from, effective_to, version_number,
+    config_group_id, start_date, status, org_id
+  ) VALUES (
+    p_name,
+    -- The General (default) group is the org-wide fallback, not a special rule
+    NOT COALESCE((SELECT is_default FROM public.special_config_groups WHERE id = p_group_id), false),
+    p_allocation_type, p_total_amount, p_rows,
+    p_effective_from, v_new_to, v_max_ver + 1,
+    p_group_id, p_effective_from, p_status, p_org_id
+  )
+  RETURNING id INTO v_new_id;
+
+  RETURN v_new_id;
+END;
+$$;
+
+REVOKE ALL   ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.create_special_config_version(uuid,uuid,text,text,numeric,jsonb,date,text) TO authenticated;
+
+-- ── approve_config_version — promote a draft to live ─────────────────────────
+-- Drafts (including every rule the onboarding wizard creates) resolve to
+-- nothing until locked. Flipping status with a bare UPDATE would leave two
+-- locked versions covering the same day, so approving has to close the version
+-- it supersedes and bound its own range — the same timeline arithmetic
+-- create_special_config_version does, in one transaction.
+
+CREATE OR REPLACE FUNCTION public.approve_config_version(p_version_id uuid)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+SET lock_timeout = '5s'
+SET statement_timeout = '30s'
+AS $$
+DECLARE
+  v_cfg         record;
+  v_covering_id uuid;
+  v_next_from   date;
+BEGIN
+  SELECT * INTO v_cfg FROM public.allocation_configs WHERE id = p_version_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'approve_config_version: version % not found', p_version_id;
+  END IF;
+
+  IF NOT public.is_org_admin(v_cfg.org_id) THEN
+    RAISE EXCEPTION 'approve_config_version: caller must be an org admin';
+  END IF;
+
+  IF v_cfg.status <> 'draft' THEN
+    RAISE EXCEPTION 'approve_config_version: version is already %', v_cfg.status;
+  END IF;
+
+  IF v_cfg.config_group_id IS NULL THEN
+    RAISE EXCEPTION 'approve_config_version: version does not belong to a rule group';
+  END IF;
+
+  IF v_cfg.rows IS NULL OR jsonb_array_length(v_cfg.rows) = 0 THEN
+    RAISE EXCEPTION 'approve_config_version: version has no category rows';
+  END IF;
+
+  BEGIN
+    PERFORM id FROM public.special_config_groups
+    WHERE id = v_cfg.config_group_id
+    FOR UPDATE;
+  EXCEPTION WHEN lock_not_available THEN
+    RAISE EXCEPTION
+      'Another change to this distribution rule is still in progress. Wait a moment and try again.';
+  END;
+
+  IF EXISTS (
+    SELECT 1 FROM public.allocation_configs
+    WHERE config_group_id = v_cfg.config_group_id
+      AND status          = 'locked'
+      AND effective_from  = v_cfg.effective_from
+      AND id             <> p_version_id
+  ) THEN
+    RAISE EXCEPTION
+      'A live version of this rule already starts on %. Change this draft''s start date first.',
+      v_cfg.effective_from;
+  END IF;
+
+  SELECT id INTO v_covering_id
+  FROM   public.allocation_configs
+  WHERE  config_group_id = v_cfg.config_group_id
+    AND  status          = 'locked'
+    AND  superseded_by_id IS NULL
+    AND  effective_from < v_cfg.effective_from
+    AND  (effective_to IS NULL OR effective_to >= v_cfg.effective_from)
+  ORDER BY effective_from DESC
+  LIMIT  1;
+
+  IF v_covering_id IS NOT NULL THEN
+    UPDATE public.allocation_configs
+    SET    effective_to = v_cfg.effective_from - 1
+    WHERE  id = v_covering_id;
+  END IF;
+
+  SELECT effective_from INTO v_next_from
+  FROM   public.allocation_configs
+  WHERE  config_group_id = v_cfg.config_group_id
+    AND  status          = 'locked'
+    AND  superseded_by_id IS NULL
+    AND  effective_from  > v_cfg.effective_from
+  ORDER BY effective_from
+  LIMIT  1;
+
+  UPDATE public.allocation_configs
+  SET    status       = 'locked',
+         effective_to = CASE
+                          WHEN v_next_from IS NOT NULL
+                            AND (effective_to IS NULL OR effective_to > v_next_from - 1)
+                          THEN v_next_from - 1
+                          ELSE effective_to
+                        END
+  WHERE  id = p_version_id;
+END;
+$$;
+
+REVOKE ALL   ON FUNCTION public.approve_config_version(uuid) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.approve_config_version(uuid) TO authenticated;
+
 
 create or replace function public.update_org_member_role(
   p_member_id uuid,
@@ -2241,6 +2526,7 @@ begin
     'intrabank_transfers','fx_transactions','fx_conversions','banks','categories',
     'category_groups','category_opening_balances','category_outflow_type_map',
     'allocation_configs','income_types','income_type_rules','outflow_types',
+    'outflow_classification_rules',
     'special_config_groups','transaction_allocation_snapshots','recalculation_logs',
     'special_projects','project_entries','report_templates','dynamic_reports',
     'departments','receipts'
@@ -2463,6 +2749,7 @@ begin
   delete from public.inflow_transactions               where org_id = p_org_id;
   delete from public.income_type_rules                 where org_id = p_org_id;
   delete from public.income_types                      where org_id = p_org_id;
+  delete from public.outflow_classification_rules      where org_id = p_org_id;
   delete from public.category_outflow_type_map         where org_id = p_org_id;
   delete from public.outflow_types                     where org_id = p_org_id;
   delete from public.allocation_configs                where org_id = p_org_id;

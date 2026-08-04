@@ -22,7 +22,8 @@
 | `special_config_groups` | Groups multiple versions of the same special config; `name`, `created_at`; income types link here via `special_config_group_id` |
 | `transaction_allocation_snapshots` | Per-transaction snapshot of resolved special config at calculation time; `transaction_id` UNIQUE, `config_version_id`, `config_group_id`, `resolved_rows jsonb`, `allocation_type`, `is_recalculated bool`, `recalculated_at` |
 | `recalculation_logs` | Audit trail for bulk recalculation actions; `config_group_id`, `config_version_id`, `performed_by`, `affected_count`, `reason`, `action_summary` |
-| `income_type_rules` | Keyword/stage-code rules per income type |
+| `income_type_rules` | Keyword/bank rules per income type; `rule_type check (keyword,stage_code,bank)` — `stage_code` is legacy-only, `bank` replaced it in the UI (`20260804000001_add_bank_rule_type.sql`) |
+| `outflow_classification_rules` | Keyword/bank rules for import-time outflow auto-classification (mirrors `income_type_rules`, but rules aren't type-owned — `outflow_type_id` is a nullable column set per row, alongside `stage_code_1`/`stage_code_2`, `priority int`). Two writers share the table: "Save as rule" (`ImportModal.tsx` grouped view, always sets `stage_code_1`) and the outflow type's own Recognition Rules panel (`AddOutflowTypeModal.tsx`, always leaves `stage_code_1` null) — that distinction is what lets the panel edit its own rules without touching group-saved ones. `bank` rule's `rule_value` is a `banks.id` UUID — no FK (rule_value is a shared text column also used for keywords), so an org-scoped lookup at read time (`useBanks()`, itself `.eq('org_id', orgId)` + RLS) is what prevents a rule from ever resolving to another org's bank |
 | `inflow_transactions` | Money received; `bank_name` text, FX fields, `income_type_id`, `allocation_config_id` |
 | `outflow_transactions` | Money paid out; `bank_name` text, FX fields, `is_pending_deduction`, `outflow_type_id` nullable FK → `outflow_types(id) ON DELETE SET NULL` |
 | `intra_flows` | Internal fund movements between categories; `account_from`/`account_to` text (name snapshot), `account_from_stage2`/`account_to_stage2` text (portion label), `total_amount`, `from_category_id`/`to_category_id` UUID FK → `categories(id) ON DELETE SET NULL` (authoritative ID), `status text DEFAULT 'active' CHECK (status IN ('active','reversed','void'))`, `reversal_of_id` UUID FK → `intra_flows(id)`, `transfer_type text` (e.g. `'bulk_reallocation'`), `batch_id uuid` (groups rows from the same bulk operation) |
@@ -226,10 +227,12 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 - Filters by `config_group_id`, `status = 'locked'`, `effective_from <= date`, `effective_to >= date` (or NULL)
 - Returns the version with the latest `effective_from` within range
 
-**Creating a new version** (`createNewVersion` in `useSpecialConfigGroups.ts`):
-1. Finds the version currently covering `effective_from` → sets its `effective_to = effective_from - 1 day`
-2. Finds the next version after `effective_from` → sets new version's `effective_to = next.effective_from - 1 day` (or NULL if latest)
-3. Inserts new version with `version_number = max + 1`
+**Creating a new version** (`createNewVersion` → `create_special_config_version` RPC):
+1. Locks the group row (`FOR UPDATE`, `lock_timeout = 5s`) so concurrent creates fail fast instead of hanging
+2. **Only when `p_status = 'locked'`**: finds the locked version covering `effective_from` → sets its `effective_to = effective_from - 1 day`, and bounds the new version at `next.effective_from - 1 day`. A draft never touches the live timeline.
+3. Inserts new version with `version_number = max + 1`; `is_special` is derived from `special_config_groups.is_default`
+
+**Approving a draft** (`lockVersion` → `approve_config_version` RPC): drafts resolve to nothing, so promoting one must also close the version it supersedes — never flip `status` with a bare UPDATE, or two locked versions cover the same day.
 
 **Income type link** lives at the group level (`income_types.special_config_group_id`), not per-version. `special_config_id` (old per-config link) is preserved for backward compat; `AddInflowModal` checks group link first.
 

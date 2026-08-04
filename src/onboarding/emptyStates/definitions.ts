@@ -30,9 +30,9 @@ export const EMPTY_STATES: EmptyStateDefinition[] = [
   {
     pageId: 'categories',
     iconName: 'Tag',
-    title: 'No categories yet',
+    title: 'No funds yet',
     description: 'Create income and outflow types to classify your transactions.',
-    action: { label: 'Add Category', href: '/settings?tab=general' },
+    action: { label: 'Add Fund', href: '/settings?tab=general' },
   },
   {
     pageId: 'reports',

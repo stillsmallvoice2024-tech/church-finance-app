@@ -33,8 +33,12 @@ Both `AddInflowInput` and `AddOutflowInput` in `useMutations.ts` include `bank_n
 
 ## Allocation Configs
 
+**Every config must belong to a group.** `buildVersionIndex()` skips any row with a null `config_group_id`, and the Distribution Rules tab only lists rows by group — so a config written without one is invisible everywhere and applies to nothing. The General (fallback) rule is the group with `special_config_groups.is_default = true`; write to it via `createGeneralVersion()`.
+
+**Drafts apply to nothing.** Only `status = 'locked'` versions resolve. The onboarding wizard therefore writes **locked** rules (`setGeneralRuleLive`, and special rules with `status: 'locked'`). Drafts created anywhere else need a reachable approve action — `PendingDraftsBanner` / `approveDraft` in `DistributionRulesTab.tsx`.
+
 **Regular configs** (`is_special = false`):
-- Held in `allocationStore` (fetched once on first use)
+- Held in `allocationStore` (fetched once on first use; `reload()` shares/awaits the in-flight fetch)
 - `getConfigForDate(configs, date)` → most recent **locked, non-special** config with `start_date` ≤ date
 - Draft configs are never applied
 - Special configs are explicitly excluded from date lookup
@@ -308,6 +312,34 @@ Same intra_flows logic now applied in both report engines — `balances` from `u
 
 ---
 
+## Dashboard Totals ↔ Inflows/Outflows Page Totals
+
+`useDashboard` headline totals must equal `useInflowSummary` / `useOutflowSummary` for the same period.
+
+**Same-table offset flip** — a row with `offset_role='offset'` whose `root_transaction_table` is its **own** table is money moving the other way, so it counts on the **opposite** side. This is deliberate: a refund reversing an outflow is cash the church actually received, and the headline should show what the user experienced.
+
+| Row | Counted as | Excluded from |
+|---|---|---|
+| outflow offset, root = outflow | inflow (`amount_disbursed`) | outflow total |
+| inflow offset, root = inflow | outflow (`amount`) | inflow total |
+
+Root + offset nets to zero while both amounts stay visible.
+
+**All three surfaces apply it:**
+- `useDashboard` — filters + flips in one pass over the year's inflow and outflow rows
+- `useInflowSummary` — 4 queries: own rows (+ prior period) and the flipped outflow offsets (+ prior period)
+- `useOutflowSummary` — mirror image
+
+Shared logic lives in `src/utils/flowAggregate.ts` (`isSameTableOffset`, `aggregateFlow`). Flipped rows come from the other table and carry no `income_type_id` / `outflow_type_id`, so they land in the `null` **Unclassified** slice — required for the type-breakdown percentages to sum to the headline total.
+
+> The flipped queries must reuse the *other* table's `transaction_type` exclusion list (inflows also exclude `balance_brought_forward`) or the two screens select different row sets.
+
+> Prior divergence: only the dashboard flipped, so `Total Inflows (year)` ran high by the sum of outflow reversals versus the Inflows hero total, which read `inflow_transactions` alone.
+
+**`fetchAllRows` ordering:** the helper appends `.order('id', { ascending: true })` (override via 2nd arg) to every page request. Paging with `.range()` over a query with no total ORDER BY lets Postgres return rows in any order per request — rows silently duplicate or vanish past the first 1000-row page. Caller-supplied `.order()` calls are preserved; the key is only a tiebreaker.
+
+---
+
 ## Outflow Amount Calculation
 
 `outflow_transactions.actual_amount` has `DEFAULT 0` — it is **never NULL** for rows inserted without that field (manual entry via `AddOutflowModal` never sets it).
@@ -431,3 +463,14 @@ Pages that show type-filtered views of `inflow_transactions` / `outflow_transact
 | `'balance_brought_forward'` | BankLedger (blue row, no edit), Inflows (blue badge, no edit/delete) | synthetic; managed by `src/utils/bankOpeningBalance.ts` |
 
 > If Reversals or Refunds pages show an error or empty results: verify the `transaction_type` column exists in the live DB (see `db-rules.md`). The application query logic is correct.
+
+### Offset Root Auto-Tagging
+
+Scoped to `transaction_type` in `{'reversal', 'intrabank_transfer'}` only (not refund/bank_deposit): when an offset row is linked to a root via `RootTransactionSearch`, the root is auto-promoted to `offset_role='root'` + `transaction_type=<same as the offset's own type>` — no manual root edit needed. This satisfies the Reversals/Intrabank-Transfers pages' `.eq('transaction_type', ...)` fetch on both tables, so the root shows up correctly (grouped, for Reversals via `groupRows()`; flat-listed with an "R" badge, for the Intrabank Transfers tab in `BankMovement.tsx`).
+
+- Shared helper: `autoTagOffsetRoot()` in `src/utils/autoTagOffsetRoot.ts` — no-ops unless `transactionType` is in the scoped set above `&& offsetRole==='offset' && rootTxnLink`; picks the target-table `useUpdateTransaction` mutate fn by `rootTxnLink.table`.
+- Wired into the three places `RootTransactionSearch` creates a root link: `AddInflowModal`/`AddOutflowModal` (post-save, both add & edit branches) and `Import.tsx` `ManualEntryForm` (`doSaveInflow`/`doSaveOutflow`).
+- Best-effort: failure doesn't roll back the already-saved offset row — surfaces via a warning toast instead (mirrors `AddBankModal`'s B/F propagation pattern).
+- `ImportModal.tsx` batch wizard's `batchOffsetRole` is unaffected — it bulk-labels rows within one import batch with no per-row `root_transaction_id`, so there's no discrete root to promote.
+- Pre-existing offset rows already linked to a root before this fix was added are not backfilled — this only fires on new saves.
+- To extend to another offsetable type (e.g. refund, bank_deposit), add it to `AUTO_TAG_ROOT_TYPES` in `autoTagOffsetRoot.ts` — no other changes needed, the 3 call sites are already type-agnostic.

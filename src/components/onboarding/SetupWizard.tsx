@@ -14,15 +14,16 @@ import { useAuthStore } from '../../store/authStore'
 import { useRole } from '../../hooks/useRole'
 import { useDepartments, saveDepartment, deleteDepartment } from '../../hooks/useDepartments'
 import { useBanks } from '../../hooks/useBanks'
-import { useAddBank, useAddAllocationConfig, useAddCategory, useDeleteCategory } from '../../hooks/useMutations'
+import { useAddBank, useAddCategory, useDeleteCategory } from '../../hooks/useMutations'
 import { useIncomeTypes, saveIncomeType, deleteIncomeType } from '../../hooks/useIncomeTypes'
 import { useOutflowTypes, saveOutflowType, deleteOutflowType } from '../../hooks/useOutflowTypes'
 import { useCategories } from '../../hooks/useCategories'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { supabase } from '../../lib/supabase'
 import { useAllocationStore } from '../../store/allocationStore'
-import { createGroupWithFirstVersion, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
+import { createGroupWithFirstVersion, setGeneralRuleLive, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import { useToastStore } from '../../store/toastStore'
+import { friendlyError } from '../../utils/friendlyError'
 import { WIZARD_STEPS } from '../../onboarding/wizard/definitions'
 import { getOrgTypeContent } from '../../onboarding/wizard/orgTypeContent'
 import type { OrgType } from '../../onboarding/wizard/orgTypeContent'
@@ -306,7 +307,7 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -322,7 +323,7 @@ function DepartmentsStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -432,7 +433,7 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
       setName(''); setAcctNum('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -565,7 +566,7 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -581,7 +582,7 @@ function IncomeTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => voi
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -692,7 +693,7 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -708,7 +709,7 @@ function OutflowTypesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -833,7 +834,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
       toast(`${starter} added`, 'success')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setAddingStarter(null)
     }
@@ -850,7 +851,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
       setName('')
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
@@ -914,7 +915,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
         </p>
       )}
 
-      <EditLaterNote where="Budget & Allocation → Categories" />
+      <EditLaterNote where="Budget & Allocation → Fund Setup" />
     </div>
   )
 }
@@ -951,11 +952,78 @@ function buildDistributionTemplates(catNames: string[]): DistTemplate[] {
   return templates
 }
 
+type SplitRow = { category_name: string; percentage: number }
+
+const SPLIT_GRID = 'grid grid-cols-[minmax(0,1fr)_4.5rem_1.25rem] gap-2 items-center'
+
+/** Fund + share editor. Select can shrink/ellipsize, and picks are echoed as chips. */
+function FundSplitRows({ rows, catNames, onChange }: {
+  rows: SplitRow[]
+  catNames: string[]
+  onChange: (rows: SplitRow[]) => void
+}) {
+  const patch    = (i: number, p: Partial<SplitRow>) => onChange(rows.map((r, j) => j === i ? { ...r, ...p } : r))
+  const selected = rows.filter(r => r.category_name)
+
+  return (
+    <div className="space-y-1">
+      <div className={`${SPLIT_GRID} pb-0.5`}>
+        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
+        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
+        <span />
+      </div>
+      {rows.map((row, i) => (
+        <div key={i} className={SPLIT_GRID}>
+          <select
+            value={row.category_name}
+            title={row.category_name || undefined}
+            onChange={e => patch(i, { category_name: e.target.value })}
+            className={`${inputCls} min-w-0 truncate`}
+          >
+            <option value="">Select fund…</option>
+            {catNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={row.percentage}
+            onChange={e => patch(i, { percentage: Number(e.target.value) })}
+            className={`${inputCls} min-w-0 px-1 text-center`}
+          />
+          {rows.length > 1 ? (
+            <button
+              type="button"
+              aria-label={`Remove ${row.category_name || 'fund'}`}
+              onClick={() => onChange(rows.filter((_, j) => j !== i))}
+              className="text-red-400 hover:text-red-500"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          ) : <span />}
+        </div>
+      ))}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 pt-1.5">
+          {selected.map((r, i) => (
+            <span
+              key={i}
+              className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary dark:bg-primary/20"
+            >
+              {r.category_name} · {r.percentage}%
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { categories }         = useCategories()
   const configs                = useAllocationStore(s => s.configs)
+  const groups                 = useAllocationStore(s => s.groups)
   const loaded                 = useAllocationStore(s => s.loaded)
-  const { mutate: addConfig }  = useAddAllocationConfig()
   const { push: toast }        = useToastStore()
   const [creating, setCreating]  = useState<number | null>(null)
   const [error, setError]        = useState<string | null>(null)
@@ -969,18 +1037,35 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
 
   const catNames       = useMemo(() => categories.filter(c => !c.is_hidden).map(c => c.name), [categories])
   const templates      = useMemo(() => buildDistributionTemplates(catNames), [catNames])
-  const regularConfigs = useMemo(() => configs.filter(c => !c.is_special), [configs])
+
+  // Rules created here are versions of the General rule group. Configs written
+  // without a config_group_id are orphans: they never show up in Setup →
+  // Distribution Rules and are skipped by buildVersionIndex(), so they can
+  // never apply to a transaction.
+  const generalGroupId = useMemo(() => groups.find(g => g.is_default)?.id ?? null, [groups])
+  const regularConfigs = useMemo(
+    () => (generalGroupId ? configs.filter(c => c.config_group_id === generalGroupId) : []),
+    [configs, generalGroupId],
+  )
+
+  const saveGeneralRule = async (label: string, rows: SplitRow[]) => {
+    const today = new Date().toISOString().slice(0, 10)
+    await setGeneralRuleLive({
+      name:           label,
+      rows:           rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage', percentage: r.percentage })),
+      effective_from: today,
+    })
+    await useAllocationStore.getState().reload()
+  }
 
   const handleCreate = async (idx: number, t: DistTemplate) => {
     if (creating !== null) return
     setCreating(idx); setError(null)
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      await addConfig({ name: t.label, start_date: today, rows: t.rows })
-      toast(`"${t.label}" saved as a draft`, 'success')
-      useAllocationStore.getState().reload()
+      await saveGeneralRule(t.label, t.rows)
+      toast(`"${t.label}" is now your live General rule`, 'success')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setCreating(null)
     }
@@ -992,13 +1077,11 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
     if (total !== 100 || customRows.some(r => !r.category_name)) return
     setSavingCustom(true); setError(null)
     try {
-      const today = new Date().toISOString().slice(0, 10)
-      await addConfig({ name: customName.trim(), start_date: today, rows: customRows })
-      toast(`"${customName.trim()}" saved as a draft`, 'success')
+      await saveGeneralRule(customName.trim(), customRows)
+      toast(`"${customName.trim()}" is now your live General rule`, 'success')
       setShowCustom(false); setCustomName(''); setCustomRows([{ category_name: '', percentage: 100 }])
-      useAllocationStore.getState().reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setSavingCustom(false)
     }
@@ -1013,7 +1096,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
 
       <div className="flex gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <p>Rules created here are saved as <strong>drafts</strong>. Approve them in Budget &amp; Allocation → Distribution Rules before they go live.</p>
+        <p>The rule you pick here <strong>goes live immediately</strong> as your General rule. Pick a different one to replace it, or change it any time in Settings → Distribution Rules.</p>
       </div>
 
       {regularConfigs.length > 0 && (
@@ -1031,7 +1114,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
         </p>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Quick-start templates — tap any to create as a draft:</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Quick-start templates — tap any to make it your live rule:</p>
           {templates.map((t, idx) => {
             const alreadyCreated = regularConfigs.some(r => r.name === t.label)
             const isCreating     = creating === idx
@@ -1096,42 +1179,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
               placeholder="Rule name (e.g. My Custom Split)"
               className={inputCls}
             />
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 pb-0.5">
-                <span className="flex-1 text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
-                <span className="w-20 text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
-                {customRows.length > 1 && <span className="w-4" />}
-              </div>
-              {customRows.map((row, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    value={row.category_name}
-                    onChange={e => setCustomRows(rows => rows.map((r, j) => j === i ? { ...r, category_name: e.target.value } : r))}
-                    className={`${inputCls} flex-1`}
-                  >
-                    <option value="">Select fund…</option>
-                    {catNames.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={row.percentage}
-                    onChange={e => setCustomRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
-                    className={`${inputCls} w-20 text-center`}
-                  />
-                  {customRows.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setCustomRows(rows => rows.filter((_, j) => j !== i))}
-                      className="text-red-400 hover:text-red-500 flex-shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+            <FundSplitRows rows={customRows} catNames={catNames} onChange={setCustomRows} />
             {(() => {
               const total = customRows.reduce((s, r) => s + r.percentage, 0)
               return total !== 100 ? (
@@ -1171,7 +1219,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
         )}
       </div>
 
-      <EditLaterNote where="Budget & Allocation → Distribution Rules" />
+      <EditLaterNote where="Settings → Distribution Rules" />
     </div>
   )
 }
@@ -1235,13 +1283,14 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         total_amount:    null,
         rows:            t.rows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage' as const, percentage: r.percentage })),
         effective_from:  today,
-        status:          'draft',
+        status:          'locked',
         income_type_id:  t.incomeTypeId,
       })
-      toast(`"${t.label}" special rule created as a draft`, 'success')
+      toast(`"${t.label}" special rule is now live`, 'success')
+      await useAllocationStore.getState().reload()
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setCreating(null)
     }
@@ -1260,14 +1309,15 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         total_amount:    null,
         rows:            customSpecialRows.map(r => ({ category_name: r.category_name, budget_portion: 'Percentage' as const, percentage: r.percentage })),
         effective_from:  today,
-        status:          'draft',
+        status:          'locked',
         income_type_id:  customSpecialTypeId,
       })
-      toast(`"${customSpecialName.trim()}" special rule created as a draft`, 'success')
+      toast(`"${customSpecialName.trim()}" special rule is now live`, 'success')
       setShowCustomSpecial(false); setCustomSpecialName(''); setCustomSpecialTypeId(''); setCustomSpecialRows([{ category_name: '', percentage: 100 }])
+      await useAllocationStore.getState().reload()
       refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(friendlyError(err, 'save the rule'))
     } finally {
       setSavingCustomSpecial(false)
     }
@@ -1300,7 +1350,7 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         </p>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Example rules — tap any to create as a draft:</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Example rules — tap any to make it live:</p>
           {templates.map((t, idx) => {
             const alreadyCreated = groups.some(g => g.name === t.label)
             const isCreating     = creating === idx
@@ -1378,42 +1428,7 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">How to split it</label>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 pb-0.5">
-                  <span className="flex-1 text-xs font-medium text-gray-400 dark:text-gray-500 pl-1">Fund</span>
-                  <span className="w-20 text-xs font-medium text-gray-400 dark:text-gray-500 text-center">Share&nbsp;(%)</span>
-                  {customSpecialRows.length > 1 && <span className="w-4" />}
-                </div>
-                {customSpecialRows.map((row, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <select
-                      value={row.category_name}
-                      onChange={e => setCustomSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, category_name: e.target.value } : r))}
-                      className={`${inputCls} flex-1`}
-                    >
-                      <option value="">Select fund…</option>
-                      {catNames.map(n => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={row.percentage}
-                      onChange={e => setCustomSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, percentage: Number(e.target.value) } : r))}
-                      className={`${inputCls} w-20 text-center`}
-                    />
-                    {customSpecialRows.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setCustomSpecialRows(rows => rows.filter((_, j) => j !== i))}
-                        className="text-red-400 hover:text-red-500 flex-shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <FundSplitRows rows={customSpecialRows} catNames={catNames} onChange={setCustomSpecialRows} />
             </div>
             {(() => {
               const total = customSpecialRows.reduce((s, r) => s + r.percentage, 0)
@@ -1701,7 +1716,7 @@ function FinishStep({ onClose }: { onClose: () => void }) {
           { icon: Upload,        label: 'Import Statement',  desc: 'Upload your first bank statement',   href: '/import'      },
           { icon: Landmark,      label: 'Bank Ledger',       desc: 'View transactions by account',       href: '/bank-ledger' },
           { icon: ArrowDownCircle, label: 'Inflows',         desc: 'Browse income records',              href: '/inflows'     },
-          { icon: Tag,           label: 'Categories',        desc: 'Manage your funds and pots',         href: '/categories'  },
+          { icon: Tag,           label: 'Fund Setup',        desc: 'Manage your funds and pots',         href: '/categories'  },
         ].map(({ icon: Icon, label, desc, href }) => (
           <button
             key={href}

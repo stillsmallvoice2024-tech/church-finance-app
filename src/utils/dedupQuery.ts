@@ -1,10 +1,21 @@
 import { supabase } from '../lib/supabase'
 import { normalizeId } from './normalizeId'
 import { chunkIds } from './chunkIds'
+import { mapWithConcurrency } from './mapWithConcurrency'
+
+// Chunks are fetched concurrently but capped — a 50k-row import chunked at
+// 100 IDs/request is ~500 chunks per side, and firing all of them at once
+// via a single Promise.all hits browser per-host connection limits and
+// Supabase rate limits well before it hits anything server-side.
+const DEDUP_QUERY_CONCURRENCY = 10
 
 /**
  * Fetch which of the given transaction IDs already exist in the database,
- * scoped to `bank_name` when provided.
+ * scoped to the active org and to `bank_name` when provided.
+ *
+ * The org filter is required: RLS permits every org the user belongs to, so
+ * without it a ref that exists in another org marks the row as a duplicate
+ * here and the import silently skips a legitimate transaction.
  *
  * IDs are queried in chunks so the PostgREST `.in()` query string never
  * exceeds URL limits, and any query error is THROWN — never swallowed —
@@ -15,17 +26,16 @@ export async function fetchExistingTransactionIds(
   column: 'transaction_ref' | 'transaction_id',
   ids: string[],
   bankName: string | null,
+  orgId: string,
 ): Promise<Set<string>> {
   const existing = new Set<string>()
   const unique = [...new Set(ids)].filter(Boolean)
   if (unique.length === 0) return existing
 
-  const results = await Promise.all(
-    chunkIds(unique).map(chunk => {
-      const base = supabase.from(table).select(column).in(column, chunk)
-      return bankName ? base.eq('bank_name', bankName) : base
-    }),
-  )
+  const results = await mapWithConcurrency(chunkIds(unique), DEDUP_QUERY_CONCURRENCY, chunk => {
+    const base = supabase.from(table).select(column).eq('org_id', orgId).in(column, chunk)
+    return bankName ? base.eq('bank_name', bankName) : base
+  })
 
   for (const { data, error } of results) {
     if (error) throw error

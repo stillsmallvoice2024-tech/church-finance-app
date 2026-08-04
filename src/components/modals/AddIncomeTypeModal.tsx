@@ -5,6 +5,8 @@ import { Modal } from '../ui/Modal'
 import { Field, inputCls } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { TypeColorPicker, TYPE_PRESET_COLORS } from '../ui/TypeColorPicker'
+import { SearchableSelect } from '../ui/SearchableSelect'
+import { useBanks } from '../../hooks/useBanks'
 import {
   saveIncomeType, useSpecialConfigGroupOptions,
   type IncomeType, type IncomeTypeInput,
@@ -43,9 +45,12 @@ CREATE POLICY "authenticated full access" ON public.income_type_rules
   FOR ALL TO authenticated USING (true) WITH CHECK (true);`
 
 // ── Rule row type ──────────────────────────────────────────────────────────────
+// 'stage_code' is legacy — no longer creatable from this UI (replaced by
+// 'bank') but a rule already saved as stage_code is still shown so it isn't
+// silently discarded when the type is next edited.
 
 interface RuleDraft {
-  rule_type:  'keyword' | 'stage_code'
+  rule_type:  'keyword' | 'stage_code' | 'bank'
   rule_value: string
 }
 
@@ -63,6 +68,7 @@ interface Props {
 export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props) {
   const isEdit = !!editRecord
   const { options: groupOptions, reload: reloadSpecialGroups } = useSpecialConfigGroupOptions()
+  const { banks } = useBanks()   // org-scoped — RLS + explicit org_id filter (see useBanks.ts)
 
   const [name,                setName]                = useState('')
   const [description,         setDescription]         = useState('')
@@ -232,19 +238,36 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
               <div key={i} className="flex items-center gap-2">
                 <select
                   value={rule.rule_type}
-                  onChange={e => updateRule(i, { rule_type: e.target.value as 'keyword' | 'stage_code' })}
+                  onChange={e => updateRule(i, {
+                    rule_type:  e.target.value as 'keyword' | 'stage_code' | 'bank',
+                    rule_value: '', // previous value doesn't carry meaning across types
+                  })}
                   className="shrink-0 px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   <option value="keyword">Keyword</option>
-                  <option value="stage_code">Stage Code</option>
+                  <option value="bank">Bank</option>
+                  {rule.rule_type === 'stage_code' && (
+                    <option value="stage_code" disabled>Stage Code (legacy)</option>
+                  )}
                 </select>
-                <input
-                  type="text"
-                  value={rule.rule_value}
-                  onChange={e => updateRule(i, { rule_value: e.target.value })}
-                  placeholder={rule.rule_type === 'keyword' ? 'e.g. tithe, tith' : 'e.g. Tithe Fund'}
-                  className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
+                {rule.rule_type === 'bank' ? (
+                  <SearchableSelect
+                    value={rule.rule_value}
+                    onChange={v => updateRule(i, { rule_value: v })}
+                    options={banks.map(b => ({ value: b.id, label: b.name }))}
+                    placeholder="— Select bank —"
+                    className="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={rule.rule_value}
+                    onChange={e => updateRule(i, { rule_value: e.target.value })}
+                    disabled={rule.rule_type === 'stage_code'}
+                    placeholder={rule.rule_type === 'keyword' ? 'e.g. tithe, tith' : 'e.g. Tithe Fund'}
+                    className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-100 disabled:text-gray-400"
+                  />
+                )}
                 <button
                   type="button" onClick={() => removeRule(i)}
                   className="p-1 text-gray-400 hover:text-danger rounded transition-colors"
@@ -257,7 +280,8 @@ export function AddIncomeTypeModal({ open, onClose, onSaved, editRecord }: Props
           </div>
           <p className="text-xs text-gray-500">
             <span className="font-medium">Keyword:</span> substring match on description (case-insensitive).<br />
-            <span className="font-medium">Stage Code:</span> exact match on the transaction's Stage Code 1 / category.
+            <span className="font-medium">Bank:</span> rows imported for the selected bank get this type automatically —
+            overrides keyword matches, so it fits a bank account dedicated to one purpose.
           </p>
         </div>
 

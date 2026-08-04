@@ -444,7 +444,7 @@ export default function Onboarding() {
               <div className="space-y-2">
                 {/* Row headers */}
                 <div className="grid grid-cols-[1fr_6rem_2rem] gap-2 px-1">
-                  <span className="text-xs font-medium text-gray-500">Category</span>
+                  <span className="text-xs font-medium text-gray-500">Fund</span>
                   <span className="text-xs font-medium text-gray-500 text-right">Percentage</span>
                   <span />
                 </div>
@@ -456,7 +456,7 @@ export default function Onboarding() {
                       type="text"
                       value={row.category_name}
                       onChange={e => updateDistRow(i, 'category_name', e.target.value)}
-                      placeholder="Category name"
+                      placeholder="Fund name"
                       className={inputCls}
                     />
                     <div className="relative">

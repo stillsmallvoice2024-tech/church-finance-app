@@ -25,10 +25,14 @@ interface ReceiptRow {
   file_name:   string
 }
 
-export async function auditLegacyReceiptPaths(): Promise<number> {
+// orgId is required, not optional: RLS alone exposes every org the caller
+// belongs to, so an unscoped run would audit and rewrite another org's
+// receipts from this org's UI.
+export async function auditLegacyReceiptPaths(orgId: string): Promise<number> {
   const { data, error, count } = await supabase
     .from('receipts')
     .select('file_path', { count: 'exact' })
+    .eq('org_id', orgId)
 
   if (error) throw new Error(error.message)
 
@@ -37,6 +41,7 @@ export async function auditLegacyReceiptPaths(): Promise<number> {
 }
 
 export async function migrateReceiptPaths(
+  orgId:       string,
   onProgress?: MigrationProgressCallback,
 ): Promise<MigrationStats> {
   const stats: MigrationStats = { total: 0, migrated: 0, skipped: 0, failed: 0, errors: [] }
@@ -44,6 +49,7 @@ export async function migrateReceiptPaths(
   const { data, error } = await supabase
     .from('receipts')
     .select('id, org_id, entity_type, entity_id, file_path, file_name')
+    .eq('org_id', orgId)
     .order('created_at', { ascending: true })
 
   if (error) throw new Error(`Failed to fetch receipts: ${error.message}`)
@@ -83,6 +89,7 @@ export async function migrateReceiptPaths(
       const { error: dbErr } = await supabase
         .from('receipts')
         .update({ file_path: newPath })
+        .eq('org_id', orgId)
         .eq('id', r.id)
       if (dbErr) {
         await supabase.storage.from('receipts').remove([newPath]).catch(() => {})

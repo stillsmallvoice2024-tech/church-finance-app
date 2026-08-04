@@ -8,6 +8,7 @@ import { useAddFXTransaction, useUpdateFXTransaction, type AddFXTransactionInput
 import { CurrencyInput } from '../ui/CurrencyInput'
 import type { FXTransaction } from '../../hooks/useFX'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { useOrgStore } from '../../store/orgStore'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { supabase } from '../../lib/supabase'
 
@@ -40,6 +41,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const updateMutation = useUpdateFXTransaction()
   const { loading, error, reset } = isEdit ? updateMutation : addMutation
   const { foreignCurrencies, getCurrencySymbol } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
   const [dupError, setDupError] = useState<string | null>(null)
 
   const defaultFxCurrency = foreignCurrencies[0]?.code ?? 'USD'
@@ -107,7 +109,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
       } else {
         const txnRef = values.transaction_ref?.trim()
           || await generateFallbackTransactionId(values.date, String(values.amount), values.narration ?? '', values.bank_name ?? '')
-        let dupQ = supabase.from('fx_transactions').select('id').eq('transaction_ref', txnRef)
+        let dupQ = supabase.from('fx_transactions').select('id').eq('org_id', orgId).eq('transaction_ref', txnRef)
         if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
         const { data: dup } = await dupQ.limit(1)
         if (dup && dup.length > 0) {

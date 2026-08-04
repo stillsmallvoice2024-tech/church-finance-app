@@ -9,12 +9,18 @@ import {
   createNewVersion,
   createVersionWithSplit,
   amendVersion,
+  updateDraftVersion,
+  lockVersion,
   detectVersionOverlap,
   type SpecialConfigGroupWithVersions,
   type VersionOverlap,
 } from '../../hooks/useSpecialConfigGroups'
 import { useIncomeTypeOptions } from '../../hooks/useIncomeTypes'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { friendlyError } from '../../utils/friendlyError'
+
+/** Raw Postgres text that means the DB is missing the unification migration. */
+const MIGRATION_HINT_RE = /is_special|allocation_type|total_amount|Could not find|config_group_id|effective_from/
 
 export const MIGRATION_SQL =
 `ALTER TABLE allocation_configs
@@ -34,7 +40,7 @@ interface Props {
   open:              boolean
   onClose:           () => void
   onSaved:           (cfg?: AllocationConfig) => void
-  mode:              'new_group' | 'new_version' | 'amend_version'
+  mode:              'new_group' | 'new_version' | 'amend_version' | 'edit_draft'
   group?:            SpecialConfigGroupWithVersions | null
   copyFromVersion?:  AllocationConfig | null
   versionToAmend?:   AllocationConfig | null
@@ -68,7 +74,8 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
 
   const selectedOption = incomeTypeOptions.find(o => o.id === selectedIncomeTypeId) ?? null
 
-  const isAmend = mode === 'amend_version'
+  const isAmend     = mode === 'amend_version'
+  const isEditDraft = mode === 'edit_draft'
 
   // Detect overlaps when effective dates change (new_version mode only)
   const overlaps = useMemo((): VersionOverlap[] => {
@@ -97,7 +104,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
       setTotalAmount('')
       setRows([{ category_name: '', budget_portion: '', value: '' }])
       setSelectedIncomeTypeId('')
-    } else if (mode === 'amend_version') {
+    } else if (mode === 'amend_version' || mode === 'edit_draft') {
       const src = versionToAmend
       if (src) {
         setEffectiveFrom(src.effective_from ?? today)
@@ -180,7 +187,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
       setError('Total amount is required for amount-type configs'); return
     }
     const dbRows = buildDbRows()
-    if (dbRows.length === 0) { setError('Add at least one category row'); return }
+    if (dbRows.length === 0) { setError('Add at least one fund row'); return }
 
     const status: 'draft' | 'locked' = lockAfterSave ? 'locked' : 'draft'
     setSaving(true)
@@ -198,6 +205,18 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           prev_income_type_id: prevLinked?.id ?? null,
         })
         onSaved(config)
+      } else if (isEditDraft) {
+        if (!versionToAmend) throw new Error('Draft version is required')
+        await updateDraftVersion({
+          id:              versionToAmend.id,
+          allocation_type: allocType,
+          total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
+          rows:            dbRows,
+          effective_from:  effectiveFrom,
+          effective_to:    effectiveTo || null,
+        })
+        if (lockAfterSave) await lockVersion(versionToAmend.id)
+        onSaved()
       } else if (isAmend) {
         if (!versionToAmend) throw new Error('Version to amend is required')
         await amendVersion({
@@ -236,7 +255,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         onSaved()
       }
     } catch (e: unknown) {
-      setError((e as { message?: string })?.message ?? 'Save failed')
+      const raw = (e as { message?: string })?.message ?? ''
+      // Migration hints below key off the raw Postgres text, so keep it for
+      // those; anything else gets translated into plain language.
+      setError(MIGRATION_HINT_RE.test(raw) ? raw : friendlyError(e, 'save this rule'))
     } finally {
       setSaving(false)
     }
@@ -246,7 +268,9 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     ? 'Create Special Rule'
     : isAmend
       ? `Amend Version — ${versionToAmend ? `v${versionToAmend.version_number}` : ''}`
-      : `New Version — ${group?.name ?? ''}`
+      : isEditDraft
+        ? `Edit Draft — ${versionToAmend ? `v${versionToAmend.version_number}` : ''}`
+        : `New Version — ${group?.name ?? ''}`
 
   return (
     <Modal
@@ -386,10 +410,10 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           </div>
         )}
 
-        {/* Category rows */}
+        {/* Fund rows */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-gray-600">Category Rows</label>
+            <label className="text-xs font-medium text-gray-600">Fund Rows</label>
             <span className={`text-xs font-mono font-semibold ${balanced ? 'text-green-600' : 'text-amber-600'}`}>
               {allocType === 'percentage'
                 ? `${runningTotal.toFixed(1)} / 100%`
@@ -399,8 +423,8 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
 
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_32px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
-              <span>Category</span>
-              <span>Budget Portion</span>
+              <span>Fund</span>
+              <span>Fund Type</span>
               <span>{allocType === 'percentage' ? '%' : `${baseCurrencySymbol} Amount`}</span>
               <span />
             </div>
@@ -419,7 +443,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
                     onChange={e => setRowField(i, 'budget_portion', e.target.value)}
                     className="text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full"
                   >
-                    <option value="">— Portion —</option>
+                    <option value="">— Fund Type —</option>
                     <option value="Percentage">Regular Funds</option>
                     <option value="Specific Seed">Designated Gift</option>
                     <option value="Savings">Savings Funds</option>
@@ -529,7 +553,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
         {/* Impact prompt (backdated new_version) */}
         {/* Error */}
         {error && (() => {
-          const isMigration = /is_special|allocation_type|total_amount|Could not find|config_group_id|effective_from/.test(error)
+          const isMigration = MIGRATION_HINT_RE.test(error)
           return (
             <div className="space-y-2">
               <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">

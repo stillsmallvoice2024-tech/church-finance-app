@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Pencil, Trash2, AlertCircle, Plus, Layers, Lock } from 'lucide-react'
 import { useOutflowTypes, useCategoryOutflowTypeMaps, type OutflowType } from '../../hooks/useOutflowTypes'
+import { useOutflowClassificationRules } from '../../hooks/useOutflowClassificationRules'
 import { useCategories } from '../../hooks/useCategories'
 import { SetupSearchSort, applySetupSort, TYPE_SORT_OPTS } from './shared'
 
@@ -14,6 +15,7 @@ export function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
   const { outflowTypes, loading, error } = useOutflowTypes()
   const { maps }                         = useCategoryOutflowTypeMaps()
   const { categories }                   = useCategories()
+  const { rules: classificationRules }   = useOutflowClassificationRules()
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
 
@@ -26,6 +28,17 @@ export function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
     }
     return m
   }, [maps, categories])
+
+  // Counts every rule routed to a type — both manually authored ones and
+  // "Save as rule" entries from the import grouped view.
+  const typeToRuleCount = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const rule of classificationRules) {
+      if (!rule.outflow_type_id) continue
+      m.set(rule.outflow_type_id, (m.get(rule.outflow_type_id) ?? 0) + 1)
+    }
+    return m
+  }, [classificationRules])
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -66,7 +79,10 @@ export function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
       )}
 
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-gray-500">Outflow types for reporting and expense classification. Does not affect balances or allocations.</p>
+        <p className="text-sm text-gray-500">
+          Outflow types for reporting and expense classification. Does not affect balances or allocations.
+          Add recognition rules to a type to have import auto-assign it to matching debit rows.
+        </p>
         <button
           onClick={onAdd}
           className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
@@ -90,6 +106,7 @@ export function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
             <div className="space-y-2">
               {visible.map(t => {
                 const linkedCats = typeToCategories.get(t.id) ?? []
+                const ruleCount  = typeToRuleCount.get(t.id) ?? 0
                 const isStandalone = !t.is_system && linkedCats.length === 0
                 return (
                   <div key={t.id} className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:shadow-sm transition-shadow">
@@ -105,6 +122,11 @@ export function OutflowTypesTab({ onAdd, onEdit, onDelete }: {
                         )}
                         {isStandalone && (
                           <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Standalone</span>
+                        )}
+                        {ruleCount > 0 && (
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                            {ruleCount} rule{ruleCount !== 1 ? 's' : ''}
+                          </span>
                         )}
                       </div>
                       {linkedCats.length > 0 && (

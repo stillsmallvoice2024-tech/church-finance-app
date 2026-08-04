@@ -40,7 +40,7 @@ A pending deduction is a payment that was approved and recorded, but the money h
 
 1. Wait until the money truly leaves the bank (check your bank statement).
 2. Find the row on this page.
-3. Make sure the row has both a category and a fund type filled in. If not, click the **pencil**, fill **Category** and **Fund Type**, and save.
+3. Make sure the row has both a fund and a fund type filled in. If not, click the **pencil**, fill **Fund** and **Fund Type**, and save.
 4. Click the green **Resolve** button on the row.
 5. The row disappears from this list — it is now a normal outflow.
 
@@ -48,10 +48,10 @@ A pending deduction is a payment that was approved and recorded, but the money h
 
 1. Tick the checkboxes of all the rows that have been paid.
 2. Click **Resolve selected** in the bar that appears.
-3. Rows missing their category or fund type are skipped — the app tells you how many. Fix those with **Edit selected**, then resolve again.
+3. Rows missing their fund or fund type are skipped — the app tells you how many. Fix those with **Edit selected**, then resolve again.
 
 ## If something goes wrong
 
-- **"Fill in both stage codes before resolving"** — the row is missing its Category or Fund Type. Edit it first.
+- **"Fill in both stage codes before resolving"** — the row is missing its Fund or Fund Type. Edit it first.
 - **"No pending deductions"** — great! Everything approved has been paid.
 - **A designated gift shows no target** — edit the original inflow and fill the **Designated Purpose** box.

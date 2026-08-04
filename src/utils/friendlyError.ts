@@ -17,6 +17,9 @@ export function friendlyError(err: unknown, action?: string): string {
   const prefix = action ? `Couldn't ${action}. ` : "Couldn't complete that. "
   const m = raw.toLowerCase()
 
+  // AbortError covers both our own request timeout and a cancelled navigation.
+  if (m.includes('took longer than') || m.includes('aborterror') || m.includes('signal is aborted') || m.includes('lock_not_available') || m.includes('canceling statement'))
+    return `${prefix}The server took too long to respond. Reload the page to check whether it saved before trying again.`
   if (m.includes('failed to fetch') || m.includes('network') || m.includes('timeout'))
     return `${prefix}Check your connection and try again.`
   if (m.includes('row-level security') || m.includes('permission denied') || m.includes('not authorized'))

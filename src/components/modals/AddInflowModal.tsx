@@ -21,9 +21,12 @@ import { getFinalConfig } from '../../utils/configResolver'
 import type { InflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { useOrgStore } from '../../store/orgStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../ui/RootTransactionSearch'
 import { isOffsetableType } from '../../utils/transactionTypes'
+import { autoTagOffsetRoot } from '../../utils/autoTagOffsetRoot'
+import { useToastStore } from '../../store/toastStore'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
@@ -66,6 +69,7 @@ interface Props {
 export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) {
   const isEdit = !!editRecord
   const { baseCurrencySymbol } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
   const { categories } = useCategories()
   const { banks } = useBanks()
   const fxBanks    = banks.filter(b => b.is_foreign_currency)
@@ -77,8 +81,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const { incomeTypes } = useIncomeTypes()
 
-  const addMutation    = useAddInflow()
-  const updateMutation = useUpdateTransaction('inflow_transactions')
+  const addMutation       = useAddInflow()
+  const updateMutation    = useUpdateTransaction('inflow_transactions')
+  const updateRootOutflow = useUpdateTransaction('outflow_transactions')
+  const { push: toast }   = useToastStore()
 
   const { mutate: add,    loading: adding,   error: addError,    reset: resetAdd    } = addMutation
   const { mutate: update, loading: updating, error: updateError, reset: resetUpdate } = updateMutation
@@ -116,6 +122,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const watchedDate     = watch('date')
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
+  const watchedBankId   = banks.find(b => b.name === watchedBankName)?.id ?? ''
 
   const generalConfigId = useMemo(() => {
     if (!watchedDate) return null
@@ -161,7 +168,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
     }
     if (incomeTypeId && !incomeTypeAutoSet) return   // manually set — leave it
     if (!incomeTypes.length) return
-    const match = classifyIncomeType(description ?? '', stageCode1 ?? '', incomeTypes)
+    const match = classifyIncomeType(description ?? '', stageCode1 ?? '', incomeTypes, watchedBankId)
     if (match) {
       setIncomeTypeId(match.id)
       setIncomeTypeAutoSet(true)
@@ -170,7 +177,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       setIncomeTypeId('')
       setIncomeTypeAutoSet(false)
     }
-  }, [description, stageCode1, incomeTypes, transactionType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [description, stageCode1, incomeTypes, transactionType, watchedBankId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear config state when switching away from Normal transaction type
   useEffect(() => {
@@ -289,7 +296,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       } else {
         const txnRef = values.transaction_ref?.trim()
           || await generateFallbackTransactionId(values.date, String(values.amount), values.description ?? '', values.bank_name ?? '')
-        let dupQ = supabase.from('inflow_transactions').select('id').eq('transaction_ref', txnRef)
+        let dupQ = supabase.from('inflow_transactions').select('id').eq('org_id', orgId).eq('transaction_ref', txnRef)
         if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
         const { data: dup } = await dupQ.limit(1)
         if (dup && dup.length > 0) {
@@ -323,6 +330,12 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           ...(values.recorded_at_date ? { recorded_at: `${values.recorded_at_date}T00:00:00.000Z` } : {}),
         }
         await add(input)
+      }
+      try {
+        await autoTagOffsetRoot(values.transaction_type, values.offset_role, rootTxnLink, update, updateRootOutflow.mutate)
+      } catch (e) {
+        console.warn('[offset-root] auto-tag failed', e)
+        toast('Saved — but the original transaction could not be auto-tagged as the root. Link it manually if needed.', 'warning')
       }
       onSuccess?.()
       onClose()
