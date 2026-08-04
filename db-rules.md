@@ -226,10 +226,12 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 - Filters by `config_group_id`, `status = 'locked'`, `effective_from <= date`, `effective_to >= date` (or NULL)
 - Returns the version with the latest `effective_from` within range
 
-**Creating a new version** (`createNewVersion` in `useSpecialConfigGroups.ts`):
-1. Finds the version currently covering `effective_from` → sets its `effective_to = effective_from - 1 day`
-2. Finds the next version after `effective_from` → sets new version's `effective_to = next.effective_from - 1 day` (or NULL if latest)
-3. Inserts new version with `version_number = max + 1`
+**Creating a new version** (`createNewVersion` → `create_special_config_version` RPC):
+1. Locks the group row (`FOR UPDATE`, `lock_timeout = 5s`) so concurrent creates fail fast instead of hanging
+2. **Only when `p_status = 'locked'`**: finds the locked version covering `effective_from` → sets its `effective_to = effective_from - 1 day`, and bounds the new version at `next.effective_from - 1 day`. A draft never touches the live timeline.
+3. Inserts new version with `version_number = max + 1`; `is_special` is derived from `special_config_groups.is_default`
+
+**Approving a draft** (`lockVersion` → `approve_config_version` RPC): drafts resolve to nothing, so promoting one must also close the version it supersedes — never flip `status` with a bare UPDATE, or two locked versions cover the same day.
 
 **Income type link** lives at the group level (`income_types.special_config_group_id`), not per-version. `special_config_id` (old per-config link) is preserved for backward compat; `AddInflowModal` checks group link first.
 

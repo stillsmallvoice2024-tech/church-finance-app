@@ -103,6 +103,11 @@ interface AllocationState {
   resolve:  (groupId: string | null, date: string) => AllocationConfig | null
 }
 
+// Tracks the in-flight fetch so concurrent callers share it instead of being
+// dropped. A dropped fetch used to leave `loaded: false` with no request
+// running, so a rule saved moments earlier stayed invisible.
+let inflight: Promise<void> | null = null
+
 export const useAllocationStore = create<AllocationState>((set, get) => ({
   configs: [],
   groups:  [],
@@ -112,39 +117,47 @@ export const useAllocationStore = create<AllocationState>((set, get) => ({
 
   fetch: async () => {
     const orgId = useOrgStore.getState().orgId
-    if (!orgId || get().loading) return
+    if (!orgId) return
+    if (inflight) return inflight
+
     set({ loading: true, error: null })
+    inflight = (async () => {
+      const [configsRes, groupsRes] = await Promise.all([
+        supabase
+          .from('allocation_configs')
+          .select('*')
+          .eq('org_id', orgId)
+          .order('effective_from', { ascending: true }),
+        supabase
+          .from('special_config_groups')
+          .select('id, name, is_default, created_at')
+          .eq('org_id', orgId),
+      ])
 
-    const [configsRes, groupsRes] = await Promise.all([
-      supabase
-        .from('allocation_configs')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('effective_from', { ascending: true }),
-      supabase
-        .from('special_config_groups')
-        .select('id, name, is_default, created_at')
-        .eq('org_id', orgId),
-    ])
+      if (configsRes.error || groupsRes.error) {
+        set({ error: (configsRes.error ?? groupsRes.error)!.message, loading: false })
+      } else {
+        set({
+          configs: (configsRes.data ?? []) as AllocationConfig[],
+          groups:  (groupsRes.data ?? []) as SpecialConfigGroup[],
+          loading: false,
+          loaded:  true,
+        })
+      }
+    })().finally(() => { inflight = null })
 
-    if (configsRes.error || groupsRes.error) {
-      set({ error: (configsRes.error ?? groupsRes.error)!.message, loading: false })
-    } else {
-      set({
-        configs: (configsRes.data ?? []) as AllocationConfig[],
-        groups:  (groupsRes.data ?? []) as SpecialConfigGroup[],
-        loading: false,
-        loaded:  true,
-      })
-    }
+    return inflight
   },
 
   reload: async () => {
+    // Let any in-flight read finish first — it started before the write and
+    // would otherwise be the result callers end up with.
+    if (inflight) await inflight.catch(() => {})
     set({ loaded: false })
     await get().fetch()
   },
 
-  reset: () => set({ configs: [], groups: [], loading: false, error: null, loaded: false }),
+  reset: () => { inflight = null; set({ configs: [], groups: [], loading: false, error: null, loaded: false }) },
 
   resolve: (groupId, date) => buildVersionIndex(get().configs, get().groups).resolve(groupId, date),
 }))
