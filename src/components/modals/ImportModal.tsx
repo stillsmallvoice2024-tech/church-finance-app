@@ -1395,7 +1395,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             )
             if (resolvedId) row.allocation_config_id = resolvedId
           }
-          if (internalBank) row.bank_name = internalBank.name
+          if (internalBank) { row.bank_name = internalBank.name; row.bank_id = internalBank.id }
           if (!row.transaction_ref) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
             // Falls back to on-the-fly generation as a safety net.
@@ -1423,7 +1423,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const row: Record<string, unknown> = { date, amount_disbursed: debit, description: desc, transaction_id: ref ? `${ref}${chargeTag}` : ref }
           if (userId) row.created_by = userId
           row.org_id = orgId
-          if (internalBank) row.bank_name = internalBank.name
+          if (internalBank) { row.bank_name = internalBank.name; row.bank_id = internalBank.id }
           if (!row.transaction_id) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
             const baseId = precomputedOutflowIds[ri]
@@ -1720,7 +1720,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
         if (userId) row.created_by = userId
         row.org_id = orgId
-        if (internalBank) row.bank_name = internalBank.name
+        if (internalBank) { row.bank_name = internalBank.name; row.bank_id = internalBank.id }
         fxRows.push(row)
       }
 

@@ -77,6 +77,8 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const selectedCurrency = watch('currency')
   const txType    = watch('type')
   const amount    = Number(watch('amount') || 0)
+  const watchedBankName = watch('bank_name')
+  const watchedBankId   = fxBanks.find(b => b.name === watchedBankName)?.id ?? ''
 
   // In edit mode, "previous balance" is the balance of the row before this one,
   // not the current latest. Derived as: stored_balance - old_deposit + old_withdrawal.
@@ -104,6 +106,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           narration:       values.narration       || undefined,
           transaction_ref: values.transaction_ref || undefined,
           bank_name:       values.bank_name       || undefined,
+          bank_id:         watchedBankId || undefined,
         }
         await (updateMutation.mutate as unknown as (i: UpdateFXTransactionInput) => Promise<void>)(input)
       } else {
@@ -124,6 +127,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           narration:       values.narration       || undefined,
           transaction_ref: txnRef,
           bank_name:       values.bank_name       || undefined,
+          bank_id:         watchedBankId || undefined,
         }
         await (addMutation.mutate as unknown as (i: AddFXTransactionInput) => Promise<void>)(input)
       }

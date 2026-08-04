@@ -488,6 +488,7 @@ create table public.inflow_transactions (
   specific_seed_description text,
   remark                    text,
   bank_name                 text,
+  bank_id                   uuid        references public.banks(id) on delete set null,
   fx_currency               text,
   fx_amount                 numeric(15,4),
   fx_rate                   numeric(15,6),
@@ -525,6 +526,7 @@ create table public.outflow_transactions (
   stage_code_2            text,
   remarks                 text,
   bank_name               text,
+  bank_id                 uuid        references public.banks(id) on delete set null,
   fx_currency             text,
   fx_amount               numeric(15,4),
   fx_rate                 numeric(15,6),
@@ -586,6 +588,7 @@ create table public.fx_transactions (
   withdrawal      numeric(15,4) default 0,
   running_balance numeric(15,4) default 0,
   bank_name       text,
+  bank_id         uuid        references public.banks(id) on delete set null,
   created_by      uuid        references public.profiles(id),
   org_id          uuid        not null default public.get_current_org_id()
                   references public.organizations(id) on delete set null,
@@ -1676,6 +1679,10 @@ create unique index if not exists idx_inflow_bf_unique_bank
 
 create index if not exists idx_inflow_bank_name   on public.inflow_transactions(bank_name);
 create index if not exists idx_outflow_bank_name  on public.outflow_transactions(bank_name);
+
+create index if not exists idx_inflow_bank_id     on public.inflow_transactions(bank_id);
+create index if not exists idx_outflow_bank_id    on public.outflow_transactions(bank_id);
+create index if not exists idx_fx_bank_id         on public.fx_transactions(bank_id);
 
 -- ================================================================
 -- 11. RPCS, SECURITY FUNCTIONS AND GRANTS

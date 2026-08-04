@@ -98,6 +98,7 @@ export interface AddInflowInput {
   original_transaction_id?: string
   income_type_id?: string
   bank_name?: string
+  bank_id?: string | null
   recorded_at?: string
   root_transaction_id?: string | null
   root_transaction_table?: 'inflow_transactions' | 'outflow_transactions' | null
@@ -127,6 +128,7 @@ export interface AddOutflowInput {
   outflow_type_id?: string | null
   department_id?: string | null
   bank_name?: string
+  bank_id?: string | null
   recorded_at?: string
   root_transaction_id?: string | null
   root_transaction_table?: 'inflow_transactions' | 'outflow_transactions' | null
@@ -756,6 +758,7 @@ export interface AddFXTransactionInput {
   narration?: string
   transaction_ref?: string
   bank_name?: string
+  bank_id?: string | null
 }
 
 export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, string> {
@@ -778,6 +781,7 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
         p_narration:       input.narration       ?? null,
         p_transaction_ref: input.transaction_ref ?? null,
         p_bank_name:       input.bank_name       ?? null,
+        p_bank_id:         input.bank_id         ?? null,
       })
       if (err) throw err
       if (!data) throw new Error('No ID returned.')
@@ -802,6 +806,7 @@ export interface UpdateFXTransactionInput {
   narration?:      string
   transaction_ref?: string
   bank_name?:      string
+  bank_id?:        string | null
 }
 
 export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput> {
@@ -826,6 +831,7 @@ export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput>
         p_narration:       input.narration       ?? null,
         p_transaction_ref: input.transaction_ref ?? null,
         p_bank_name:       input.bank_name       ?? null,
+        p_bank_id:         input.bank_id         ?? null,
       })
       if (err) throw err
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'fx_transactions', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: input as unknown as Record<string, unknown> })
@@ -923,6 +929,36 @@ export function useUpdateBank(): MutationHook<UpdateBankInput> {
         .from('banks').update(updates).eq('id', input.id).select('id')
       if (err) throw err
       if (!updatedRows?.length) throw new Error('Bank not found or update was silently rejected — please refresh and try again.')
+
+      // bank_name is denormalized text on several tables (no FK on
+      // inflow/outflow/fx_transactions). Cascade a rename onto every row still
+      // holding the old name so historical records stay visible after the
+      // rename — bank_id (added for inflow/outflow/fx_transactions) is the
+      // authoritative link going forward and needs no update here since it's
+      // immutable, but bank_name-keyed reads elsewhere still depend on this.
+      const oldName = (oldData as { name?: string } | null)?.name
+      if (oldName && oldName !== input.name) {
+        const orgId = useOrgStore.getState().orgId
+        if (orgId) {
+          await Promise.all([
+            supabase.from('inflow_transactions').update({ bank_name: input.name }).eq('org_id', orgId).eq('bank_name', oldName),
+            supabase.from('outflow_transactions').update({ bank_name: input.name }).eq('org_id', orgId).eq('bank_name', oldName),
+            supabase.from('fx_transactions').update({ bank_name: input.name }).eq('org_id', orgId).eq('bank_name', oldName),
+            supabase.from('bank_deposits').update({ bank_name: input.name }).eq('org_id', orgId).eq('bank_name', oldName),
+            supabase.from('intrabank_transfers').update({ from_bank_name: input.name }).eq('org_id', orgId).eq('from_bank_name', oldName),
+            supabase.from('intrabank_transfers').update({ to_bank_name: input.name }).eq('org_id', orgId).eq('to_bank_name', oldName),
+            // bank_statement_balances has UNIQUE(org_id, bank_name) — skip if a
+            // reference balance already exists under the new name.
+            (async () => {
+              const { data: conflict } = await supabase
+                .from('bank_statement_balances').select('id').eq('org_id', orgId).eq('bank_name', input.name).maybeSingle()
+              if (!conflict) {
+                await supabase.from('bank_statement_balances').update({ bank_name: input.name }).eq('org_id', orgId).eq('bank_name', oldName)
+              }
+            })(),
+          ])
+        }
+      }
 
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'banks', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })
       if (oldData) logFieldChanges(user.id, 'banks', input.id, oldData as Record<string, unknown>, updates as Record<string, unknown>)

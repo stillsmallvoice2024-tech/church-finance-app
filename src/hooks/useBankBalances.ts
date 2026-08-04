@@ -43,11 +43,11 @@ export function useBankBalances(): BankBalancesResult {
     const [inflowRes, outflowRes] = await Promise.all([
       fetchAllRows(() => supabase
         .from('inflow_transactions')
-        .select('bank_name, amount, transaction_type')
+        .select('bank_id, bank_name, amount, transaction_type')
         .eq('org_id', orgId)),
       fetchAllRows(() => supabase
         .from('outflow_transactions')
-        .select('bank_name, amount_disbursed')
+        .select('bank_id, bank_name, amount_disbursed')
         .eq('org_id', orgId)),
     ])
 
@@ -57,16 +57,21 @@ export function useBankBalances(): BankBalancesResult {
       return
     }
 
-    const inflowByBank = new Map<string, number>()
-    for (const r of inflowRes.data as { bank_name: string | null; amount: number; transaction_type: string | null }[]) {
-      if (!r.bank_name || r.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE) continue
-      inflowByBank.set(r.bank_name, (inflowByBank.get(r.bank_name) ?? 0) + Number(r.amount))
+    // bank_id is the authoritative key (immune to renames); bank_name is only
+    // used as a fallback for rows written before the bank_id backfill ran.
+    const inflowById = new Map<string, number>()
+    const inflowByName = new Map<string, number>()
+    for (const r of inflowRes.data as { bank_id: string | null; bank_name: string | null; amount: number; transaction_type: string | null }[]) {
+      if (r.transaction_type === BALANCE_BROUGHT_FORWARD_TYPE) continue
+      if (r.bank_id) inflowById.set(r.bank_id, (inflowById.get(r.bank_id) ?? 0) + Number(r.amount))
+      else if (r.bank_name) inflowByName.set(r.bank_name, (inflowByName.get(r.bank_name) ?? 0) + Number(r.amount))
     }
 
-    const outflowByBank = new Map<string, number>()
-    for (const r of outflowRes.data as { bank_name: string | null; amount_disbursed: number }[]) {
-      if (!r.bank_name) continue
-      outflowByBank.set(r.bank_name, (outflowByBank.get(r.bank_name) ?? 0) + Number(r.amount_disbursed))
+    const outflowById = new Map<string, number>()
+    const outflowByName = new Map<string, number>()
+    for (const r of outflowRes.data as { bank_id: string | null; bank_name: string | null; amount_disbursed: number }[]) {
+      if (r.bank_id) outflowById.set(r.bank_id, (outflowById.get(r.bank_id) ?? 0) + Number(r.amount_disbursed))
+      else if (r.bank_name) outflowByName.set(r.bank_name, (outflowByName.get(r.bank_name) ?? 0) + Number(r.amount_disbursed))
     }
 
     const result: BankBalance[] = banks.map(b => ({
@@ -74,7 +79,9 @@ export function useBankBalances(): BankBalancesResult {
       name:      b.name,
       currency:  b.currency,
       isForeign: b.is_foreign_currency,
-      balance:   (b.starting_balance ?? 0) + (inflowByBank.get(b.name) ?? 0) - (outflowByBank.get(b.name) ?? 0),
+      balance:   (b.starting_balance ?? 0)
+        + (inflowById.get(b.id) ?? 0) + (inflowByName.get(b.name) ?? 0)
+        - (outflowById.get(b.id) ?? 0) - (outflowByName.get(b.name) ?? 0),
     }))
 
     setBalances(result)

@@ -253,15 +253,15 @@ describe('per-page "export all" paths are org-scoped', () => {
 describe('BankLedger is org-scoped', () => {
   const code = src('pages/BankLedger.tsx')
 
-  it('both transaction queries filter by org_id', () => {
+  it('all four transaction queries filter by org_id', () => {
     const start = code.indexOf('const load = useCallback')
     const fn = code.slice(start, code.indexOf('useEffect', start))
     expect(start).toBeGreaterThanOrEqual(0)
-    expect((fn.match(/\.eq\('org_id', orgId\)/g) ?? []).length).toBe(2)
+    expect((fn.match(/\.eq\('org_id', orgId\)/g) ?? []).length).toBe(4)
   })
 
   it('guards when no org is active', () => {
-    expect(code).toContain('if (!bankName || !orgId)')
+    expect(code).toContain('if (!bankId || !bankName || !orgId)')
   })
 })
 
