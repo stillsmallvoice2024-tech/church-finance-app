@@ -276,13 +276,34 @@ describe('extractTableFromPages — wrapped narration rows', () => {
 
 describe('extractTableFromPages — fallback', () => {
   it('reports tableDetected=false and still returns a grid when no header exists', () => {
+    // No recognisable titles, but the body reads like transactions, so the
+    // guessed grid is worth handing back.
     const p = page([
       t(20, 100, 'alpha', 30), t(200, 100, 'beta', 25),
-      t(20, 120, 'gamma', 32), t(200, 120, 'delta', 28),
+      t(20, 120, '02-Aug-2026', 46), t(200, 120, '1,500.00', 30),
+      t(20, 140, '03-Aug-2026', 46), t(200, 140, '2,500.00', 30),
     ])
     const r = extractTableFromPages([p])
     expect(r.tableDetected).toBe(false)
     expect(r.rows.length).toBeGreaterThan(0)
+  })
+
+  it('returns nothing when the only text layer is a page stamp', () => {
+    // Mirrors the Parallex statement: the table is drawn as vector outlines, so
+    // the sole extractable text is `Page: N of 8`. Returning a tidy one-column
+    // grid here would stop the caller falling through to OCR — the only thing
+    // that can read such a file.
+    const pages = Array.from({ length: 8 }, (_, i) =>
+      page([t(543.2, 736.1, `Page: ${i + 1} of 8`, 30.3)], 792),
+    )
+    const r = extractTableFromPages(pages)
+    expect(r).toEqual({ headers: [], rows: [], tableDetected: false })
+  })
+
+  it('returns nothing for a single stray text run', () => {
+    const r = extractTableFromPages([page([t(100, 100, 'Confidential', 60)])])
+    expect(r.rows).toEqual([])
+    expect(r.headers).toEqual([])
   })
 
   it('returns empty output for an empty document', () => {
