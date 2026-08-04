@@ -1244,7 +1244,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const { error } = await supabase.from(table).insert(batch)
           if (error) {
             // Isolate the actually-bad row(s) instead of failing the whole batch again.
-            const split = await insertBatchResilient(r => supabase.from(table).insert(r), batch)
+            const split = await insertBatchResilient(async r => supabase.from(table).insert(r), batch)
             imported += split.imported
             bucket.push(...split.failed)
             for (const m of new Set(split.errors)) errors.push(`${table}: ${m}`)
@@ -1525,7 +1525,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           // is atomic) — split down to isolate it instead of losing every
           // good row (and the fund breakdown they were configured with).
           const split = await insertBatchResilient(
-            rows => supabase.from('inflow_transactions').insert(rows), rowsToRetry,
+            async rows => supabase.from('inflow_transactions').insert(rows), rowsToRetry,
           )
           imported += split.imported
           skipped  += split.failed.length
@@ -1553,7 +1553,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
         if (err) {
           const split = await insertBatchResilient(
-            rows => supabase.from('outflow_transactions').insert(rows), rowsToRetry,
+            async rows => supabase.from('outflow_transactions').insert(rows), rowsToRetry,
           )
           imported += split.imported
           skipped  += split.failed.length
