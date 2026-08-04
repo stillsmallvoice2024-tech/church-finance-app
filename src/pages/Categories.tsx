@@ -323,10 +323,10 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           />
         </div>
 
-        {/* Opening Balances by Portion */}
+        {/* Opening Balances by Fund Type */}
         <div className="border border-gray-100 rounded-lg p-3 space-y-3 bg-gray-50">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-500">Opening Balances by Portion</p>
+            <p className="text-xs font-semibold text-gray-500">Opening Balances by Fund Type</p>
             <button
               type="button"
               onClick={() => setObRows(prev => [...prev, { budget_portion: '', amount: '' }])}
@@ -351,7 +351,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
                     onChange={e => setObRows(prev => prev.map((r, j) => j === i ? { ...r, budget_portion: e.target.value as BudgetPortion | '' } : r))}
                     className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                   >
-                    <option value="">— Portion —</option>
+                    <option value="">— Fund Type —</option>
                     {BUDGET_PORTIONS.map(p => (
                       <option key={p} value={p} disabled={usedPortions.has(p)}>{BUDGET_PORTION_LABELS[p] ?? p}</option>
                     ))}
@@ -760,7 +760,7 @@ export default function Categories() {
               <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <th className="px-5 py-3 text-left font-medium">Name</th>
                 <th className="px-5 py-3 text-left font-medium hidden sm:table-cell">Description</th>
-                <th className="px-5 py-3 text-left font-medium hidden md:table-cell">Portion</th>
+                <th className="px-5 py-3 text-left font-medium hidden md:table-cell">Fund Type</th>
                 <th className="px-5 py-3 text-right font-medium hidden sm:table-cell">Bal. B/F</th>
                 <th className="px-5 py-3 text-right font-medium">Actions</th>
               </tr>

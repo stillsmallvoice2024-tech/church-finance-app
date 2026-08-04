@@ -638,8 +638,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                   {selectedConfigId && configDerivedRows.length > 0 && (
                     <div className="border border-gray-200 rounded-lg overflow-hidden">
                       <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px] bg-black/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06]">
-                        <span>Category</span>
-                        <span>Portion</span>
+                        <span>Fund</span>
+                        <span>Fund Type</span>
                         <span>%</span>
                         <span title="Count in category balance" className="cursor-help">Count</span>
                       </div>
@@ -691,8 +691,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   {/* Header — desktop only */}
                   <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_80px_28px_32px] bg-black/[0.02] dark:bg-white/[0.02] px-3 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b border-black/[0.06] dark:border-white/[0.07]">
-                    <span>Category</span>
-                    <span>Portion</span>
+                    <span>Fund</span>
+                    <span>Fund Type</span>
                     <span>{allocType === 'percentage' ? '%' : selectedCurrencySymbol}</span>
                     <span title="Count in category balance" className="cursor-help">Count</span>
                     <span />
@@ -715,7 +715,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                                   if (e.key === 'Enter') { e.preventDefault(); confirmNewCategory(i) }
                                   if (e.key === 'Escape') setNewCatMode(null)
                                 }}
-                                placeholder="Category name"
+                                placeholder="Fund name"
                                 disabled={newCatMode!.saving}
                                 className="text-xs px-2 py-1.5 border border-primary rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-0 flex-1"
                               />
@@ -748,11 +748,11 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                               }}
                               className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                             >
-                              <option value="">— Category —</option>
+                              <option value="">— Fund —</option>
                               {categories.map(c => (
                                 <option key={c.id} value={c.name}>{c.name}</option>
                               ))}
-                              <option value={NEW_SENTINEL}>+ New category…</option>
+                              <option value={NEW_SENTINEL}>+ New fund…</option>
                             </select>
                           )}
 
@@ -761,7 +761,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                             onChange={e => setRowField(i, 'budget_portion', e.target.value)}
                             className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
                           >
-                            <option value="">— Portion —</option>
+                            <option value="">— Fund Type —</option>
                             {BUDGET_PORTIONS.map(p => (
                               <option key={p} value={p}>{BUDGET_PORTION_LABELS[p] ?? p}</option>
                             ))}

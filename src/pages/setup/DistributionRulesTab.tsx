@@ -271,7 +271,7 @@ function GeneralGroupPanel({
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="border-b border-gray-200">
-                                  <th className="py-1.5 text-left text-gray-500 font-medium">Category</th>
+                                  <th className="py-1.5 text-left text-gray-500 font-medium">Fund</th>
                                   <th className="py-1.5 text-left text-gray-500 font-medium">Fund Type</th>
                                   <th className="py-1.5 text-right text-gray-500 font-medium">Value</th>
                                 </tr>
@@ -690,7 +690,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                                         <table className="w-full text-xs">
                                           <thead>
                                             <tr className="border-b border-gray-200">
-                                              <th className="py-1.5 text-left text-gray-500 font-medium">Category</th>
+                                              <th className="py-1.5 text-left text-gray-500 font-medium">Fund</th>
                                               <th className="py-1.5 text-left text-gray-500 font-medium">Fund Type</th>
                                               <th className="py-1.5 text-right text-gray-500 font-medium">Value</th>
                                             </tr>
