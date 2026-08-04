@@ -1268,7 +1268,7 @@ function DistributionRulesStep({ onDataReady }: { onDataReady: (ready: boolean) 
         </>
       )}
 
-      <EditLaterNote where="Settings → Distribution Rules" />
+      <EditLaterNote where="Administration → Settings → Distribution Rules" />
     </div>
   )
 }
@@ -1553,7 +1553,7 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         </div>
       )}
 
-      <EditLaterNote where="Budget & Allocation → Special Rules" />
+      <EditLaterNote where="Administration → Settings → Distribution Rules (Custom Rules section)" />
     </div>
   )
 }
