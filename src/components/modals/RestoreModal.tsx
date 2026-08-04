@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useToastStore } from '../../store/toastStore'
+import { useOrgStore } from '../../store/orgStore'
 import {
   MANAGED_TABLES,
   parseBackupFile,
@@ -36,6 +37,7 @@ const RESTORE_MODE_COLORS: Record<RestoreMode, string> = {
 
 export function RestoreModal({ open, onClose, onDone }: Props) {
   const { push: toast } = useToastStore()
+  const orgId = useOrgStore(s => s.orgId)
 
   const [step,             setStep]             = useState<Step>('select')
   const [mode,             setMode]             = useState<Mode>('merge')
@@ -104,6 +106,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
 
   const handleRestore = async () => {
     if (!backup) return
+    if (!orgId) { toast('No active organisation — cannot restore.', 'error'); return }
     setStep('restoring')
 
     // Pre-populate managed progress items
@@ -127,6 +130,7 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
       const res = await restoreFromBackup(
         backup,
         { mode, restoreUnmanaged },
+        orgId,
         (section, key, status, count) => upsertItem(section, key, status, count),
       )
       setResult(res)

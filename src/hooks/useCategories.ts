@@ -56,20 +56,23 @@ export function useCategories() {
 }
 
 export function useCategoryOpeningBalances(categoryId?: string) {
+  const orgId = useOrgStore((s) => s.orgId)
+
   const [balances, setBalances] = useState<CategoryOpeningBalance[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!orgId) { setBalances([]); setLoading(false); return }
     setLoading(true)
     setError(null)
-    let query = supabase.from('category_opening_balances').select('*')
+    let query = supabase.from('category_opening_balances').select('*').eq('org_id', orgId)
     if (categoryId) query = query.eq('category_id', categoryId)
     const { data, error: err } = await query.order('budget_portion')
     if (err && !/does not exist/i.test(err.message)) setError(err.message)
     else setBalances((data ?? []) as CategoryOpeningBalance[])
     setLoading(false)
-  }, [categoryId])
+  }, [categoryId, orgId])
 
   useEffect(() => { fetch() }, [fetch])
   return { balances, loading, error, refetch: fetch }

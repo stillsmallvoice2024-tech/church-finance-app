@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { exportCSV } from '../../utils/csvExport'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
+import { useOrgStore } from '../../store/orgStore'
 
 type ItemStatus = 'pending' | 'running' | 'done' | 'error'
 
@@ -28,14 +29,16 @@ const EXPORT_ITEMS: ExportItem[] = [
   { key: 'audit-log',           label: 'Audit Log',                status: 'pending' },
 ]
 
-const Q = (table: string) =>
-  supabase.from(table).select('*', { count: 'exact' }).limit(100_000)
+// Every export must be scoped to the active org: RLS alone permits every org
+// the user belongs to, so an unscoped export ships another org's ledger.
+const Q = (table: string, orgId: string) =>
+  supabase.from(table).select('*', { count: 'exact' }).eq('org_id', orgId).limit(100_000)
 
-async function runExport(key: string, sym: string): Promise<void> {
+async function runExport(key: string, sym: string, orgId: string): Promise<void> {
   const date = new Date().toISOString().slice(0, 10)
 
   if (key === 'inflows') {
-    const { data } = await Q('inflow_transactions').order('date')
+    const { data } = await Q('inflow_transactions', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`inflows-${date}.csv`,
       ['Date','Description',`Amount (${sym})`,'Inflow Type','Stage 1','Stage 2','Stage 3','Txn Ref','FX Currency','Txn Type','Created At'],
@@ -44,7 +47,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'outflows') {
-    const { data } = await Q('outflow_transactions').order('date')
+    const { data } = await Q('outflow_transactions', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`outflows-${date}.csv`,
       ['Date','Txn ID','Description',`Disbursed (${sym})`,`Refunded (${sym})`,`Transfer Charge (${sym})`,'Stage 1','Stage 2','Remarks','FX Currency','Txn Type','Created At'],
@@ -54,7 +57,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'intra-flows') {
-    const { data } = await Q('intra_flows').order('date')
+    const { data } = await Q('intra_flows', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`intra-flows-${date}.csv`,
       ['Date','From Category','To Category',`Amount (${sym})`,'Description','Transaction Ref','From Stage 1','From Stage 2','To Stage 1','To Stage 2','Remark','Created At'],
@@ -64,7 +67,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'bank-deposits') {
-    const { data } = await Q('bank_deposits').order('date')
+    const { data } = await Q('bank_deposits', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`bank-deposits-${date}.csv`,
       ['Date','Bank',`Amount (${sym})`,'Description','Transaction Ref','Remarks','Created At'],
@@ -72,7 +75,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'intrabank-transfers') {
-    const { data } = await Q('intrabank_transfers').order('date')
+    const { data } = await Q('intrabank_transfers', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`intrabank-transfers-${date}.csv`,
       ['Date','From Bank','To Bank',`Amount (${sym})`,'Description','Transaction Ref','Remarks','Created At'],
@@ -81,7 +84,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'foreign-currency') {
-    const { data } = await Q('fx_transactions').order('date')
+    const { data } = await Q('fx_transactions', orgId).order('date')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`foreign-currency-${date}.csv`,
       ['Date','Currency','Narration','Deposit','Withdrawal','Running Balance','Transaction Ref','Created At'],
@@ -90,7 +93,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'special-projects') {
-    const { data } = await Q('special_projects').order('name')
+    const { data } = await Q('special_projects', orgId).order('name')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`special-projects-${date}.csv`,
       ['Name','Code',`Opening Balance (${sym})`,'Active','Created At'],
@@ -98,8 +101,8 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'project-entries') {
-    const { data: entries }  = await Q('project_entries').order('date')
-    const { data: projects } = await supabase.from('special_projects').select('id, name').limit(10_000)
+    const { data: entries }  = await Q('project_entries', orgId).order('date')
+    const { data: projects } = await supabase.from('special_projects').select('id, name').eq('org_id', orgId).limit(10_000)
     const nameMap = new Map((projects ?? []).map((p: Record<string, unknown>) => [p.id, p.name]))
     const rows    = (entries ?? []) as Record<string, unknown>[]
     exportCSV(`special-project-entries-${date}.csv`,
@@ -109,7 +112,7 @@ async function runExport(key: string, sym: string): Promise<void> {
   }
 
   else if (key === 'receipts') {
-    const { data } = await Q('receipts').order('created_at')
+    const { data } = await Q('receipts', orgId).order('created_at')
     const rows = (data ?? []) as Record<string, unknown>[]
     exportCSV(`receipts-${date}.csv`,
       ['Entity Type','Entity ID','File Name','File Path','File Size (bytes)','MIME Type','Uploaded By','Created At'],
@@ -119,8 +122,8 @@ async function runExport(key: string, sym: string): Promise<void> {
 
   else if (key === 'bank-ledger') {
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('id,date,description,amount,stage_code_1').order('date').limit(100_000),
-      supabase.from('outflow_transactions').select('id,date,description,amount_disbursed,stage_code_1').order('date').limit(100_000),
+      supabase.from('inflow_transactions').select('id,date,description,amount,stage_code_1').eq('org_id', orgId).order('date').limit(100_000),
+      supabase.from('outflow_transactions').select('id,date,description,amount_disbursed,stage_code_1').eq('org_id', orgId).order('date').limit(100_000),
     ])
     type R = Record<string, unknown>
     const merged = [
@@ -134,8 +137,8 @@ async function runExport(key: string, sym: string): Promise<void> {
 
   else if (key === 'category-ledger') {
     const [inflowRes, outflowRes] = await Promise.all([
-      supabase.from('inflow_transactions').select('date,description,amount,stage_code_1,inflow_type').order('stage_code_1').order('date').limit(100_000),
-      supabase.from('outflow_transactions').select('date,description,amount_disbursed,stage_code_1').order('stage_code_1').order('date').limit(100_000),
+      supabase.from('inflow_transactions').select('date,description,amount,stage_code_1,inflow_type').eq('org_id', orgId).order('stage_code_1').order('date').limit(100_000),
+      supabase.from('outflow_transactions').select('date,description,amount_disbursed,stage_code_1').eq('org_id', orgId).order('stage_code_1').order('date').limit(100_000),
     ])
     type R = Record<string, unknown>
     const rows = [
@@ -151,6 +154,7 @@ async function runExport(key: string, sym: string): Promise<void> {
     const { data } = await supabase
       .from('audit_log')
       .select('id,user_id,action,table_name,record_id,created_at,profiles:user_id(full_name,email)')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(100_000)
     const rows = (data ?? []) as Record<string, unknown>[]
@@ -172,13 +176,14 @@ export function ExportCSVsModal({ open, onClose }: Props) {
   const [items,  setItems]  = useState<ExportItem[]>(EXPORT_ITEMS)
   const [done,   setDone]   = useState(false)
   const { baseCurrencySymbol } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
 
   const setStatus = useCallback((key: string, status: ItemStatus) => {
     setItems(prev => prev.map(it => it.key === key ? { ...it, status } : it))
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !orgId) return
     setItems(EXPORT_ITEMS)
     setDone(false)
 
@@ -189,7 +194,7 @@ export function ExportCSVsModal({ open, onClose }: Props) {
         if (cancelled) return
         setStatus(item.key, 'running')
         try {
-          await runExport(item.key, sym)
+          await runExport(item.key, sym, orgId)
           if (!cancelled) setStatus(item.key, 'done')
         } catch {
           if (!cancelled) setStatus(item.key, 'error')
@@ -199,7 +204,7 @@ export function ExportCSVsModal({ open, onClose }: Props) {
     })()
 
     return () => { cancelled = true }
-  }, [open, setStatus, baseCurrencySymbol])
+  }, [open, setStatus, baseCurrencySymbol, orgId])
 
   const allFinished = items.every(it => it.status === 'done' || it.status === 'error')
 

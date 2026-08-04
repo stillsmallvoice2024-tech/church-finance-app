@@ -1033,10 +1033,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       // Chunked queries + thrown errors — a large ID list (long fallback hashes)
       // must never overflow the URL or silently report every row as new.
       const bankName = internalBank?.name ?? null
+      const dupOrgId = useOrgStore.getState().orgId
+      if (!dupOrgId) { setDupCheckError('No active organisation.'); return }
 
       const [existingInflowRefs, existingOutflowIds] = await Promise.all([
-        fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', inflowIdList, bankName),
-        fetchExistingTransactionIds('outflow_transactions', 'transaction_id', outflowIdList, bankName),
+        fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', inflowIdList, bankName, dupOrgId),
+        fetchExistingTransactionIds('outflow_transactions', 'transaction_id', outflowIdList, bankName, dupOrgId),
       ])
 
       // Merge in skipTxnIds from Import.tsx pre-stage (when user chose "Skip Duplicates").
@@ -1502,7 +1504,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       const bankName  = internalBank?.name ?? null
       let existingFxRefs = new Set<string>()
       if (allFxRefs.length > 0) {
-        let fxDupQ = supabase.from('fx_transactions').select('transaction_ref').in('transaction_ref', allFxRefs)
+        let fxDupQ = supabase.from('fx_transactions').select('transaction_ref').eq('org_id', orgId).in('transaction_ref', allFxRefs)
         if (bankName) fxDupQ = fxDupQ.eq('bank_name', bankName)
         const { data: fxDupData } = await fxDupQ
         existingFxRefs = new Set(

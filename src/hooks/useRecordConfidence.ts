@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useHealthStore } from '../store/healthStore'
+import { useOrgStore } from '../store/orgStore'
 
 export interface RecordConfidence {
   /** 0–100 composite score, or null when reconciliation has never run. */
@@ -21,23 +22,25 @@ export interface RecordConfidence {
 export function useRecordConfidence(): RecordConfidence {
   const healthStatus = useHealthStore(s => s.status)
   const healthRunAt  = useHealthStore(s => s.runAt)
+  const orgId        = useOrgStore(s => s.orgId)
 
   const [bankCompleteness, setBankCompleteness] = useState(100)
   const [loading, setLoading] = useState(true)
 
   const fetchCompleteness = useCallback(async () => {
+    if (!orgId) { setBankCompleteness(100); setLoading(false); return }
     setLoading(true)
     const [inAll, inMissing, outAll, outMissing] = await Promise.all([
-      supabase.from('inflow_transactions').select('id',  { count: 'exact', head: true }),
-      supabase.from('inflow_transactions').select('id',  { count: 'exact', head: true }).is('bank_name', null),
-      supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }),
-      supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).is('bank_name', null),
+      supabase.from('inflow_transactions').select('id',  { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('inflow_transactions').select('id',  { count: 'exact', head: true }).eq('org_id', orgId).is('bank_name', null),
+      supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('bank_name', null),
     ])
     const total   = (inAll.count ?? 0) + (outAll.count ?? 0)
     const missing = (inMissing.count ?? 0) + (outMissing.count ?? 0)
     setBankCompleteness(total === 0 ? 100 : Math.round(((total - missing) / total) * 100))
     setLoading(false)
-  }, [])
+  }, [orgId])
 
   useEffect(() => { fetchCompleteness() }, [fetchCompleteness])
 

@@ -4,7 +4,11 @@ import { chunkIds } from './chunkIds'
 
 /**
  * Fetch which of the given transaction IDs already exist in the database,
- * scoped to `bank_name` when provided.
+ * scoped to the active org and to `bank_name` when provided.
+ *
+ * The org filter is required: RLS permits every org the user belongs to, so
+ * without it a ref that exists in another org marks the row as a duplicate
+ * here and the import silently skips a legitimate transaction.
  *
  * IDs are queried in chunks so the PostgREST `.in()` query string never
  * exceeds URL limits, and any query error is THROWN — never swallowed —
@@ -15,6 +19,7 @@ export async function fetchExistingTransactionIds(
   column: 'transaction_ref' | 'transaction_id',
   ids: string[],
   bankName: string | null,
+  orgId: string,
 ): Promise<Set<string>> {
   const existing = new Set<string>()
   const unique = [...new Set(ids)].filter(Boolean)
@@ -22,7 +27,7 @@ export async function fetchExistingTransactionIds(
 
   const results = await Promise.all(
     chunkIds(unique).map(chunk => {
-      const base = supabase.from(table).select(column).in(column, chunk)
+      const base = supabase.from(table).select(column).eq('org_id', orgId).in(column, chunk)
       return bankName ? base.eq('bank_name', bankName) : base
     }),
   )

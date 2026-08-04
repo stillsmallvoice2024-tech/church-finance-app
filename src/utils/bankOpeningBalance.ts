@@ -30,11 +30,15 @@ export async function propagateBankOpeningBalance(
   const { orgId } = useOrgStore.getState()
   if (!orgId) throw new Error('No active organisation.')
 
-  // On bank rename: purge the entry filed under the old name
+  // On bank rename: purge the entry filed under the old name.
+  // bank_name is plain text, not an FK — without the org_id filter this
+  // deletes the identically-named bank's B/F row in every other org the
+  // user belongs to.
   if (previousBankName && previousBankName !== bankName) {
     await supabase
       .from('inflow_transactions')
       .delete()
+      .eq('org_id', orgId)
       .eq('bank_name', previousBankName)
       .eq('transaction_type', BALANCE_BROUGHT_FORWARD_TYPE)
   }
@@ -43,6 +47,7 @@ export async function propagateBankOpeningBalance(
   const { data: rows, error: selectErr } = await supabase
     .from('inflow_transactions')
     .select('id')
+    .eq('org_id', orgId)
     .eq('bank_name', bankName)
     .eq('transaction_type', BALANCE_BROUGHT_FORWARD_TYPE)
     .limit(2)
@@ -54,6 +59,7 @@ export async function propagateBankOpeningBalance(
     const { error: cleanErr } = await supabase
       .from('inflow_transactions')
       .delete()
+      .eq('org_id', orgId)
       .in('id', rows.slice(1).map(r => r.id))
     if (cleanErr) console.warn('[bankOpeningBalance] duplicate cleanup failed:', cleanErr.message)
   }
@@ -66,6 +72,7 @@ export async function propagateBankOpeningBalance(
       const { error } = await supabase
         .from('inflow_transactions')
         .delete()
+        .eq('org_id', orgId)
         .eq('id', existing.id)
       if (error) throw error
     }
@@ -76,6 +83,7 @@ export async function propagateBankOpeningBalance(
     const { error } = await supabase
       .from('inflow_transactions')
       .update({ amount: balance })
+      .eq('org_id', orgId)
       .eq('id', existing.id)
     if (error) throw error
   } else {
