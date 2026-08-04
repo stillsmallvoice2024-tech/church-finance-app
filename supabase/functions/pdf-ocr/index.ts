@@ -3,8 +3,8 @@
 // Swap OCR_PROVIDER env var to change providers without touching frontend code.
 //
 // Deploy: supabase functions deploy pdf-ocr
-// Required env vars: ANTHROPIC_API_KEY
-// Optional:          OCR_PROVIDER (default: 'anthropic')
+// Required env vars: ANTHROPIC_API_KEY (provider 'anthropic') or OPENAI_API_KEY (provider 'openai')
+// Optional:          OCR_PROVIDER ('anthropic' | 'openai', default: 'anthropic')
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -12,6 +12,7 @@ const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const OCR_PROVIDER         = Deno.env.get('OCR_PROVIDER') ?? 'anthropic'
 const ANTHROPIC_API_KEY    = Deno.env.get('ANTHROPIC_API_KEY')
+const OPENAI_API_KEY       = Deno.env.get('OPENAI_API_KEY')
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,46 @@ async function anthropicProvider(image: string, mimeType: string): Promise<OcrRe
   return JSON.parse(jsonMatch[0]) as OcrResult
 }
 
+// ── OpenAI provider ───────────────────────────────────────────────────────────
+
+async function openaiProvider(image: string, mimeType: string): Promise<OcrResult> {
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured')
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify({
+      model:           'gpt-4o-mini',
+      max_tokens:      4096,
+      response_format: { type: 'json_object' },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${image}` } },
+          { type: 'text', text: EXTRACTION_PROMPT },
+        ],
+      }],
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`OpenAI API error ${res.status}: ${body.slice(0, 200)}`)
+  }
+
+  const json = await res.json() as { choices: Array<{ message: { content: string } }> }
+  const text = json.choices[0]?.message?.content ?? ''
+
+  const stripped  = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('OCR response contained no valid JSON')
+
+  return JSON.parse(jsonMatch[0]) as OcrResult
+}
+
 // ── Provider factory ──────────────────────────────────────────────────────────
 // To add a new provider: implement an async function matching OcrProviderFn,
 // then add a case here and set OCR_PROVIDER in your Supabase project secrets.
@@ -92,7 +133,7 @@ async function anthropicProvider(image: string, mimeType: string): Promise<OcrRe
 function getProvider(): OcrProviderFn {
   switch (OCR_PROVIDER) {
     case 'anthropic': return anthropicProvider
-    // case 'mistral':   return mistralProvider
+    case 'openai':    return openaiProvider
     default: throw new Error(`Unknown OCR_PROVIDER: "${OCR_PROVIDER}"`)
   }
 }
