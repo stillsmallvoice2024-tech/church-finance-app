@@ -708,7 +708,7 @@ export default function Categories() {
                     {displayBalances.length > 0 && (
                       <div className="flex flex-col items-end gap-0.5 shrink-0">
                         {displayBalances.map(b => (
-                          <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{b.budget_portion}</span>
+                          <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{BUDGET_PORTION_LABELS[b.budget_portion] ?? b.budget_portion}</span>
                         ))}
                       </div>
                     )}
@@ -918,7 +918,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
         {displayBalances.length > 0
           ? <div className="flex flex-col gap-0.5">
               {displayBalances.map(b => (
-                <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full w-fit">{b.budget_portion}</span>
+                <span key={b.budget_portion} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full w-fit">{BUDGET_PORTION_LABELS[b.budget_portion] ?? b.budget_portion}</span>
               ))}
             </div>
           : <span className="text-gray-300">—</span>}
