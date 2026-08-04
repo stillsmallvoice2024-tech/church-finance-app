@@ -276,7 +276,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       setRowField(rowIndex, 'category_name', name)
       setNewCatMode(null)
     } catch (e: unknown) {
-      const msg = (e as { message?: string })?.message ?? 'Failed to create category'
+      const msg = (e as { message?: string })?.message ?? 'Failed to create fund'
       setNewCatMode(prev => prev ? { ...prev, saving: false, error: msg } : null)
     }
   }
@@ -406,12 +406,12 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
         if (propagateErrors.length > 0) {
           toast(
-            `Bank saved — category balance update failed for: ${propagateErrors.join(', ')}. Check Setup → Database if migration is needed.`,
+            `Bank saved — fund balance update failed for: ${propagateErrors.join(', ')}. Check Setup → Database if migration is needed.`,
             'error'
           )
         } else if (skipped.length > 0) {
           toast(
-            `Bank saved — ${skipped.length} categor${skipped.length === 1 ? 'y was' : 'ies were'} not found and skipped: ${skipped.join(', ')}`,
+            `Bank saved — ${skipped.length} fund${skipped.length === 1 ? ' was' : 's were'} not found and skipped: ${skipped.join(', ')}`,
             'error'
           )
         } else {
@@ -641,7 +641,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                         <span>Fund</span>
                         <span>Fund Type</span>
                         <span>%</span>
-                        <span title="Count in category balance" className="cursor-help">Count</span>
+                        <span title="Count in fund balance" className="cursor-help">Count</span>
                       </div>
                       <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
                         {configDerivedRows.map((row, i) => (
@@ -694,7 +694,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                     <span>Fund</span>
                     <span>Fund Type</span>
                     <span>{allocType === 'percentage' ? '%' : selectedCurrencySymbol}</span>
-                    <span title="Count in category balance" className="cursor-help">Count</span>
+                    <span title="Count in fund balance" className="cursor-help">Count</span>
                     <span />
                   </div>
                   <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
@@ -792,8 +792,8 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                                 checked={row.apply_to_category}
                                 onChange={e => setRowField(i, 'apply_to_category', e.target.checked)}
                                 title={row.apply_to_category
-                                  ? 'Will be added to category balance'
-                                  : 'Already in category records — not counted again'}
+                                  ? 'Will be added to fund balance'
+                                  : 'Already in fund records — not counted again'}
                                 className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                               />
                               <span className="text-xs text-gray-500 sm:hidden">Count</span>
@@ -827,7 +827,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
                 </button>
 
                 <p className="text-xs text-gray-500">
-                  <span className="font-medium">Count</span>: tick if this amount is new and should be added to the category balance. Untick if it already exists in the category's transaction records.
+                  <span className="font-medium">Count</span>: tick if this amount is new and should be added to the fund balance. Untick if it already exists in the fund's transaction records.
                 </p>
               </div>}
               {(allocError || (!balanced && (allocType === 'config' ? configDerivedRows.length > 0 : runningTotal > 0))) && (
