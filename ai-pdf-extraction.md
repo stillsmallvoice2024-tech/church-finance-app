@@ -1,229 +1,244 @@
-# AI-Powered PDF Extraction — How It Works & How to Set It Up
+# AI-Powered PDF Extraction — A Simple Guide
 
-> **Important discovery first:** this app *already has* the generic AI layer you're thinking of.
-> It lives in `supabase/functions/pdf-ocr/index.ts` and is wired into the import flow via
-> `src/components/modals/PdfConverterOverlay.tsx`. It currently uses **Anthropic (Claude)**
-> as the vision provider, with a pluggable design so **OpenAI can be added as a provider**
-> without touching any frontend code. This document explains the whole system, what API
-> keys are, how to get one (OpenAI or Anthropic), and how to enable/extend the AI layer.
+This app lets users upload a bank statement PDF and turns it into rows of
+transactions. This guide explains how that works, why plain code alone can't do
+it well, and how AI (OpenAI or Anthropic) fixes the problem.
 
----
-
-## 1. The Problem: Why Local PDF Parsing Doesn't Scale
-
-PDF parsing today happens in two tiers:
-
-**Tier 1 — Native text extraction (`src/utils/pdfParser.ts` + `src/utils/pdfTableExtract.ts`)**
-
-- Uses the `pdfjs-dist` package (Mozilla's PDF.js) to read the raw text runs inside the PDF,
-  each with its x/y coordinates on the page.
-- `pdfTableExtract.ts` then reconstructs the transaction table using **geometry + regex
-  heuristics**: it looks for rows of text at the same vertical position, detects the header
-  row by matching words like "Date", "Debit", "Credit", "Balance", classifies cells as
-  date-like or amount-like with regular expressions, and filters out boilerplate
-  ("customer care", "page 1 of 3", disclaimers…).
-
-**Why this isn't scalable:**
-
-1. **Every bank formats statements differently.** The heuristics encode assumptions
-   (header words, date formats, column alignment). A new bank with an unusual layout means
-   editing regexes and shipping a new build — forever playing whack-a-mole.
-2. **Scanned PDFs contain no text at all.** Many statements are just photographs/scans of
-   paper. `pdfjs-dist` finds zero text runs, so the geometric approach gets nothing.
-3. **Merged/wrapped cells, multi-line narrations, and multi-page tables** break positional
-   logic in subtle ways that regexes can't anticipate.
-4. **No understanding, only pattern-matching.** The parser can't reason "this column is
-   obviously the balance because it always equals previous balance ± amount."
-
-**Tier 2 — the AI (OCR) fallback** solves all four problems and is already implemented.
-When the native parser fails or produces a low-confidence guess, the app sends a
-*picture* of each page to a vision-capable AI model that reads it like a human would.
+**Good news:** the AI part is already built into the app. You only need to add
+an API key to switch it on. This guide shows you where.
 
 ---
 
-## 2. What Is an API Key?
+## 1. The Problem: Reading PDFs with Plain Code Is Fragile
 
-An **API key** is a secret token (a long random string, e.g. `sk-proj-AbC123…`) that
-identifies and authenticates your account when your code calls a third-party service over
-the internet. Think of it as a password for programs instead of people:
+When a user uploads a PDF, the app first tries to read it **without** AI:
 
-- When the app calls the AI provider's API, it sends the key in a request header.
-- The provider checks the key, knows it's *your* account, processes the request, and
-  **bills your account** for the usage (these APIs are pay-per-use, priced per "token" —
-  roughly per word/image-chunk processed).
-- Anyone who has your key can spend your money — so keys must be kept **secret**:
-  - ✅ Stored as a **Supabase Edge Function secret** (server-side, invisible to users).
-  - ❌ Never in frontend code, never committed to git, never in `VITE_*` env vars
-    (anything prefixed `VITE_` is bundled into the public JavaScript!).
+1. `src/utils/pdfParser.ts` uses a package called **pdfjs-dist** to pull every
+   piece of text out of the PDF, along with its position on the page
+   (x/y coordinates).
+2. `src/utils/pdfTableExtract.ts` then tries to rebuild the transaction table
+   from those positions. It guesses which line is the header by searching for
+   words like "Date", "Debit", "Credit", and uses pattern-matching rules
+   (regular expressions) to decide if a cell looks like a date or an amount.
 
-This is exactly why the AI call lives in a **Supabase Edge Function** rather than in the
-React app: the browser never sees the key.
+This works for clean, well-behaved PDFs. But it breaks easily:
 
-### How to get an OpenAI API key
+- **Every bank designs statements differently.** Our rules assume certain
+  header words and layouts. A new bank with a different design means writing
+  new rules — again and again, forever.
+- **Scanned PDFs contain no text at all.** If a statement is a photo or scan of
+  paper, pdfjs-dist finds nothing to extract. The code gets zero rows.
+- **Messy layouts confuse it.** Descriptions that wrap onto two lines, merged
+  columns, or tables split across pages break the position-based guessing.
+- **The code doesn't understand anything.** It only matches patterns. It can't
+  think "this column must be the balance" the way a person can.
 
-1. Go to <https://platform.openai.com> and sign up / log in.
-2. Add a payment method under **Settings → Billing** (a few dollars of credit is plenty —
-   extracting a statement page costs fractions of a cent).
-3. Go to **Settings → API keys** (or <https://platform.openai.com/api-keys>) →
-   **Create new secret key**. Give it a name like `church-finance-pdf-ocr`.
-4. Copy the key immediately — it is shown **only once**. It looks like `sk-proj-…`.
-5. Store it as a Supabase secret (see §5). Never paste it into the repo.
-
-### How to get an Anthropic API key (the provider currently wired in)
-
-1. Go to <https://console.anthropic.com> and sign up / log in.
-2. Add billing under **Settings → Billing**.
-3. **Settings → API Keys → Create Key**. It looks like `sk-ant-…`.
-4. Same secrecy rules apply.
-
-You only need **one** provider's key to make the AI layer work.
+In short: rule-based parsing can't scale to every bank in the world.
 
 ---
 
-## 3. How the Solution Works, End to End
+## 2. The Solution: Let an AI *Look* at the Page
+
+The fix is simple to describe: **take a screenshot of each PDF page and show it
+to an AI model that can see images** (like OpenAI's GPT-4o or Anthropic's
+Claude). The AI reads the page the same way a human would, so it doesn't care
+which bank made the statement, whether it's scanned, or how weird the layout is.
+
+We ask the AI one thing: "Extract the table from this image and give it back as
+structured data." It replies with:
+
+```json
+{
+  "headers": ["Date", "Description", "Credit", "Debit", "Balance"],
+  "rows": [["2024-01-15", "Payment received", "5000.00", "", "25000.00"]],
+  "confidence": [[1.0, 0.95, 1.0, 1.0, 1.0]],
+  "warnings": ["Row 3 reference number partially obscured"]
+}
+```
+
+Two safety rules keep the financial data trustworthy:
+
+- The AI is told to copy values **exactly as they appear** — no guessing, no
+  "fixing" numbers.
+- Every cell comes with a **confidence score** (0.0 = unreadable, 1.0 = crystal
+  clear). Low-confidence cells get flagged so a human can double-check them
+  before anything is imported.
+
+---
+
+## 3. What Is an API Key?
+
+To use OpenAI's (or Anthropic's) AI, our code sends requests over the internet
+to their servers. An **API key** is how they know the request came from *our*
+account. Think of it as a password for programs:
+
+- It's a long random string, e.g. `sk-proj-AbC123...`
+- Our server includes it with every AI request.
+- The provider checks it, runs the request, and **charges our account** a tiny
+  fee (these services are pay-as-you-go).
+
+Because anyone holding the key can spend our money, it must stay **secret**:
+
+- ✅ Store it in Supabase's secret storage (server-side — users can never see it).
+- ❌ Never put it in the React code, never commit it to git, never put it in a
+  `VITE_...` variable (everything starting with `VITE_` ends up in the public
+  JavaScript that every visitor can read!).
+
+That's exactly why the AI call happens inside a **Supabase Edge Function**
+(a small piece of server code) instead of in the browser.
+
+### Getting an OpenAI API key (step by step)
+
+1. Go to <https://platform.openai.com> and create an account (or log in).
+2. Add a payment card under **Settings → Billing**. A few dollars is plenty —
+   one statement page costs a fraction of a cent.
+3. Go to <https://platform.openai.com/api-keys> → **Create new secret key**.
+   Name it something like `church-finance-pdf-ocr`.
+4. **Copy the key right away** — OpenAI shows it only once.
+5. Put it into Supabase (see section 6). Don't paste it anywhere else.
+
+### Getting an Anthropic API key (the alternative provider)
+
+Same idea: <https://console.anthropic.com> → add billing → **Settings →
+API Keys → Create Key**. Anthropic keys start with `sk-ant-...`.
+
+You only need **one** of the two keys.
+
+---
+
+## 4. How the Whole Flow Works
+
+Here is the journey of an uploaded PDF, start to finish:
 
 ```
-User drops a PDF on the Import page
+User uploads a PDF on the Import page
         │
         ▼
-PdfConverterOverlay.tsx
+Step 1: Try the free, instant way first
+        parsePDF() reads the text with pdfjs-dist and
+        tries to rebuild the table with position rules.
         │
-        ├─ 1. Try native extraction:  parsePDF(file)          [pdfjs-dist, free, instant]
-        │       └─ pdfTableExtract finds header + rows geometrically
+        ├── It worked (a real table was found)?
+        │        → Done! No AI needed, nothing spent.
         │
-        ├─ 2. Good result? (real table detected, or ≥ 5 rows)
-        │       └─ YES → done. Method badge shows "native".
-        │
-        └─ 3. NO (scanned PDF / weird layout) → AI pipeline:
-                │
-                ├─ renderPageToBase64()  (pdfPageRenderer.ts)
-                │     renders each page to a PNG image at 2× scale
-                │     using pdfjs + an offscreen <canvas>
-                │
-                ├─ for each page:  supabase.functions.invoke('pdf-ocr', { image, pageNumber })
-                │
-                │         Edge Function (supabase/functions/pdf-ocr/index.ts)
-                │         ├─ verifies the caller is a logged-in user (JWT check)
-                │         ├─ sends the image + extraction prompt to the AI provider
-                │         │     "You are a financial document parser. Extract ALL tabular
-                │         │      data… return ONLY JSON: { headers, rows, confidence, warnings }"
-                │         └─ parses the model's JSON reply and returns it
-                │
-                └─ pages are merged; rows land in the same review grid the
-                   native path uses. Method badge shows "OCR".
-                   Per-cell confidence scores (0.0–1.0) let the UI flag
-                   uncertain values for human review before import.
+        └── It failed (scanned PDF or strange layout)?
+                 → Go to Step 2.
+
+Step 2: The AI fallback
+        a. pdfPageRenderer.ts draws each PDF page onto an
+           invisible canvas and saves it as a PNG image.
+        b. Each image is sent to our Supabase Edge Function
+           ("pdf-ocr") — with a progress bar in the UI:
+           "OCR: page 2 of 5…"
+        c. The edge function checks the user is logged in,
+           then sends the image + instructions to the AI
+           (OpenAI or Anthropic, whichever is configured).
+        d. The AI returns the JSON table shown in section 2.
+
+Step 3: Human review
+        All extracted rows (from either path) appear in the
+        same review grid. Low-confidence cells are flagged.
+        Nothing enters the ledger until a person approves it.
 ```
 
-Key properties of the design:
+Why this design is good:
 
-- **AI is a fallback, not the default.** Clean digital PDFs are parsed locally for free in
-  milliseconds; the AI is only paid for when heuristics fail. Users can also force it with
-  the **"Re-extract with OCR"** button.
-- **Vision, not text.** The model receives a *screenshot* of the page, so it handles
-  scanned statements, any bank's layout, wrapped cells, stamps, and handwriting — no
-  per-bank rules needed. This is what makes it scalable.
-- **Structured output contract.** The prompt demands strict JSON
-  (`headers / rows / confidence / warnings`) with "preserve values EXACTLY, no
-  inferences", so the AI acts as a transcriber, not an author — important for financial
-  data integrity.
-- **Human in the loop.** Extracted rows always pass through the import review grid; low
-  confidence cells carry warnings. Nothing enters the ledger unreviewed.
-- **Provider-agnostic.** The edge function selects its provider from the `OCR_PROVIDER`
-  env var via a small factory (`getProvider()`), so swapping AI vendors is a
-  server-side config change with zero frontend changes.
+- **AI is a fallback, not the default.** Clean PDFs are parsed locally for
+  free. You only pay for AI when the free way fails. (There's also a
+  "Re-extract with OCR" button to force the AI path manually.)
+- **The key never leaves the server.** The browser sends images to *our* edge
+  function; only the edge function talks to the AI provider.
+- **Swapping AI vendors is a settings change**, not a code rewrite (see next
+  section).
 
 ---
 
-## 4. Where OpenAI Fits In
+## 5. Where OpenAI Fits in the Code
 
-**The OpenAI provider is implemented** in `supabase/functions/pdf-ocr/index.ts` as
-`openaiProvider`, alongside the existing `anthropicProvider`. It calls OpenAI's
-Chat Completions API with the vision-capable **`gpt-4o-mini`** model (cheap and accurate;
-change one line to `gpt-4o` for maximum accuracy), passes the page screenshot as a
-`data:` image URL, and uses `response_format: { type: 'json_object' }` so the model is
-forced to return valid JSON.
+All the AI logic lives in **one file**:
+`supabase/functions/pdf-ocr/index.ts`. It contains:
 
-Which provider actually runs is decided at runtime by the **`OCR_PROVIDER`** secret:
+- `EXTRACTION_PROMPT` — the instructions we send to the AI.
+- `anthropicProvider()` — sends the image to Anthropic (Claude Haiku).
+- `openaiProvider()` — sends the image to OpenAI (`gpt-4o-mini`, a cheap
+  vision model; change one line to `gpt-4o` if you want maximum accuracy).
+- `getProvider()` — picks which one to use, based on a setting called
+  `OCR_PROVIDER`.
 
-| `OCR_PROVIDER` value | Provider used | Key it needs |
+| If `OCR_PROVIDER` is set to… | The AI used is… | The key you must set is… |
 |---|---|---|
-| `openai` | OpenAI `gpt-4o-mini` | `OPENAI_API_KEY` |
-| `anthropic` *(default when unset)* | Claude Haiku | `ANTHROPIC_API_KEY` |
+| `openai` | OpenAI gpt-4o-mini | `OPENAI_API_KEY` |
+| `anthropic` (or not set at all) | Claude Haiku | `ANTHROPIC_API_KEY` |
 
-Both providers share the same `EXTRACTION_PROMPT` and return the same
-`{ headers, rows, confidence, warnings }` shape, so `PdfConverterOverlay.tsx`,
-`pdfPageRenderer.ts`, and the import grid need **zero changes** when switching.
+Both providers receive the same instructions and return the same JSON shape,
+so **nothing else in the app changes** when you switch between them.
 
 ---
 
-## 5. Where to Set the API Key (Setup / Deployment)
+## 6. Where to Set the API Key
 
-The key is **never** put in the code, the repo, or `.env.local`. It lives in your
-Supabase project's **Edge Function secrets**, which only the server-side function can
-read. There are two equivalent ways to set it — pick one:
+The key goes into your **Supabase project's Edge Function secrets** — a safe
+server-side storage that only your edge functions can read. Two ways to do it:
 
-### Option A — Supabase Dashboard (no terminal needed)
+### Option A — Supabase website (easiest, no terminal)
 
-1. Open <https://supabase.com/dashboard> and select this project.
-2. In the left sidebar go to **Edge Functions → Secrets**
-   (on some dashboard versions: **Project Settings → Edge Functions → Secrets**).
-3. Click **Add new secret** and create:
-   - Name: `OPENAI_API_KEY` — Value: your `sk-proj-…` key from §2
-   - Name: `OCR_PROVIDER` — Value: `openai`
-4. Save. Secrets take effect on the next function invocation — no redeploy needed
-   just for changing a secret.
+1. Open <https://supabase.com/dashboard> and click this project.
+2. In the left sidebar: **Edge Functions → Secrets**
+   (on some versions: **Project Settings → Edge Functions → Secrets**).
+3. Click **Add new secret** and add these two:
 
-### Option B — Supabase CLI
+   | Name | Value |
+   |---|---|
+   | `OPENAI_API_KEY` | your `sk-proj-...` key from section 3 |
+   | `OCR_PROVIDER` | `openai` |
+
+4. Save. New secrets are picked up automatically on the next PDF upload.
+
+### Option B — Terminal (Supabase CLI)
 
 ```bash
-# 1. Store the secret key server-side
 supabase secrets set OPENAI_API_KEY=sk-proj-...
 supabase secrets set OCR_PROVIDER=openai
+```
 
-# (To use Anthropic instead: set ANTHROPIC_API_KEY and either
-#  set OCR_PROVIDER=anthropic or leave OCR_PROVIDER unset — it's the default.)
+### One-time deploy
 
-# 2. Deploy the edge function (needed once after the code change)
+After the edge function's *code* changes (like adding the OpenAI provider),
+it must be deployed once:
+
+```bash
 supabase functions deploy pdf-ocr
 ```
 
-> ⚠️ The one-time **deploy** step above is required after the provider code change,
-> regardless of whether you set secrets via dashboard or CLI.
-
-That's it. The frontend already:
-- detects when native parsing fails and calls the function automatically,
-- shows per-page progress ("OCR: page 2 of 5…"),
-- offers manual "Re-extract with OCR",
-- surfaces model warnings + confidence in the review grid.
+Changing only secrets never requires a redeploy.
 
 ---
 
-## 6. Costs, Limits & Practical Notes
+## 7. Cost, Privacy & What Happens When Things Fail
 
-- **Cost scale:** a statement page image sent to `gpt-4o-mini` or Claude Haiku costs on
-  the order of **$0.001–0.01 per page**. Even heavy monthly imports are pennies.
-- **Rate limits:** new API accounts have modest requests-per-minute limits; the pipeline
-  processes pages sequentially, which stays comfortably inside them.
-- **Privacy:** page images (which contain real transactions) are sent to the AI provider.
-  Both OpenAI and Anthropic contractually do **not** train on API traffic, but this should
-  be understood/accepted by the organisation. The JWT check in the edge function ensures
-  only logged-in app users can trigger calls (i.e., nobody can burn your credits from
-  outside the app).
-- **Failure behaviour:** if the key is missing/invalid or the provider is down, the edge
-  function returns `{ ok: false, error }`; the overlay surfaces the error and the user
-  still has the native-extraction result or CSV/Excel import as fallback.
-- **Encrypted PDFs:** unsupported encryption is caught *before* any AI call
-  (`throwAsPdfError` in `pdfParser.ts`) with user-facing remediation steps.
+- **Cost:** roughly **$0.001–$0.01 per page**. A month of heavy statement
+  imports costs pennies.
+- **Privacy:** the page images (which show real transactions) are sent to
+  OpenAI/Anthropic. Both companies state they do **not** train their models on
+  API data, but the organisation should be aware of and okay with this.
+- **Security:** the edge function checks the caller's login token first, so
+  only signed-in users of the app can trigger AI calls (strangers can't burn
+  your credits).
+- **If the AI fails** (bad key, provider outage): the user sees a clear error
+  and can still fall back to the free parser's result, or import a CSV/Excel
+  file instead. Nothing crashes.
+- **Password-protected PDFs** are handled before any AI is involved — the app
+  asks for the password, and explains what to do if the encryption can't be
+  opened at all.
 
 ---
 
-## 7. File Map
+## 8. Quick File Map
 
-| File | Role |
+| File | What it does |
 |---|---|
-| `src/utils/pdfParser.ts` | Native text extraction via `pdfjs-dist`; password/encryption errors |
-| `src/utils/pdfTableExtract.ts` | Heuristic (geometry + regex) table reconstruction — the non-scalable part the AI layer backstops |
-| `src/utils/pdfPageRenderer.ts` | Renders PDF pages → base64 PNG for the AI |
-| `src/components/modals/PdfConverterOverlay.tsx` | Orchestrates native → AI fallback, progress UI, review grid |
-| `supabase/functions/pdf-ocr/index.ts` | **The AI layer**: auth, provider factory, prompt, JSON parsing |
+| `src/utils/pdfParser.ts` | Free path: pulls text out of the PDF with pdfjs-dist |
+| `src/utils/pdfTableExtract.ts` | Free path: rebuilds the table with position + pattern rules (the fragile part the AI backs up) |
+| `src/utils/pdfPageRenderer.ts` | Turns PDF pages into PNG images for the AI |
+| `src/components/modals/PdfConverterOverlay.tsx` | The UI: tries the free path, falls back to AI, shows progress and results |
+| `supabase/functions/pdf-ocr/index.ts` | **The AI layer**: login check, the prompt, the OpenAI & Anthropic providers |
