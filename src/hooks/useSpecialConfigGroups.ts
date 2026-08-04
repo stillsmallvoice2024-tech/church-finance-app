@@ -174,6 +174,42 @@ export async function createNewVersion(params: {
   return data as string
 }
 
+/**
+ * Updates a draft version in place — no new version, no supersession. Drafts
+ * apply to nothing until approved, so editing them directly is safe; only
+ * `amendVersion` (for locked/current versions) needs the supersession dance.
+ */
+export async function updateDraftVersion(params: {
+  id:              string
+  allocation_type: 'percentage' | 'amount'
+  total_amount?:   number | null
+  rows:            AllocationConfig['rows']
+  effective_from:  string
+  effective_to?:   string | null
+}): Promise<void> {
+  const { data: existing, error: selErr } = await supabase
+    .from('allocation_configs')
+    .select('status')
+    .eq('id', params.id)
+    .single()
+  if (selErr) throw new Error(selErr.message)
+  if ((existing as { status: string }).status !== 'draft') {
+    throw new Error('Only draft versions can be edited directly.')
+  }
+
+  const { error } = await supabase
+    .from('allocation_configs')
+    .update({
+      allocation_type: params.allocation_type,
+      total_amount:    params.total_amount ?? null,
+      rows:            params.rows,
+      effective_from:  params.effective_from,
+      effective_to:    params.effective_to ?? null,
+    })
+    .eq('id', params.id)
+  if (error) throw new Error(error.message)
+}
+
 // ── General (default) rule group ───────────────────────────────────────────────
 
 /**
