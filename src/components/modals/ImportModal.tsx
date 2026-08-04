@@ -25,6 +25,7 @@ import {
 } from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { fetchExistingTransactionIds } from '../../utils/dedupQuery'
+import { insertBatchResilient } from '../../utils/insertBatchResilient'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
@@ -1241,8 +1242,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         for (let i = 0; i < rows.length; i += BATCH) {
           const batch = rows.slice(i, i + BATCH)
           const { error } = await supabase.from(table).insert(batch)
-          if (error) { errors.push(`${table}: ${error.message}`); bucket.push(...batch) }
-          else imported += batch.length
+          if (error) {
+            // Isolate the actually-bad row(s) instead of failing the whole batch again.
+            const split = await insertBatchResilient(r => supabase.from(table).insert(r), batch)
+            imported += split.imported
+            bucket.push(...split.failed)
+            for (const m of new Set(split.errors)) errors.push(`${table}: ${m}`)
+          } else imported += batch.length
         }
       }
       if (imported > 0) {
@@ -1504,42 +1510,59 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       for (let i = 0; i < inflowToInsert.length; i += BATCH) {
         const batch = inflowToInsert.slice(i, i + BATCH)
         let { error: err } = await supabase.from('inflow_transactions').insert(batch)
+        let rowsToRetry = batch
         const missingInflow = err?.message.match(/Could not find (?:the ')?(\w+)'? column/)?.[1]
         if (missingInflow) {
-          const stripped = batch.map(row => { const r = { ...row }; delete r[missingInflow]; return r })
-          const { error: retryErr } = await supabase.from('inflow_transactions').insert(stripped)
+          rowsToRetry = batch.map(row => { const r = { ...row }; delete r[missingInflow]; return r })
+          const { error: retryErr } = await supabase.from('inflow_transactions').insert(rowsToRetry)
           err = retryErr ?? null
           if (!errors.some(e => e.includes(missingInflow))) {
             errors.push(missingColMsg(missingInflow))
           }
         }
         if (err) {
-          const msg = err.message.includes('invalid input syntax for type uuid')
-            ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
-            : `Inflow batch: ${err.message}`
-          errors.push(msg); skipped += batch.length
-          failedInflows.push(...batch)
+          // A single bad row fails the whole 250-row batch (multi-row INSERT
+          // is atomic) — split down to isolate it instead of losing every
+          // good row (and the fund breakdown they were configured with).
+          const split = await insertBatchResilient(
+            rows => supabase.from('inflow_transactions').insert(rows), rowsToRetry,
+          )
+          imported += split.imported
+          skipped  += split.failed.length
+          failedInflows.push(...split.failed)
+          for (const m of new Set(split.errors)) {
+            errors.push(m.includes('invalid input syntax for type uuid')
+              ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
+              : `Inflow row: ${m}`)
+          }
         } else imported += batch.length
         setProgress(total > 0 ? Math.round(((i + batch.length) / total) * 50) : 50)
       }
       for (let i = 0; i < outflowToInsert.length; i += BATCH) {
         const batch = outflowToInsert.slice(i, i + BATCH)
         let { error: err } = await supabase.from('outflow_transactions').insert(batch)
+        let rowsToRetry = batch
         const missingOutflow = err?.message.match(/Could not find (?:the ')?(\w+)'? column/)?.[1]
         if (missingOutflow) {
-          const stripped = batch.map(row => { const r = { ...row }; delete r[missingOutflow]; return r })
-          const { error: retryErr } = await supabase.from('outflow_transactions').insert(stripped)
+          rowsToRetry = batch.map(row => { const r = { ...row }; delete r[missingOutflow]; return r })
+          const { error: retryErr } = await supabase.from('outflow_transactions').insert(rowsToRetry)
           err = retryErr ?? null
           if (!errors.some(e => e.includes(missingOutflow))) {
             errors.push(missingColMsg(missingOutflow))
           }
         }
         if (err) {
-          const msg = err.message.includes('invalid input syntax for type uuid')
-            ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
-            : `Outflow batch: ${err.message}`
-          errors.push(msg); skipped += batch.length
-          failedOutflows.push(...batch)
+          const split = await insertBatchResilient(
+            rows => supabase.from('outflow_transactions').insert(rows), rowsToRetry,
+          )
+          imported += split.imported
+          skipped  += split.failed.length
+          failedOutflows.push(...split.failed)
+          for (const m of new Set(split.errors)) {
+            errors.push(m.includes('invalid input syntax for type uuid')
+              ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
+              : `Outflow row: ${m}`)
+          }
         } else imported += batch.length
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
       }
