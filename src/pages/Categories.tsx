@@ -338,7 +338,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
           </div>
 
           {obRows.length === 0 && (
-            <p className="text-xs text-gray-500">No opening balances. Click Add to set a balance brought forward per budget portion.</p>
+            <p className="text-xs text-gray-500">No opening balances. Click Add to set a balance brought forward per fund type.</p>
           )}
 
           <div className="space-y-2">
@@ -373,7 +373,7 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
               )
             })}
           </div>
-          <p className="text-xs text-gray-500">Balance brought forward per budget portion. Each portion can only appear once.</p>
+          <p className="text-xs text-gray-500">Balance brought forward per fund type. Each fund type can only appear once.</p>
         </div>
 
         <div className="flex justify-end gap-3 pt-1">

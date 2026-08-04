@@ -442,12 +442,12 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         {rootPropagated && (
           <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800">
             <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-            <span>Category and fund type were auto-filled from the linked root transaction. <strong>Save to apply these to ledgers.</strong></span>
+            <span>Fund and fund type were auto-filled from the linked root transaction. <strong>Save to apply these to ledgers.</strong></span>
           </div>
         )}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Category" error={errors.stage_code_1?.message}
-            help="The fund or category this outflow is charged against. Used to match outflows to the correct budget line and fund balance.">
+          <Field label="Fund" error={errors.stage_code_1?.message}
+            help="The fund this outflow is charged against. Used to match outflows to the correct budget line and fund balance.">
             <Controller name="stage_code_1" control={control} render={({ field }) => (
               <SearchableSelect value={field.value ?? ''} onChange={field.onChange}
                 options={filteredCategories.map(c => ({ value: c.name, label: c.name }))}

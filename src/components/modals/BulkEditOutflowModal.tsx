@@ -86,7 +86,7 @@ export function BulkEditOutflowModal({ open, onClose, ids, banks, onSuccess, onR
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Category</label>
+          <label className="text-xs font-medium text-gray-500">Fund</label>
           <SearchableSelect value={stageCode1} onChange={setStageCode1}
             options={categories.map(c => ({ value: c.name, label: c.name }))}
             placeholder="— Keep existing —" className={filterInputCls} />

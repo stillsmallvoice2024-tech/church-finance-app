@@ -32,7 +32,7 @@ const rowSchema = z.object({
 const schema = z.object({
   name:       z.string().min(1, 'Name is required'),
   start_date: z.string().min(1, 'Start date is required'),
-  rows:       z.array(rowSchema).min(1, 'Add at least one category row')
+  rows:       z.array(rowSchema).min(1, 'Add at least one fund row')
     .superRefine((rows, ctx) => {
       const seen = new Set<string>()
       rows.forEach((r, i) => {
@@ -41,7 +41,7 @@ const schema = z.object({
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: [i, 'budget_portion'],
-            message: 'Duplicate category + portion combination',
+            message: 'Duplicate fund + fund type combination',
           })
         }
         seen.add(key)

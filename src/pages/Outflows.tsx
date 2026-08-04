@@ -75,7 +75,7 @@ const OUT_COLUMNS: TableColumnDef<OutflowTransaction>[] = [
   { key: 'transaction_type', label: 'Type',          sortType: 'text',    accessor: r => TXN_TYPE_LABELS[r.transaction_type ?? ''] ?? r.transaction_type ?? '' },
   { key: 'amount_disbursed', label: 'Disbursed',     sortType: 'numeric', accessor: r => String(r.amount_disbursed) },
   { key: 'outflow_type',     label: 'Outflow Type',  sortType: 'text',    accessor: r => r.outflow_type_name ?? '' },
-  { key: 'stage_code_1',     label: 'Category',                           accessor: r => r.stage_code_1 ?? '' },
+  { key: 'stage_code_1',     label: 'Fund',                               accessor: r => r.stage_code_1 ?? '' },
   { key: 'net',              label: 'Net',                                accessor: r => String(Number(r.amount_disbursed) - Number(r.amount_refunded) - Number(r.transfer_charge)) },
 ]
 
@@ -379,7 +379,7 @@ export default function Outflows() {
         <PageHelpBanner storageKey="help-dismissed-outflows" title="Outflow Transactions">
           Disbursements and payments are imported from bank statements — bulk data should come through
           the <strong>Import</strong> page. Use <strong>Add Outflow</strong> for one-off manual entries only.
-          Filter by date, category, or bank and export the current view at any time.
+          Filter by date, fund, or bank and export the current view at any time.
         </PageHelpBanner>
         )}
 
@@ -399,10 +399,10 @@ export default function Outflows() {
               <FilterGroup label="To">
                 <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
               </FilterGroup>
-              <FilterGroup label="Category" className="min-w-[180px]">
+              <FilterGroup label="Fund" className="min-w-[180px]">
                 <SearchableSelect value={stageCode} onChange={setStageCode}
                   options={categories.map(c => ({ value: c.name, label: c.name }))}
-                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+                  placeholder="All funds" className={`${filterInputCls} bg-white`} />
               </FilterGroup>
               {outflowTypes.length > 0 && (
                 <FilterGroup label="Outflow Type" className="min-w-[180px]">
@@ -486,7 +486,7 @@ export default function Outflows() {
           active={showUnmappedOnly}
           onToggle={() => setShowUnmappedOnly(v => !v)}
           loading={loading}
-          label="missing category or fund type"
+          label="missing fund or fund type"
         />
 
         {/* Compact pagination above content */}
@@ -988,7 +988,7 @@ function SimpleOutflowView({
           <div className="flex items-center gap-2 min-w-0">
             <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
             <p className="text-sm text-amber-800">
-              <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not yet assigned a category or fund type
+              <span className="font-semibold">{unmappedCount.toLocaleString()}</span> transaction{unmappedCount !== 1 ? 's' : ''} not yet assigned a fund or fund type
             </p>
           </div>
           <ArrowRight className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1034,7 +1034,7 @@ function SimpleOutflowView({
                 {expanded && (
                   <div className="px-4 pb-3 pt-0 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pl-10">
                     {row.outflow_type_name && <span>Type: <span className="font-medium text-gray-600">{row.outflow_type_name}</span></span>}
-                    {row.stage_code_1 && <span>Category: <span className="font-medium text-gray-600">{row.stage_code_1}</span></span>}
+                    {row.stage_code_1 && <span>Fund: <span className="font-medium text-gray-600">{row.stage_code_1}</span></span>}
                     {row.transaction_id && <span>Txn ID: <span className="font-medium text-gray-600">{row.transaction_id}</span></span>}
                     {row.remarks && <span className="w-full text-gray-400">{row.remarks}</span>}
                   </div>
