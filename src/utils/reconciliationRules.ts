@@ -34,18 +34,23 @@ const orphanTransferRule: ReconciliationRule = {
     const [transfersRes, banksRes] = await Promise.all([
       allRows(supabase
         .from('intrabank_transfers')
-        .select('id, from_bank_name, to_bank_name, amount, date')
+        .select('id, from_bank_id, to_bank_id, from_bank_name, to_bank_name, amount, date')
         .eq('org_id', orgId)),
-      supabase.from('banks').select('name').eq('org_id', orgId),
+      supabase.from('banks').select('id, name').eq('org_id', orgId),
     ])
     if (transfersRes.error || banksRes.error) return []
 
     const bankNames = new Set((banksRes.data ?? []).map((b: Record<string, unknown>) => b.name as string))
+    const bankIds   = new Set((banksRes.data ?? []).map((b: Record<string, unknown>) => b.id as string))
     const issues: ReconciliationIssue[] = []
 
     for (const t of transfersRes.data) {
-      const r = t as { id: string; from_bank_name: string; to_bank_name: string; amount: number; date: string }
-      if (r.from_bank_name && !bankNames.has(r.from_bank_name)) {
+      const r = t as { id: string; from_bank_id: string | null; to_bank_id: string | null; from_bank_name: string; to_bank_name: string; amount: number; date: string }
+      // bank_id is authoritative when present (immune to renames) — only fall
+      // back to the name-based check for rows recorded before bank_id existed.
+      const fromOrphaned = r.from_bank_id ? !bankIds.has(r.from_bank_id) : (r.from_bank_name && !bankNames.has(r.from_bank_name))
+      const toOrphaned   = r.to_bank_id   ? !bankIds.has(r.to_bank_id)   : (r.to_bank_name   && !bankNames.has(r.to_bank_name))
+      if (fromOrphaned) {
         issues.push({
           id: `orphan_transfer-from-${r.id}`,
           ruleId: 'orphan_transfer',
@@ -56,7 +61,7 @@ const orphanTransferRule: ReconciliationRule = {
           bankName: r.from_bank_name,
         })
       }
-      if (r.to_bank_name && !bankNames.has(r.to_bank_name)) {
+      if (toOrphaned) {
         issues.push({
           id: `orphan_transfer-to-${r.id}`,
           ruleId: 'orphan_transfer',

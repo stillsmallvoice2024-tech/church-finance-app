@@ -107,30 +107,43 @@ export default function BankLedger() {
   const [expandedId,   setExpandedId]   = useState<string | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
-  const load = useCallback(async (bankName: string, openingBalance: number = 0) => {
-    if (!bankName || !orgId) { setLedgerRows([]); setLoading(false); return }
+  const load = useCallback(async (bankId: string, bankName: string, openingBalance: number = 0) => {
+    if (!bankId || !bankName || !orgId) { setLedgerRows([]); setLoading(false); return }
     setLoading(true)
     setError(null)
 
-    // bank_name is plain text, not an FK — two orgs with an identically named
-    // bank would otherwise merge into a single ledger.
-    const [inflowRes, outflowRes] = await Promise.all([
+    // bank_id is the authoritative link (added so renames don't orphan
+    // history); bank_name is still matched for rows written before the
+    // bank_id backfill ran (bank_id IS NULL) or on a not-yet-migrated DB.
+    const [inflowById, inflowByName, outflowById, outflowByName] = await Promise.all([
       fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('*')
         .eq('org_id', orgId)
+        .eq('bank_id', bankId)
+        .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)),
+      fetchAllRows(() => supabase
+        .from('inflow_transactions')
+        .select('*')
+        .eq('org_id', orgId)
+        .is('bank_id', null)
         .eq('bank_name', bankName)
-        .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)
-        .order('date', { ascending: true })
-        .order('import_seq', { ascending: true })),
+        .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)),
       fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('*')
         .eq('org_id', orgId)
-        .eq('bank_name', bankName)
-        .order('date', { ascending: true })
-        .order('import_seq', { ascending: true })),
+        .eq('bank_id', bankId)),
+      fetchAllRows(() => supabase
+        .from('outflow_transactions')
+        .select('*')
+        .eq('org_id', orgId)
+        .is('bank_id', null)
+        .eq('bank_name', bankName)),
     ])
+
+    const inflowRes  = { data: [...(inflowById.data ?? []), ...(inflowByName.data ?? [])], error: inflowById.error ?? inflowByName.error }
+    const outflowRes = { data: [...(outflowById.data ?? []), ...(outflowByName.data ?? [])], error: outflowById.error ?? outflowByName.error }
 
     if (inflowRes.error || outflowRes.error) {
       setError((inflowRes.error ?? outflowRes.error)!.message)
@@ -191,7 +204,7 @@ export default function BankLedger() {
 
   useEffect(() => {
     const bank = banks.find(b => b.id === selectedBank)
-    load(bank?.name ?? '', bank?.starting_balance ?? 0)
+    load(bank?.id ?? '', bank?.name ?? '', bank?.starting_balance ?? 0)
   }, [selectedBank, banks, load])
 
   // Auto-select first bank on initial load (fires once when banks become available)
@@ -397,7 +410,7 @@ export default function BankLedger() {
           <AlertCircle className="w-10 h-10 text-danger" />
           <p className="font-semibold text-gray-800">Failed to load ledger</p>
           <p className="text-sm text-gray-500">{error}</p>
-          <button onClick={() => load(selectedBankName, selectedBankObj?.starting_balance ?? 0)}
+          <button onClick={() => load(selectedBank, selectedBankName, selectedBankObj?.starting_balance ?? 0)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light">
             <RefreshCw className="w-4 h-4" /> Retry
           </button>
@@ -634,13 +647,13 @@ export default function BankLedger() {
       <AddInflowModal
         open={!!editInflow}
         onClose={() => setEditInflow(null)}
-        onSuccess={() => { setEditInflow(null); load(selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
+        onSuccess={() => { setEditInflow(null); load(selectedBank, selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
         editRecord={editInflow}
       />
       <AddOutflowModal
         open={!!editOutflow}
         onClose={() => setEditOutflow(null)}
-        onSuccess={() => { setEditOutflow(null); load(selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
+        onSuccess={() => { setEditOutflow(null); load(selectedBank, selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
         editRecord={editOutflow}
       />
       <DescriptionTooltip tooltip={descTooltip} />
