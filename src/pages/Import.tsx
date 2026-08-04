@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 import {
   Upload, PenLine, FileSpreadsheet, FileText,
   CheckCircle2, AlertTriangle, Loader2, X,
-  TrendingUp, TrendingDown, Sparkles,
+  TrendingUp, TrendingDown, Sparkles, RefreshCw,
 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { HelpButton }       from '../components/onboarding/HelpButton'
@@ -30,6 +30,7 @@ import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
 import { classifyIncomeType } from '../utils/classifyIncomeType'
 import { normalizeId } from '../utils/normalizeId'
+import { readImportSession, clearImportSession, describeSavedAt } from '../utils/importSession'
 import { fetchExistingTransactionIds } from '../utils/dedupQuery'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
@@ -101,6 +102,15 @@ export default function Import() {
   const [pdfToConvert, setPdfToConvert]   = useState<File | null>(null)
   const [wizardOpen,   setWizardOpen]     = useState(false)
   const [importMode,   setImportMode]     = useState<ImportMode>(getDefaultImportMode)
+
+  // An import interrupted by anything other than a deliberate discard — a
+  // swipe-back gesture, a tab crash, a stray browser Back — leaves its
+  // configuration in sessionStorage. Offer to pick it up rather than letting
+  // the user discover the loss only after re-doing the work.
+  const [pendingSession, setPendingSession] = useState(() => readImportSession())
+  useEffect(() => {
+    if (!importOpen) setPendingSession(readImportSession())
+  }, [importOpen])
 
   const { banks } = useBanks()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -247,6 +257,37 @@ export default function Import() {
 
   return (
     <div className="space-y-5">
+
+      {/* Resume an interrupted import */}
+      {pendingSession && !importOpen && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50">
+          <RefreshCw className="w-4 h-4 text-blue-600 shrink-0" />
+          <div className="text-sm text-blue-800 min-w-0">
+            <p className="font-medium">Continue ongoing import?</p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              {pendingSession.fileName}
+              {pendingSession.rowCount > 0 && ` · ${pendingSession.rowCount.toLocaleString()} rows`}
+              {describeSavedAt(pendingSession.savedAt) && ` · saved ${describeSavedAt(pendingSession.savedAt)}`}
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { clearImportSession(); setPendingSession(null) }}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-white hover:bg-primary-light"
+            >
+              Continue import
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div data-tour="page-header" className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pb-4 border-b border-gray-100">

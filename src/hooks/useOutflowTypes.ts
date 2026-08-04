@@ -125,6 +125,25 @@ export function getDefaultOutflowTypeForCategory(
   return outflowTypes.find(t => t.id === mapped[0].outflow_type_id) ?? null
 }
 
+// ── Pure helper: reverse lookup, outflow type → its one linked fund ───────────
+//
+// Only returns a category when the relationship is genuinely 1:1 — exactly one
+// category maps to this outflow type. With several, there is nothing to infer
+// and the caller must leave the fund alone rather than guess.
+
+export function getCategoryForOutflowType(
+  outflowTypeId: string,
+  maps: CategoryOutflowTypeMap[],
+  categories: { id: string; name: string }[],
+): { id: string; name: string } | null {
+  if (!outflowTypeId) return null
+  const categoryIds = [...new Set(
+    maps.filter(m => m.outflow_type_id === outflowTypeId).map(m => m.category_id),
+  )]
+  if (categoryIds.length !== 1) return null
+  return categories.find(c => c.id === categoryIds[0]) ?? null
+}
+
 // ── Pure helper: get all outflow type ids mapped to a category ─────────────────
 
 export function getMappedOutflowTypeIds(

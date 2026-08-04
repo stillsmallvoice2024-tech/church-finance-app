@@ -16,7 +16,7 @@ import { useAllocationStore, buildVersionIndex } from '../../store/allocationSto
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useIncomeTypes } from '../../hooks/useIncomeTypes'
-import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../../hooks/useOutflowTypes'
+import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory, getCategoryForOutflowType } from '../../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import {
   resolveDefaultIncomeType,
@@ -33,6 +33,8 @@ import { RowWindowBar } from '../ui/RowWindowBar'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { isOffsetableType } from '../../utils/transactionTypes'
 import { BUDGET_PORTIONS } from '../../utils/constants'
+// Shared with Import.tsx so the page can offer to resume an interrupted import.
+import { IMPORT_SESSION_KEY as SESSION_KEY, clearImportSession } from '../../utils/importSession'
 import { friendlyError } from '../../utils/friendlyError'
 // Shared with Import.tsx — a divergent second copy would break dedup silently,
 // since Set.has() is byte-exact.
@@ -87,7 +89,6 @@ const TABLE_CONFIG: Record<TargetTable, { label: string; fields: FieldDef[] }> =
 
 const SKIP = '__skip__'
 
-const SESSION_KEY = 'church-import-session'
 
 // ── Date / number parsing ──────────────────────────────────────────────────────
 // parseDate / DateFormat come from ../../utils/parseDate.
@@ -451,7 +452,55 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
   // Set when a previous session's configuration was recovered and the user
   // needs to re-select the file to continue.
-  const [restoredSession, setRestoredSession] = useState<{ fileName: string; rowCount: number } | null>(null)
+  const [restoredSession, setRestoredSession] = useState<{ fileName: string; rowCount: number; savedAt: string | null } | null>(null)
+
+  // ── Manual section overrides & group splitting ─────────────────────────────
+  // Sections were purely derived from completeness, so the user could not
+  // disagree with them in either direction.
+  const [manualGroupSections, setManualGroupSections] = useState<Record<string, 'sorted' | 'attention'>>({})
+  const setGroupSection = useCallback((key: string, section: 'sorted' | 'attention' | null) => {
+    setManualGroupSections(prev => {
+      const next = { ...prev }
+      if (section) next[key] = section
+      else delete next[key]
+      return next
+    })
+  }, [])
+
+  // Rows the user pulled out of their narration group so they can be handled
+  // separately. `ri → forced group key`; session-only, cleared on reset.
+  const [groupOverrides, setGroupOverrides] = useState<Map<number, string>>(new Map())
+  const [groupOverrideLabels, setGroupOverrideLabels] = useState<Map<string, string>>(new Map())
+
+  const splitRowsIntoGroup = useCallback((group: ImportRowGroup, ris: number[]) => {
+    if (ris.length === 0) return
+    const key = `split:${crypto.randomUUID()}`
+    setGroupOverrides(prev => {
+      const next = new Map(prev)
+      for (const ri of ris) next.set(ri, key)
+      return next
+    })
+    setGroupOverrideLabels(prev => new Map(prev).set(key, `${group.label} (split)`))
+    toast.success(`${ris.length} row(s) split into their own group`)
+  }, [toast])
+
+  const unsplitGroup = useCallback((key: string) => {
+    setGroupOverrides(prev => {
+      const next = new Map(prev)
+      for (const [ri, k] of prev) if (k === key) next.delete(ri)
+      return next
+    })
+    setGroupOverrideLabels(prev => {
+      const next = new Map(prev)
+      next.delete(key)
+      return next
+    })
+    setManualGroupSections(prev => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
 
   // ── Step 4 pagination ──────────────────────────────────────────────────────
   // Step 4 previously mounted every non-duplicate row — each with a select, a
@@ -584,7 +633,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // ── Reset on open/close ──────────────────────────────────────────────────
 
   const reset = useCallback(() => {
-    try { sessionStorage.removeItem(SESSION_KEY) } catch {}
+    clearImportSession()
     setConfirmingReset(false)
     setNavBlockShowing(false)
     setStep(1)
@@ -704,6 +753,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         rowPendingDeductions: [...rowPendingDeductions],
         bsConfigTab,
         batchOffsetRole,
+        // Grouping decisions are as expensive to recreate as per-row config, and
+        // both are small (string-keyed, one entry per touched group/row), so they
+        // stay inside the v2 no-bulk-data rule.
+        manualGroupSections,
+        groupOverrides:      [...groupOverrides],
+        groupOverrideLabels: [...groupOverrideLabels],
+        recordedMode,
+        recordedDate,
+        rowRecordedDates,
         savedAt: new Date().toISOString(),
       }
       try {
@@ -722,7 +780,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   }, [isDirty, importing, step, fileName, sheet?.rowCount, selectedSheet, targetTable, mapping,
       dateFormat, fxCurrency, internalBank, rowConfigs, rowStageCodes, rowTxnTypes,
       rowOrigTxnIds, rowOutflowTypes, rowIncomeTypes, rowManualOverrides,
-      rowPendingDeductions, bsConfigTab, batchOffsetRole, preloadedFile])
+      rowPendingDeductions, bsConfigTab, batchOffsetRole, preloadedFile,
+      manualGroupSections, groupOverrides, groupOverrideLabels,
+      recordedMode, recordedDate, rowRecordedDates])
 
   // ── Session restore ────────────────────────────────────────────────────────
   // Runs once per false→true open transition. Restores the user's configuration
@@ -759,7 +819,17 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       setRowPendingDeductions(new Set<number>(s.rowPendingDeductions ?? []))
       if (s.bsConfigTab) setBsConfigTab(s.bsConfigTab)
       if (s.batchOffsetRole) setBatchOffsetRole(s.batchOffsetRole)
-      setRestoredSession({ fileName: s.fileName, rowCount: s.rowCount ?? 0 })
+      setManualGroupSections(s.manualGroupSections ?? {})
+      setGroupOverrides(new Map((s.groupOverrides ?? []) as [number, string][]))
+      setGroupOverrideLabels(new Map((s.groupOverrideLabels ?? []) as [string, string][]))
+      if (s.recordedMode) setRecordedMode(s.recordedMode)
+      setRecordedDate(s.recordedDate ?? '')
+      setRowRecordedDates(toNumRec(s.rowRecordedDates ?? {}))
+      setRestoredSession({
+        fileName: s.fileName,
+        rowCount: s.rowCount ?? 0,
+        savedAt:  s.savedAt ?? null,
+      })
     } catch {}
   }, [open, preloadedFile]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1122,53 +1192,31 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     ))
   }, [])
 
-  // ── Manual section overrides & group splitting ─────────────────────────────
-  // Sections were purely derived from completeness, so the user could not
-  // disagree with them in either direction.
-  const [manualGroupSections, setManualGroupSections] = useState<Record<string, 'sorted' | 'attention'>>({})
-  const setGroupSection = useCallback((key: string, section: 'sorted' | 'attention' | null) => {
-    setManualGroupSections(prev => {
+  /**
+   * Apply an outflow type to rows, pulling its linked fund across with it.
+   *
+   * Only when the outflow type maps to exactly ONE category — with several there
+   * is nothing to infer and guessing would silently mis-file the row. The fund
+   * stays editable afterwards.
+   */
+  const applyOutflowTypeToRows = useCallback((ris: number[], outflowTypeId: string) => {
+    setRowOutflowTypes(prev => {
       const next = { ...prev }
-      if (section) next[key] = section
-      else delete next[key]
+      for (const ri of ris) next[ri] = outflowTypeId
       return next
     })
-  }, [])
-
-  // Rows the user pulled out of their narration group so they can be handled
-  // separately. `ri → forced group key`; session-only, cleared on reset.
-  const [groupOverrides, setGroupOverrides] = useState<Map<number, string>>(new Map())
-  const [groupOverrideLabels, setGroupOverrideLabels] = useState<Map<string, string>>(new Map())
-
-  const splitRowsIntoGroup = useCallback((group: ImportRowGroup, ris: number[]) => {
-    if (ris.length === 0) return
-    const key = `split:${crypto.randomUUID()}`
-    setGroupOverrides(prev => {
-      const next = new Map(prev)
-      for (const ri of ris) next.set(ri, key)
-      return next
-    })
-    setGroupOverrideLabels(prev => new Map(prev).set(key, `${group.label} (split)`))
-    toast.success(`${ris.length} row(s) split into their own group`)
-  }, [toast])
-
-  const unsplitGroup = useCallback((key: string) => {
-    setGroupOverrides(prev => {
-      const next = new Map(prev)
-      for (const [ri, k] of prev) if (k === key) next.delete(ri)
-      return next
-    })
-    setGroupOverrideLabels(prev => {
-      const next = new Map(prev)
-      next.delete(key)
-      return next
-    })
-    setManualGroupSections(prev => {
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
-  }, [])
+    const linked = getCategoryForOutflowType(outflowTypeId, categoryOutflowMaps, categories)
+    if (linked) {
+      setRowStageCodes(prev => {
+        const next = { ...prev }
+        for (const ri of ris) next[ri] = { s1: linked.name, s2: prev[ri]?.s2 ?? '' }
+        return next
+      })
+      applyToGroup(ris, { outflowTypeId, stageCode1: linked.name })
+    } else {
+      applyToGroup(ris, { outflowTypeId })
+    }
+  }, [categoryOutflowMaps, categories, applyToGroup])
 
   const [savingRuleKey, setSavingRuleKey] = useState<string | null>(null)
 
@@ -2530,11 +2578,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                           isManualOverride:   rowManualOverrides[ri] ?? false,
                         }
                         const generalConfigId = vIdx.resolve(null, date)?.id ?? null
-                        const displaySelId = getFinalConfig(
+                        const resolvedCfgId = getFinalConfig(
                           rowState,
                           generalConfigId,
                           (gId) => vIdx.resolve(gId, date)?.id ?? null,
                         ) ?? ''
+                        // The date-based general config is represented by the EMPTY option
+                        // ("General (date-based)"). Surfacing its UUID as well made the
+                        // dropdown offer two entries meaning the same thing — the empty one
+                        // and an extra option carrying the config's own name ("General").
+                        const displaySelId = resolvedCfgId && resolvedCfgId === generalConfigId ? '' : resolvedCfgId
                         return { date, desc, txnType, origId, autoType, effIncomeTypeId, effIncomeType, displaySelId }
                       }
 
@@ -2561,7 +2614,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                             <>
                               {/* Income type first — it determines the rule. */}
                               <SearchableSelect
-                                value={rowIncomeTypes[group.ris[0]] ?? autoClassifiedTypes[group.ris[0]]?.id ?? ''}
+                                value={buildInflowRowData(
+                                  group.ris[0],
+                                  ((processedRows ?? [])[group.ris[0]] ?? []) as unknown[],
+                                ).effIncomeTypeId}
                                 onChange={newId => {
                                   setRowIncomeTypes(prev => {
                                     const next = { ...prev }
@@ -2581,7 +2637,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                 wrapperClassName="min-w-[150px]"
                               />
                               <select
-                                value={rowConfigs[group.ris[0]] ?? ''}
+                                // Resolved through getFinalConfig, exactly as the table view
+                                // does. Binding to the raw rowConfigs override meant a rule
+                                // linked to an auto-assigned income type never appeared —
+                                // every row read "General (date-based)".
+                                value={buildInflowRowData(
+                                  group.ris[0],
+                                  ((processedRows ?? [])[group.ris[0]] ?? []) as unknown[],
+                                ).displaySelId}
                                 onChange={e => {
                                   const val = e.target.value
                                   if (val === '__create__') { setCreateConfigPendingRow(group.ris[0]); return }
@@ -3228,12 +3291,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                 value={rowOutflowTypes[group.ris[0]] ?? ''}
                                 onChange={e => {
                                   const v = e.target.value
-                                  setRowOutflowTypes(prev => {
-                                    const next = { ...prev }
-                                    for (const ri of group.ris) next[ri] = v
-                                    return next
-                                  })
-                                  applyToGroup(group.ris, { outflowTypeId: v })
+                                  applyOutflowTypeToRows(group.ris, v)
                                 }}
                                 className="text-xs px-2 py-1 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white min-w-[130px]">
                                 <option value="">— Outflow Type —</option>
@@ -3353,7 +3411,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                   <div className="px-3 pb-2 flex items-center gap-2">
                                     <span className="text-xs text-gray-500 w-28 shrink-0">Outflow Type:</span>
                                     <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
-                                      onChange={v => { setRowOutflowTypes(prev => ({ ...prev, [ri]: v })); applyToGroup([ri], { outflowTypeId: v }) }}
+                                      onChange={v => applyOutflowTypeToRows([ri], v)}
                                       options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
                                       placeholder="— None —"
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white"
@@ -3517,7 +3575,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                       <div>
                                         <label className="text-xs uppercase tracking-wide font-semibold text-gray-400 mb-1 block">Outflow Type</label>
                                         <SearchableSelect value={rowOutflowTypes[ri] ?? ''}
-                                          onChange={v => { setRowOutflowTypes(prev => ({ ...prev, [ri]: v })); applyToGroup([ri], { outflowTypeId: v }) }}
+                                          onChange={v => applyOutflowTypeToRows([ri], v)}
                                           options={outflowTypeOptions.map(t => ({ value: t.id, label: t.name }))}
                                           placeholder="— None —"
                                           className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white" />
@@ -3941,7 +3999,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             <button
               type="button"
               onClick={() => {
-                try { sessionStorage.removeItem(SESSION_KEY) } catch {}
+                clearImportSession()
                 if (pendingNavIsBackRef.current) {
                   // Triggered by browser back / swipe-back: close modal, stay on page.
                   // Neutralise the re-pushed sentinel to avoid a phantom back-step.

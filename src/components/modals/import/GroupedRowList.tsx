@@ -109,8 +109,31 @@ function GroupSection({ title, tone, groups, defaultOpen, ...rest }: GroupSectio
   const safePage   = Math.min(page, totalPages - 1)
   const paged      = groups.slice(safePage * GROUPS_PER_PAGE, (safePage + 1) * GROUPS_PER_PAGE)
 
+  // Bulk select across the whole section, not just the visible window — the
+  // same rule the table view follows, so a bulk action never silently means
+  // "only what happens to be on screen".
+  const sectionRis   = groups.flatMap(g => g.ris)
+  const allSelected  = sectionRis.length > 0 && sectionRis.every(ri => rest.selectedRis.has(ri))
+  const someSelected = !allSelected && sectionRis.some(ri => rest.selectedRis.has(ri))
+
   return (
     <CollapsibleSection label={title} defaultOpen={defaultOpen}>
+      <div className="flex items-center gap-2 pb-2">
+        <input
+          type="checkbox"
+          checked={allSelected}
+          ref={el => { if (el) el.indeterminate = someSelected }}
+          onChange={e => rest.onToggleGroup(sectionRis, e.target.checked)}
+          className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+        />
+        <span className="text-[11px] text-gray-500 select-none">
+          {allSelected
+            ? `All ${sectionRis.length.toLocaleString()} rows selected`
+            : someSelected
+              ? `${sectionRis.filter(ri => rest.selectedRis.has(ri)).length.toLocaleString()} of ${sectionRis.length.toLocaleString()} rows selected`
+              : `Select all ${sectionRis.length.toLocaleString()} rows in ${groups.length.toLocaleString()} group${groups.length === 1 ? '' : 's'}`}
+        </span>
+      </div>
       <div className="space-y-2">
         {paged.map(group => (
           <GroupCard key={group.key} {...rest} group={group} tone={tone} />

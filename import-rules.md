@@ -284,6 +284,25 @@ Pipeline stages (all before Step 4 opens):
 
 ---
 
+## Auto-Assignment & Resume
+
+**Every view must bind config selects to the RESOLVED value** (`buildInflowRowData().displaySelId`), never to the raw `rowConfigs[ri]` override. The grouped view bound to the raw override, so a distribution rule linked to an auto-assigned income type never appeared — every inflow read "General (date-based)".
+
+**The date-based general config is the empty option.** `displaySelId` collapses `resolved === generalConfigId` to `''`. Leaving the UUID in place made the dropdown render a second option carrying the config's own name ("General") next to "General (date-based)" — two entries meaning the same thing.
+
+**Outflow type carries its fund** — `getCategoryForOutflowType` (`src/hooks/useOutflowTypes.ts`) resolves the reverse of `category_outflow_type_map` and returns a category **only when exactly one** maps to that outflow type. With several there is nothing to infer, so the fund is left alone. All outflow-type controls go through `applyOutflowTypeToRows`.
+
+### Interrupted-import resume
+
+**Helper:** `src/utils/importSession.ts` — `readImportSession`, `clearImportSession`, `describeSavedAt`, and the shared `IMPORT_SESSION_KEY`.
+
+- Autosave now also persists `manualGroupSections`, `groupOverrides`, `groupOverrideLabels`, `recordedMode`, `recordedDate` and `rowRecordedDates`. All are small and string/number-keyed, so the v2 no-bulk-data rule still holds.
+- `Import.tsx` shows a **"Continue ongoing import?"** banner whenever a resumable session exists and the wizard is closed — this is what makes a swipe-back or tab crash recoverable, not just an X click.
+- `readImportSession` returns null for `step < 2` or a missing filename: an import that never got past choosing a file has nothing to resume and would only be noise.
+- **A deliberate discard clears the session** (`reset()` → `clearImportSession()`), as does a completed import. Everything else is kept — the user did not choose to lose it.
+
+---
+
 ## Config Propagation Precedence (Import Modal)
 
 **Resolver:** `src/utils/configResolver.ts` — single source of truth for all config resolution.
