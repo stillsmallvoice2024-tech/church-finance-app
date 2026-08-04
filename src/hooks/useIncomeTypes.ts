@@ -7,7 +7,7 @@ import { useOrgStore } from '../store/orgStore'
 export interface IncomeTypeRule {
   id:             string
   income_type_id: string
-  rule_type:      'keyword' | 'stage_code'
+  rule_type:      'keyword' | 'stage_code' | 'bank'
   rule_value:     string
 }
 
@@ -210,7 +210,7 @@ export interface IncomeTypeInput {
   color:                   string
   special_config_id?:      string | null
   special_config_group_id?: string | null
-  rules:                   { rule_type: 'keyword' | 'stage_code'; rule_value: string }[]
+  rules:                   { rule_type: 'keyword' | 'stage_code' | 'bank'; rule_value: string }[]
 }
 
 export async function saveIncomeType(input: IncomeTypeInput, existingId?: string): Promise<string> {

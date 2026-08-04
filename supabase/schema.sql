@@ -348,7 +348,7 @@ create table public.income_types (
 create table public.income_type_rules (
   id             uuid        default gen_random_uuid() primary key,
   income_type_id uuid        not null references public.income_types(id) on delete cascade,
-  rule_type      text        not null check (rule_type in ('keyword', 'stage_code')),
+  rule_type      text        not null check (rule_type in ('keyword', 'stage_code', 'bank')),
   rule_value     text        not null,
   org_id         uuid        not null default public.get_current_org_id()
                  references public.organizations(id) on delete set null,
@@ -376,7 +376,7 @@ create table public.outflow_types (
 -- import. Matches against the RAW description, never a cleaned narration.
 create table public.outflow_classification_rules (
   id              uuid        default gen_random_uuid() primary key,
-  rule_type       text        not null check (rule_type in ('keyword', 'stage_code')),
+  rule_type       text        not null check (rule_type in ('keyword', 'stage_code', 'bank')),
   rule_value      text        not null,
   stage_code_1    text,
   stage_code_2    text,

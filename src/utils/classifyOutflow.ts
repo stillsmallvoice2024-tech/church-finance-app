@@ -19,12 +19,30 @@ export interface OutflowClassification {
   source:        'rule' | 'column'
 }
 
+function toClassification(rule: OutflowClassificationRule): OutflowClassification {
+  return {
+    // A rule that leaves a field blank must not wipe a value the sheet
+    // already supplied.
+    stageCode1:    rule.stage_code_1 ?? '',
+    stageCode2:    rule.stage_code_2 ?? '',
+    outflowTypeId: rule.outflow_type_id ?? '',
+    source:        'rule',
+  }
+}
+
 /**
- * Find the first rule matching the given description / stage code.
+ * Find the rule matching the given description / stage code / bank.
  * Rules are expected pre-sorted by priority then created_at.
  *
+ * `bank` rules are checked first, regardless of priority — a whole import
+ * batch belongs to one bank, so an account dedicated to one purpose (e.g. a
+ * Missions-only account) shouldn't be second-guessed by a keyword coincidence
+ * in the description. `bankId` is the bank the current import/entry is for;
+ * pass '' when no bank context applies.
+ *
  * keyword    – case-insensitive substring match on the raw description
- * stage_code – case-insensitive exact match on stage_code_1
+ * stage_code – case-insensitive exact match on stage_code_1 (legacy — no
+ *              longer creatable from the UI, but existing rules still fire)
  *
  * Returns null when no rule fires, so the caller can fall back to the existing
  * category-mapping behaviour.
@@ -32,10 +50,19 @@ export interface OutflowClassification {
 export function classifyOutflow(
   description: string,
   stageCode1:  string,
+  bankId:      string,
   rules:       OutflowClassificationRule[],
 ): OutflowClassification | null {
   const desc  = description.toLowerCase()
   const stage = stageCode1.toLowerCase()
+  const bank  = (bankId ?? '').trim().toLowerCase()
+
+  if (bank) {
+    for (const rule of rules) {
+      if (rule.rule_type !== 'bank') continue
+      if (rule.rule_value.trim().toLowerCase() === bank) return toClassification(rule)
+    }
+  }
 
   for (const rule of rules) {
     const val = rule.rule_value.toLowerCase().trim()
@@ -47,14 +74,7 @@ export function classifyOutflow(
 
     if (!hit) continue
 
-    return {
-      // A rule that leaves a field blank must not wipe a value the sheet
-      // already supplied.
-      stageCode1:    rule.stage_code_1 ?? '',
-      stageCode2:    rule.stage_code_2 ?? '',
-      outflowTypeId: rule.outflow_type_id ?? '',
-      source:        'rule',
-    }
+    return toClassification(rule)
   }
 
   return null

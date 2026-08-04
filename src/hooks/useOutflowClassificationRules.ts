@@ -6,7 +6,7 @@ import { useOrgStore } from '../store/orgStore'
 
 export interface OutflowClassificationRule {
   id:              string
-  rule_type:       'keyword' | 'stage_code'
+  rule_type:       'keyword' | 'stage_code' | 'bank'
   rule_value:      string
   stage_code_1:    string | null
   stage_code_2:    string | null
@@ -58,4 +58,67 @@ export function useOutflowClassificationRules() {
   useEffect(() => { void fetch() }, [fetch])
 
   return { rules, loading, error, refetch: fetch }
+}
+
+// ── Manual per-type recognition rules ───────────────────────────────────────
+//
+// "Save as rule" (ImportModal) always sets stage_code_1, since it's saving a
+// configured group's category alongside the type. A rule created from the
+// outflow type's own "Recognition Rules" panel is about the type only, so it
+// always leaves stage_code_1/stage_code_2 null. That distinction is what lets
+// `saveManualOutflowRules` replace "this type's manual rules" on every save
+// without ever touching a group-saved rule.
+
+export type ManualOutflowRuleType = 'keyword' | 'bank'
+
+export async function fetchManualOutflowRules(outflowTypeId: string): Promise<OutflowClassificationRule[]> {
+  const { data, error } = await supabase
+    .from('outflow_classification_rules')
+    .select('id, rule_type, rule_value, stage_code_1, stage_code_2, outflow_type_id, priority, created_at')
+    .eq('outflow_type_id', outflowTypeId)
+    .is('stage_code_1', null)
+    .order('created_at', { ascending: true })
+  if (error) {
+    if (/relation.*does not exist|does not exist|schema cache/i.test(error.message)) return []
+    throw new Error(error.message)
+  }
+  return (data ?? []) as OutflowClassificationRule[]
+}
+
+export async function saveManualOutflowRules(
+  outflowTypeId: string,
+  rules: { rule_type: ManualOutflowRuleType; rule_value: string }[],
+): Promise<void> {
+  const { orgId } = useOrgStore.getState()
+  const clean = rules.filter(r => r.rule_value.trim())
+
+  // Scoped to stage_code_1 IS NULL so a group-saved rule for this same type
+  // (which always has stage_code_1 set) is never deleted here.
+  const { error: delErr } = await supabase
+    .from('outflow_classification_rules')
+    .delete()
+    .eq('outflow_type_id', outflowTypeId)
+    .is('stage_code_1', null)
+  if (delErr) {
+    if (!/relation.*does not exist|does not exist|schema cache/i.test(delErr.message)) {
+      throw new Error(delErr.message)
+    }
+    if (clean.length === 0) return
+    throw new Error(
+      'Recognition rules need a database migration (outflow_classification_rules). '
+      + 'The outflow type itself was saved — contact your administrator to enable rules.'
+    )
+  }
+
+  if (clean.length === 0) return
+
+  const { error: insErr } = await supabase.from('outflow_classification_rules').insert(
+    clean.map(r => ({
+      outflow_type_id: outflowTypeId,
+      rule_type:       r.rule_type,
+      rule_value:      r.rule_value.trim(),
+      org_id:          orgId,
+    }))
+  )
+  if (insErr) throw new Error(insErr.message)
 }

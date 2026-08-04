@@ -15,6 +15,8 @@ import { useAddOutflow, useUpdateTransaction, type AddOutflowInput } from '../..
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../../hooks/useOutflowTypes'
+import { useOutflowClassificationRules } from '../../hooks/useOutflowClassificationRules'
+import { classifyOutflow } from '../../utils/classifyOutflow'
 import { useDepartmentOptions } from '../../hooks/useDepartments'
 import type { OutflowTransaction } from '../../hooks/useTransactions'
 import { CurrencyInput } from '../ui/CurrencyInput'
@@ -72,6 +74,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const fxBanks    = banks.filter(b => b.is_foreign_currency)
   const nonFxBanks = banks.filter(b => !b.is_foreign_currency)
   const { options: outflowTypeOptions } = useOutflowTypeOptions()
+  const { rules: outflowClassificationRules } = useOutflowClassificationRules()
   const { maps: categoryOutflowMaps }  = useCategoryOutflowTypeMaps()
   const { options: departmentOptions } = useDepartmentOptions()
   const isEdit = !!editRecord
@@ -106,6 +109,8 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const stage1Watch     = useWatch({ control, name: 'stage_code_1' })
   const offsetRole      = watch('offset_role') ?? ''
   const watchedBankName = watch('bank_name')
+  const watchedBankId   = banks.find(b => b.name === watchedBankName)?.id ?? ''
+  const descriptionWatch = useWatch({ control, name: 'description' })
 
   const filteredCategories = useMemo(
     () => categories.filter(c => !c.currency),
@@ -182,18 +187,30 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
     if (!filteredCategories.some(c => c.name === stage1Value)) setValue('stage_code_1', '')
   }, [filteredCategories, stage1Value, setValue])
 
-  // Auto-suggest outflow type from the category-outflow map when stage_code_1 changes
-  // (only if user hasn't already picked a type; never forced — user can override)
+  // Auto-suggest outflow type when stage_code_1, description, or bank changes
+  // (only if user hasn't already picked a type; never forced — user can override).
+  // Recognition rules (bank beats description keyword) take priority; falls
+  // back to the existing category → outflow type mapping. A rule saved from
+  // the import grouped view also carries its own Fund/Fund Type — applied
+  // here too so the type and its distribution rule land together.
   const currentTypeId = useWatch({ control, name: 'outflow_type_id' })
   useEffect(() => {
     if (!open || isEdit || currentTypeId) return
+    const hit = classifyOutflow(descriptionWatch ?? '', stage1Watch ?? '', watchedBankId, outflowClassificationRules)
+    if (hit?.outflowTypeId) {
+      setValue('outflow_type_id', hit.outflowTypeId)
+      if (hit.stageCode1 && hit.stageCode1 !== stage1Watch) setValue('stage_code_1', hit.stageCode1)
+      if (hit.stageCode2) setValue('stage_code_2', hit.stageCode2)
+      return
+    }
     if (!stage1Watch) return
     const cat = categories.find(c => c.name === stage1Watch)
     if (cat) {
       const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
       if (suggested) setValue('outflow_type_id', suggested.id)
     }
-  }, [stage1Watch, categories, categoryOutflowMaps, outflowTypeOptions, open, isEdit, currentTypeId, setValue])
+  }, [stage1Watch, descriptionWatch, watchedBankId, categories, categoryOutflowMaps, outflowTypeOptions,
+      outflowClassificationRules, open, isEdit, currentTypeId, setValue])
 
   const onSubmit = async (values: FormValues) => {
     setDupError(null)

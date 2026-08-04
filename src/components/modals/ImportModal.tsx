@@ -491,11 +491,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     for (const row of importRows) {
       if (row.kind !== 'inflow') continue
       result[row.ri] = row.description
-        ? resolveDefaultIncomeType(row.description, '', incomeTypes)
+        ? resolveDefaultIncomeType(row.description, '', incomeTypes, undefined, internalBank?.id)
         : null
     }
     return result
-  }, [importRows, incomeTypes])
+  }, [importRows, incomeTypes, internalBank?.id])
 
   // A narrowed filter can leave the current page past the end of the results.
   useEffect(() => { setInflowPage(0)  }, [inflowFilter])
@@ -1001,9 +1001,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       // Inflows: a real keyword/stage-code match counts as classified; landing
       // on the catch-all fallback does not, so those rows stay in "Needs
       // attention" rather than looking done.
+      const bankId = internalBank?.id ?? ''
       for (const row of rows) {
         if (row.kind === 'outflow') {
-          const hit = classifyOutflow(row.description, row.config.stageCode1, outflowRules)
+          const hit = classifyOutflow(row.description, row.config.stageCode1, bankId, outflowRules)
           if (hit) {
             if (hit.stageCode1) row.config.stageCode1 = hit.stageCode1
             if (hit.stageCode2) row.config.stageCode2 = hit.stageCode2
@@ -1023,12 +1024,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
         // Inflow — distinguish a genuine rule match from the catch-all default.
         if (incomeTypes.length === 0 || !row.description) { row.resolution = 'unresolved'; continue }
-        const matched = classifyIncomeType(row.description, '', incomeTypes)
+        const matched = classifyIncomeType(row.description, '', incomeTypes, bankId)
         if (matched) {
           row.config.incomeTypeId = matched.id
           row.resolution = 'rule'
         } else {
-          const fallback = resolveDefaultIncomeType(row.description, '', incomeTypes)
+          const fallback = resolveDefaultIncomeType(row.description, '', incomeTypes, undefined, bankId)
           row.config.incomeTypeId = fallback?.id ?? ''
           row.resolution = fallback ? 'fallback' : 'unresolved'
         }
@@ -1373,7 +1374,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           // Non-Normal transactions skip income type and allocation entirely
           if (!txnType) {
             const effIncomeTypeId = rowIncomeTypes[ri]
-              ?? (desc ? resolveDefaultIncomeType(desc, '', incomeTypes)?.id : undefined)
+              ?? (desc ? resolveDefaultIncomeType(desc, '', incomeTypes, undefined, internalBank?.id)?.id : undefined)
             if (effIncomeTypeId) row.income_type_id = effIncomeTypeId
             const rowState: RowResolverState = {
               incomeType:          incomeTypes.find(t => t.id === effIncomeTypeId) ?? null,

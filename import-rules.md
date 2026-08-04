@@ -108,10 +108,30 @@ Third mode on `useViewToggle('import-step4-view', STEP4_VIEW_MODES)`. Opt-in —
 
 **Outflow rules:** `outflow_classification_rules` table (mirrors `income_type_rules`) + `src/utils/classifyOutflow.ts` + `src/hooks/useOutflowClassificationRules.ts`.
 
-- Precedence: rule match → `getDefaultOutflowTypeForCategory` (category map) → exact category-name match (the previous *sole* behaviour, now last).
+- Precedence: **bank rule** (checked first, any priority) → rule match by priority/`created_at` (keyword or legacy stage_code) → `getDefaultOutflowTypeForCategory` (category map) → exact category-name match (the original *sole* behaviour, now last resort).
+- `classifyOutflow(description, stageCode1, bankId, rules)` — `bankId` is the bank the import/entry is for; a `bank` rule matches on exact id and always wins over a keyword coincidence, mirroring `matchByRules`'s bank tier on the income side (though this engine stays a flat priority list, not a scored matcher — see `matchRules.ts` for why income uses scoring and this doesn't).
 - **Rules match the RAW description**, like `classifyIncomeType`. `rule_value` saved by "Save as rule" is the group's raw sample text, not the cleaned label.
+- A rule can carry `stage_code_1`/`stage_code_2` (its "distribution rule") alongside `outflow_type_id` — applied together wherever `classifyOutflow` is called, never independently.
 - The hook degrades to an empty rule set if the table is missing, so an unmigrated org can still import.
 - Registered in `schema.sql` in **six** places: table, RLS enable, four policies, two indexes, the org-lifecycle table list, and the org delete cascade (before `outflow_types`, its FK target).
+
+### Manual recognition rules (`AddOutflowTypeModal.tsx`)
+
+Unlike income types, `outflow_classification_rules` rows aren't owned by a type in the schema (`outflow_type_id`
+is nullable, set per-row) — but two very different things write to the same table:
+
+- **"Save as rule"** (`ImportModal.tsx`, grouped view) always sets `stage_code_1` — it's persisting a
+  configured group's Fund alongside its type.
+- **The outflow type's own "Recognition Rules" panel** is about the type only, so it always leaves
+  `stage_code_1`/`stage_code_2` **null**.
+
+That distinction is the safety boundary: `fetchManualOutflowRules(outflowTypeId)` /
+`saveManualOutflowRules(outflowTypeId, rules)` (`useOutflowClassificationRules.ts`) only ever
+read/delete/insert rows matching `outflow_type_id = X AND stage_code_1 IS NULL`. Saving the panel can
+never touch a group-saved rule for the same type, even though both live in one table. Rule types offered:
+**Keyword** and **Bank** (bank picker via `useBanks()`, same org-scoping as the income side). The
+`OutflowTypesTab` rule-count badge counts *all* rules for a type (manual + group-saved) for an honest
+total, even though the panel itself only edits its own subset.
 
 ---
 
@@ -278,9 +298,47 @@ Pipeline stages (all before Step 4 opens):
 
 ---
 
-## Auto-Classification
+## Auto-Classification (Income Side)
 
-`classifyIncomeType.ts` exports `matchIncomeType()` — a rule engine that auto-classifies inflows during import based on keyword/stage-code rules defined in `income_type_rules`.
+**Shared matcher:** `src/utils/matchRules.ts` → `matchByRules(description, stageCode1, bankId, candidates)`.
+Rules are **scored, not first-match-wins**. Every rule of every candidate is evaluated and the strongest wins:
+
+| Tier | Meaning | Example (`"Tithes"`) |
+|---|---|---|
+| 6 | `bank` exact match on the import's selected bank | — |
+| 5 | `stage_code` exact match (**legacy** — see below) | — |
+| 4 | keyword is a whole word | `tithe` in `cash tithe jan` |
+| 3 | keyword at a word start | `tithe` → `TITHE-s` |
+| 2 | keyword at a word end | `hes` → `tit-HES` |
+| 1 | keyword mid-word | `ith` → `t-ITH-es` |
+
+Ties break on rule length (longer = more specific), then on candidate order. This is what stops a short
+accidental substring (`HES`) from beating a real word match (`tithe`) — with first-match-wins over DB
+order, a `HES` rule on one type could claim `"Tithes"` before a `tithe` rule on the correct type ever ran.
+Mid-word matches still fire when nothing stronger does, so pre-existing rules keep working.
+
+`classifyIncomeType.ts` → `classifyIncomeType(description, stageCode1, incomeTypes, bankId?)` over
+`income_type_rules`. Word boundaries use `\p{L}\p{N}`, so `trf/tithe/john` and `tithe-offering` count as
+whole words. Called from `AddIncomeTypeModal`-configured types in: `ImportModal.tsx` (Step 3→4 pipeline,
+`runImport` safety net), `ImportWizardModal.tsx` (Quick import), `Import.tsx` ManualEntryForm, and
+`AddInflowModal.tsx` (the direct add/edit modal used outside the import flow, e.g. refunds/reversals).
+
+**Outflow classification uses a separate engine** — see `outflow_classification_rules` below; this
+matcher and its tier table are income-side only.
+
+### Rule types: `keyword` and `bank` (`stage_code` is legacy)
+
+`AddIncomeTypeModal.tsx`'s Recognition Rules panel offers only **Keyword** and **Bank** — `stage_code` was
+replaced by `bank`. It is no longer creatable, but the matcher and DB constraint still accept it so an
+existing rule doesn't silently stop firing; it shows as a disabled "Stage Code (legacy)" option in its own
+row so it stays visible (and deletable) without being editable back to that type.
+
+- **Keyword:** substring match on description, scored per the table above.
+- **Bank:** `rule_value` is a bank UUID, picked from a `SearchableSelect` populated by `useBanks()` — the
+  same org-scoped hook (`.eq('org_id', orgId)` plus RLS) used everywhere else banks are listed, so a rule
+  can only ever reference a bank belonging to the current org. Matches when the import/entry's selected
+  bank equals the rule's bank, and **outranks every keyword rule** — a bank account dedicated to one
+  purpose (e.g. a Missions-only account) shouldn't be second-guessed by a coincidental keyword.
 
 ---
 
