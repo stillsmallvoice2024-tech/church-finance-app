@@ -42,11 +42,12 @@ async function approveDraft(v: AllocationConfig): Promise<boolean> {
  * history — yet a group full of drafts and no locked version applies to
  * nothing. Surfaced inline on the card so approving is always one click away.
  */
-function PendingDraftsBanner({ versions, onApproved }: {
-  versions:   AllocationConfig[]
-  onApproved: () => void
+function PendingDraftsBanner({ versions, onApproved, onEditDraft }: {
+  versions:    AllocationConfig[]
+  onApproved:  () => void
+  onEditDraft?: (version: AllocationConfig) => void
 }) {
-  const drafts = versions.filter(v => v.status === 'draft' && v.rows.length > 0)
+  const drafts = versions.filter(v => v.status === 'draft')
   if (drafts.length === 0) return null
 
   return (
@@ -59,11 +60,23 @@ function PendingDraftsBanner({ versions, onApproved }: {
           <div key={v.id} className="flex items-center gap-3 text-xs">
             <span className="text-gray-700 truncate">
               v{v.version_number} &middot; {v.effective_from ?? '—'} &middot;{' '}
-              {v.rows.map(r => `${r.category_name} ${r.percentage ?? r.amount ?? 0}${v.allocation_type === 'amount' ? '' : '%'}`).join(', ')}
+              {v.rows.length > 0
+                ? v.rows.map(r => `${r.category_name} ${r.percentage ?? r.amount ?? 0}${v.allocation_type === 'amount' ? '' : '%'}`).join(', ')
+                : <span className="text-amber-600">no rows yet — edit to add allocation</span>}
             </span>
+            {onEditDraft && (
+              <button
+                onClick={() => onEditDraft(v)}
+                className="ml-auto shrink-0 flex items-center gap-1 px-2 py-1 font-medium text-primary border border-primary/30 rounded-lg hover:bg-blue-50 transition-colors"
+              >
+                <Pencil className="w-3 h-3" /> Edit
+              </button>
+            )}
             <button
               onClick={async () => { if (await approveDraft(v)) onApproved() }}
-              className="ml-auto shrink-0 flex items-center gap-1 px-2 py-1 font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors"
+              disabled={v.rows.length === 0}
+              className="shrink-0 flex items-center gap-1 px-2 py-1 font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              title={v.rows.length === 0 ? 'Add allocation rows before approving' : undefined}
             >
               <CheckCircle2 className="w-3 h-3" /> Approve
             </button>
@@ -79,11 +92,13 @@ function PendingDraftsBanner({ versions, onApproved }: {
 function GeneralGroupPanel({
   onNewVersion,
   onAmend,
+  onEditDraft,
   refetchKey,
   onRefetch,
 }: {
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
   onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
+  onEditDraft:  (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   refetchKey:   number
   onRefetch:    () => void
 }) {
@@ -212,7 +227,7 @@ function GeneralGroupPanel({
       </div>
 
       {/* Pending drafts — e.g. rules created during onboarding */}
-      <PendingDraftsBanner versions={group.versions} onApproved={onRefetch} />
+      <PendingDraftsBanner versions={group.versions} onApproved={onRefetch} onEditDraft={v => onEditDraft(group!, v)} />
 
       {/* Active version rows preview */}
       {av && (
@@ -327,6 +342,13 @@ function GeneralGroupPanel({
                             {v.status === 'draft' && (
                               <>
                                 <button
+                                  onClick={() => onEditDraft(group!, v)}
+                                  className="p-1 text-gray-400 hover:text-primary hover:bg-blue-50 rounded transition-colors"
+                                  title="Edit draft"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
                                   onClick={async () => { if (await approveDraft(v)) onRefetch() }}
                                   className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                                   title="Approve — make this version live"
@@ -421,12 +443,14 @@ export function DistributionRulesTab({
   onNewCustom,
   onNewVersion,
   onAmend,
+  onEditDraft,
   refetchKey,
   onRefetch,
 }: {
   onNewCustom:  () => void
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
   onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
+  onEditDraft:  (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   refetchKey:   number
   onRefetch:    () => void
 }) {
@@ -438,7 +462,7 @@ export function DistributionRulesTab({
           <h3 className="text-sm font-semibold text-gray-800">General Rule</h3>
           <p className="text-xs text-gray-500 mt-0.5">The fallback rule applied when an income type has no custom rule.</p>
         </div>
-        <GeneralGroupPanel onNewVersion={onNewVersion} onAmend={onAmend} refetchKey={refetchKey} onRefetch={onRefetch} />
+        <GeneralGroupPanel onNewVersion={onNewVersion} onAmend={onAmend} onEditDraft={onEditDraft} refetchKey={refetchKey} onRefetch={onRefetch} />
       </div>
 
       {/* Divider */}
@@ -463,6 +487,7 @@ export function DistributionRulesTab({
           onNew={onNewCustom}
           onNewVersion={onNewVersion}
           onAmend={onAmend}
+          onEditDraft={onEditDraft}
           onRefetch={onRefetch}
           hideHeader
         />
@@ -473,10 +498,11 @@ export function DistributionRulesTab({
 
 // ── Custom Rules tab ─────────────────────────────────────────────────────────────
 
-function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader = false }: {
+function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onEditDraft, onRefetch, hideHeader = false }: {
   onNew:        () => void
   onNewVersion: (group: SpecialConfigGroupWithVersions, copyFrom: AllocationConfig | null) => void
   onAmend:      (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
+  onEditDraft:  (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => void
   onRefetch:    () => void
   hideHeader?:  boolean
 }) {
@@ -650,7 +676,7 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                 </div>
 
                 {/* Pending drafts — e.g. special rules created during onboarding */}
-                <PendingDraftsBanner versions={g.versions} onApproved={onRefetch} />
+                <PendingDraftsBanner versions={g.versions} onApproved={onRefetch} onEditDraft={v => onEditDraft(g, v)} />
 
                 {/* Version history */}
                 {isExpanded && (
@@ -753,6 +779,15 @@ function SpecialConfigsTab({ onNew, onNewVersion, onAmend, onRefetch, hideHeader
                                             title="About this past version"
                                           >
                                             <Info className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        {!vLocked && (
+                                          <button
+                                            onClick={() => onEditDraft(g, v)}
+                                            className="touch-target p-1 rounded text-gray-400 hover:text-primary hover:bg-blue-50 transition-colors"
+                                            title="Edit draft"
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
                                           </button>
                                         )}
                                         {!vLocked && (

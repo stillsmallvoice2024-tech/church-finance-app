@@ -89,7 +89,7 @@ export default function SetupPage() {
   const [editLockedTarget,  setEditLockedTarget]  = useState<AllocationConfig | null>(null)
   const [deleteAllocTarget, setDeleteAllocTarget] = useState<AllocationConfig | null>(null)
   const [specialModalOpen,      setSpecialModalOpen]      = useState(false)
-  const [specialModalMode,      setSpecialModalMode]      = useState<'new_group' | 'new_version' | 'amend_version'>('new_group')
+  const [specialModalMode,      setSpecialModalMode]      = useState<'new_group' | 'new_version' | 'amend_version' | 'edit_draft'>('new_group')
   const [selectedSpecialGroup,  setSelectedSpecialGroup]  = useState<SpecialConfigGroupWithVersions | null>(null)
   const [copyFromVersion,       setCopyFromVersion]       = useState<AllocationConfig | null>(null)
   const [amendVersionRecord,    setAmendVersionRecord]    = useState<AllocationConfig | null>(null)
@@ -196,6 +196,14 @@ export default function SetupPage() {
     setSpecialModalOpen(true)
   }
 
+  const handleEditDraft = (group: SpecialConfigGroupWithVersions, version: AllocationConfig) => {
+    setSpecialModalMode('edit_draft')
+    setSelectedSpecialGroup(group)
+    setCopyFromVersion(null)
+    setAmendVersionRecord(version)
+    setSpecialModalOpen(true)
+  }
+
   const handleAddBank     = () => { setEditBankRecord(null); setBankModalOpen(true) }
   const handleEditBank    = (bank: DbBank) => { setEditBankRecord(bank); setBankModalOpen(true) }
   const handleDeleteBank  = (bank: DbBank) => { setDeleteBankRecord(bank) }
@@ -271,6 +279,7 @@ export default function SetupPage() {
                 onNewCustom={handleNewGroup}
                 onNewVersion={handleNewVersion}
                 onAmend={handleAmendVersion}
+                onEditDraft={handleEditDraft}
                 refetchKey={specialRefetch}
                 onRefetch={() => setSpecialRefetch(n => n + 1)}
               />

@@ -9,6 +9,8 @@ import {
   createNewVersion,
   createVersionWithSplit,
   amendVersion,
+  updateDraftVersion,
+  lockVersion,
   detectVersionOverlap,
   type SpecialConfigGroupWithVersions,
   type VersionOverlap,
@@ -38,7 +40,7 @@ interface Props {
   open:              boolean
   onClose:           () => void
   onSaved:           (cfg?: AllocationConfig) => void
-  mode:              'new_group' | 'new_version' | 'amend_version'
+  mode:              'new_group' | 'new_version' | 'amend_version' | 'edit_draft'
   group?:            SpecialConfigGroupWithVersions | null
   copyFromVersion?:  AllocationConfig | null
   versionToAmend?:   AllocationConfig | null
@@ -72,7 +74,8 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
 
   const selectedOption = incomeTypeOptions.find(o => o.id === selectedIncomeTypeId) ?? null
 
-  const isAmend = mode === 'amend_version'
+  const isAmend     = mode === 'amend_version'
+  const isEditDraft = mode === 'edit_draft'
 
   // Detect overlaps when effective dates change (new_version mode only)
   const overlaps = useMemo((): VersionOverlap[] => {
@@ -101,7 +104,7 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
       setTotalAmount('')
       setRows([{ category_name: '', budget_portion: '', value: '' }])
       setSelectedIncomeTypeId('')
-    } else if (mode === 'amend_version') {
+    } else if (mode === 'amend_version' || mode === 'edit_draft') {
       const src = versionToAmend
       if (src) {
         setEffectiveFrom(src.effective_from ?? today)
@@ -202,6 +205,18 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
           prev_income_type_id: prevLinked?.id ?? null,
         })
         onSaved(config)
+      } else if (isEditDraft) {
+        if (!versionToAmend) throw new Error('Draft version is required')
+        await updateDraftVersion({
+          id:              versionToAmend.id,
+          allocation_type: allocType,
+          total_amount:    allocType === 'amount' ? parseFloat(totalAmount) : null,
+          rows:            dbRows,
+          effective_from:  effectiveFrom,
+          effective_to:    effectiveTo || null,
+        })
+        if (lockAfterSave) await lockVersion(versionToAmend.id)
+        onSaved()
       } else if (isAmend) {
         if (!versionToAmend) throw new Error('Version to amend is required')
         await amendVersion({
@@ -253,7 +268,9 @@ export function CreateSpecialConfigModal({ open, onClose, onSaved, mode, group, 
     ? 'Create Special Rule'
     : isAmend
       ? `Amend Version — ${versionToAmend ? `v${versionToAmend.version_number}` : ''}`
-      : `New Version — ${group?.name ?? ''}`
+      : isEditDraft
+        ? `Edit Draft — ${versionToAmend ? `v${versionToAmend.version_number}` : ''}`
+        : `New Version — ${group?.name ?? ''}`
 
   return (
     <Modal
