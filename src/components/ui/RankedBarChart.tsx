@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer } from 'recharts
 // one screen, no scrolling), truncated Y-axis labels, and a plain HTML
 // click-overlay per row (recharts' own Bar onClick only registers on the
 // bar's own rendered rectangle, which is unusably thin for near-zero
-// values — see Category Accounts chart fix). Caller supplies already-
+// values — see Fund Accounts chart fix). Caller supplies already-
 // bucketed items (e.g. with a synthetic "Other (N)" row folded in).
 
 const NORMAL_ROW_HEIGHT = 34

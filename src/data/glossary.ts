@@ -41,8 +41,8 @@ export const GLOSSARY: GlossaryTerm[] = [
     definition: 'Cash physically deposited into a bank account. Records the deposit date, amount, and which bank received it.',
   },
   {
-    term:       'Category Accounts',
-    definition: 'A view of all spending grouped by outflow category (e.g. Utilities, Salaries) so you can see where money is going.',
+    term:       'Fund Accounts',
+    definition: 'A view of all spending grouped by outflow fund (e.g. Utilities, Salaries) so you can see where money is going.',
   },
   {
     term:       'Pending Deduction',

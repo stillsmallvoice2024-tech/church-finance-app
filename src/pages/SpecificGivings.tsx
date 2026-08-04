@@ -31,7 +31,7 @@ interface GiftRow {
 }
 
 const SG_COLUMNS: TableColumnDef<GiftRow>[] = [
-  { key: 'category',  label: 'Category',    sortType: 'text',    primary: true, accessor: r => r.category },
+  { key: 'category',  label: 'Fund',        sortType: 'text',    primary: true, accessor: r => r.category },
   { key: 'deposited', label: 'Gifts In',    sortType: 'numeric', primary: true },
   { key: 'balance',   label: 'Net Balance', sortType: 'numeric', primary: true },
 ]
@@ -57,7 +57,7 @@ export default function SpecificGivings() {
     setLoading(true)
     setError(null)
 
-    // Single shared source of truth — same engine as the Category Accounts
+    // Single shared source of truth — same engine as the Fund Accounts
     // summary cards. Designated Gifts here (and its per-target breakdown)
     // always reconciles with that card.
     const fb = await computeFundBuckets(orgId)
@@ -102,7 +102,7 @@ export default function SpecificGivings() {
     [sortedRows, sgState.page, sgState.pageSize],
   )
 
-  const SG_CSV_HEADERS = ['Category', `Gifts In (${baseCurrencySymbol})`, `Withdrawn (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
+  const SG_CSV_HEADERS = ['Fund', `Gifts In (${baseCurrencySymbol})`, `Withdrawn (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const sgCsvRow = (r: GiftRow) => [r.category, r.deposited, r.withdrawn, r.balance]
   const SG_CSV_FILE = `specific-givings-${new Date().toISOString().slice(0, 10)}.csv`
   const handleExportView = () => exportCSV(SG_CSV_FILE, SG_CSV_HEADERS, sgPage.map(sgCsvRow))
@@ -147,7 +147,7 @@ export default function SpecificGivings() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Designated Gifts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Designated gift balances per category — all time
+            Designated gift balances per fund — all time
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ export default function SpecificGivings() {
             </div>
           </div>
 
-          {/* Per-category table */}
+          {/* Per-fund table */}
           <div className="space-y-1.5">
             <DataControlsBar
               columns={SG_COLUMNS}
@@ -229,7 +229,7 @@ export default function SpecificGivings() {
               defaultSortDir="desc"
               search={sgState.search}
               onSearchChange={sgState.setSearch}
-              searchPlaceholder="Search categories…"
+              searchPlaceholder="Search funds…"
               searchCol={sgState.searchCol}
               onSearchColChange={sgState.setSearchCol}
               advancedSort={sgState.advancedSort}
@@ -342,7 +342,7 @@ export default function SpecificGivings() {
 // Same pattern as Regular/Savings Funds, plus: selecting a real category (not
 // the "Other" bucket) also lists its target/recipient breakdown, preserving
 // the one capability unique to this page. Bars use Gold Honour — the same
-// color this fund type gets in the Category Accounts composition chart.
+// color this fund type gets in the Fund Accounts composition chart.
 
 const DESIGNATED_BAR_COLOR = '#C89B3C' // Gold Honour
 
@@ -423,7 +423,7 @@ function SimpleDesignatedGiftsView({ rows, loading, baseCurrencyCode, onViewAll 
         value={activeCategory}
         onChange={setActiveCategory}
         options={rows.map(r => ({ value: r.category, label: r.category }))}
-        placeholder="Select a category to zoom in…"
+        placeholder="Select a fund to zoom in…"
         className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700"
       />
       {activeCategory && (
@@ -447,7 +447,7 @@ function SimpleDesignatedGiftsView({ rows, loading, baseCurrencyCode, onViewAll 
             <p className="text-sm font-semibold text-gray-800 min-w-0 truncate">{selected.category}</p>
             <div className="flex items-center gap-2 shrink-0">
               <p className={`text-sm font-mono font-bold tabular-nums ${selected.balance >= 0 ? 'text-gray-900' : 'text-danger'}`}>{formatCurrency(selected.balance, baseCurrencyCode)}</p>
-              <button type="button" onClick={() => setActiveCategory('')} aria-label="Close category detail" className="p-1 -m-1 rounded text-gray-400 hover:text-gray-600 hover:bg-black/5 transition-colors">
+              <button type="button" onClick={() => setActiveCategory('')} aria-label="Close fund detail" className="p-1 -m-1 rounded text-gray-400 hover:text-gray-600 hover:bg-black/5 transition-colors">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -465,7 +465,7 @@ function SimpleDesignatedGiftsView({ rows, loading, baseCurrencyCode, onViewAll 
 
           {(selected as BucketRow).isOther && otherMembers && otherMembers.length > 0 && (
             <div className="mt-3 pt-3 border-t border-primary/20 space-y-1">
-              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Categories in this group</p>
+              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Funds in this group</p>
               {otherMembers.slice(0, 10).map(m => (
                 <div key={m.category} className="flex items-center justify-between text-xs">
                   <span className="text-gray-600 truncate min-w-0 mr-2">{m.category}</span>
@@ -491,7 +491,7 @@ function SimpleDesignatedGiftsView({ rows, loading, baseCurrencyCode, onViewAll 
       )}
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4">
-        <p className="text-[11px] text-gray-400 mb-2">Tap a category to see its detail</p>
+        <p className="text-[11px] text-gray-400 mb-2">Tap a fund to see its detail</p>
         <RankedBarChart
           items={displayRows.map(r => ({ name: r.category, value: r.balance, muted: !!r.isOther }))}
           color={DESIGNATED_BAR_COLOR}
@@ -507,7 +507,7 @@ function SimpleDesignatedGiftsView({ rows, loading, baseCurrencyCode, onViewAll 
       pageId="designated-gifts"
       hero={hero}
       filters={filters}
-      bodyTitle="Balances by category"
+      bodyTitle="Balances by fund"
       body={body}
       onViewAll={onViewAll}
       viewAllLabel="View full table"

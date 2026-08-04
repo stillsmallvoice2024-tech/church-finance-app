@@ -1252,7 +1252,7 @@ function ManualEntryForm() {
                   placeholder="— None —" className={iCls} />
               </Field>
             )}
-            <p className="text-xs text-gray-500">Links this outflow to the category ledger for tracking.</p>
+            <p className="text-xs text-gray-500">Links this outflow to the fund ledger for tracking.</p>
           </div>
 
           {/* Pending Deduction */}

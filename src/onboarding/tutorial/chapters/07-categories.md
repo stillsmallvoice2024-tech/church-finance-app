@@ -23,7 +23,7 @@
 
 ### Result
 
-The fund appears in the fund list and is immediately available in allocation rules, reports, and the Category Accounts ledger.
+The fund appears in the fund list and is immediately available in allocation rules, reports, and the Fund Accounts ledger.
 
 ---
 
@@ -35,11 +35,11 @@ The fund appears in the fund list and is immediately available in allocation rul
 
 ---
 
-## How to Read the Category Accounts Ledger
+## How to Read the Fund Accounts Ledger
 
 **What you'll need:** At least one fund with imported or manually entered transactions.
 
-**Where to go:** Budget & Allocation → Category Ledger
+**Where to go:** Budget & Allocation → Fund Ledger
 
 **Time:** ~2 minutes.
 
@@ -47,7 +47,7 @@ The fund appears in the fund list and is immediately available in allocation rul
 
 ### Steps
 
-1. Open **Budget & Allocation → Category Ledger** in the left sidebar.
+1. Open **Budget & Allocation → Fund Ledger** in the left sidebar.
 2. Click the **Ledger** view tab at the top.
 3. Choose a **Portion** from the dropdown: Regular Funds, Designated Gift, or Savings Funds.
 4. Choose a **Fund** from the next dropdown.
@@ -62,7 +62,7 @@ You can verify exactly how much money is in each bucket and trace every entry th
 
 ## How to See Fund Totals at a Glance (Summary View)
 
-1. Open **Budget & Allocation → Category Ledger**.
+1. Open **Budget & Allocation → Fund Ledger**.
 2. Click the **Summary** view tab.
 3. The table shows totals for every fund across three pockets: Regular Funds, Designated Gifts, and Savings Balance.
 4. Use the filter buttons (**All**, **Regular Funds**, **Designated Gifts**, **Savings**) to focus on one pocket.

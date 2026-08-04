@@ -326,7 +326,7 @@ The transaction appears immediately in **Inflows**, the **Bank Ledger**, and all
 
 ### Result
 
-The fund appears in the Fund List and is immediately available for allocation rules, reports, and the Category Accounts ledger.
+The fund appears in the Fund List and is immediately available for allocation rules, reports, and the Fund Accounts ledger.
 
 ---
 
