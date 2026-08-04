@@ -385,6 +385,14 @@ export function detectVersionOverlap(
 
 // ── Amendment mutation ──────────────────────────────────────────────────────────
 
+/**
+ * Amends a locked version in place via an atomic RPC. A bare insert-then-
+ * supersede from the client used to race with the partial unique index on
+ * (config_group_id, effective_from) WHERE status='locked': the amendment
+ * shares the original's effective_from, and superseding never changes the
+ * original's status away from 'locked', so both rows always collided on that
+ * index. The RPC sequences the insert/supersede/lock so they never coexist.
+ */
 export async function amendVersion(params: {
   original:        AllocationConfig
   allocation_type: 'percentage' | 'amount'
@@ -394,42 +402,17 @@ export async function amendVersion(params: {
   effective_to:    string | null
   amendment_reason: string
 }): Promise<string> {
-  const { orgId } = useOrgStore.getState()
-  if (!orgId) throw new Error('No active organisation.')
-
-  // Insert new version as amendment
-  const { data: newRow, error: insertErr } = await supabase
-    .from('allocation_configs')
-    .insert({
-      org_id:           orgId,
-      config_group_id:  params.original.config_group_id,
-      name:             params.original.name,
-      is_special:       params.original.is_special ?? true,
-      allocation_type:  params.allocation_type,
-      total_amount:     params.total_amount ?? null,
-      rows:             params.rows,
-      effective_from:   params.effective_from,
-      effective_to:     params.effective_to,
-      version_number:   (params.original.version_number ?? 1) + 1,
-      start_date:       params.effective_from,
-      status:           'locked',
-      change_type:      'amendment',
-      source_version_id: params.original.id,
-      amendment_reason: params.amendment_reason,
-    })
-    .select('id')
-    .single()
-  if (insertErr) throw new Error(insertErr.message)
-  const newId = (newRow as { id: string }).id
-
-  // Mark original as superseded
-  const { error: supErr } = await supabase
-    .from('allocation_configs')
-    .update({ superseded_by_id: newId, superseded_at: new Date().toISOString() })
-    .eq('id', params.original.id)
-  if (supErr) throw new Error(supErr.message)
-
-  return newId
+  const { data, error } = await supabase.rpc('amend_config_version', {
+    p_original_id:      params.original.id,
+    p_allocation_type:  params.allocation_type,
+    p_total_amount:     params.total_amount ?? null,
+    p_rows:             params.rows,
+    p_effective_from:   params.effective_from,
+    p_effective_to:     params.effective_to,
+    p_amendment_reason: params.amendment_reason,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
 }
 
 // ── Create version with optional date-split ────────────────────────────────────
