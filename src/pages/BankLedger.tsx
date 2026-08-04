@@ -108,14 +108,17 @@ export default function BankLedger() {
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
   const load = useCallback(async (bankName: string, openingBalance: number = 0) => {
-    if (!bankName) { setLedgerRows([]); return }
+    if (!bankName || !orgId) { setLedgerRows([]); setLoading(false); return }
     setLoading(true)
     setError(null)
 
+    // bank_name is plain text, not an FK — two orgs with an identically named
+    // bank would otherwise merge into a single ledger.
     const [inflowRes, outflowRes] = await Promise.all([
       fetchAllRows(() => supabase
         .from('inflow_transactions')
         .select('*')
+        .eq('org_id', orgId)
         .eq('bank_name', bankName)
         .or(`transaction_type.is.null,transaction_type.neq.${BALANCE_BROUGHT_FORWARD_TYPE}`)
         .order('date', { ascending: true })
@@ -123,6 +126,7 @@ export default function BankLedger() {
       fetchAllRows(() => supabase
         .from('outflow_transactions')
         .select('*')
+        .eq('org_id', orgId)
         .eq('bank_name', bankName)
         .order('date', { ascending: true })
         .order('import_seq', { ascending: true })),

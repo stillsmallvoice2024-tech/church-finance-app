@@ -34,6 +34,7 @@ import { normalizeId } from '../utils/normalizeId'
 import { fetchExistingTransactionIds } from '../utils/dedupQuery'
 import { useOutflowTypeOptions, useCategoryOutflowTypeMaps, getDefaultOutflowTypeForCategory } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../components/ui/RootTransactionSearch'
 import { isOffsetableType } from '../utils/transactionTypes'
@@ -87,6 +88,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 
 export default function Import() {
   const { canImportTransactions } = useRole()
+  const orgId = useOrgStore(s => s.orgId)
   const [activeTab, setActiveTab]     = useState<Tab>('file')
   const [importOpen, setImportOpen]   = useState(false)
   const [skipDups, setSkipDups]       = useState(false)
@@ -188,7 +190,7 @@ export default function Import() {
   // changes.  Scoped to bank_name so transactions in different banks with the
   // same ID are not treated as duplicates.
   useEffect(() => {
-    if (!parseResult?.ids?.length) return
+    if (!parseResult?.ids?.length || !orgId) return
     let isCurrent = true
 
     const runCheck = async () => {
@@ -200,8 +202,8 @@ export default function Import() {
         // Chunked queries — a large ID list must never overflow the URL limit,
         // and a failed query must surface instead of reporting zero duplicates.
         const [inflowSet, outflowSet] = await Promise.all([
-          fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', parseResult.ids, selectedBankName),
-          fetchExistingTransactionIds('outflow_transactions', 'transaction_id', parseResult.ids, selectedBankName),
+          fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', parseResult.ids, selectedBankName, orgId),
+          fetchExistingTransactionIds('outflow_transactions', 'transaction_id', parseResult.ids, selectedBankName, orgId),
         ])
 
         if (!isCurrent) return
@@ -224,7 +226,7 @@ export default function Import() {
 
     runCheck()
     return () => { isCurrent = false }
-  }, [parseResult, selectedBankName])
+  }, [parseResult, selectedBankName, orgId])
 
   // Defense-in-depth: route guard in App.tsx is primary, this is a fallback
   if (!canImportTransactions()) return <Navigate to="/" replace />
@@ -614,6 +616,7 @@ export default function Import() {
 
 function ManualEntryForm() {
   const { baseCurrencySymbol } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
   const { categories }                                 = useCategories()
   const { push: toast }                                = useToastStore()
   const { banks, loading: banksLoading }               = useBanks()
@@ -743,14 +746,14 @@ function ManualEntryForm() {
   // different bank is not treated as a duplicate.
 
   async function checkInflowDup(ref: string, bankName: string | null): Promise<boolean> {
-    let q = supabase.from('inflow_transactions').select('id').eq('transaction_ref', ref)
+    let q = supabase.from('inflow_transactions').select('id').eq('org_id', orgId).eq('transaction_ref', ref)
     if (bankName) q = q.eq('bank_name', bankName)
     const { data } = await q.limit(1)
     return (data?.length ?? 0) > 0
   }
 
   async function checkOutflowDup(txnId: string, bankName: string | null): Promise<boolean> {
-    let q = supabase.from('outflow_transactions').select('id').eq('transaction_id', txnId)
+    let q = supabase.from('outflow_transactions').select('id').eq('org_id', orgId).eq('transaction_id', txnId)
     if (bankName) q = q.eq('bank_name', bankName)
     const { data } = await q.limit(1)
     return (data?.length ?? 0) > 0

@@ -12,6 +12,7 @@ import { usePageTitle }       from '../hooks/usePageTitle'
 import { useDataViewState }   from '../hooks/useDataViewState'
 import { exportCSV }          from '../utils/csvExport'
 import { supabase }           from '../lib/supabase'
+import { useOrgStore }        from '../store/orgStore'
 import { ExportDropdown }     from '../components/ui/ExportDropdown'
 import type { SortField } from '../utils/sortUtils'
 import type { TableColumnDef } from '../utils/tableColumns'
@@ -52,6 +53,7 @@ function fmtTs(ts: string, locale: string) {
 export default function ChangeLog() {
   usePageTitle('Activity History')
   const { formatLocale } = useOrgCurrency()
+  const orgId = useOrgStore(s => s.orgId)
 
   const [tableFilter, setTableFilter] = useState('')
   const [dateFrom,    setDateFrom]    = useState('')
@@ -121,9 +123,11 @@ export default function ChangeLog() {
   }
 
   const handleExportAll = async () => {
+    if (!orgId) return
     let query = supabase
       .from('field_changes')
       .select(`id, user_id, table_name, record_id, field_name, old_value, new_value, changed_at, profiles:user_id ( full_name, email )`)
+      .eq('org_id', orgId)
       .limit(10000)
     const adv = clState.advancedSort
     if (adv.length > 0) {

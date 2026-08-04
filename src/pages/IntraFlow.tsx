@@ -38,6 +38,7 @@ import { BulkEditIntraFlowModal } from '../components/modals/BulkEditIntraFlowMo
 import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResultsModal'
 import { useBulkSelection }       from '../hooks/useBulkSelection'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
+import { useOrgStore } from '../store/orgStore'
 import { MobileFab } from '../components/ui/MobileFab'
 
 // ── Sort / search config ───────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ function SummaryStrip({ total, count, largest, average, loading }: {
 export default function IntraFlow() {
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const { year, dateFrom: yearStart, dateTo: yearEnd } = useYearRange()
+  const orgId = useOrgStore(s => s.orgId)
 
   // Filters
   const [dateFrom,    setDateFrom]    = useState(yearStart)
@@ -210,7 +212,8 @@ export default function IntraFlow() {
   }
 
   const handleExportAll = async () => {
-    let query = supabase.from('intra_flows').select('*').limit(10000)
+    if (!orgId) return
+    let query = supabase.from('intra_flows').select('*').eq('org_id', orgId).limit(10000)
     const adv = iflState.advancedSort
     if (adv.length > 0) {
       for (const l of adv) {
