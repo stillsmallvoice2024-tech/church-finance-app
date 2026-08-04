@@ -4,6 +4,17 @@
  * Deliberately free of any pdfjs import so the logic stays unit-testable in a
  * plain Node environment — `pdfParser.ts` owns the pdfjs plumbing and feeds
  * positioned text runs in here.
+ *
+ * Three properties of real bank statements drive the design:
+ *
+ *  1. Reported glyph widths cannot be trusted. Some generators emit runs whose
+ *     advertised width overlaps the next run on the same line, so column
+ *     geometry is derived from *start* positions, which are always reliable.
+ *  2. A header may be stacked over several lines (`Value` above `Date`), so the
+ *     header is resolved as a band of lines rather than a single line.
+ *  3. One transaction may span several lines when a narrow column wraps, and
+ *     only one of those lines carries the amounts. The amount-bearing line is
+ *     the record anchor; the rest are continuations folded into it.
  */
 
 // ── Geometry primitives ────────────────────────────────────────────────────────
@@ -22,7 +33,7 @@ export interface PdfPageItems {
   items: PdfTextItem[]
 }
 
-interface TextRow {
+interface TextLine {
   /** Page-local Y (top-down). */
   y: number
   /** Y offset by all preceding page heights — safe for cross-page comparisons. */
@@ -31,6 +42,15 @@ interface TextRow {
 }
 
 const DEFAULT_FONT_SIZE = 10
+
+/** Widest gap between two runs that can still be one cell (fraction of em). */
+const INTRA_CELL_GAP = 0.35
+/** Overlap this deep means broken widths or colliding cells — never merge. */
+const MAX_MERGE_OVERLAP = 0.15
+/** Gap above which a space is re-inserted when joining runs inside one cell. */
+const SPACE_GAP = 0.12
+/** Start positions closer than this (fraction of em) belong to one column. */
+const COLUMN_CLUSTER = 1.2
 
 // ── Cell content classifiers ───────────────────────────────────────────────────
 
@@ -88,6 +108,10 @@ const HEADER_WORD_RE = new RegExp(
   'i',
 )
 
+/** Columns whose values are monetary — used to find each record's anchor line. */
+const AMOUNT_HEADER_RE =
+  /\b(?:credits?|debits?|amounts?|balances?|deposits?|withdrawals?|lodgements?|money in|money out|paid in|paid out|dr|cr)\b/i
+
 function normaliseCell(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -100,16 +124,36 @@ function scoreHeaderCells(cells: string[]): number {
   }).length
 }
 
+/**
+ * Repairs letter-spaced headers. Some generators emit `R e f e r e n c e` as a
+ * run of single characters; three or more in a row are re-joined into a word.
+ */
+export function collapseLetterSpacing(value: string): string {
+  const tokens = value.split(' ')
+  const out: string[] = []
+  let i = 0
+  while (i < tokens.length) {
+    let j = i
+    while (j < tokens.length && tokens[j].length === 1 && /[A-Za-z]/.test(tokens[j])) j++
+    if (j - i >= 3) {
+      out.push(tokens.slice(i, j).join(''))
+      i = j
+    } else {
+      out.push(tokens[i])
+      i++
+    }
+  }
+  return out.join(' ')
+}
+
 /** `Credit(₦)` → `Credit`, `Amount (NGN)` → `Amount`. */
 export function cleanHeaderCell(value: string): string {
-  return value
-    .replace(/\s+/g, ' ')
-    .trim()
+  return collapseLetterSpacing(value.replace(/\s+/g, ' ').trim())
     .replace(/\s*[([]\s*(?:[₦$£€¥₹]|[A-Za-z]{3})\s*[)\]]\s*$/, '')
     .trim()
 }
 
-// ── Row assembly ───────────────────────────────────────────────────────────────
+// ── Line assembly ──────────────────────────────────────────────────────────────
 
 function medianOf(values: number[]): number {
   if (values.length === 0) return 0
@@ -117,19 +161,22 @@ function medianOf(values: number[]): number {
   return s[Math.floor(s.length / 2)]
 }
 
+function fontSizeOf(items: PdfTextItem[]): number {
+  return medianOf(items.map(i => i.height).filter(h => h > 0)) || DEFAULT_FONT_SIZE
+}
+
 /**
  * Groups items into visual lines by clustering on Y with a font-size-derived
  * tolerance. Clustering (rather than snapping to a fixed grid) prevents two
- * items on the same baseline landing in different rows because they straddle a
- * snap boundary — a major source of the "scattered" output.
+ * items on the same baseline landing in different lines because they straddle a
+ * snap boundary.
  */
-function groupIntoRows(items: PdfTextItem[]): PdfTextItem[][] {
+function groupIntoLines(items: PdfTextItem[]): PdfTextItem[][] {
   if (items.length === 0) return []
-  const medianHeight = medianOf(items.map(i => i.height).filter(h => h > 0)) || DEFAULT_FONT_SIZE
-  const tol = Math.max(2, medianHeight * 0.5)
+  const tol = Math.max(2, fontSizeOf(items) * 0.5)
 
   const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x)
-  const rows: PdfTextItem[][] = []
+  const lines: PdfTextItem[][] = []
   let current: PdfTextItem[] = []
   let anchorY = 0
 
@@ -137,29 +184,29 @@ function groupIntoRows(items: PdfTextItem[]): PdfTextItem[][] {
     if (current.length === 0 || Math.abs(item.y - anchorY) <= tol) {
       if (current.length === 0) anchorY = item.y
       current.push(item)
-      // Track the running mean so a slowly-drifting baseline stays one row.
+      // Track the running mean so a slowly-drifting baseline stays one line.
       anchorY = (anchorY * (current.length - 1) + item.y) / current.length
     } else {
-      rows.push(current)
+      lines.push(current)
       current = [item]
       anchorY = item.y
     }
   }
-  if (current.length > 0) rows.push(current)
-  return rows
+  if (current.length > 0) lines.push(current)
+  return lines
 }
 
 /**
  * Merges text runs that belong to the same cell.
  *
  * pdfjs splits a rendered string wherever the font, kerning or encoding
- * changes, so `Credit(`, `₦`, `)` arrive as three items. The gap between a
- * run's right edge and the next run's left edge is the only reliable signal:
- * anything under ~half an em is intra-cell, anything larger is a column gutter.
+ * changes, so `Credit(`, `₦`, `)` arrive as three items. Two guards keep this
+ * conservative, because it only has to be good enough to read column titles —
+ * data cells are assembled from column membership instead:
  *
- * The previous implementation compared *left edges* and only merged when one
- * side was ≤3 chars, which both missed long fragments and stopped merging as
- * soon as the accumulated text grew wider than the threshold.
+ *  • an overlap beyond a rounding tolerance means the advertised widths are
+ *    broken (or the cells genuinely collide), so the runs are left apart;
+ *  • the gap must be under roughly one space.
  */
 export function mergeRowFragments(items: PdfTextItem[]): PdfTextItem[] {
   if (items.length <= 1) return items.map(i => ({ ...i }))
@@ -172,9 +219,9 @@ export function mergeRowFragments(items: PdfTextItem[]): PdfTextItem[] {
     const font = Math.max(prev.height, cur.height) || DEFAULT_FONT_SIZE
     const gap  = cur.x - prev.xEnd
 
-    if (gap <= font * 0.55) {
+    if (gap >= -font * MAX_MERGE_OVERLAP && gap <= font * INTRA_CELL_GAP) {
       // Re-insert a space only when the glyphs were actually separated.
-      const joiner = gap > font * 0.12 && !/\s$/.test(prev.text) && !/^\s/.test(cur.text) ? ' ' : ''
+      const joiner = gap > font * SPACE_GAP && !/\s$/.test(prev.text) && !/^\s/.test(cur.text) ? ' ' : ''
       prev.text   = prev.text + joiner + cur.text
       prev.xEnd   = Math.max(prev.xEnd, cur.xEnd)
       prev.height = font
@@ -188,73 +235,121 @@ export function mergeRowFragments(items: PdfTextItem[]): PdfTextItem[] {
 // ── Column model ───────────────────────────────────────────────────────────────
 
 /**
- * Vertical cut positions between columns. `bounds.length === columnCount - 1`;
- * the axis is fully partitioned so every item lands in exactly one column.
+ * Column geometry, expressed as start-position anchors plus the cut positions
+ * between them. Start positions are used rather than full extents because
+ * advertised widths are unreliable across generators — a run's left edge is the
+ * only measurement that is always correct.
  */
-function boundsFromItems(cells: PdfTextItem[]): number[] {
+export interface ColumnModel {
+  starts: number[]
+  bounds: number[]
+  headers: string[]
+}
+
+function boundsFromStarts(starts: number[]): number[] {
   const bounds: number[] = []
-  for (let i = 0; i < cells.length - 1; i++) {
-    bounds.push((cells[i].xEnd + cells[i + 1].x) / 2)
-  }
+  for (let i = 0; i < starts.length - 1; i++) bounds.push((starts[i] + starts[i + 1]) / 2)
   return bounds
 }
 
-function columnIndexFor(item: PdfTextItem, bounds: number[]): number {
-  const colCount = bounds.length + 1
-  const start = item.x
-  const end   = Math.max(item.xEnd, item.x + 0.01)
+function columnIndexFor(x: number, bounds: number[]): number {
+  let i = 0
+  while (i < bounds.length && x >= bounds[i]) i++
+  return i
+}
 
-  let bestIdx = 0
-  let bestOverlap = -1
-  for (let ci = 0; ci < colCount; ci++) {
-    const lo = ci === 0 ? -Infinity : bounds[ci - 1]
-    const hi = ci === colCount - 1 ? Infinity : bounds[ci]
-    const overlap = Math.min(end, hi) - Math.max(start, lo)
-    if (overlap > bestOverlap) { bestOverlap = overlap; bestIdx = ci }
+/** Joins runs that share a column, restoring the spaces the layout implied. */
+function joinRunsInCell(items: PdfTextItem[]): string {
+  const sorted = [...items].sort((a, b) => a.x - b.x)
+  let text = sorted[0].text.trim()
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1]
+    const cur  = sorted[i]
+    const font = Math.max(prev.height, cur.height) || DEFAULT_FONT_SIZE
+    const gap  = cur.x - prev.xEnd
+    // A deep negative gap means the widths are broken, not that the runs touch.
+    const spaced = gap > font * SPACE_GAP || gap < -font * 0.5
+    // A trailing hyphen is a wrapped word, never a word break.
+    const joiner = /-$/.test(text) ? '' : spaced ? ' ' : ''
+    text = text + joiner + cur.text.trim()
   }
-  return bestIdx
+  return text
 }
 
 /**
- * Assigns each run to the column it overlaps most.
+ * Assigns runs to columns by their start position and joins each column's runs.
  *
- * Overlap (not left-edge proximity) is what makes right-aligned amount columns
- * and over-wide narration cells land correctly: a wide description that bleeds
- * under the Credit header still has most of its width inside Description, and a
- * long right-aligned balance whose left edge falls in the Debit gutter still has
- * most of its width inside Balance.
+ * Start-position assignment is immune to the over-wide and overlapping widths
+ * some generators report, and it handles right-aligned amount columns and
+ * over-wide narration alike, because a cell's left edge always sits inside its
+ * own column even when its text does not.
  */
 function assignToColumns(items: PdfTextItem[], bounds: number[]): string[] {
-  const cells = new Array<string>(bounds.length + 1).fill('')
+  const buckets: PdfTextItem[][] = Array.from({ length: bounds.length + 1 }, () => [])
   for (const item of items) {
-    const ci = columnIndexFor(item, bounds)
-    const text = item.text.trim()
-    if (!text) continue
-    cells[ci] = cells[ci] ? `${cells[ci]} ${text}` : text
+    if (!item.text.trim()) continue
+    buckets[columnIndexFor(item.x, bounds)].push(item)
   }
-  return cells
+  return buckets.map(b => (b.length === 0 ? '' : joinRunsInCell(b)))
 }
 
 /**
- * Second pass: header text is often narrower or offset relative to the data
- * beneath it, so re-cut the boundaries using the real extent of everything that
- * landed in each column. Only widens where the columns stay disjoint.
+ * Clusters the start positions of every run in the header band into columns.
+ * A stacked header (`Value` above `Date`) contributes the same start twice and
+ * collapses to one column; distinct columns sit far further apart than the
+ * clustering tolerance.
  */
-function refineBounds(rows: PdfTextItem[][], bounds: number[]): number[] {
-  const colCount = bounds.length + 1
+function buildColumnModel(band: PdfTextItem[][]): ColumnModel {
+  const items = band.flat().filter(i => i.text.trim())
+  if (items.length === 0) return { starts: [], bounds: [], headers: [] }
+
+  const tol = Math.max(4, fontSizeOf(items) * COLUMN_CLUSTER)
+  const sorted = [...items].sort((a, b) => a.x - b.x)
+
+  const groups: PdfTextItem[][] = [[sorted[0]]]
+  for (let i = 1; i < sorted.length; i++) {
+    const group = groups[groups.length - 1]
+    if (sorted[i].x - group[0].x <= tol) group.push(sorted[i])
+    else groups.push([sorted[i]])
+  }
+
+  const starts = groups.map(g => Math.min(...g.map(i => i.x)))
+  const headers = groups.map(g =>
+    cleanHeaderCell(
+      [...g].sort((a, b) => a.y - b.y || a.x - b.x).map(i => i.text.trim()).join(' '),
+    ),
+  )
+  return { starts, bounds: boundsFromStarts(starts), headers }
+}
+
+/**
+ * Re-cuts the boundaries once the body content is known, placing each cut
+ * midway between the rightmost start in one column and the leftmost start in
+ * the next. Applied only where the two columns remain disjoint.
+ */
+function refineBounds(lines: PdfTextItem[][], model: ColumnModel): number[] {
+  const colCount = model.bounds.length + 1
   const minX = new Array<number>(colCount).fill(Infinity)
   const maxX = new Array<number>(colCount).fill(-Infinity)
 
-  for (const row of rows) {
-    for (const item of row) {
+  for (const line of lines) {
+    for (const item of line) {
       if (!item.text.trim()) continue
-      const ci = columnIndexFor(item, bounds)
+      const ci = columnIndexFor(item.x, model.bounds)
       minX[ci] = Math.min(minX[ci], item.x)
-      maxX[ci] = Math.max(maxX[ci], item.xEnd)
+      maxX[ci] = Math.max(maxX[ci], item.x)
+    }
+  }
+  // Seed with the header starts so a column with no body content keeps its anchor.
+  for (let ci = 0; ci < colCount; ci++) {
+    const s = model.starts[ci]
+    if (s !== undefined) {
+      minX[ci] = Math.min(minX[ci], s)
+      maxX[ci] = Math.max(maxX[ci], s)
     }
   }
 
-  return bounds.map((b, i) => {
+  return model.bounds.map((b, i) => {
     const left  = maxX[i]
     const right = minX[i + 1]
     if (!Number.isFinite(left) || !Number.isFinite(right) || left >= right) return b
@@ -262,12 +357,12 @@ function refineBounds(rows: PdfTextItem[][], bounds: number[]): number[] {
   })
 }
 
-// ── Table location ─────────────────────────────────────────────────────────────
+// ── Header band location ───────────────────────────────────────────────────────
 
-interface HeaderCandidate {
-  rowIndex: number
-  cells: PdfTextItem[]
-  bounds: number[]
+interface HeaderBand {
+  /** Indices of every line forming the header, in document order. */
+  lineIndices: number[]
+  model: ColumnModel
   score: number
   run: number
 }
@@ -281,91 +376,141 @@ function isSparse(cells: string[]): boolean {
   return nonEmpty > 0 && nonEmpty <= Math.max(1, Math.floor(cells.length / 2))
 }
 
+/** A line carrying no date and no number cannot be part of the data body. */
+function isHeaderish(items: PdfTextItem[]): boolean {
+  return !items.some(i => isDateLike(i.text) || isAmountLike(i.text))
+}
+
 /**
  * Picks the transaction-table header on a page.
  *
  * Keyword score alone is not enough — a statement's summary block
  * (`Opening Balance | Closing Balance | Date Printed | Start Date | End Date`)
  * scores as highly as the real header. The discriminator is what *follows*:
- * the real header is trailed by an unbroken run of transaction rows, the
- * summary block by exactly one value row. Candidates are therefore ranked by
+ * the real header is trailed by an unbroken run of transaction lines, the
+ * summary block by exactly one value line. Candidates are therefore ranked by
  * that run length first and keyword score only as a tie-break.
+ *
+ * The winning line is then grown into a band, absorbing adjacent lines that
+ * carry no data of their own, so a stacked header resolves to one row of titles.
  */
-function findHeaderRow(rows: PdfTextItem[][]): HeaderCandidate | null {
-  let best: HeaderCandidate | null = null
+function findHeaderBand(lines: PdfTextItem[][]): HeaderBand | null {
+  const merged = lines.map(mergeRowFragments)
+  let best: { index: number; score: number; run: number } | null = null
 
-  for (let i = 0; i < rows.length; i++) {
-    const cells = rows[i]
+  for (let i = 0; i < merged.length; i++) {
+    const cells = merged[i]
     if (cells.length < 3) continue
-    const texts = cells.map(c => c.text)
-    const score = scoreHeaderCells(texts)
+    const score = scoreHeaderCells(cells.map(c => c.text))
     if (score < 2) continue
 
-    const bounds = boundsFromItems(cells)
+    const bounds = boundsFromStarts(cells.map(c => c.x))
     let run = 0
-    for (let j = i + 1; j < rows.length; j++) {
-      const assigned = assignToColumns(rows[j], bounds)
+    for (let j = i + 1; j < merged.length; j++) {
+      const assigned = assignToColumns(lines[j], bounds)
       if (isDataLike(assigned)) { run++; continue }
-      // Wrapped narration lines interleave with data rows — skip, don't break.
+      // Wrapped narration and stacked header lines interleave — skip, don't break.
       if (isSparse(assigned) || looksLikeBoilerplate(assigned)) continue
       break
     }
     if (run < 1) continue
 
-    const candidate: HeaderCandidate = { rowIndex: i, cells, bounds, score, run }
     if (
-      best === null ||
-      candidate.run > best.run ||
-      (candidate.run === best.run && candidate.score > best.score) ||
-      (candidate.run === best.run && candidate.score === best.score && candidate.rowIndex > best.rowIndex)
+      best === null || run > best.run ||
+      (run === best.run && score > best.score) ||
+      (run === best.run && score === best.score && i > best.index)
     ) {
-      best = candidate
+      best = { index: i, score, run }
     }
   }
 
-  return best
+  if (!best) return null
+
+  // Grow the band across adjacent lines that hold no data of their own. A
+  // stacked header renders as several such lines a few points apart; the first
+  // transaction line stops the walk because it carries dates and amounts.
+  const font   = fontSizeOf(lines[best.index])
+  const maxGap = font * 2.2
+  const yOf    = (idx: number) => Math.min(...lines[idx].map(i => i.y))
+
+  let first = best.index
+  let last  = best.index
+  while (first - 1 >= 0 && isHeaderish(lines[first - 1]) && yOf(first) - yOf(first - 1) <= maxGap) first--
+  while (last + 1 < lines.length && isHeaderish(lines[last + 1]) && yOf(last + 1) - yOf(last) <= maxGap) last++
+
+  const lineIndices: number[] = []
+  for (let i = first; i <= last; i++) lineIndices.push(i)
+
+  return {
+    lineIndices,
+    model: buildColumnModel(lineIndices.map(i => merged[i])),
+    score: best.score,
+    run: best.run,
+  }
 }
 
-// ── Continuation-row merging ───────────────────────────────────────────────────
+// ── Record assembly ────────────────────────────────────────────────────────────
 
-interface GridRow {
+interface GridLine {
   globalY: number
   cells: string[]
 }
 
+/** Column indices whose values are monetary, by header name then by content. */
+function findAmountColumns(headers: string[], body: GridLine[]): Set<number> {
+  const byHeader = new Set<number>()
+  headers.forEach((h, ci) => { if (AMOUNT_HEADER_RE.test(normaliseCell(h))) byHeader.add(ci) })
+  if (byHeader.size > 0) return byHeader
+
+  const byContent = new Set<number>()
+  for (let ci = 0; ci < headers.length; ci++) {
+    const values = body.map(r => r.cells[ci]?.trim()).filter((v): v is string => !!v)
+    if (values.length >= 2 && values.filter(isAmountLike).length >= values.length * 0.6) byContent.add(ci)
+  }
+  return byContent
+}
+
+function appendCell(existing: string, addition: string): string {
+  const add = addition.trim()
+  if (!add) return existing
+  if (!existing) return add
+  // A trailing hyphen is a wrapped word (`01-Aug-` + `2026`), not a separator.
+  return /-$/.test(existing) ? existing + add : `${existing} ${add}`
+}
+
 /**
- * Folds sparse wrap rows into the transaction they belong to.
+ * Folds continuation lines into the transaction they belong to.
  *
- * Direction is decided by Y-proximity to the surrounding anchor rows:
- *   • distToNext <= distToPrev → "leading" wrap: description text rendered
- *     above the row's own date/amount baseline, so it belongs to the NEXT
- *     anchor — prepend in document order.
- *   • otherwise → "trailing" wrap, appended to the PREVIOUS anchor.
+ * A record's anchor is the line carrying its amounts: every transaction has one,
+ * while a wrapped narration or a split date fragment has none. Each continuation
+ * attaches to the nearer anchor by Y:
+ *   • closer to the next anchor → "leading": text rendered above the amounts,
+ *     prepended in document order.
+ *   • otherwise → "trailing", appended to the previous anchor.
  *
- * This handles Oracle-style statements where a multi-line description starts
- * rendering before (above) the row's date and amount columns.
+ * This handles both statements whose description wraps below the amounts and
+ * those whose narrow date column wraps above and below them.
  */
-function mergeContinuationRows(rows: GridRow[]): string[][] {
+function mergeContinuationLines(lines: GridLine[], amountCols: Set<number>): string[][] {
+  const isAnchor = (cells: string[]) =>
+    amountCols.size > 0
+      ? [...amountCols].some(ci => cells[ci]?.trim())
+      : !!cells[0]?.trim() && cells.filter(c => c.trim()).length >= Math.ceil(cells.length / 2)
+
   const merged: string[][] = []
-  const pending: GridRow[] = []
+  const pending: GridLine[] = []
   let prevAnchorY: number | null = null
 
   const flushTrailing = (conts: string[][]) => {
     if (conts.length === 0 || merged.length === 0) return
     const prev = merged[merged.length - 1]
     for (const cont of conts) {
-      cont.forEach((cell, ci) => {
-        if (cell.trim()) prev[ci] = prev[ci] ? `${prev[ci]} ${cell.trim()}` : cell.trim()
-      })
+      cont.forEach((cell, ci) => { prev[ci] = appendCell(prev[ci] ?? '', cell) })
     }
   }
 
-  for (const { globalY, cells } of rows) {
-    const firstEmpty     = !cells[0]?.trim()
-    const nonEmptyCount  = cells.filter(c => c.trim()).length
-    const isContinuation = firstEmpty && nonEmptyCount < Math.ceil(cells.length / 2)
-
-    if (isContinuation) {
+  for (const { globalY, cells } of lines) {
+    if (!isAnchor(cells)) {
       pending.push({ globalY, cells: [...cells] })
       continue
     }
@@ -383,8 +528,9 @@ function mergeContinuationRows(rows: GridRow[]): string[][] {
 
     const anchorCells = [...cells]
     for (let ci = 0; ci < anchorCells.length; ci++) {
-      const parts = leading.map(cont => cont[ci]?.trim()).filter(Boolean)
-      if (parts.length > 0) anchorCells[ci] = [...parts, anchorCells[ci]].filter(Boolean).join(' ')
+      let acc = ''
+      for (const cont of leading) acc = appendCell(acc, cont[ci] ?? '')
+      if (acc) anchorCells[ci] = appendCell(acc, anchorCells[ci] ?? '')
     }
 
     pending.length = 0
@@ -396,41 +542,7 @@ function mergeContinuationRows(rows: GridRow[]): string[][] {
   return merged
 }
 
-// ── Fallback grid (no header found) ────────────────────────────────────────────
-
-/**
- * Whitespace-projection column detection, used only when no transaction-table
- * header can be located. Columns are the maximal X ranges covered by text,
- * separated by gutters wider than ~0.8em.
- */
-function fallbackBounds(rows: PdfTextItem[][]): number[] {
-  const spans: Array<[number, number]> = []
-  const heights: number[] = []
-  for (const row of rows) {
-    for (const item of row) {
-      if (!item.text.trim()) continue
-      spans.push([item.x, item.xEnd])
-      if (item.height > 0) heights.push(item.height)
-    }
-  }
-  if (spans.length === 0) return []
-
-  const gutter = Math.max(6, (medianOf(heights) || DEFAULT_FONT_SIZE) * 0.8)
-  spans.sort((a, b) => a[0] - b[0])
-
-  const merged: Array<[number, number]> = [[...spans[0]] as [number, number]]
-  for (let i = 1; i < spans.length; i++) {
-    const last = merged[merged.length - 1]
-    if (spans[i][0] - last[1] <= gutter) last[1] = Math.max(last[1], spans[i][1])
-    else merged.push([...spans[i]] as [number, number])
-  }
-
-  const bounds: number[] = []
-  for (let i = 0; i < merged.length - 1; i++) bounds.push((merged[i][1] + merged[i + 1][0]) / 2)
-  return bounds
-}
-
-// ── Core extraction (pure — unit-testable without pdfjs) ───────────────────────
+// ── Core extraction ────────────────────────────────────────────────────────────
 
 export interface ExtractedTable {
   headers: string[]
@@ -439,59 +551,57 @@ export interface ExtractedTable {
 }
 
 export function extractTableFromPages(pages: PdfPageItems[]): ExtractedTable {
-  // 1. Rows are built per page so that two pages never collide on Y, then
-  //    tagged with a global Y for the cross-page continuation logic.
+  // 1. Lines are built per page so two pages never collide on Y, then tagged
+  //    with a global Y for the cross-page continuation logic.
   let yOffset = 0
-  const pageRows: TextRow[][] = []
+  const pageLines: TextLine[][] = []
   for (const page of pages) {
-    const rows = groupIntoRows(page.items)
-      .map(mergeRowFragments)
+    const lines = groupIntoLines(page.items)
       .filter(items => items.some(i => i.text.trim()))
       .map(items => ({ y: items[0].y, globalY: yOffset + items[0].y, items }))
-    pageRows.push(rows)
+    pageLines.push(lines)
     yOffset += page.height
   }
 
-  const allRows = pageRows.flat()
-  if (allRows.length === 0) return { headers: [], rows: [], tableDetected: false }
+  const allLines = pageLines.flat()
+  if (allLines.length === 0) return { headers: [], rows: [], tableDetected: false }
 
-  // 2. Locate the transaction table on each page independently. Continuation
-  //    pages that reprint no header inherit the previous page's grid.
-  const perPageHeader = pageRows.map(rows => findHeaderRow(rows.map(r => r.items)))
-  const primary = perPageHeader.find(h => h !== null) ?? null
+  // 2. Locate the header band on each page independently. Continuation pages
+  //    that reprint no header inherit the previous page's column model.
+  const perPageBand = pageLines.map(lines => findHeaderBand(lines.map(l => l.items)))
+  const primary = perPageBand.find(b => b !== null) ?? null
 
-  if (!primary) return fallbackExtraction(allRows)
+  if (!primary || primary.model.headers.length < 2) return fallbackExtraction(allLines)
 
-  const primaryHeaderTexts = primary.cells.map(c => cleanHeaderCell(c.text))
-  const colCount = primaryHeaderTexts.length
+  const headers  = primary.model.headers
+  const colCount = headers.length
 
-  // 3. Collect data rows page by page using that page's own grid when its
-  //    header matches the primary shape (X positions drift slightly between
-  //    pages on some generators), otherwise the primary grid.
-  const collected: GridRow[] = []
-  let lastBounds = primary.bounds
+  // 3. Collect body lines page by page, using that page's own column model when
+  //    its header has the same shape (X positions drift slightly between pages
+  //    on some generators), otherwise the primary model.
+  const collected: GridLine[] = []
+  let lastModel = primary.model
 
-  for (let p = 0; p < pageRows.length; p++) {
-    const header = perPageHeader[p]
-    const useOwn = header !== null && header.cells.length === colCount
-    const bounds = useOwn ? header!.bounds : lastBounds
-    if (useOwn) lastBounds = header!.bounds
+  for (let p = 0; p < pageLines.length; p++) {
+    const band   = perPageBand[p]
+    const useOwn = band !== null && band.model.headers.length === colCount
+    const model  = useOwn ? band!.model : lastModel
+    if (useOwn) lastModel = band!.model
 
-    const startIdx = header !== null ? header.rowIndex + 1 : 0
-    const bodyRows = pageRows[p].slice(startIdx)
+    // Everything up to and including the header band is page preamble, not data.
+    const startIdx  = band ? Math.max(...band.lineIndices) + 1 : 0
+    const bodyLines = pageLines[p].slice(startIdx)
 
-    // Refine the cut positions against the actual body content of this page.
-    const refined = refineBounds(bodyRows.map(r => r.items), bounds)
-
-    for (const row of bodyRows) {
-      collected.push({ globalY: row.globalY, cells: assignToColumns(row.items, refined) })
+    const bounds = refineBounds(bodyLines.map(l => l.items), model)
+    for (const line of bodyLines) {
+      collected.push({ globalY: line.globalY, cells: assignToColumns(line.items, bounds) })
     }
   }
 
   // 4. Drop reprinted headers, page furniture and anything that is neither a
-  //    transaction nor a wrapped narration line.
-  const headerKey = primaryHeaderTexts.map(normaliseCell).join('|')
-  let body = collected.filter(({ cells }) => {
+  //    transaction nor a wrapped continuation line.
+  const headerKey = headers.map(normaliseCell).join('|')
+  const body = collected.filter(({ cells }) => {
     if (!cells.some(c => c.trim())) return false
     if (cells.map(c => normaliseCell(cleanHeaderCell(c))).join('|') === headerKey) return false
     if (!isDataLike(cells) && looksLikeBoilerplate(cells)) return false
@@ -506,25 +616,29 @@ export function extractTableFromPages(pages: PdfPageItems[]): ExtractedTable {
     body.pop()
   }
 
-  const rows = mergeContinuationRows(body)
+  const rows = mergeContinuationLines(body, findAmountColumns(headers, body))
 
   // 6. Drop columns that are empty in both the header and every data row.
   const keep: number[] = []
   for (let ci = 0; ci < colCount; ci++) {
-    if (primaryHeaderTexts[ci]?.trim() || rows.some(r => r[ci]?.trim())) keep.push(ci)
+    if (headers[ci]?.trim() || rows.some(r => r[ci]?.trim())) keep.push(ci)
   }
 
   return {
-    headers: keep.map((ci, i) => primaryHeaderTexts[ci]?.trim() || `Column ${i + 1}`),
+    headers: keep.map((ci, i) => headers[ci]?.trim() || `Column ${i + 1}`),
     rows: rows.map(r => keep.map(ci => r[ci] ?? '')),
     tableDetected: true,
   }
 }
 
-/** Best-effort whole-document grid for PDFs with no recognisable table header. */
-function fallbackExtraction(allRows: TextRow[]): ExtractedTable {
-  const bounds = refineBounds(allRows.map(r => r.items), fallbackBounds(allRows.map(r => r.items)))
-  const grid = allRows.map(r => ({ globalY: r.globalY, cells: assignToColumns(r.items, bounds) }))
+/** Best-effort grid for PDFs with no recognisable table header. */
+function fallbackExtraction(allLines: TextLine[]): ExtractedTable {
+  const merged = allLines.map(l => mergeRowFragments(l.items))
+  const model  = buildColumnModel(merged)
+  if (model.starts.length === 0) return { headers: [], rows: [], tableDetected: false }
+
+  const grid = allLines
+    .map((l, i) => ({ globalY: l.globalY, cells: assignToColumns(merged[i], model.bounds) }))
     .filter(({ cells }) => cells.some(c => c.trim()))
 
   if (grid.length === 0) return { headers: [], rows: [], tableDetected: false }
@@ -538,7 +652,8 @@ function fallbackExtraction(allRows: TextRow[]): ExtractedTable {
     ? first.map((h, i) => cleanHeaderCell(h) || `Column ${i + 1}`)
     : first.map((_, i) => `Column ${i + 1}`)
 
-  const rows = mergeContinuationRows(firstIsHeader ? grid.slice(1) : grid)
+  const bodyLines = firstIsHeader ? grid.slice(1) : grid
+  const rows = mergeContinuationLines(bodyLines, findAmountColumns(headers, bodyLines))
 
   const keep: number[] = []
   for (let ci = 0; ci < headers.length; ci++) {

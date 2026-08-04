@@ -3,6 +3,7 @@ import {
   extractTableFromPages,
   mergeRowFragments,
   cleanHeaderCell,
+  collapseLetterSpacing,
   isDateLike,
   isAmountLike,
   type PdfPageItems,
@@ -18,6 +19,11 @@ const CHAR_W = 5.4
 function t(x: number, y: number, text: string, width?: number): PdfTextItem {
   const w = width ?? text.length * CHAR_W
   return { x, xEnd: x + w, y, height: FONT, text }
+}
+
+/** Places a run with an explicit font size — for fixtures that mirror real geometry. */
+function tf(x: number, y: number, text: string, width: number, height: number): PdfTextItem {
+  return { x, xEnd: x + width, y, height, text }
 }
 
 function page(items: PdfTextItem[], height = 842): PdfPageItems {
@@ -281,5 +287,167 @@ describe('extractTableFromPages — fallback', () => {
 
   it('returns empty output for an empty document', () => {
     expect(extractTableFromPages([page([])])).toEqual({ headers: [], rows: [], tableDetected: false })
+  })
+})
+
+// ── Overlapping advertised widths ──────────────────────────────────────────────
+
+/**
+ * Mirrors a Wema "Barbados" export. Every run's advertised width overruns the
+ * next run's start — `Transaction Date` claims x 52.8→129.1 while
+ * `Transaction ID` begins at 102 — so any width-derived gap is negative and the
+ * narration claims to be wider than the four columns to its right combined.
+ */
+function overlappingWidthPage(): PdfPageItems {
+  const F = 11
+  const desc = 'IP:BARBADOS INTL-MOBILE TRF TO WBP Mission BARBADOS INTL'
+  return page([
+    tf(52.8, 65.2, 'Account Name', 67.3, F), tf(102, 65.2, 'BARBADOS', 49.9, F),
+    tf(52.8, 79.7, 'Account No', 53.3, F), tf(102.3, 79.7, '30000000', 45.1, F),
+    // Header — advertised widths overlap the following column's start.
+    tf(52.8, 108.7, 'Transaction Date', 76.3, F), tf(102, 108.7, 'Transaction ID', 64.5, F),
+    tf(151.2, 108.7, 'Narration', 43.2, F), tf(200.4, 108.7, 'Amount Debit', 63.2, F),
+    tf(253, 108.7, 'Amount Credit', 66.1, F), tf(327.4, 108.7, 'Current Balance', 71.8, F),
+    // Credit column is right-aligned, so its start drifts across 24pt.
+    tf(55.7, 123.3, '7/1/2026', 42.4, F), tf(102, 123.3, 'S97466995', 50.1, F),
+    tf(151.2, 123.3, desc, 293.2, F), tf(257.8, 123.3, '1,000,000.00', 58.9, F),
+    tf(334.8, 123.3, '1,000,000.00', 58.9, F),
+    tf(55.7, 166.8, '7/5/2026', 42.4, F), tf(102, 166.8, 'S99398538', 50.1, F),
+    tf(151.2, 166.8, 'NIP:Gudybella multi stream concept-offering', 201, F),
+    tf(277.5, 166.8, '1,000.00', 39.3, F), tf(334.8, 166.8, '7,001,000.00', 58.9, F),
+    // The only debit row.
+    tf(55.7, 181.3, '7/6/2026', 42.4, F), tf(102, 181.3, 'S97214584', 50.1, F),
+    tf(151.2, 181.3, 'Fuel to Total Petrol Station', 120.4, F),
+    tf(200.8, 181.3, '67,000.00', 44.9, F), tf(334.8, 181.3, '6,934,000.00', 58.9, F),
+  ], 792)
+}
+
+describe('extractTableFromPages — overlapping advertised widths', () => {
+  const result = extractTableFromPages([overlappingWidthPage()])
+
+  it('does not collapse the row into a single cell', () => {
+    expect(result.tableDetected).toBe(true)
+    expect(result.headers).toEqual([
+      'Transaction Date', 'Transaction ID', 'Narration', 'Amount Debit', 'Amount Credit', 'Current Balance',
+    ])
+  })
+
+  it('separates every column despite negative width-derived gaps', () => {
+    expect(result.rows).toEqual([
+      ['7/1/2026', 'S97466995', 'IP:BARBADOS INTL-MOBILE TRF TO WBP Mission BARBADOS INTL', '', '1,000,000.00', '1,000,000.00'],
+      ['7/5/2026', 'S99398538', 'NIP:Gudybella multi stream concept-offering', '', '1,000.00', '7,001,000.00'],
+      ['7/6/2026', 'S97214584', 'Fuel to Total Petrol Station', '67,000.00', '', '6,934,000.00'],
+    ])
+  })
+
+  it('keeps debit and credit apart when their advertised extents overlap', () => {
+    // Amount Debit claims 200.4→263.6 and Amount Credit starts at 253.
+    expect(result.rows[2][3]).toBe('67,000.00')
+    expect(result.rows[2][4]).toBe('')
+    expect(result.rows[0][3]).toBe('')
+  })
+})
+
+// ── Stacked header and multi-line records ──────────────────────────────────────
+
+/**
+ * Mirrors a Wema "Lagos Church" statement. The header stacks over three lines
+ * (`Value`/`Date`), the reference title is letter-spaced, and each transaction
+ * spans three lines because the narrow date column wraps `01-Aug-` / `2026`
+ * above and below the single line that carries the amounts.
+ */
+function stackedHeaderPage(): PdfPageItems {
+  const F = 6.9
+  return page([
+    // Summary block — scores as highly on header keywords as the real header.
+    tf(38.7, 388.7, 'Opening Balance', 76.4, 7.9), tf(165.6, 388.7, 'Closing Balance', 71.4, 7.9),
+    tf(287.6, 388.7, 'Date Printed', 54.5, 7.9), tf(399.6, 388.7, 'Start Date', 44.6, 7.9),
+    tf(503.3, 388.7, 'End Date', 39.2, 7.9),
+    tf(38.7, 402.6, '₦', 5.7, 7.9), tf(44.6, 402.6, '2,997,721.37', 43.6, 7.9),
+    tf(165.6, 402.6, '₦', 5.7, 7.9), tf(171.6, 402.6, '3,046,178.19', 43.1, 7.9),
+    tf(287.6, 402.6, '03 - Aug - 2026', 61, 7.9), tf(399.6, 402.6, '03-Aug-2026', 53.1, 7.9),
+    tf(503.3, 402.6, '03-Aug-2026', 53.1, 7.9),
+    // Header band, stacked across three lines.
+    tf(20.8, 442.8, 'Value', 21.8, F), tf(60.5, 442.8, 'Transaction', 46.1, F),
+    tf(122.5, 442.8, 'R e f e r e n c e', 40.7, F),
+    tf(183.5, 448.7, 'Transaction Details', 74.9, F),
+    tf(430.9, 448.7, 'Credit(', 27.3, F), tf(458.1, 448.7, '₦', 5, F), tf(463.1, 448.7, ')', 3.2, F),
+    tf(482.4, 448.7, 'Debit(', 23.8, F), tf(506.2, 448.7, '₦', 5, F), tf(511.2, 448.7, ')', 3.2, F),
+    tf(530.5, 448.7, 'Balance(', 35.2, F), tf(565.7, 448.7, '₦', 5, F), tf(570.7, 448.7, ')', 3.2, F),
+    tf(20.8, 455.2, 'Date', 18.3, F), tf(60.5, 455.2, 'Date', 18.3, F), tf(122.5, 455.2, 'Number', 30.7, F),
+    // Record 1 — date wraps above and below the amount line.
+    tf(18.8, 477.5, '01-Aug-', 27.8, F),
+    tf(181.5, 477.5, 'IP:AKINTOLA TIMILEYIN ASHADE-MOBILE TRF TO WBP Tithe-Timileyin', 221.6, F),
+    tf(58.5, 483.4, '03-Aug-2026', 46.6, F), tf(120.5, 483.4, 'S97227427', 36.7, F),
+    tf(428.9, 483.4, '123,000.00', 35.2, F), tf(528.6, 483.4, '2,997,721.37', 39.2, F),
+    tf(18.8, 489.9, '2026', 16.9, F),
+    tf(181.5, 489.9, 'Akintola THE STANDING CHURCH INTERN', 134.4, F),
+    // Record 2 — single-line narration, date still wrapped.
+    tf(18.8, 514.2, '01-Aug-', 27.8, F),
+    tf(58.5, 520.1, '03-Aug-2026', 46.6, F), tf(120.5, 520.1, 'S97623571', 35.2, F),
+    tf(181.5, 520.1, 'NIP:YETUNDE DORCAS AWOLADE-TITHE', 128.4, F),
+    tf(428.9, 520.1, '1,000.00', 27.3, F), tf(528.6, 520.1, '2,998,721.37', 39.7, F),
+    tf(18.8, 526.6, '2026', 16.9, F),
+    // Record 3 — a debit, with the date split three ways.
+    tf(18.8, 550.9, '02-', 12.4, F),
+    tf(18.8, 563.3, 'Aug-', 17.4, F), tf(58.5, 563.3, '03-Aug-2026', 46.6, F),
+    tf(120.5, 563.3, 'S482987', 29.7, F),
+    tf(181.5, 563.3, '0299030203:WTax.Pd:31-07-2026to 31-07-2026', 161.6, F),
+    tf(480.4, 563.3, '1,106.31', 25.8, F), tf(528.6, 563.3, '3,018,678.19', 41.2, F),
+    tf(18.8, 575.7, '2026', 16.9, F),
+  ])
+}
+
+describe('extractTableFromPages — stacked header and wrapped records', () => {
+  const result = extractTableFromPages([stackedHeaderPage()])
+
+  it('assembles the stacked header into one row of titles', () => {
+    expect(result.tableDetected).toBe(true)
+    expect(result.headers).toEqual([
+      'Value Date', 'Transaction Date', 'Reference Number', 'Transaction Details',
+      'Credit', 'Debit', 'Balance',
+    ])
+  })
+
+  it('folds each three-line record into one transaction', () => {
+    expect(result.rows).toHaveLength(3)
+  })
+
+  it('rejoins a date split across the lines above and below the amounts', () => {
+    // `01-Aug-` renders above the amount line and `2026` below it.
+    expect(result.rows.map(r => r[0])).toEqual(['01-Aug-2026', '01-Aug-2026', '02-Aug-2026'])
+  })
+
+  it('keeps the amount line together with its wrapped narration', () => {
+    expect(result.rows[0][3]).toBe(
+      'IP:AKINTOLA TIMILEYIN ASHADE-MOBILE TRF TO WBP Tithe-Timileyin Akintola THE STANDING CHURCH INTERN',
+    )
+    expect(result.rows[0][4]).toBe('123,000.00')
+    expect(result.rows[0][6]).toBe('2,997,721.37')
+  })
+
+  it('routes the debit to the debit column', () => {
+    expect(result.rows[2][4]).toBe('')
+    expect(result.rows[2][5]).toBe('1,106.31')
+    expect(result.rows[2][6]).toBe('3,018,678.19')
+  })
+
+  it('still prefers the transaction header over the summary block', () => {
+    expect(result.headers).not.toContain('Opening Balance')
+    expect(result.rows.some(r => r.includes('3,046,178.19'))).toBe(false)
+  })
+})
+
+// ── Letter-spaced titles ───────────────────────────────────────────────────────
+
+describe('collapseLetterSpacing', () => {
+  it('rejoins characters emitted one per token', () => {
+    expect(collapseLetterSpacing('R e f e r e n c e')).toBe('Reference')
+    expect(collapseLetterSpacing('R e f e r e n c e Number')).toBe('Reference Number')
+  })
+
+  it('leaves ordinary titles and short words alone', () => {
+    expect(collapseLetterSpacing('Transaction Details')).toBe('Transaction Details')
+    expect(collapseLetterSpacing('A B Bank')).toBe('A B Bank')
   })
 })
