@@ -251,7 +251,7 @@ export function InlineCategorySelect({
           ref={listRef}
           id={listId}
           role="listbox"
-          aria-label="Categories"
+          aria-label="Funds"
           style={{ position: 'fixed', top: dropRect.top, left: dropRect.left, width: dropRect.width, zIndex: 9999 }}
           className="max-h-60 overflow-y-auto overscroll-contain bg-white border border-gray-200 rounded-lg shadow-lg py-1"
         >

@@ -21,7 +21,7 @@ Only **Admins** and **Accountants** can open Setup. Find it in the left menu und
 3. Type the **Bank Name** (example: First Bank).
 4. You can also type the **Account Number**, pick an **Account Type** (Current, Savings, Fixed Deposit, Domiciliary) and the **Account Currency**.
 5. If the bank already has money in it, type that money in **Starting Balance**.
-6. If you typed a starting balance, the app asks how to split it between categories. Choose **Percentage %** or **Amount**, click **+ Add row**, and for each row pick a Category, a Portion, and a value. The totals must add up (100% or the full starting balance) — the app shows green when it's right.
+6. If you typed a starting balance, the app asks how to split it between funds. Choose **Percentage %** or **Amount**, click **+ Add row**, and for each row pick a Fund, a Portion, and a value. The totals must add up (100% or the full starting balance) — the app shows green when it's right.
 7. Click **Add Bank**. Done! The bank now appears everywhere in the app.
 
 ### How to add an income type

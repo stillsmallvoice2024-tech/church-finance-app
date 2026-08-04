@@ -70,7 +70,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Budget & Allocation',
     defaultOpen: false,
     items: [
-      { label: 'Categories',         path: '/categories',             icon: Layers   },
+      { label: 'Fund Setup',         path: '/categories',             icon: Layers   },
       { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent  },
       { label: 'Funds',              path: '/funds',                  icon: PieChart },
     ],

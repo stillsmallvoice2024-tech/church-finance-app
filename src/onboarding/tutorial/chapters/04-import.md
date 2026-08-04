@@ -65,7 +65,7 @@ All imported transactions appear immediately in **Daily Finance → Inflows** an
 2. Click **Inflow** (green, money coming in) or **Outflow** (red, money going out).
 3. Fill in the required fields (marked with a star): **Date**, **Amount**, and **Bank**.
 4. Add a **Description** so the entry is identifiable later (e.g. "Generator fuel — June 2026").
-5. For outflows: optionally pick a **Category**, **Fund Type**, and **Outflow Type**. Tick **Mark as Pending Deduction** if the payment is approved but has not left the bank yet.
+5. For outflows: optionally pick a **Fund**, **Fund Type**, and **Outflow Type**. Tick **Mark as Pending Deduction** if the payment is approved but has not left the bank yet.
 6. Click **Save Inflow** or **Save Outflow**.
 
 ### Result

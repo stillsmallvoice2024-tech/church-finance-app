@@ -472,7 +472,7 @@ export default function BulkReallocation() {
       {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Categories', value: categories.length.toLocaleString(), color: 'text-gray-900' },
+          { label: 'Funds', value: categories.length.toLocaleString(), color: 'text-gray-900' },
           { label: 'Selected',   value: selectedIds.size.toLocaleString(),  color: 'text-primary' },
           { label: 'With balance', value: tableRows.filter(r => r.srcBalance > 0).length.toLocaleString(), color: 'text-gray-700' },
           { label: 'Total to Move', value: formatCurrency(totalAmount, baseCurrencyCode), color: 'text-primary' },

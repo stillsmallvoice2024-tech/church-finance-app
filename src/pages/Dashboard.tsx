@@ -384,7 +384,7 @@ export default function Dashboard() {
               />
               <StatCard
                 variant="hero"
-                title="Categories"
+                title="Funds"
                 value={<AnimatedStat value={categories.length} format={v => String(Math.round(v))} />}
                 href="/categories"
               />

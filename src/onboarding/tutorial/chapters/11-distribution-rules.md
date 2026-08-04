@@ -16,7 +16,7 @@ Admins only.
 1. Go to **Setup**, click the **Distribution Rules** tab, then **New Distribution Rule**.
 2. Type a **Configuration Name** (example: 2026 Allocation).
 3. Pick **Effective From** — the date the rule starts working.
-4. Add rows: for each row pick a **Category**, a **Budget Portion** (**Regular Funds**, **Designated Gift**, or **Savings Funds**), and a **Percentage**. Click **Add row** for more.
+4. Add rows: for each row pick a **Fund**, a **Budget Portion** (**Regular Funds**, **Designated Gift**, or **Savings Funds**), and a **Percentage**. Click **Add row** for more.
 5. Watch the **Running total** strip at the bottom — it turns green when your percentages add up to 100%.
 6. Click **Save as Draft**.
 7. Back in the list, click the **lock** icon (**Approve & Lock**) on your draft. Important: a rule does nothing until it is locked! Drafts say "Not in use — approve & lock to activate".

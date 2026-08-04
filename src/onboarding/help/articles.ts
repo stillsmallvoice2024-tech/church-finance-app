@@ -45,32 +45,32 @@ Open **Reports → Reports** to see summaries, totals by category, and allocatio
   {
     id: 'understanding-categories',
     title: 'Understanding Income and Outflow Types',
-    summary: 'How categories drive your financial reports and allocation rules.',
+    summary: 'How funds drive your financial reports and allocation rules.',
     category: 'categories',
     tags: ['categories', 'income', 'outflow', 'types', 'classification'],
     relatedPageId: 'categories',
     updatedAt: '2026-06-19',
     lastVerified: '2026-06-19',
-    breadcrumb: ['Budget & Allocation', 'Categories'],
+    breadcrumb: ['Budget & Allocation', 'Fund Setup'],
     content: `
-## What Are Categories?
+## What Are Funds?
 
 Every transaction is assigned a type:
 - **Income Types** for inflows (e.g. Tithes, Offerings, Building Fund)
 - **Outflow Types** for expenditure (e.g. Salaries, Rent, Supplies)
 
-Categories determine how transactions appear in reports and whether distribution rules apply.
+Funds determine how transactions appear in reports and whether distribution rules apply.
 
 ## Why They Matter
 
-- Reports group transactions by category — clear naming makes reports readable by leadership.
+- Reports group transactions by fund — clear naming makes reports readable by leadership.
 - Distribution rules are configured per income type, letting you automatically split income across departments or purposes.
-- Designated Gifts (restricted funds) are linked to specific categories.
+- Designated Gifts (restricted funds) are linked to specific funds.
 
 ## Best Practices
 
-- Keep category names short and recognisable (e.g. "Tithes" not "Regular Tithe Payments from Members").
-- Create separate categories for funds you want to track independently (e.g. split "Building Fund" from "General Offering").
+- Keep fund names short and recognisable (e.g. "Tithes" not "Regular Tithe Payments from Members").
+- Create separate funds for money you want to track independently (e.g. split "Building Fund" from "General Offering").
     `.trim(),
   },
 
@@ -293,8 +293,8 @@ The transaction appears immediately in **Inflows**, the **Bank Ledger**, and all
 
   {
     id: 'create-budget-category',
-    title: 'How to Create a Budget Category',
-    summary: 'Add a new category (money bucket) in the Categories page.',
+    title: 'How to Create a Fund',
+    summary: 'Add a new fund (money bucket) in the Fund Setup page.',
     category: 'categories',
     tags: ['category', 'budget', 'setup', 'allocation'],
     relatedPageId: 'categories',
@@ -302,13 +302,13 @@ The transaction appears immediately in **Inflows**, the **Bank Ledger**, and all
     lastVerified: '2026-06-19',
     howTo: true,
     estimatedMinutes: 2,
-    breadcrumb: ['Budget & Allocation', 'Categories'],
+    breadcrumb: ['Budget & Allocation', 'Fund Setup'],
     content: `
-## How to Create a Budget Category
+## How to Create a Fund
 
-**What you'll need:** A name for the category and optionally a group to organise it under.
+**What you'll need:** A name for the fund and optionally a group to organise it under.
 
-**Where to go:** Budget & Allocation → Categories
+**Where to go:** Budget & Allocation → Fund Setup
 
 **Time:** ~2 minutes
 
@@ -316,24 +316,24 @@ The transaction appears immediately in **Inflows**, the **Bank Ledger**, and all
 
 ### Steps
 
-1. Open **Budget & Allocation → Categories** in the left sidebar.
-2. Click **Add Category**.
-3. Type the **Category Name** (e.g. "Welfare", "Building Fund", "Missions").
-4. Optional: select or create a **Group** to keep related categories together. Click the folder-plus icon to create a new group inline.
-5. Optional: add a **Description** to explain what this category is for.
-6. Optional: add **Opening Balances** if this category already had money before you started using Clariva. Click **Add**, choose a portion type, and enter the amount.
+1. Open **Budget & Allocation → Fund Setup** in the left sidebar.
+2. Click **Add Fund**.
+3. Type the **Fund Name** (e.g. "Welfare", "Building Fund", "Missions").
+4. Optional: select or create a **Group** to keep related funds together. Click the folder-plus icon to create a new group inline.
+5. Optional: add a **Description** to explain what this fund is for.
+6. Optional: add **Opening Balances** if this fund already had money before you started using Clariva. Click **Add**, choose a portion type, and enter the amount.
 7. Click **Create**.
 
 ### Result
 
-The category appears in the Categories list and is immediately available for allocation rules, reports, and the Category Accounts ledger.
+The fund appears in the Fund List and is immediately available for allocation rules, reports, and the Category Accounts ledger.
 
 ---
 
 ### Common issues
 
-- **Cannot delete a category:** It already has transactions. Use **Hide Category** instead — it removes it from active lists while keeping the history.
-- **Category not appearing in allocation rules:** Check that your allocation config is active and covers the current date. See Administration → Setup → Allocation tab.
+- **Cannot delete a fund:** It already has transactions. Use **Hide Fund** instead — it removes it from active lists while keeping the history.
+- **Fund not appearing in allocation rules:** Check that your allocation config is active and covers the current date. See Administration → Setup → Allocation tab.
     `.trim(),
   },
 

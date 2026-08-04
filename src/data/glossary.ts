@@ -66,7 +66,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   },
   {
     term:       'Budget',
-    definition: 'A planned spending target for a category or department over a period. The system compares actual outflows against the budget to show variance.',
+    definition: 'A planned spending target for a fund or department over a period. The system compares actual outflows against the budget to show variance.',
   },
   {
     term:       'Reconciliation',
