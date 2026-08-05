@@ -33,16 +33,16 @@ export const GLOSSARY: GlossaryTerm[] = [
     definition: 'A portion of income set aside as savings or a reserve fund. It is deducted by your Distribution Rules before operating expenses.',
   },
   {
-    term:       'Category Fund Transfer',
-    definition: 'A transfer of funds between two bank accounts within the same organisation — not income or expense, just a movement of money.',
+    term:       'Fund-to-Fund Transfer',
+    definition: 'A transfer of funds between two funds within the same organisation — not income or expense, just a movement of money.',
   },
   {
     term:       'Bank Deposit',
     definition: 'Cash physically deposited into a bank account. Records the deposit date, amount, and which bank received it.',
   },
   {
-    term:       'Category Accounts',
-    definition: 'A view of all spending grouped by outflow category (e.g. Utilities, Salaries) so you can see where money is going.',
+    term:       'Fund Accounts',
+    definition: 'A view of all spending grouped by fund (e.g. Utilities, Salaries) so you can see where money is going.',
   },
   {
     term:       'Pending Deduction',

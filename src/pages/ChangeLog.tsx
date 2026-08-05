@@ -24,7 +24,7 @@ import { useOrgCurrency }     from '../hooks/useOrgCurrency'
 const TABLE_LABELS: Record<string, string> = {
   inflow_transactions:  'Inflow Transactions',
   outflow_transactions: 'Outflow Transactions',
-  intra_flows:          'IntraBank Transfers',
+  intra_flows:          'Fund-to-Fund Transfer',
   categories:           'Funds',
   banks:                'Banks',
   allocation_configs:   'Distribution Rules',

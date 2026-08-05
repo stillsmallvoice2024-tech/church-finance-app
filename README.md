@@ -28,7 +28,7 @@ A full-featured financial management system for **The Standing Church Internatio
 - **Accounts** — Chart of accounts, ledger entry history with sparkline charts, balance snapshots
 - **Special Projects** — Project-specific fund tracking with inline ledger, department units tab
 - **Foreign Currency** — USD/GBP/EUR/CNY balances, manual Naira rate inputs, FX transaction log
-- **Internal Transfers** — Intra-account flow tracking with account-to-account mapping
+- **Fund-to-Fund Transfer** — Internal fund movement tracking with fund-to-fund mapping
 - **Reports** — Annual summary, monthly breakdown, account balances, FX holdings, audit log (admin only)
 - **User Management** — Role management (admin/accountant/viewer), invite users, revoke access
 - **Settings** — Profile update, password reset, live DB status ping
@@ -135,7 +135,7 @@ Open [http://localhost:5173](http://localhost:5173)
 | `ledger_entries` | Balance snapshots per account |
 | `inflow_transactions` | Income and receipts |
 | `outflow_transactions` | Disbursements and payments |
-| `intra_flows` | Internal account-to-account transfers |
+| `intra_flows` | Internal fund-to-fund transfers |
 | `fx_transactions` | Foreign currency buy/sell entries |
 | `special_projects` | Project/department fund tracking |
 | `project_entries` | Individual ledger lines per project |

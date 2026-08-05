@@ -162,8 +162,11 @@ export default function IntraFlow() {
   const { execute: bulkDelete, loading: bulkDeleting } = useBulkDeleteTransaction('intra_flows')
   const { categories } = useCategories()
 
-  usePageTitle('Category Fund Transfers')
+  usePageTitle('Fund-to-Fund Transfer')
   const [tab, setTab] = useState<'transfers' | 'reallocation'>('transfers')
+
+  // Land at the top of the tab's own content instead of wherever the previous tab was scrolled to.
+  useEffect(() => { document.getElementById('main-content')?.scrollTo(0, 0) }, [tab])
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: IntraFlowRow) => { setEditRecord(r); setModalOpen(true) }
@@ -198,7 +201,7 @@ export default function IntraFlow() {
     refetch()
   }
 
-  const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', `Amount (${baseCurrencySymbol})`, 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
+  const IFL_CSV_HEADERS = ['Date', 'From Fund', 'To Fund', `Amount (${baseCurrencySymbol})`, 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
   const iflCsvRow = (r: IntraFlowRow) => [
     r.date, r.account_from ?? '', r.account_to ?? '', r.total_amount,
     r.account_from_stage1, r.account_from_stage2,
@@ -257,25 +260,31 @@ export default function IntraFlow() {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              {t === 'transfers' ? 'Category Fund Transfers' : 'Bulk Reallocation'}
+              {t === 'transfers' ? 'Fund-to-Fund Transfer' : 'Bulk Reallocation'}
             </button>
           ))}
         </nav>
       </div>
 
       {tab === 'reallocation' ? (
-        <BulkReallocation />
-      ) : tab === 'transfers' && (
-        <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Category Fund Transfer?">
-          A category fund transfer / internal transfer moves money between two category accounts or pockets within the organisation.
-          It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one category bucket to another.
-          Record a transfer when, for example, money record moves from "General Funds" category/bucket to "Project Funds" category/bucket..
-        </PageHelpBanner>
-      )}
+        <div className="space-y-5">
+          <div className="pb-4 border-b border-gray-100">
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Bulk Reallocation</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Move money for many funds at once</p>
+          </div>
+          <BulkReallocation />
+        </div>
+      ) : (
+      <>
+      <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Fund-to-Fund Transfer?">
+        A fund-to-fund transfer moves money between two funds or pockets within the organisation.
+        It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one fund bucket to another.
+        Record a transfer when, for example, money moves from the "General Funds" fund/bucket to the "Project Funds" fund/bucket.
+      </PageHelpBanner>
       {error ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <AlertCircle className="w-10 h-10 text-danger" />
-          <p className="font-semibold text-gray-800">Failed to load internal transfers</p>
+          <p className="font-semibold text-gray-800">Failed to load fund-to-fund transfers</p>
           <p className="text-sm text-gray-500">{error}</p>
           <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
             <RefreshCw className="w-4 h-4" /> Retry
@@ -287,7 +296,7 @@ export default function IntraFlow() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Category Fund Transfers</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Fund-to-Fund Transfer</h1>
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">
@@ -320,15 +329,15 @@ export default function IntraFlow() {
               <FilterGroup label="To">
                 <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
               </FilterGroup>
-              <FilterGroup label="From Category" className="min-w-[180px]">
+              <FilterGroup label="From Fund" className="min-w-[180px]">
                 <SearchableSelect value={accountFrom} onChange={setAccountFrom}
                   options={categories.map(c => ({ value: c.name, label: c.name }))}
-                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+                  placeholder="All funds" className={`${filterInputCls} bg-white`} />
               </FilterGroup>
-              <FilterGroup label="To Category" className="min-w-[180px]">
+              <FilterGroup label="To Fund" className="min-w-[180px]">
                 <SearchableSelect value={accountTo} onChange={setAccountTo}
                   options={categories.map(c => ({ value: c.name, label: c.name }))}
-                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+                  placeholder="All funds" className={`${filterInputCls} bg-white`} />
               </FilterGroup>
               {hasActiveFilters && (
                 <button
@@ -420,7 +429,7 @@ export default function IntraFlow() {
               ) : displayed.length === 0 ? (
                 <div className="py-12 text-center text-gray-400">
                   <ArrowLeftRight className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm">No internal transfers match your filters.</p>
+                  <p className="text-sm">No fund-to-fund transfers match your filters.</p>
                 </div>
               ) : (
                 displayed.map(row => {
@@ -553,7 +562,7 @@ export default function IntraFlow() {
                       <td colSpan={9} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-gray-400">
                           <ArrowLeftRight className="w-10 h-10 text-gray-200" />
-                          <p className="text-sm">No internal transfers match your filters.</p>
+                          <p className="text-sm">No fund-to-fund transfers match your filters.</p>
                         </div>
                       </td>
                     </tr>
@@ -626,6 +635,8 @@ export default function IntraFlow() {
         </Card>
       </div>
       )}
+      </>
+      )}
 
       <AddIntraFlowModal
         open={modalOpen}
@@ -638,7 +649,7 @@ export default function IntraFlow() {
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
         loading={deleting}
-        label="this internal transfer"
+        label="this fund-to-fund transfer"
       />
       <BulkEditIntraFlowModal
         open={bulkEditOpen}
@@ -654,7 +665,7 @@ export default function IntraFlow() {
         onClose={() => setBulkDeleteConfirmOpen(false)}
         onConfirm={handleBulkDelete}
         loading={bulkDeleting}
-        label={`${selectedIds.size} internal transfer${selectedIds.size !== 1 ? 's' : ''}`}
+        label={`${selectedIds.size} fund-to-fund transfer${selectedIds.size !== 1 ? 's' : ''}`}
       />
       <DescriptionTooltip tooltip={descTooltip} />
     </>

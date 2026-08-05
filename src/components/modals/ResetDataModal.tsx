@@ -20,7 +20,7 @@ interface ExportItem {
 const INITIAL_EXPORTS: ExportItem[] = [
   { key: 'inflows',               label: 'Inflows',                   status: 'pending' },
   { key: 'outflows',              label: 'Outflows',                  status: 'pending' },
-  { key: 'intra-flows',           label: 'Category Fund Transfers',        status: 'pending' },
+  { key: 'intra-flows',           label: 'Fund-to-Fund Transfer',        status: 'pending' },
   { key: 'bank-deposits',         label: 'Bank Deposits',             status: 'pending' },
   { key: 'intrabank-transfers',   label: 'Intrabank Transfers',       status: 'pending' },
   { key: 'foreign-currency',      label: 'Foreign Currency',          status: 'pending' },
@@ -28,7 +28,7 @@ const INITIAL_EXPORTS: ExportItem[] = [
   { key: 'project-entries',       label: 'Special Project Entries',   status: 'pending' },
   { key: 'receipts',              label: 'Receipts (metadata)',        status: 'pending' },
   { key: 'bank-ledger',           label: 'Bank Ledger',               status: 'pending' },
-  { key: 'category-ledger',       label: 'Category Ledger',           status: 'pending' },
+  { key: 'category-ledger',       label: 'Fund Ledger',           status: 'pending' },
   { key: 'audit-log',             label: 'Audit Log',                 status: 'pending' },
 ]
 
@@ -319,7 +319,7 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
             <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div className="text-sm text-red-700 space-y-1">
               <p className="font-semibold">This action is permanent and irreversible.</p>
-              <p>All transaction records will be deleted — inflows, outflows, internal transfers, bank deposits, intrabank transfers, foreign currency, special project entries, receipts, and the audit log. Your data has been exported above.</p>
+              <p>All transaction records will be deleted — inflows, outflows, fund-to-fund transfers, bank deposits, intrabank transfers, foreign currency, special project entries, receipts, and the audit log. Your data has been exported above.</p>
             </div>
           </div>
           <p className="text-sm text-gray-600">

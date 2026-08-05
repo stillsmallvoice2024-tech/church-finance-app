@@ -36,7 +36,7 @@ import { FUND_TYPE_LABELS }   from '../utils/rowDetailItems'
 // ── Sort field definitions ────────────────────────────────────────────────────
 
 const SUMMARY_COLUMNS: TableColumnDef<CategoryRow>[] = [
-  { key: 'name',                label: 'Category',         sortType: 'text',    primary: true, accessor: r => r.name },
+  { key: 'name',                label: 'Fund',             sortType: 'text',    primary: true, accessor: r => r.name },
   { key: 'percentage',          label: 'Share %',          sortType: 'numeric', primary: true, accessor: r => r.percentage ?? 0 },
   { key: 'percentageAllocated', label: 'Regular Funds',    sortType: 'numeric', primary: true },
   { key: 'specificSeed',        label: 'Designated Gifts', sortType: 'numeric', primary: true },
@@ -104,7 +104,7 @@ const PORTION_LABELS: Record<Portion, string> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CategoryLedger() {
-  usePageTitle('Category Accounts')
+  usePageTitle('Fund Accounts')
   const { baseCurrencySymbol, baseCurrencyCode } = useOrgCurrency()
   const orgId = useOrgStore(s => s.orgId)
 
@@ -676,8 +676,8 @@ export default function CategoryLedger() {
 
   const activeLedgerField = LEDGER_SORT_FIELDS.find(f => f.key === ledgerViewState.sortKey)
 
-  const CL_CSV_FILE = `category-ledger-${new Date().toISOString().slice(0, 10)}.csv`
-  const SUMMARY_CSV_HEADERS = ['Category', '% Alloc', `${baseCurrencySymbol} Allocation`, 'Designated Gift', 'Savings Net']
+  const CL_CSV_FILE = `fund-ledger-${new Date().toISOString().slice(0, 10)}.csv`
+  const SUMMARY_CSV_HEADERS = ['Fund', '% Alloc', `${baseCurrencySymbol} Allocation`, 'Designated Gift', 'Savings Net']
   const summaryCsvRow = (r: CategoryRow) => [r.name, r.percentage ?? '', r.percentageAllocated, r.specificSeed, r.savingsIn - r.savingsOut]
   const LEDGER_CSV_HEADERS = ['Date', 'Description', `Inflow (${baseCurrencySymbol})`, `Outflow (${baseCurrencySymbol})`, `Balance (${baseCurrencySymbol})`]
   const ledgerCsvRow = (r: LedgerRow) => [r.date, r.description ?? '', r.inflow || '', r.outflow || '', r.balance]
@@ -701,19 +701,19 @@ export default function CategoryLedger() {
   return (
     <div className="space-y-5">
 
-      <PageHelpBanner storageKey="help-dismissed-category-ledger" title="What is the Category Ledger?">
-        The Category Ledger shows how outflow spending is distributed across budget categories (e.g. Salaries, Utilities, Ministry).
-        Use the Summary view to see total spending per category, or switch to Ledger view to see individual transactions.
-        Categories are set up in the Categories page and assigned to outflows at the time of recording.
+      <PageHelpBanner storageKey="help-dismissed-category-ledger" title="What is the Fund Ledger?">
+        The Fund Ledger shows how outflow spending is distributed across funds (e.g. Salaries, Utilities, Ministry).
+        Use the Summary view to see total spending per fund, or switch to Ledger view to see individual transactions.
+        Funds are set up in the Fund Setup page and assigned to outflows at the time of recording.
       </PageHelpBanner>
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Category Accounts</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Fund Accounts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {viewMode === 'summary' ? 'Aggregated view of all fund balances per category' :
-             viewMode === 'ledger'  ? 'Transaction-level view per category and fund type' :
+            {viewMode === 'summary' ? 'Aggregated view of all fund balances per fund' :
+             viewMode === 'ledger'  ? 'Transaction-level view per fund and fund type' :
                                       'Foreign-currency transaction history by currency'}
           </p>
         </div>
@@ -779,7 +779,7 @@ export default function CategoryLedger() {
           <div className="flex flex-wrap items-center gap-3">
             <SearchableSelect value={activeCategory} onChange={setActiveCategory}
               options={rows.map(r => ({ value: r.name, label: r.name }))}
-              placeholder="Select a category…"
+              placeholder="Select a fund…"
               className="text-sm px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700 min-w-[180px]" />
 
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
@@ -804,8 +804,8 @@ export default function CategoryLedger() {
                 <Layers className="w-8 h-8 text-gray-400" />
               </div>
               <div>
-                <p className="font-semibold text-gray-700">Select a category</p>
-                <p className="text-sm text-gray-500 mt-1">Choose a category above to view its transaction ledger.</p>
+                <p className="font-semibold text-gray-700">Select a fund</p>
+                <p className="text-sm text-gray-500 mt-1">Choose a fund above to view its transaction ledger.</p>
               </div>
             </div>
           )}
@@ -831,7 +831,7 @@ export default function CategoryLedger() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="col-span-2 sm:col-span-1 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-xs font-bold uppercase tracking-wide text-primary mb-1 truncate">{activeCategory}</p>
-                  <p className="text-xs text-gray-500">{ledgerPortion} portion</p>
+                  <p className="text-xs text-gray-500">{PORTION_LABELS[ledgerPortion]} fund type</p>
                 </div>
                 <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 min-w-0 overflow-hidden">
                   <p className="text-xs font-bold uppercase tracking-wide text-success mb-1">Total Inflow</p>
@@ -854,7 +854,7 @@ export default function CategoryLedger() {
                   <Layers className="w-8 h-8 text-gray-300" />
                   <div>
                     <p className="text-sm font-medium text-gray-600">No transactions found</p>
-                    <p className="text-xs text-gray-500 mt-0.5">No {ledgerPortion} transactions for {activeCategory}.</p>
+                    <p className="text-xs text-gray-500 mt-0.5">No {PORTION_LABELS[ledgerPortion]} transactions for {activeCategory}.</p>
                   </div>
                 </div>
               )}
@@ -1458,7 +1458,7 @@ function SimpleCategorySummary({
         value={activeCategory}
         onChange={onCategoryChange}
         options={categoryOptions}
-        placeholder="Select a category to zoom in…"
+        placeholder="Select a fund to zoom in…"
         className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white text-gray-700"
       />
       {activeCategory && (
@@ -1484,7 +1484,7 @@ function SimpleCategorySummary({
   ) : ranked.length === 0 ? (
     <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-2xl border border-dashed border-gray-200 bg-gray-50">
       <LayoutList className="w-8 h-8 text-primary/60" />
-      <p className="text-sm text-gray-500">No category balances yet.</p>
+      <p className="text-sm text-gray-500">No fund balances yet.</p>
     </div>
   ) : (
     <div className="space-y-3">
@@ -1499,7 +1499,7 @@ function SimpleCategorySummary({
               <button
                 type="button"
                 onClick={() => onCategoryChange('')}
-                aria-label="Close category detail"
+                aria-label="Close fund detail"
                 className="p-1 -m-1 rounded text-gray-400 hover:text-gray-600 hover:bg-black/5 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
@@ -1522,7 +1522,7 @@ function SimpleCategorySummary({
               not just its combined fund-type composition. */}
           {selected.isOther && selected.members && selected.members.length > 0 && (
             <div className="mt-3 pt-3 border-t border-primary/20 space-y-1">
-              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Categories in this group</p>
+              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Funds in this group</p>
               {selected.members.slice(0, 10).map(m => (
                 <div key={m.name} className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5 min-w-0 mr-2">
@@ -1555,7 +1555,7 @@ function SimpleCategorySummary({
           An absolutely-positioned div per row sidesteps that entirely: the
           whole row is clickable regardless of how thin its bar is. */}
       <div className="rounded-2xl border border-gray-200 bg-white p-4">
-        <p className="text-[11px] text-gray-400 mb-2">Tap a category to see its fund-type breakdown</p>
+        <p className="text-[11px] text-gray-400 mb-2">Tap a fund to see its fund-type breakdown</p>
         <div className="relative">
           <ResponsiveContainer width="100%" height={rowHeight * displayRows.length}>
             <BarChart data={displayRows} layout="vertical" margin={{ top: 0, right: 12, left: 4, bottom: 0 }}>
@@ -1601,7 +1601,7 @@ function SimpleCategorySummary({
       pageId="category-accounts"
       hero={hero}
       filters={filters}
-      bodyTitle="Fund balances by category"
+      bodyTitle="Fund balances overview"
       body={<>{errorBanner}{body}</>}
       onViewAll={onViewLedger}
       viewAllLabel="View full ledger"

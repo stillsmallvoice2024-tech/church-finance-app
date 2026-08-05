@@ -950,7 +950,7 @@ function CategoryRow({ cat, openingBalances, onEdit, onDelete, onToggleHide, che
             </button>
           )}
           {cat.is_system ? (
-            <span className="p-1.5 text-gray-300" title="System category — cannot be deleted">
+            <span className="p-1.5 text-gray-300" title="System fund — cannot be deleted">
               <Lock className="w-4 h-4" />
             </span>
           ) : (

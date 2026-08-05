@@ -321,12 +321,12 @@ The transaction appears immediately in **Inflows**, the **Bank Ledger**, and all
 3. Type the **Fund Name** (e.g. "Welfare", "Building Fund", "Missions").
 4. Optional: select or create a **Group** to keep related funds together. Click the folder-plus icon to create a new group inline.
 5. Optional: add a **Description** to explain what this fund is for.
-6. Optional: add **Opening Balances** if this fund already had money before you started using Clariva. Click **Add**, choose a portion type, and enter the amount.
+6. Optional: add **Opening Balances** if this fund already had money before you started using Clariva. Click **Add**, choose a fund type, and enter the amount.
 7. Click **Create**.
 
 ### Result
 
-The fund appears in the Fund List and is immediately available for allocation rules, reports, and the Category Accounts ledger.
+The fund appears in the Fund List and is immediately available for allocation rules, reports, and the Fund Accounts ledger.
 
 ---
 

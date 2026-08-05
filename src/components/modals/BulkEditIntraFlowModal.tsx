@@ -83,14 +83,14 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess, onResult
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">From Category</label>
+          <label className="text-xs font-medium text-gray-500">From Fund</label>
           <SearchableSelect value={accountFrom} onChange={setAccountFrom}
             options={categories.map(c => ({ value: c.name, label: c.name }))}
             placeholder="— Keep existing —" className={`${filterInputCls} bg-white`} />
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">From Portion</label>
+          <label className="text-xs font-medium text-gray-500">From Fund Type</label>
           <select value={accountFromStage2} onChange={e => setAccountFromStage2(e.target.value)} className={`${filterInputCls} bg-white`}>
             <option value="">— Keep existing —</option>
             {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}
@@ -98,14 +98,14 @@ export function BulkEditIntraFlowModal({ open, onClose, ids, onSuccess, onResult
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">To Category</label>
+          <label className="text-xs font-medium text-gray-500">To Fund</label>
           <SearchableSelect value={accountTo} onChange={setAccountTo}
             options={categories.map(c => ({ value: c.name, label: c.name }))}
             placeholder="— Keep existing —" className={`${filterInputCls} bg-white`} />
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">To Portion</label>
+          <label className="text-xs font-medium text-gray-500">To Fund Type</label>
           <select value={accountToStage2} onChange={e => setAccountToStage2(e.target.value)} className={`${filterInputCls} bg-white`}>
             <option value="">— Keep existing —</option>
             {PORTIONS.map(p => <option key={p} value={p}>{PORTION_LABELS[p] ?? p}</option>)}

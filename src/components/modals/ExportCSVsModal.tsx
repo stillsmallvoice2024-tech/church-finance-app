@@ -17,7 +17,7 @@ interface ExportItem {
 const EXPORT_ITEMS: ExportItem[] = [
   { key: 'inflows',             label: 'Inflows',                  status: 'pending' },
   { key: 'outflows',            label: 'Outflows',                 status: 'pending' },
-  { key: 'intra-flows',         label: 'Category Fund Transfers',       status: 'pending' },
+  { key: 'intra-flows',         label: 'Fund-to-Fund Transfer',       status: 'pending' },
   { key: 'bank-deposits',       label: 'Bank Deposits',            status: 'pending' },
   { key: 'intrabank-transfers', label: 'Intrabank Transfers',      status: 'pending' },
   { key: 'foreign-currency',    label: 'Foreign Currency',         status: 'pending' },
@@ -25,7 +25,7 @@ const EXPORT_ITEMS: ExportItem[] = [
   { key: 'project-entries',     label: 'Special Project Entries',  status: 'pending' },
   { key: 'receipts',            label: 'Receipts (metadata)',      status: 'pending' },
   { key: 'bank-ledger',         label: 'Bank Ledger',              status: 'pending' },
-  { key: 'category-ledger',     label: 'Category Ledger',          status: 'pending' },
+  { key: 'category-ledger',     label: 'Fund Ledger',          status: 'pending' },
   { key: 'audit-log',           label: 'Audit Log',                status: 'pending' },
 ]
 

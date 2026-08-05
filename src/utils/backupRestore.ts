@@ -129,7 +129,7 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
     dependencies: ['outflow_types'],
   },
   {
-    key: 'intra_flows', label: 'Intra-Account Flows', module: 'Transactions',
+    key: 'intra_flows', label: 'Fund-to-Fund Transfer', module: 'Transactions',
     restorePriority: 13, backupEnabled: true, restoreMode: 'merge',
     conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: false,

@@ -87,7 +87,7 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = [
   {
     id: 'categories',
     number: 7,
-    title: 'Fund Setup & Category Accounts',
+    title: 'Fund Setup & Fund Accounts',
     summary: 'Create money buckets, group them, set opening balances, and read their ledgers.',
     updatedAt: '2026-06-20',
     content: ch07,
