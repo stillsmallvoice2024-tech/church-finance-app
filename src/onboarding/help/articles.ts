@@ -51,7 +51,7 @@ Open **Reports → Reports** to see summaries, totals by category, and allocatio
     relatedPageId: 'categories',
     updatedAt: '2026-06-19',
     lastVerified: '2026-06-19',
-    breadcrumb: ['Budget & Allocation', 'Fund Setup'],
+    breadcrumb: ['Fund Management', 'Fund Setup'],
     content: `
 ## What Are Funds?
 
@@ -302,13 +302,13 @@ The transaction appears immediately in **Inflows**, the **Bank Ledger**, and all
     lastVerified: '2026-06-19',
     howTo: true,
     estimatedMinutes: 2,
-    breadcrumb: ['Budget & Allocation', 'Fund Setup'],
+    breadcrumb: ['Fund Management', 'Fund Setup'],
     content: `
 ## How to Create a Fund
 
 **What you'll need:** A name for the fund and optionally a group to organise it under.
 
-**Where to go:** Budget & Allocation → Fund Setup
+**Where to go:** Fund Management → Fund Setup
 
 **Time:** ~2 minutes
 
@@ -316,7 +316,7 @@ The transaction appears immediately in **Inflows**, the **Bank Ledger**, and all
 
 ### Steps
 
-1. Open **Budget & Allocation → Fund Setup** in the left sidebar.
+1. Open **Fund Management → Fund Setup** in the left sidebar.
 2. Click **Add Fund**.
 3. Type the **Fund Name** (e.g. "Welfare", "Building Fund", "Missions").
 4. Optional: select or create a **Group** to keep related funds together. Click the folder-plus icon to create a new group inline.
