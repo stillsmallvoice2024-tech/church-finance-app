@@ -117,14 +117,17 @@ export async function parsePDF(file: File, password?: string): Promise<ParsedShe
     pages.push({ height: viewport.height, items })
   }
 
-  const { headers, rows, tableDetected } = extractTableFromPages(pages)
+  const { headers, rows, tableDetected, rowPages } = extractTableFromPages(pages)
   if (rows.length === 0 && headers.length === 0) return []
 
   // Belt-and-braces against page furniture reaching a transaction row. The grid
   // logic already drops furniture *rows* structurally; this catches the residue
-  // that survived inside a cell. Applied here rather than at the call site so
-  // every consumer of parsePDF is covered, not just the converter overlay.
-  const scrubbed = stripPageFurniture(rows)
+  // that survived inside a cell — a support code or helpline that the bank
+  // prints inside the date column's bounds, so column geometry cannot separate
+  // it. Passing rowPages is what lets the scrubber act on those: they are only
+  // distinguishable from a reference number by the fact that they recur on
+  // every page, and without provenance that test cannot run.
+  const scrubbed = stripPageFurniture(rows, rowPages)
 
   return [{
     name: file.name.replace(/\.pdf$/i, ''),

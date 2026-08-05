@@ -38,6 +38,8 @@ interface TextLine {
   y: number
   /** Y offset by all preceding page heights — safe for cross-page comparisons. */
   globalY: number
+  /** Zero-based index of the page this line was read from. */
+  page: number
   items: PdfTextItem[]
 }
 
@@ -453,6 +455,8 @@ function findHeaderBand(lines: PdfTextItem[][]): HeaderBand | null {
 
 interface GridLine {
   globalY: number
+  /** Zero-based index of the page this line was read from. */
+  page: number
   cells: string[]
 }
 
@@ -491,27 +495,30 @@ function appendCell(existing: string, addition: string): string {
  * This handles both statements whose description wraps below the amounts and
  * those whose narrow date column wraps above and below them.
  */
-function mergeContinuationLines(lines: GridLine[], amountCols: Set<number>): string[][] {
+function mergeContinuationLines(
+  lines: GridLine[],
+  amountCols: Set<number>,
+): Array<{ cells: string[]; page: number }> {
   const isAnchor = (cells: string[]) =>
     amountCols.size > 0
       ? [...amountCols].some(ci => cells[ci]?.trim())
       : !!cells[0]?.trim() && cells.filter(c => c.trim()).length >= Math.ceil(cells.length / 2)
 
-  const merged: string[][] = []
+  const merged: Array<{ cells: string[]; page: number }> = []
   const pending: GridLine[] = []
   let prevAnchorY: number | null = null
 
   const flushTrailing = (conts: string[][]) => {
     if (conts.length === 0 || merged.length === 0) return
-    const prev = merged[merged.length - 1]
+    const prev = merged[merged.length - 1].cells
     for (const cont of conts) {
       cont.forEach((cell, ci) => { prev[ci] = appendCell(prev[ci] ?? '', cell) })
     }
   }
 
-  for (const { globalY, cells } of lines) {
+  for (const { globalY, page, cells } of lines) {
     if (!isAnchor(cells)) {
-      pending.push({ globalY, cells: [...cells] })
+      pending.push({ globalY, page, cells: [...cells] })
       continue
     }
 
@@ -535,7 +542,7 @@ function mergeContinuationLines(lines: GridLine[], amountCols: Set<number>): str
 
     pending.length = 0
     prevAnchorY = globalY
-    merged.push(anchorCells)
+    merged.push({ cells: anchorCells, page })
   }
 
   flushTrailing(pending.map(p => p.cells))
@@ -548,6 +555,13 @@ export interface ExtractedTable {
   headers: string[]
   rows: string[][]
   tableDetected: boolean
+  /**
+   * Source page index for each row, parallel to `rows`. Page furniture repeats
+   * across pages while transaction content does not, so this is the evidence
+   * the furniture scrubber needs to tell a recurring helpline apart from a
+   * one-off reference number.
+   */
+  rowPages: number[]
 }
 
 export function extractTableFromPages(pages: PdfPageItems[]): ExtractedTable {
@@ -555,16 +569,16 @@ export function extractTableFromPages(pages: PdfPageItems[]): ExtractedTable {
   //    with a global Y for the cross-page continuation logic.
   let yOffset = 0
   const pageLines: TextLine[][] = []
-  for (const page of pages) {
+  pages.forEach((page, pageIndex) => {
     const lines = groupIntoLines(page.items)
       .filter(items => items.some(i => i.text.trim()))
-      .map(items => ({ y: items[0].y, globalY: yOffset + items[0].y, items }))
+      .map(items => ({ y: items[0].y, globalY: yOffset + items[0].y, page: pageIndex, items }))
     pageLines.push(lines)
     yOffset += page.height
-  }
+  })
 
   const allLines = pageLines.flat()
-  if (allLines.length === 0) return { headers: [], rows: [], tableDetected: false }
+  if (allLines.length === 0) return { headers: [], rows: [], tableDetected: false, rowPages: [] }
 
   // 2. Locate the header band on each page independently. Continuation pages
   //    that reprint no header inherit the previous page's column model.
@@ -594,7 +608,7 @@ export function extractTableFromPages(pages: PdfPageItems[]): ExtractedTable {
 
     const bounds = refineBounds(bodyLines.map(l => l.items), model)
     for (const line of bodyLines) {
-      collected.push({ globalY: line.globalY, cells: assignToColumns(line.items, bounds) })
+      collected.push({ globalY: line.globalY, page: p, cells: assignToColumns(line.items, bounds) })
     }
   }
 
@@ -621,13 +635,14 @@ export function extractTableFromPages(pages: PdfPageItems[]): ExtractedTable {
   // 6. Drop columns that are empty in both the header and every data row.
   const keep: number[] = []
   for (let ci = 0; ci < colCount; ci++) {
-    if (headers[ci]?.trim() || rows.some(r => r[ci]?.trim())) keep.push(ci)
+    if (headers[ci]?.trim() || rows.some(r => r.cells[ci]?.trim())) keep.push(ci)
   }
 
   return {
     headers: keep.map((ci, i) => headers[ci]?.trim() || `Column ${i + 1}`),
-    rows: rows.map(r => keep.map(ci => r[ci] ?? '')),
+    rows: rows.map(r => keep.map(ci => r.cells[ci] ?? '')),
     tableDetected: true,
+    rowPages: rows.map(r => r.page),
   }
 }
 
@@ -635,13 +650,13 @@ export function extractTableFromPages(pages: PdfPageItems[]): ExtractedTable {
 function fallbackExtraction(allLines: TextLine[]): ExtractedTable {
   const merged = allLines.map(l => mergeRowFragments(l.items))
   const model  = buildColumnModel(merged)
-  if (model.starts.length === 0) return { headers: [], rows: [], tableDetected: false }
+  if (model.starts.length === 0) return { headers: [], rows: [], tableDetected: false, rowPages: [] }
 
   const grid = allLines
-    .map((l, i) => ({ globalY: l.globalY, cells: assignToColumns(merged[i], model.bounds) }))
+    .map((l, i) => ({ globalY: l.globalY, page: l.page, cells: assignToColumns(merged[i], model.bounds) }))
     .filter(({ cells }) => cells.some(c => c.trim()))
 
-  if (grid.length === 0) return { headers: [], rows: [], tableDetected: false }
+  if (grid.length === 0) return { headers: [], rows: [], tableDetected: false, rowPages: [] }
 
   const first = grid[0].cells
   const firstNonEmpty = first.filter(c => c.trim())
@@ -657,10 +672,10 @@ function fallbackExtraction(allLines: TextLine[]): ExtractedTable {
 
   const keep: number[] = []
   for (let ci = 0; ci < headers.length; ci++) {
-    if (rows.some(r => r[ci]?.trim())) keep.push(ci)
+    if (rows.some(r => r.cells[ci]?.trim())) keep.push(ci)
   }
 
-  const outRows = rows.map(r => keep.map(ci => r[ci] ?? ''))
+  const outRows = rows.map(r => keep.map(ci => r.cells[ci] ?? ''))
 
   // A guessed grid is only worth returning if it plausibly *is* a statement
   // table: more than one column, and at least one row carrying a date or an
@@ -669,11 +684,12 @@ function fallbackExtraction(allLines: TextLine[]): ExtractedTable {
   // one-column grid that the caller would accept as an extraction instead of
   // falling through to OCR, which is the only thing that can read such a file.
   const plausible = keep.length >= 2 && outRows.some(isDataLike)
-  if (!plausible) return { headers: [], rows: [], tableDetected: false }
+  if (!plausible) return { headers: [], rows: [], tableDetected: false, rowPages: [] }
 
   return {
     headers: keep.map((ci, i) => headers[ci] || `Column ${i + 1}`),
     rows: outRows,
     tableDetected: false,
+    rowPages: rows.map(r => r.page),
   }
 }

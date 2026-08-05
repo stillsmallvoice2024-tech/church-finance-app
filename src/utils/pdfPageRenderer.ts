@@ -26,6 +26,19 @@ export const MAX_OCR_IMAGE_EDGE = 2576
 const MAX_RENDER_SCALE = 4.0
 
 /**
+ * Floor for the back-off below — beneath this, small print stops being legible
+ * and OCR accuracy falls off faster than the payload shrinks.
+ */
+const MIN_RENDER_SCALE = 1.5
+
+/**
+ * Ceiling on the base64 payload for one page. The vision API rejects a single
+ * base64 image above 5MB outright, so this leaves headroom for the surrounding
+ * JSON envelope rather than sitting on the limit.
+ */
+const MAX_OCR_IMAGE_BYTES = 3_500_000
+
+/**
  * Scale that lands the page's longest edge as close to the model's limit as
  * possible. Derived from the page's own dimensions rather than a fixed
  * multiplier so Letter, A4 and any odd media box all arrive at full usable
@@ -54,16 +67,34 @@ export async function renderPageToBase64(
   const page = await pdf!.getPage(pageNumber)
   // Measure the page at 1:1 first, then pick the scale that fills the model's
   // resolution budget.
-  const base     = page.getViewport({ scale: 1 })
-  const viewport = page.getViewport({ scale: scale ?? fitScale(base.width, base.height) })
+  const base = page.getViewport({ scale: 1 })
 
-  const canvas   = document.createElement('canvas')
-  canvas.width   = viewport.width
-  canvas.height  = viewport.height
+  const renderAt = async (s: number): Promise<string> => {
+    const viewport = page.getViewport({ scale: s })
+    const canvas   = document.createElement('canvas')
+    canvas.width   = viewport.width
+    canvas.height  = viewport.height
 
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas 2D context unavailable')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas 2D context unavailable')
 
-  await page.render({ canvas, canvasContext: ctx, viewport }).promise
-  return canvas.toDataURL('image/png').split(',')[1]
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise
+    return canvas.toDataURL('image/png').split(',')[1]
+  }
+
+  // An explicit scale is honoured as given — the caller has decided.
+  if (scale !== undefined) return renderAt(scale)
+
+  // Otherwise fill the resolution budget, then back off if the encoded image
+  // would breach the payload ceiling. A dense page can encode far larger than a
+  // sparse one at the same pixel count, so this has to be measured rather than
+  // predicted: an over-large image is rejected by the API outright, which would
+  // fail the whole page for the sake of detail the model never sees.
+  let current = fitScale(base.width, base.height)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const encoded = await renderAt(current)
+    if (encoded.length <= MAX_OCR_IMAGE_BYTES || current <= MIN_RENDER_SCALE) return encoded
+    current = Math.max(MIN_RENDER_SCALE, current * 0.75)
+  }
+  return renderAt(MIN_RENDER_SCALE)
 }
