@@ -2,7 +2,7 @@
 
 **What you'll need:** A name for the fund and optionally a group to organise it under.
 
-**Where to go:** Budget & Allocation → Fund Setup
+**Where to go:** Fund Management → Fund Setup
 
 **Time:** ~2 minutes per fund.
 
@@ -10,7 +10,7 @@
 
 ### Steps
 
-1. Open **Budget & Allocation → Fund Setup** in the left sidebar.
+1. Open **Fund Management → Fund Setup** in the left sidebar.
 2. Make sure you are on the **Local** tab (for your main currency) or the **FX** tab for foreign-currency funds.
 3. Click **Add Fund**.
 4. Type the **Fund Name** — keep it short and recognisable (e.g. "Welfare", "Building Fund", "Missions").
@@ -39,7 +39,7 @@ The fund appears in the fund list and is immediately available in allocation rul
 
 **What you'll need:** At least one fund with imported or manually entered transactions.
 
-**Where to go:** Budget & Allocation → Category Ledger
+**Where to go:** Fund Management → Category Ledger
 
 **Time:** ~2 minutes.
 
@@ -47,7 +47,7 @@ The fund appears in the fund list and is immediately available in allocation rul
 
 ### Steps
 
-1. Open **Budget & Allocation → Category Ledger** in the left sidebar.
+1. Open **Fund Management → Category Ledger** in the left sidebar.
 2. Click the **Ledger** view tab at the top.
 3. Choose a **Portion** from the dropdown: Regular Funds, Designated Gift, or Savings Funds.
 4. Choose a **Fund** from the next dropdown.
@@ -62,7 +62,7 @@ You can verify exactly how much money is in each bucket and trace every entry th
 
 ## How to See Fund Totals at a Glance (Summary View)
 
-1. Open **Budget & Allocation → Category Ledger**.
+1. Open **Fund Management → Category Ledger**.
 2. Click the **Summary** view tab.
 3. The table shows totals for every fund across three pockets: Regular Funds, Designated Gifts, and Savings Balance.
 4. Use the filter buttons (**All**, **Regular Funds**, **Designated Gifts**, **Savings**) to focus on one pocket.

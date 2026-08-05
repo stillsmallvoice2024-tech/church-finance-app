@@ -67,7 +67,7 @@ const NAV_GROUPS: NavGroupDef[] = [
   },
   {
     id: 'budget',
-    label: 'Budget & Allocation',
+    label: 'Fund Management',
     defaultOpen: false,
     items: [
       { label: 'Fund Setup',         path: '/categories',             icon: Layers   },
