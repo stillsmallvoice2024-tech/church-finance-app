@@ -63,7 +63,7 @@ const DRAWER_SECTIONS: DrawerSection[] = [
     ],
   },
   {
-    label: 'Budget & Allocation',
+    label: 'Fund Management',
     items: [
       { label: 'Fund Setup',         path: '/categories',             icon: Layers   },
       { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent  },

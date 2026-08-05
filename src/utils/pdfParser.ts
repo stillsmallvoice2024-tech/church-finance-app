@@ -75,6 +75,7 @@ export {
 } from './pdfTableExtract'
 
 import { extractTableFromPages, type PdfTextItem, type PdfPageItems } from './pdfTableExtract'
+import { stripPageFurniture } from './pageFurniture'
 
 const DEFAULT_FONT_SIZE = 10
 
@@ -119,11 +120,17 @@ export async function parsePDF(file: File, password?: string): Promise<ParsedShe
   const { headers, rows, tableDetected } = extractTableFromPages(pages)
   if (rows.length === 0 && headers.length === 0) return []
 
+  // Belt-and-braces against page furniture reaching a transaction row. The grid
+  // logic already drops furniture *rows* structurally; this catches the residue
+  // that survived inside a cell. Applied here rather than at the call site so
+  // every consumer of parsePDF is covered, not just the converter overlay.
+  const scrubbed = stripPageFurniture(rows)
+
   return [{
     name: file.name.replace(/\.pdf$/i, ''),
     headers,
-    rows,
-    rowCount: rows.length,
+    rows: scrubbed.rows,
+    rowCount: scrubbed.rows.length,
     tableDetected,
     pageCount: pdf!.numPages,
   }]

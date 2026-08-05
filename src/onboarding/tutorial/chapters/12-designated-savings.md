@@ -4,7 +4,7 @@ Three pages that track special pockets of money: **Designated Gifts** (money giv
 
 ## Part 1: Designated Gifts
 
-Find it at **Budget & Allocation → Designated Gifts**.
+Find it at **Fund Management → Designated Gifts**.
 
 A designated gift is money with a sticky note on it: "use this for the building project". It is restricted — it should only be spent on that purpose.
 
@@ -20,7 +20,7 @@ When an inflow's **Fund Type** is set to **Designated Gift** (also called Specif
 
 ## Part 2: Savings Funds
 
-Find it at **Budget & Allocation → Savings Funds**.
+Find it at **Fund Management → Savings Funds**.
 
 Savings are the organisation's rainy-day money. Each time qualifying money comes in, a slice can go to savings (your distribution rule decides the slice).
 

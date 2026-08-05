@@ -915,7 +915,7 @@ function CategoriesStep({ onDataReady }: { onDataReady: (ready: boolean) => void
         </p>
       )}
 
-      <EditLaterNote where="Budget & Allocation → Fund Setup" />
+      <EditLaterNote where="Fund Management → Fund Setup" />
     </div>
   )
 }

@@ -18,7 +18,11 @@ export interface InsertResilientResult<T> {
 }
 
 export async function insertBatchResilient<T>(
-  insert: (rows: T[]) => Promise<{ error: { message: string } | null }>,
+  // PromiseLike, not Promise: Supabase's query builder is a thenable that only
+  // runs when awaited, and it lacks `catch`/`finally`, so it does not satisfy
+  // `Promise`. Passing `rows => supabase.from(t).insert(rows)` directly is the
+  // intended call shape, and awaiting is all this function does with it.
+  insert: (rows: T[]) => PromiseLike<{ error: { message: string } | null }>,
   rows: T[],
 ): Promise<InsertResilientResult<T>> {
   if (rows.length === 0) return { imported: 0, failed: [], errors: [] }

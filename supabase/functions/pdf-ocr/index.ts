@@ -44,7 +44,20 @@ Rules:
 - Empty cells must be ""
 - Set confidence < 0.7 for uncertain cells and add a warning entry for each such cell
 - Do NOT include the header row in the rows array
-- If no table is found, return empty arrays and add a descriptive warning`
+- If no table is found, return empty arrays and add a descriptive warning
+
+Page furniture — extract the table ONLY:
+- Everything outside the table's ruled body is page furniture: page numbers
+  ("Page 1 of 8"), support phone numbers, e-mail addresses, website URLs,
+  bank addresses, straplines, logos, and legal disclaimers
+- NEVER merge page furniture into a transaction row, even when it sits directly
+  beneath, above or beside the last row on the page
+- NEVER emit a row that consists of page furniture
+- A transaction row's cells come from that row's columns only. If the last row
+  on the page looks like it also contains a footer, the footer is NOT part of it
+- A cell may legitimately span several lines when its text wraps inside the
+  column — keep those wrapped lines together. Wrapped text stays within the
+  column's horizontal bounds; footers do not`
 
 async function anthropicProvider(image: string, mimeType: string): Promise<OcrResult> {
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured')
@@ -57,8 +70,17 @@ async function anthropicProvider(image: string, mimeType: string): Promise<OcrRe
       'content-type':       'application/json',
     },
     body: JSON.stringify({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      model: 'claude-sonnet-5',
+      // Adaptive thinking is the default on this model; stated explicitly because
+      // reading a statement table off a page image is exactly the kind of work it
+      // helps with — deciding which column a right-aligned figure belongs to, and
+      // whether a block below the last row is a transaction or a footer.
+      thinking:      { type: 'adaptive' },
+      output_config: { effort: 'high' },
+      // max_tokens caps thinking AND response text together. A full page of
+      // transactions plus its per-cell confidence array is already sizeable, so
+      // the previous 4096 would now truncate mid-JSON and fail the parse.
+      max_tokens: 16000,
       messages: [{
         role: 'user',
         content: [

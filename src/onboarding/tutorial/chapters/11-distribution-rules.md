@@ -25,7 +25,7 @@ To change a locked rule later, create a new configuration with a newer date — 
 
 ## Part 2: The Distribution Rules page
 
-Find it at **Budget & Allocation → Distribution Rules**. This is a viewing page.
+Find it at **Fund Management → Distribution Rules**. This is a viewing page.
 
 1. Pick a rule from the dropdown (newest first; "✓" means locked, "(draft)" means draft).
 2. A green **Currently active** badge means this rule is being applied today.
@@ -34,7 +34,7 @@ Find it at **Budget & Allocation → Distribution Rules**. This is a viewing pag
 
 ## Part 3: The Regular Funds page
 
-Find it at **Budget & Allocation → Regular Funds**. It shows what the rules have collected over time: for each category, the **Total Allocated**, **Withdrawn**, and **Net Balance**. Three cards at the top show the overall totals. Red balances mean a bucket spent more than it received.
+Find it at **Fund Management → Regular Funds**. It shows what the rules have collected over time: for each category, the **Total Allocated**, **Withdrawn**, and **Net Balance**. Three cards at the top show the overall totals. Red balances mean a bucket spent more than it received.
 
 ## Part 4: Special Rules (one-off rules)
 

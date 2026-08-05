@@ -246,7 +246,7 @@ Collapsible groups; state persisted in `localStorage` under key `nav-group-<id>`
 | Daily Finance (`daily`) | open | Dashboard, Inflows, Outflows, Import, Receipts |
 | Banking (`banking`) | open | Bank Ledger, Bank Deposits, Intrabank Transfers, Intra-Account Flows, Foreign Currency |
 | Review & Processing (`review`) | open | Pending Deductions, Refunds, Reversals |
-| Budget & Allocation (`budget`) | open | Categories, Allocation Configs, Category Ledger, Percentage Allocation, Specific Givings, Savings Portions |
+| Fund Management (`budget`) | open | Categories, Allocation Configs, Category Ledger, Percentage Allocation, Specific Givings, Savings Portions |
 | Reports (`reports`) | **closed** | Reports, Financial Report |
 | Administration (`admin`) | **closed** | Setup, Settings, User Management†, Change Log† |
 
