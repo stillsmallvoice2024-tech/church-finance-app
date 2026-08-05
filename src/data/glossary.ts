@@ -33,8 +33,8 @@ export const GLOSSARY: GlossaryTerm[] = [
     definition: 'A portion of income set aside as savings or a reserve fund. It is deducted by your Distribution Rules before operating expenses.',
   },
   {
-    term:       'Category Fund Transfer',
-    definition: 'A transfer of funds between two bank accounts within the same organisation — not income or expense, just a movement of money.',
+    term:       'Fund-to-Fund Transfer',
+    definition: 'A transfer of funds between two funds within the same organisation — not income or expense, just a movement of money.',
   },
   {
     term:       'Bank Deposit',

@@ -174,7 +174,7 @@ export default function BulkReallocation() {
 
   const handlePreview = () => {
     if (srcPortion === dstPortion) { toast('Source and destination portions must differ.', 'error'); return }
-    if (selectedIds.size === 0)    { toast('Select at least one category.', 'error'); return }
+    if (selectedIds.size === 0)    { toast('Select at least one fund.', 'error'); return }
     if (selectedRows.every(r => r.amount <= 0)) { toast('No positive amounts to transfer.', 'error'); return }
     if (!description) setDescription(`Bulk reallocation: ${srcPortion} → ${dstPortion}`)
     setStep('preview')
@@ -247,7 +247,7 @@ export default function BulkReallocation() {
               <span className="font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">{dstPortion}</span>
             </div>
             <div className="ml-auto flex items-center gap-4 text-xs text-gray-500">
-              <span>{validRows.length} category{validRows.length !== 1 ? 'ies' : 'y'}</span>
+              <span>{validRows.length} fund{validRows.length !== 1 ? 's' : ''}</span>
               <span className="font-bold text-primary">{formatCurrency(totalAmount, baseCurrencyCode)}</span>
             </div>
           </div>
@@ -284,7 +284,7 @@ export default function BulkReallocation() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {['Category', 'Source Balance', 'Amount to Move', 'Dest Balance (after)', ''].map(h => (
+                  {['Fund', 'Source Balance', 'Amount to Move', 'Dest Balance (after)', ''].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                       {h}
                     </th>
@@ -336,7 +336,7 @@ export default function BulkReallocation() {
           <div className="flex gap-2 items-start px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              {willZero.length} {willZero.length === 1 ? 'category' : 'categories'} will reach zero in <strong>{srcPortion}</strong> after this move.
+              {willZero.length} {willZero.length === 1 ? 'fund' : 'funds'} will reach zero in <strong>{srcPortion}</strong> after this move.
             </span>
           </div>
         )}
@@ -344,7 +344,7 @@ export default function BulkReallocation() {
           <div className="flex gap-2 items-start px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-500">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              {skipped.length} {skipped.length === 1 ? 'category was' : 'categories were'} skipped — zero or insufficient balance in source portion.
+              {skipped.length} {skipped.length === 1 ? 'fund was' : 'funds were'} skipped — zero or insufficient balance in source portion.
             </span>
           </div>
         )}
@@ -508,7 +508,7 @@ export default function BulkReallocation() {
                   </button>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
-                  Category
+                  Fund
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   {srcPortion} Balance
@@ -535,7 +535,7 @@ export default function BulkReallocation() {
               ) : tableRows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-sm text-gray-400">
-                    No categories found.
+                    No funds found.
                   </td>
                 </tr>
               ) : (

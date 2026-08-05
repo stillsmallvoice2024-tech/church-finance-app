@@ -13,9 +13,9 @@ import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 
 const schema = z.object({
   date:               z.string().min(1, 'Date is required'),
-  account_from:       z.string().min(1, 'From Category is required'),
+  account_from:       z.string().min(1, 'From Fund is required'),
   account_from_stage2: z.string().min(1, 'From Portion is required'),
-  account_to:         z.string().min(1, 'To Category is required'),
+  account_to:         z.string().min(1, 'To Fund is required'),
   account_to_stage2:  z.string().min(1, 'To Portion is required'),
   total_amount:       z.coerce.number({ invalid_type_error: 'Enter a valid amount' }).positive('Amount must be greater than zero'),
   description:        z.string().min(1, 'Description is required'),
@@ -120,7 +120,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
       ref={modalRef}
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Edit Internal Transfer' : 'Add Internal Transfer'}
+      title={isEdit ? 'Edit Fund-to-Fund Transfer' : 'Add Fund-to-Fund Transfer'}
       size="max-w-2xl"
       isDirty={isDirty}
       disableClose={loading}
@@ -149,7 +149,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
 
         {/* From */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="From Category *" error={errors.account_from?.message}>
+          <Field label="From Fund *" error={errors.account_from?.message}>
             <select {...register('account_from')} className={inputCls(!!errors.account_from)}>
               <option value="">— Select —</option>
               {categories.map(c => (
@@ -169,7 +169,7 @@ export function AddIntraFlowModal({ open, onClose, onSuccess, editRecord }: Prop
 
         {/* To */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="To Category *" error={errors.account_to?.message}>
+          <Field label="To Fund *" error={errors.account_to?.message}>
             <select {...register('account_to')} className={inputCls(!!errors.account_to)}>
               <option value="">— Select —</option>
               {categories.map(c => (

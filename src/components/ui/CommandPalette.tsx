@@ -27,7 +27,7 @@ const NAV_ENTRIES: NavEntry[] = [
   { label: 'Dynamic Reports',      sub: 'Live-updating reports',   href: '/reports?tab=custom',       icon: FilePlus         },
   { label: 'Bank Ledger',          sub: 'Transactions by account', href: '/bank-ledger',           icon: Landmark         },
   { label: 'Bank Deposits',        sub: 'Cash deposits',           href: '/bank-deposits',         icon: Building2        },
-  { label: 'Category Fund Transfers', sub: 'Inter-category fund movements', href: '/intra-flow',            icon: ArrowLeftRight   },
+  { label: 'Fund-to-Fund Transfer', sub: 'Inter-fund movements', href: '/intra-flow',            icon: ArrowLeftRight   },
   { label: 'Intra-Bank Transfers', href: '/intrabank-transfers',   icon: GitBranch                 },
   { label: 'FX / Foreign Currency',sub: 'Currency conversions',   href: '/foreign-currency',      icon: DollarSign       },
   { label: 'Regular Funds',        sub: 'Fund distribution rules', href: '/funds?tab=regular', icon: PieChart         },

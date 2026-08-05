@@ -162,7 +162,7 @@ export default function IntraFlow() {
   const { execute: bulkDelete, loading: bulkDeleting } = useBulkDeleteTransaction('intra_flows')
   const { categories } = useCategories()
 
-  usePageTitle('Category Fund Transfers')
+  usePageTitle('Fund-to-Fund Transfer')
   const [tab, setTab] = useState<'transfers' | 'reallocation'>('transfers')
 
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
@@ -198,7 +198,7 @@ export default function IntraFlow() {
     refetch()
   }
 
-  const IFL_CSV_HEADERS = ['Date', 'From Category', 'To Category', `Amount (${baseCurrencySymbol})`, 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
+  const IFL_CSV_HEADERS = ['Date', 'From Fund', 'To Fund', `Amount (${baseCurrencySymbol})`, 'From Stage 1', 'From Stage 2', 'To Stage 1', 'To Stage 2', 'Description', 'Remark']
   const iflCsvRow = (r: IntraFlowRow) => [
     r.date, r.account_from ?? '', r.account_to ?? '', r.total_amount,
     r.account_from_stage1, r.account_from_stage2,
@@ -257,7 +257,7 @@ export default function IntraFlow() {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              {t === 'transfers' ? 'Category Fund Transfers' : 'Bulk Reallocation'}
+              {t === 'transfers' ? 'Fund-to-Fund Transfer' : 'Bulk Reallocation'}
             </button>
           ))}
         </nav>
@@ -266,10 +266,10 @@ export default function IntraFlow() {
       {tab === 'reallocation' ? (
         <BulkReallocation />
       ) : tab === 'transfers' && (
-        <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Category Fund Transfer?">
-          A category fund transfer / internal transfer moves money between two category accounts or pockets within the organisation.
-          It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one category bucket to another.
-          Record a transfer when, for example, money record moves from "General Funds" category/bucket to "Project Funds" category/bucket..
+        <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Fund-to-Fund Transfer?">
+          A fund-to-fund transfer / internal transfer moves money between two fund accounts or pockets within the organisation.
+          It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one fund bucket to another.
+          Record a transfer when, for example, money moves from the "General Funds" fund/bucket to the "Project Funds" fund/bucket.
         </PageHelpBanner>
       )}
       {error ? (
@@ -287,7 +287,7 @@ export default function IntraFlow() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-gray-100">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Category Fund Transfers</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Fund-to-Fund Transfer</h1>
             <p className="text-sm text-gray-500 mt-0.5">Movements between accounts</p>
           </div>
           <div className="flex items-center gap-2">
@@ -320,15 +320,15 @@ export default function IntraFlow() {
               <FilterGroup label="To">
                 <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }} className={filterInputCls} />
               </FilterGroup>
-              <FilterGroup label="From Category" className="min-w-[180px]">
+              <FilterGroup label="From Fund" className="min-w-[180px]">
                 <SearchableSelect value={accountFrom} onChange={setAccountFrom}
                   options={categories.map(c => ({ value: c.name, label: c.name }))}
-                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+                  placeholder="All funds" className={`${filterInputCls} bg-white`} />
               </FilterGroup>
-              <FilterGroup label="To Category" className="min-w-[180px]">
+              <FilterGroup label="To Fund" className="min-w-[180px]">
                 <SearchableSelect value={accountTo} onChange={setAccountTo}
                   options={categories.map(c => ({ value: c.name, label: c.name }))}
-                  placeholder="All categories" className={`${filterInputCls} bg-white`} />
+                  placeholder="All funds" className={`${filterInputCls} bg-white`} />
               </FilterGroup>
               {hasActiveFilters && (
                 <button

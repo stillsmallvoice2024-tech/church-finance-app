@@ -20,7 +20,7 @@ interface ExportItem {
 const INITIAL_EXPORTS: ExportItem[] = [
   { key: 'inflows',               label: 'Inflows',                   status: 'pending' },
   { key: 'outflows',              label: 'Outflows',                  status: 'pending' },
-  { key: 'intra-flows',           label: 'Category Fund Transfers',        status: 'pending' },
+  { key: 'intra-flows',           label: 'Fund-to-Fund Transfer',        status: 'pending' },
   { key: 'bank-deposits',         label: 'Bank Deposits',             status: 'pending' },
   { key: 'intrabank-transfers',   label: 'Intrabank Transfers',       status: 'pending' },
   { key: 'foreign-currency',      label: 'Foreign Currency',          status: 'pending' },
