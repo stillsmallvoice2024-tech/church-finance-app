@@ -248,7 +248,7 @@ export default function IntraFlow() {
   return (
     <>
       {/* Tab bar */}
-      <div className="sticky top-0 z-10 -mx-4 px-4 lg:-mx-6 lg:px-6 bg-background dark:bg-[#0c0c0e] border-b border-gray-200 mb-5 -mt-1">
+      <div className="border-b border-gray-200 mb-5 -mt-1">
         <nav className="-mb-px flex">
           {(['transfers', 'reallocation'] as const).map(t => (
             <button
