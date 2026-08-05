@@ -39,6 +39,35 @@ function cellCls(confidence: number): string {
   return 'bg-red-50 text-red-900'
 }
 
+/**
+ * Extracts the real reason an edge-function call failed.
+ *
+ * `supabase.functions.invoke` reports any non-2xx as a `FunctionsHttpError`
+ * whose `message` is the fixed string "Edge Function returned a non-2xx status
+ * code" — the body carrying the actual cause (a bad model id, a missing
+ * ANTHROPIC_API_KEY, an upstream 400) hangs off `error.context` instead. Reading
+ * that is the difference between a user seeing "OCR failed" and seeing the
+ * sentence that tells them what to fix.
+ */
+async function describeInvokeFailure(error: unknown, data: unknown): Promise<string> {
+  const fromBody = (data as { error?: unknown } | null)?.error
+  if (typeof fromBody === 'string' && fromBody) return fromBody
+
+  const ctx = (error as { context?: unknown } | null)?.context
+  if (ctx && typeof (ctx as Response).text === 'function') {
+    const raw = await (ctx as Response).text().catch(() => '')
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as { error?: unknown }
+        if (parsed?.error) return String(parsed.error).slice(0, 400)
+      } catch { /* body was not JSON — fall through to the raw text */ }
+      return raw.slice(0, 400)
+    }
+  }
+
+  return (error as Error | null)?.message || 'OCR failed'
+}
+
 async function runOcrPipeline(
   file: File,
   onProgress: (p: OcrProgress) => void,
@@ -68,8 +97,7 @@ async function runOcrPipeline(
     })
 
     if (error || !data?.ok) {
-      const msg = (data?.error as string | undefined) ?? (error as Error | null)?.message ?? 'OCR failed'
-      allWarnings.push(`Page ${p}: ${msg}`)
+      allWarnings.push(`Page ${p}: ${await describeInvokeFailure(error, data)}`)
       continue
     }
 
@@ -194,9 +222,16 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         await runOcrPipeline(f, setOcrProgress, password)
 
       if (rawRows.length === 0) {
+        // Every page failed for a reason that was already captured per page.
+        // Reporting the generic "may be empty or corrupted" line while
+        // discarding those reasons leaves the user with nothing to act on —
+        // a missing API key and a corrupt PDF read identically.
         throw new Error(
-          'No data could be read from this file. The PDF may be empty, unsupported, or corrupted. ' +
-          'Try downloading it again from your bank\'s portal, or contact your bank and ask for the statement in CSV or Excel format.',
+          warnings.length > 0
+            ? `Text extraction returned no rows. The reader reported:\n\n${warnings.slice(0, 5).join('\n')}` +
+              (warnings.length > 5 ? `\n…and ${warnings.length - 5} more.` : '')
+            : 'No data could be read from this file. The PDF may be empty, unsupported, or corrupted. ' +
+              'Try downloading it again from your bank\'s portal, or contact your bank and ask for the statement in CSV or Excel format.',
         )
       }
 

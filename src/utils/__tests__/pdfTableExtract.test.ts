@@ -9,6 +9,7 @@ import {
   type PdfPageItems,
   type PdfTextItem,
 } from '../pdfTableExtract'
+import { stripPageFurniture } from '../pageFurniture'
 
 // ── Fixture helpers ────────────────────────────────────────────────────────────
 
@@ -297,7 +298,7 @@ describe('extractTableFromPages — fallback', () => {
       page([t(543.2, 736.1, `Page: ${i + 1} of 8`, 30.3)], 792),
     )
     const r = extractTableFromPages(pages)
-    expect(r).toEqual({ headers: [], rows: [], tableDetected: false })
+    expect(r).toEqual({ headers: [], rows: [], tableDetected: false, rowPages: [] })
   })
 
   it('returns nothing for a single stray text run', () => {
@@ -307,7 +308,7 @@ describe('extractTableFromPages — fallback', () => {
   })
 
   it('returns empty output for an empty document', () => {
-    expect(extractTableFromPages([page([])])).toEqual({ headers: [], rows: [], tableDetected: false })
+    expect(extractTableFromPages([page([])])).toEqual({ headers: [], rows: [], tableDetected: false, rowPages: [] })
   })
 })
 
@@ -470,5 +471,77 @@ describe('collapseLetterSpacing', () => {
   it('leaves ordinary titles and short words alone', () => {
     expect(collapseLetterSpacing('Transaction Details')).toBe('Transaction Details')
     expect(collapseLetterSpacing('A B Bank')).toBe('A B Bank')
+  })
+})
+
+// ── Page provenance feeding the furniture scrubber ─────────────────────────────
+
+/**
+ * Mirrors the Parallex statement's real failure: the bank prints its support
+ * code and helpline *inside the date column's horizontal bounds* at the foot of
+ * every page, so column geometry cannot separate them from the date — they are
+ * genuinely in that column. Only the fact that they recur on every page marks
+ * them as furniture, which is what `rowPages` carries.
+ */
+function parallexFooterPage(pageNo: number, dates: string[]): PdfPageItems {
+  const items: PdfTextItem[] = [
+    t(52, 100, 'Transaction Date', 76), t(150, 100, 'Amount Debit', 63),
+    t(230, 100, 'Amount Credit', 66), t(320, 100, 'Current Balance', 72),
+    t(400, 100, 'Narration', 43),
+  ]
+  dates.forEach((d, i) => {
+    const y = 120 + i * 15
+    items.push(t(52, y, d, 53), t(155, y, '0.00', 20),
+               t(235, y, '5,010.75', 40), t(325, y, '16,017.15', 45),
+               t(400, y, `USSD:TRF TO THE STANDING CHURCH ${i}`, 180))
+  })
+  // Footer, rendered under the date column — same band as the last row.
+  const footY = 120 + dates.length * 15
+  items.push(t(52, footY, '(0700PARALLEX)', 70))
+  items.push(t(52, footY + 12, '070072725539', 62))
+  items.push(t(400, footY, `Page: ${pageNo} of 3`, 50))
+  return page(items, 792)
+}
+
+describe('extractTableFromPages — page provenance', () => {
+  const pages = [
+    parallexFooterPage(1, ['01/08/2026', '02/08/2026']),
+    parallexFooterPage(2, ['03/08/2026', '04/08/2026']),
+    parallexFooterPage(3, ['05/08/2026', '06/08/2026']),
+  ]
+  const result = extractTableFromPages(pages)
+
+  it('reports a source page for every row', () => {
+    expect(result.rowPages).toHaveLength(result.rows.length)
+    expect(new Set(result.rowPages).size).toBeGreaterThan(1)
+  })
+
+  it('attributes rows to the page they were read from', () => {
+    // Two transactions per page, in order.
+    expect(result.rowPages).toEqual([0, 0, 1, 1, 2, 2])
+  })
+
+  it('lets the scrubber strip a support code that column geometry cannot', () => {
+    // Without provenance the helpline and support code are indistinguishable
+    // from a reference number, so Tier 2 leaves them — this is the regression
+    // that put "(0700PARALLEX) 070072725539" in the date cell.
+    const withProvenance = stripPageFurniture(result.rows, result.rowPages)
+    for (const row of withProvenance.rows) {
+      expect(row[0]).not.toMatch(/PARALLEX|070072725539/)
+    }
+    expect(withProvenance.removedFragments).toContain('(0700PARALLEX)')
+    expect(withProvenance.removedFragments).toContain('070072725539')
+
+    // Negative control: the same rows without provenance keep the furniture.
+    // This is precisely the bug — parsePDF used to call the scrubber this way.
+    const withoutProvenance = stripPageFurniture(result.rows)
+    expect(withoutProvenance.rows.some(r => /PARALLEX|070072725539/.test(r[0]))).toBe(true)
+  })
+
+  it('leaves the dates themselves intact', () => {
+    const withProvenance = stripPageFurniture(result.rows, result.rowPages)
+    expect(withProvenance.rows.map(r => r[0])).toEqual([
+      '01/08/2026', '02/08/2026', '03/08/2026', '04/08/2026', '05/08/2026', '06/08/2026',
+    ])
   })
 })

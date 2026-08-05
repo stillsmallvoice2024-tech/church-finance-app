@@ -160,3 +160,60 @@ describe('stripPageFurniture — cross-page corroboration', () => {
     expect(out.rows[0][1]).toBe('TRANSFER 070072725539')
   })
 })
+
+// ── Column type as evidence, when page frequency is not available ──────────────
+
+describe('stripPageFurniture — a date column holds dates', () => {
+  /**
+   * The literal cell values reported from the Parallex statement. Cross-page
+   * corroboration is deliberately withheld here: on a long statement the
+   * frequency threshold is high, and a footer printed on only some pages misses
+   * it. The column's own 150 clean rows are the evidence instead.
+   */
+  const rows = [
+    ['01/08/2026', '02/08/2026', '5,010.75', '0.00', '16,017.15', 'USSD:TRF TO THE STANDING CHURCH'],
+    ['02/08/2026', '02/08/2026', '1,200.00', '0.00', '17,217.15', 'NIP:TRANSFER FROM ADEBAYO'],
+    ['03/08/2026 (0700PARALLEX) 070072725539', '02/08/2026', '5,010.75', '0.00', '16,017.15',
+     'USSD:TRF TO THE STANDING CHURCH INTERNATIONAL USSD48088685209'],
+    ['04/08/2026', '03/08/2026', '900.00', '0.00', '15,117.15', 'POS PURCHASE'],
+    ['05/08/2026', '03/08/2026', '450.25', '0.00', '14,666.90', 'BANK CHARGE'],
+  ]
+
+  it('strips the support code and helpline with no page evidence at all', () => {
+    const out = stripPageFurniture(rows)
+    expect(out.rows[2][0]).toBe('03/08/2026')
+  })
+
+  it('leaves every clean date untouched', () => {
+    const out = stripPageFurniture(rows)
+    expect(out.rows.map(r => r[0])).toEqual([
+      '01/08/2026', '02/08/2026', '03/08/2026', '04/08/2026', '05/08/2026',
+    ])
+  })
+
+  it('does not touch the narration column, which is not a date column', () => {
+    const out = stripPageFurniture(rows)
+    expect(out.rows[2][5]).toBe(
+      'USSD:TRF TO THE STANDING CHURCH INTERNATIONAL USSD48088685209',
+    )
+  })
+
+  it('leaves a cell alone when the date does not lead it', () => {
+    // Not a date with debris appended — guessing what to keep would destroy data.
+    const odd = [
+      ['01/08/2026', 'x'], ['02/08/2026', 'x'], ['03/08/2026', 'x'],
+      ['04/08/2026', 'x'], ['REVERSAL of 05/08/2026', 'x'],
+    ]
+    const out = stripPageFurniture(odd)
+    expect(out.rows[4][0]).toBe('REVERSAL of 05/08/2026')
+  })
+
+  it('does not fire on a column that is not overwhelmingly dates', () => {
+    const mixed = [
+      ['01/08/2026 extra', 'a'], ['not a date', 'b'], ['also not a date', 'c'],
+      ['neither is this', 'd'], ['nor this', 'e'],
+    ]
+    const out = stripPageFurniture(mixed)
+    expect(out.rows[0][0]).toBe('01/08/2026 extra')
+  })
+})
