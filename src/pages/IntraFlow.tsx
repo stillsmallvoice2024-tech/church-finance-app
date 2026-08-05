@@ -165,6 +165,9 @@ export default function IntraFlow() {
   usePageTitle('Fund-to-Fund Transfer')
   const [tab, setTab] = useState<'transfers' | 'reallocation'>('transfers')
 
+  // Land at the top of the tab's own content instead of wherever the previous tab was scrolled to.
+  useEffect(() => { document.getElementById('main-content')?.scrollTo(0, 0) }, [tab])
+
   const openAdd  = () => { setEditRecord(null); setModalOpen(true) }
   const openEdit = (r: IntraFlowRow) => { setEditRecord(r); setModalOpen(true) }
 
@@ -245,7 +248,7 @@ export default function IntraFlow() {
   return (
     <>
       {/* Tab bar */}
-      <div className="border-b border-gray-200 mb-5 -mt-1">
+      <div className="sticky top-0 z-10 -mx-4 px-4 lg:-mx-6 lg:px-6 bg-background dark:bg-[#0c0c0e] border-b border-gray-200 mb-5 -mt-1">
         <nav className="-mb-px flex">
           {(['transfers', 'reallocation'] as const).map(t => (
             <button
@@ -264,14 +267,20 @@ export default function IntraFlow() {
       </div>
 
       {tab === 'reallocation' ? (
-        <BulkReallocation />
-      ) : tab === 'transfers' && (
-        <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Fund-to-Fund Transfer?">
-          A fund-to-fund transfer moves money between two funds or pockets within the organisation.
-          It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one fund bucket to another.
-          Record a transfer when, for example, money moves from the "General Funds" fund/bucket to the "Project Funds" fund/bucket.
-        </PageHelpBanner>
-      )}
+        <div className="space-y-5">
+          <div className="pb-4 border-b border-gray-100">
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Bulk Reallocation</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Move money for many funds at once</p>
+          </div>
+          <BulkReallocation />
+        </div>
+      ) : (
+      <>
+      <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Fund-to-Fund Transfer?">
+        A fund-to-fund transfer moves money between two funds or pockets within the organisation.
+        It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one fund bucket to another.
+        Record a transfer when, for example, money moves from the "General Funds" fund/bucket to the "Project Funds" fund/bucket.
+      </PageHelpBanner>
       {error ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <AlertCircle className="w-10 h-10 text-danger" />
@@ -625,6 +634,8 @@ export default function IntraFlow() {
           />
         </Card>
       </div>
+      )}
+      </>
       )}
 
       <AddIntraFlowModal
