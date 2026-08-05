@@ -319,7 +319,7 @@ export function ResetDataModal({ open, onClose, onDone }: Props) {
             <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div className="text-sm text-red-700 space-y-1">
               <p className="font-semibold">This action is permanent and irreversible.</p>
-              <p>All transaction records will be deleted — inflows, outflows, internal transfers, bank deposits, intrabank transfers, foreign currency, special project entries, receipts, and the audit log. Your data has been exported above.</p>
+              <p>All transaction records will be deleted — inflows, outflows, fund-to-fund transfers, bank deposits, intrabank transfers, foreign currency, special project entries, receipts, and the audit log. Your data has been exported above.</p>
             </div>
           </div>
           <p className="text-sm text-gray-600">

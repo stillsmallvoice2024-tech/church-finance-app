@@ -267,7 +267,7 @@ export default function IntraFlow() {
         <BulkReallocation />
       ) : tab === 'transfers' && (
         <PageHelpBanner storageKey="help-dismissed-intraflow" title="What is a Fund-to-Fund Transfer?">
-          A fund-to-fund transfer / internal transfer moves money between two fund accounts or pockets within the organisation.
+          A fund-to-fund transfer moves money between two funds or pockets within the organisation.
           It is not income or expenditure — no money enters or leaves the organisation, money simply moves from one fund bucket to another.
           Record a transfer when, for example, money moves from the "General Funds" fund/bucket to the "Project Funds" fund/bucket.
         </PageHelpBanner>
@@ -275,7 +275,7 @@ export default function IntraFlow() {
       {error ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <AlertCircle className="w-10 h-10 text-danger" />
-          <p className="font-semibold text-gray-800">Failed to load internal transfers</p>
+          <p className="font-semibold text-gray-800">Failed to load fund-to-fund transfers</p>
           <p className="text-sm text-gray-500">{error}</p>
           <button onClick={refetch} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors">
             <RefreshCw className="w-4 h-4" /> Retry
@@ -420,7 +420,7 @@ export default function IntraFlow() {
               ) : displayed.length === 0 ? (
                 <div className="py-12 text-center text-gray-400">
                   <ArrowLeftRight className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm">No internal transfers match your filters.</p>
+                  <p className="text-sm">No fund-to-fund transfers match your filters.</p>
                 </div>
               ) : (
                 displayed.map(row => {
@@ -553,7 +553,7 @@ export default function IntraFlow() {
                       <td colSpan={9} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-gray-400">
                           <ArrowLeftRight className="w-10 h-10 text-gray-200" />
-                          <p className="text-sm">No internal transfers match your filters.</p>
+                          <p className="text-sm">No fund-to-fund transfers match your filters.</p>
                         </div>
                       </td>
                     </tr>
@@ -638,7 +638,7 @@ export default function IntraFlow() {
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
         loading={deleting}
-        label="this internal transfer"
+        label="this fund-to-fund transfer"
       />
       <BulkEditIntraFlowModal
         open={bulkEditOpen}
@@ -654,7 +654,7 @@ export default function IntraFlow() {
         onClose={() => setBulkDeleteConfirmOpen(false)}
         onConfirm={handleBulkDelete}
         loading={bulkDeleting}
-        label={`${selectedIds.size} internal transfer${selectedIds.size !== 1 ? 's' : ''}`}
+        label={`${selectedIds.size} fund-to-fund transfer${selectedIds.size !== 1 ? 's' : ''}`}
       />
       <DescriptionTooltip tooltip={descTooltip} />
     </>
