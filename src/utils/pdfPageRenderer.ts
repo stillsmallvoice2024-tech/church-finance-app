@@ -15,12 +15,16 @@ export async function getPdfPageCount(file: File, password?: string): Promise<nu
 }
 
 /**
- * Longest edge, in pixels, that the OCR vision model accepts before it
- * downscales the image itself. Rendering above this buys nothing and costs
- * upload bandwidth; rendering below it throws away legibility on the small
- * print that bank statements are made of.
+ * Longest edge, in pixels, for a page sent to OCR.
+ *
+ * The model tier accepts up to 2576px, and that was tried — but a full-size
+ * page pushed the end-to-end call past the edge function's execution window,
+ * which the browser sees only as an unexplained transport failure. 1568 is the
+ * size this pipeline has actually been observed to work at, and is also the
+ * documented balance point for accuracy against cost. Raise it only alongside
+ * evidence that the round trip still completes.
  */
-export const MAX_OCR_IMAGE_EDGE = 2576
+export const MAX_OCR_IMAGE_EDGE = 1568
 
 /** Never magnify a page beyond this, however small its media box claims to be. */
 const MAX_RENDER_SCALE = 4.0

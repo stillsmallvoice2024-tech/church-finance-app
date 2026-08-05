@@ -13,6 +13,13 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const OCR_PROVIDER         = Deno.env.get('OCR_PROVIDER') ?? 'anthropic'
 const ANTHROPIC_API_KEY    = Deno.env.get('ANTHROPIC_API_KEY')
 
+/**
+ * Ceiling on the upstream call. Comfortably inside the edge runtime's own
+ * execution window so that a slow model response is reported as an error rather
+ * than taking the whole function down with it.
+ */
+const UPSTREAM_TIMEOUT_MS = 55_000
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OcrResult {
@@ -62,34 +69,56 @@ Page furniture — extract the table ONLY:
 async function anthropicProvider(image: string, mimeType: string): Promise<OcrResult> {
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured')
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key':          ANTHROPIC_API_KEY,
-      'anthropic-version':  '2023-06-01',
-      'content-type':       'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-5',
-      // Adaptive thinking is the default on this model; stated explicitly because
-      // reading a statement table off a page image is exactly the kind of work it
-      // helps with — deciding which column a right-aligned figure belongs to, and
-      // whether a block below the last row is a transaction or a footer.
-      thinking:      { type: 'adaptive' },
-      output_config: { effort: 'high' },
-      // max_tokens caps thinking AND response text together. A full page of
-      // transactions plus its per-cell confidence array is already sizeable, so
-      // the previous 4096 would now truncate mid-JSON and fail the parse.
-      max_tokens: 16000,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType, data: image } },
-          { type: 'text',  text: EXTRACTION_PROMPT },
-        ],
-      }],
-    }),
-  })
+  // Bound the upstream call so it always loses the race against the platform's
+  // own execution limit. Being killed mid-request gives the browser a bare
+  // "failed to send a request" with no status and no body; failing here instead
+  // produces an error the caller can actually show.
+  const abort = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+
+  let res: Response
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: abort,
+      headers: {
+        'x-api-key':         ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        // Effort is deliberately low. This is transcription, not reasoning: the
+        // table is right there on the page. High effort turned a ~15s call into
+        // one long enough for the platform to kill the whole function, which the
+        // browser sees only as an unexplained transport failure. Sonnet at low
+        // effort still comfortably outperforms the Haiku call this replaced.
+        thinking:      { type: 'adaptive' },
+        output_config: { effort: 'low' },
+        // Caps thinking AND response text together. A page of transactions plus
+        // its per-cell confidence array needs headroom over the original 4096,
+        // but 16000 invited generations long enough to blow the time budget.
+        max_tokens: 8000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: image } },
+            { type: 'text',  text: EXTRACTION_PROMPT },
+          ],
+        }],
+      }),
+    })
+  } catch (e) {
+    // An abort here means the model was still working when the budget ran out.
+    // Say so plainly — the caller surfaces this text, and "took too long" points
+    // at a different fix than "the request was rejected".
+    if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+      throw new Error(
+        `Extraction timed out after ${Math.round(UPSTREAM_TIMEOUT_MS / 1000)}s on this page. ` +
+        'Retry, or reduce the page image size.',
+      )
+    }
+    throw e
+  }
 
   if (!res.ok) {
     const body = await res.text()
