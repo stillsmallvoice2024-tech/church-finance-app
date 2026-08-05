@@ -660,9 +660,20 @@ function fallbackExtraction(allLines: TextLine[]): ExtractedTable {
     if (rows.some(r => r[ci]?.trim())) keep.push(ci)
   }
 
+  const outRows = rows.map(r => keep.map(ci => r[ci] ?? ''))
+
+  // A guessed grid is only worth returning if it plausibly *is* a statement
+  // table: more than one column, and at least one row carrying a date or an
+  // amount. Without this, a page whose sole text layer is a `Page N of M`
+  // stamp — everything else drawn as vector outlines — yields a tidy-looking
+  // one-column grid that the caller would accept as an extraction instead of
+  // falling through to OCR, which is the only thing that can read such a file.
+  const plausible = keep.length >= 2 && outRows.some(isDataLike)
+  if (!plausible) return { headers: [], rows: [], tableDetected: false }
+
   return {
     headers: keep.map((ci, i) => headers[ci] || `Column ${i + 1}`),
-    rows: rows.map(r => keep.map(ci => r[ci] ?? '')),
+    rows: outRows,
     tableDetected: false,
   }
 }
