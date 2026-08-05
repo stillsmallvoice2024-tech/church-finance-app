@@ -5,7 +5,7 @@ import SavingsPortions from './SavingsPortions'
 import { CentreTabs, useCentreTab, type CentreTabDef } from '../components/ui/CentreTabs'
 
 const TABS: CentreTabDef[] = [
-  { id: 'accounts',   label: 'Category Accounts' },
+  { id: 'accounts',   label: 'Fund Accounts' },
   { id: 'regular',    label: 'Regular Funds' },
   { id: 'designated', label: 'Designated Gifts' },
   { id: 'savings',    label: 'Savings Funds' },

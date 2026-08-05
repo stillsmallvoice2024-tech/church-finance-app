@@ -16,14 +16,14 @@
 4. Type the **Fund Name** — keep it short and recognisable (e.g. "Welfare", "Building Fund", "Missions").
 5. Optional: select or create a **Group** to keep related funds together. Click the folder-plus icon to create a new group right inside the form.
 6. Optional: type a **Description** to clarify what this fund is for.
-7. Optional: under **Opening Balances by Portion**, click **+ Add** to record money this bucket already held before you started using Clariva. Choose a portion type — **Regular Funds**, **Designated Gift**, or **Savings Funds** — and enter the amount.
+7. Optional: under **Opening Balances by Fund Type**, click **+ Add** to record money this bucket already held before you started using Clariva. Choose a fund type — **Regular Funds**, **Designated Gift**, or **Savings Funds** — and enter the amount.
 8. Click **Create**.
 
 ![Screenshot: the Add Fund form with a name, group, and opening balance filled in](./screenshots/07-categories-step-08.png)
 
 ### Result
 
-The fund appears in the fund list and is immediately available in allocation rules, reports, and the Category Accounts ledger.
+The fund appears in the fund list and is immediately available in allocation rules, reports, and the Fund Accounts ledger.
 
 ---
 
@@ -35,11 +35,11 @@ The fund appears in the fund list and is immediately available in allocation rul
 
 ---
 
-## How to Read the Category Accounts Ledger
+## How to Read the Fund Accounts Ledger
 
 **What you'll need:** At least one fund with imported or manually entered transactions.
 
-**Where to go:** Budget & Allocation → Category Ledger
+**Where to go:** Budget & Allocation → Funds → **Fund Accounts** tab
 
 **Time:** ~2 minutes.
 
@@ -47,12 +47,12 @@ The fund appears in the fund list and is immediately available in allocation rul
 
 ### Steps
 
-1. Open **Budget & Allocation → Category Ledger** in the left sidebar.
+1. Open **Budget & Allocation → Funds** in the left sidebar. It opens on the **Fund Accounts** tab.
 2. Click the **Ledger** view tab at the top.
-3. Choose a **Portion** from the dropdown: Regular Funds, Designated Gift, or Savings Funds.
+3. Choose a **Fund Type** from the dropdown: Regular Funds, Designated Gift, or Savings Funds.
 4. Choose a **Fund** from the next dropdown.
 5. The transaction list appears with a running **Balance** column. The first row is the **Balance Brought Forward** — the opening balance.
-6. Rows labelled "Transfer →" or "Transfer ←" are internal moves between buckets (Fund Transfers). Click the arrow to expand and see the transfer details.
+6. Rows labelled "Transfer →" or "Transfer ←" are internal moves between buckets (Fund-to-Fund Transfers). Click the arrow to expand and see the transfer details.
 
 ### Result
 
@@ -62,7 +62,7 @@ You can verify exactly how much money is in each bucket and trace every entry th
 
 ## How to See Fund Totals at a Glance (Summary View)
 
-1. Open **Budget & Allocation → Category Ledger**.
+1. Open **Budget & Allocation → Funds → Fund Accounts** tab.
 2. Click the **Summary** view tab.
 3. The table shows totals for every fund across three pockets: Regular Funds, Designated Gifts, and Savings Balance.
 4. Use the filter buttons (**All**, **Regular Funds**, **Designated Gifts**, **Savings**) to focus on one pocket.

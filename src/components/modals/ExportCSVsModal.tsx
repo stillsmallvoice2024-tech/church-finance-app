@@ -25,7 +25,7 @@ const EXPORT_ITEMS: ExportItem[] = [
   { key: 'project-entries',     label: 'Special Project Entries',  status: 'pending' },
   { key: 'receipts',            label: 'Receipts (metadata)',      status: 'pending' },
   { key: 'bank-ledger',         label: 'Bank Ledger',              status: 'pending' },
-  { key: 'category-ledger',     label: 'Category Ledger',          status: 'pending' },
+  { key: 'category-ledger',     label: 'Fund Ledger',          status: 'pending' },
   { key: 'audit-log',           label: 'Audit Log',                status: 'pending' },
 ]
 
