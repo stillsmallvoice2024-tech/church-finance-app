@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { OrgStatus, UserRole } from '../types'
+import type { OrgStatus, PlanTier, UserRole } from '../types'
 
 export interface OrgMembership {
   org_id:               string
@@ -12,6 +12,9 @@ export interface OrgMembership {
   org_deleted_at?:      string | null
   org_purge_at?:        string | null
   org_type?:            string | null
+  plan_tier?:           PlanTier | null
+  plan_expires_at?:     string | null
+  imported_rows_count?: number | null
 }
 
 const activeOrgKey = (userId: string) => `org-active-${userId}`
@@ -27,6 +30,9 @@ interface OrgState {
   orgDeletedAt:        string | null
   orgPurgeAt:          string | null
   orgType:             string | null
+  planTier:            PlanTier | null
+  planExpiresAt:       string | null
+  importedRowsCount:   number
   memberships:         OrgMembership[]
   switching:           boolean
 
@@ -36,6 +42,7 @@ interface OrgState {
   setOrgStatus:         (status: OrgStatus, deletedAt?: string | null, purgeAt?: string | null) => void
   setTimezone:          (tz: string | null) => void
   setOrgType:           (type: string | null) => void
+  setImportedRowsCount: (count: number) => void
   setSwitching:         (v: boolean) => void
   clearOrg:             () => void
   persistActive:        (userId: string, orgId: string) => void
@@ -53,6 +60,9 @@ export const useOrgStore = create<OrgState>((set) => ({
   orgDeletedAt:       null,
   orgPurgeAt:         null,
   orgType:            null,
+  planTier:           null,
+  planExpiresAt:      null,
+  importedRowsCount:  0,
   memberships:        [],
   switching:          false,
 
@@ -67,6 +77,12 @@ export const useOrgStore = create<OrgState>((set) => ({
     orgDeletedAt:       m.org_deleted_at ?? null,
     orgPurgeAt:         m.org_purge_at ?? null,
     orgType:            m.org_type !== undefined ? (m.org_type ?? null) : null,
+    // null (schema not yet migrated, or column not selected) is treated as
+    // "unknown" by usePlan() and fails open to full access — never lock out
+    // an org just because the plan_tier column hasn't landed on its DB yet.
+    planTier:           m.plan_tier !== undefined ? (m.plan_tier ?? null) : null,
+    planExpiresAt:      m.plan_expires_at !== undefined ? (m.plan_expires_at ?? null) : null,
+    importedRowsCount:  m.imported_rows_count ?? 0,
   }),
 
   setMemberships: (ms) => set({ memberships: ms }),
@@ -80,13 +96,16 @@ export const useOrgStore = create<OrgState>((set) => ({
 
   setOrgType: (type) => set({ orgType: type }),
 
+  setImportedRowsCount: (count) => set({ importedRowsCount: count }),
+
   setSwitching: (v) => set({ switching: v }),
 
   clearOrg: () => set({
     orgId: null, orgName: null, orgRole: null,
     onboardingComplete: null, defaultCurrency: null, timezone: null,
     orgStatus: null, orgDeletedAt: null, orgPurgeAt: null,
-    orgType: null, memberships: [], switching: false,
+    orgType: null, planTier: null, planExpiresAt: null, importedRowsCount: 0,
+    memberships: [], switching: false,
   }),
 
   persistActive: (userId, orgId) => {

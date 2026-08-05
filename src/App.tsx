@@ -8,6 +8,7 @@ import { supabase } from './lib/supabase'
 import { AuthGuard } from './components/auth/AuthGuard'
 import { OrgLockedScreen } from './components/layout/OrgLockedScreen'
 import { useRole } from './hooks/useRole'
+import { usePlan, type PlanFeature } from './hooks/usePlan'
 import { Layout } from './components/layout/Layout'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { RouteFallback } from './components/ui/RouteFallback'
@@ -51,6 +52,14 @@ function CanWriteGuard() {
 function AdminOnlyGuard() {
   const { isAdmin } = useRole()
   if (!isAdmin()) return <Navigate to="/" replace />
+  return <Outlet />
+}
+
+// Redirects to the Billing tab (with a ?locked= flag it reads to explain why)
+// when the active org's plan doesn't unlock the given feature.
+function FeatureGuard({ feature }: { feature: PlanFeature }) {
+  const { hasFeature } = usePlan()
+  if (!hasFeature(feature)) return <Navigate to={`/settings?tab=billing&locked=${feature}`} replace />
   return <Outlet />
 }
 
@@ -134,13 +143,19 @@ export default function App() {
             <Route path="inflows" element={<ErrorBoundary><Inflows /></ErrorBoundary>} />
             <Route path="outflows" element={<ErrorBoundary><Outflows /></ErrorBoundary>} />
             <Route path="categories" element={<ErrorBoundary><Categories /></ErrorBoundary>} />
-            <Route path="foreign-currency" element={<ErrorBoundary><ForeignCurrency /></ErrorBoundary>} />
+            <Route element={<FeatureGuard feature="fx" />}>
+              <Route path="foreign-currency" element={<ErrorBoundary><ForeignCurrency /></ErrorBoundary>} />
+            </Route>
             <Route path="intra-flow" element={<ErrorBoundary><IntraFlow /></ErrorBoundary>} />
             {/* Report Centre — old report routes redirect into its tabs */}
-            <Route path="reports" element={<ErrorBoundary><ReportCentre /></ErrorBoundary>} />
-            <Route path="financial-report" element={<Navigate to="/reports?tab=financial" replace />} />
-            <Route path="dynamic-reports" element={<Navigate to="/reports?tab=custom" replace />} />
-            <Route path="dynamic-reports/:id" element={<ErrorBoundary><DynamicReportEditor /></ErrorBoundary>} />
+            <Route element={<FeatureGuard feature="reports" />}>
+              <Route path="reports" element={<ErrorBoundary><ReportCentre /></ErrorBoundary>} />
+              <Route path="financial-report" element={<Navigate to="/reports?tab=financial" replace />} />
+              <Route path="dynamic-reports" element={<Navigate to="/reports?tab=custom" replace />} />
+            </Route>
+            <Route element={<FeatureGuard feature="dynamicReports" />}>
+              <Route path="dynamic-reports/:id" element={<ErrorBoundary><DynamicReportEditor /></ErrorBoundary>} />
+            </Route>
             {/* Unified Settings — /setup redirects into the finance General tab (role-gated inside) */}
             <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
             <Route path="setup" element={<Navigate to="/settings?tab=general" replace />} />
@@ -151,9 +166,13 @@ export default function App() {
             {/* Admin-only routes */}
             <Route element={<AdminOnlyGuard />}>
               <Route path="users" element={<ErrorBoundary><UserManagement /></ErrorBoundary>} />
-              <Route path="change-log" element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
+              <Route element={<FeatureGuard feature="changeLog" />}>
+                <Route path="change-log" element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
+              </Route>
             </Route>
-            <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
+            <Route element={<FeatureGuard feature="specialConfigs" />}>
+              <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
+            </Route>
             {/* Funds — old fund-view routes redirect into its tabs */}
             <Route path="funds" element={<ErrorBoundary><Funds /></ErrorBoundary>} />
             <Route path="category-ledger"      element={<Navigate to="/funds?tab=accounts" replace />} />
@@ -161,14 +180,22 @@ export default function App() {
             <Route path="specific-givings"     element={<Navigate to="/funds?tab=designated" replace />} />
             <Route path="savings-portions"     element={<Navigate to="/funds?tab=savings" replace />} />
             <Route path="bank-ledger"           element={<ErrorBoundary><BankLedger /></ErrorBoundary>} />
-            <Route path="reconciliation"        element={<ErrorBoundary><ReconciliationCenter /></ErrorBoundary>} />
-            <Route path="bank-movement"         element={<ErrorBoundary><BankMovement /></ErrorBoundary>} />
+            <Route element={<FeatureGuard feature="reconciliation" />}>
+              <Route path="reconciliation"      element={<ErrorBoundary><ReconciliationCenter /></ErrorBoundary>} />
+            </Route>
+            <Route element={<FeatureGuard feature="bankMovement" />}>
+              <Route path="bank-movement"       element={<ErrorBoundary><BankMovement /></ErrorBoundary>} />
+            </Route>
             {/* Adjustments — old routes redirect into its tabs */}
-            <Route path="adjustments" element={<ErrorBoundary><Adjustments /></ErrorBoundary>} />
-            <Route path="pending-deductions"   element={<Navigate to="/adjustments?tab=upcoming" replace />} />
-            <Route path="refunds"              element={<Navigate to="/adjustments?tab=refunds" replace />} />
-            <Route path="reversals"            element={<Navigate to="/adjustments?tab=reversals" replace />} />
-            <Route path="receipts"             element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
+            <Route element={<FeatureGuard feature="adjustments" />}>
+              <Route path="adjustments" element={<ErrorBoundary><Adjustments /></ErrorBoundary>} />
+              <Route path="pending-deductions"   element={<Navigate to="/adjustments?tab=upcoming" replace />} />
+              <Route path="refunds"              element={<Navigate to="/adjustments?tab=refunds" replace />} />
+              <Route path="reversals"            element={<Navigate to="/adjustments?tab=reversals" replace />} />
+            </Route>
+            <Route element={<FeatureGuard feature="receipts" />}>
+              <Route path="receipts"           element={<ErrorBoundary><Receipts /></ErrorBoundary>} />
+            </Route>
             <Route path="tutorial"             element={<ErrorBoundary><Tutorial /></ErrorBoundary>} />
             <Route path="tutorial/:chapterId"  element={<ErrorBoundary><Tutorial /></ErrorBoundary>} />
           </Route>

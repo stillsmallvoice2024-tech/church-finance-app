@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import {
   FileText, Download, AlertTriangle,
@@ -8,6 +9,29 @@ import { parsePDF, PdfPasswordError, PdfDecryptError } from '../../utils/pdfPars
 import { getPdfPageCount, renderPageToBase64 } from '../../utils/pdfPageRenderer'
 import { stripPageFurniture } from '../../utils/pageFurniture'
 import { supabase } from '../../lib/supabase'
+import { usePlan, resolveEffectiveTier, tierAtLeast, FEATURE_TIERS } from '../../hooks/usePlan'
+import { useOrgStore } from '../../store/orgStore'
+
+// Reads current plan state directly from the store rather than the usePlan()
+// hook — the callbacks that need this are memoized with an empty deps array
+// (see eslint-disable-line react-hooks/exhaustive-deps below), so a captured
+// hook value would go stale after the org's plan changes.
+function orgHasOcrImport(): boolean {
+  const { planTier, planExpiresAt } = useOrgStore.getState()
+  const tier = resolveEffectiveTier(planTier, planExpiresAt)
+  return tierAtLeast(tier, FEATURE_TIERS.ocrImport)
+}
+
+export class OcrUpgradeRequiredError extends Error {
+  constructor() {
+    super(
+      'This PDF needs OCR extraction because no native text layer could be read from it — ' +
+      'OCR-based scanned-statement import is available on the Full plan. Upgrade to import this ' +
+      'file, or ask your bank for an Excel/CSV export.',
+    )
+    this.name = 'OcrUpgradeRequiredError'
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -134,6 +158,8 @@ interface Props {
 }
 
 export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
+  const { hasFeature } = usePlan()
+  const ocrAllowed = hasFeature('ocrImport')
   const [phase,             setPhase]             = useState<Phase>('extracting')
   const [result,            setResult]            = useState<ExtractionResult | null>(null)
   const [editedRows,        setEditedRows]        = useState<string[][]>([])
@@ -218,6 +244,8 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         return
       }
 
+      if (!orgHasOcrImport()) throw new OcrUpgradeRequiredError()
+
       const { headers, rawRows, confidence, warnings, pageCount, rowPages } =
         await runOcrPipeline(f, setOcrProgress, password)
 
@@ -257,12 +285,24 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         setPhase('error')
         return
       }
+      if (e instanceof OcrUpgradeRequiredError) {
+        setExtractErrorTitle('OCR requires the Full plan')
+        setExtractError(e.message)
+        setPhase('error')
+        return
+      }
       setExtractError(e instanceof Error ? e.message : 'Extraction failed')
       setPhase('error')
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reExtractWithOcr = useCallback(async () => {
+    if (!orgHasOcrImport()) {
+      setExtractErrorTitle('OCR requires the Full plan')
+      setExtractError(new OcrUpgradeRequiredError().message)
+      setPhase('error')
+      return
+    }
     setPhase('extracting')
     setExtractError(null)
     setExtractErrorTitle('Extraction failed')
@@ -827,7 +867,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
           >
             Cancel
           </button>
-          {result.method === 'native' && (
+          {result.method === 'native' && ocrAllowed && (
             <button
               onClick={reExtractWithOcr}
               className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-black/[0.02] transition-colors"
@@ -835,6 +875,15 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
               <ScanText className="w-4 h-4" />
               Re-extract with OCR
             </button>
+          )}
+          {result.method === 'native' && !ocrAllowed && (
+            <Link
+              to="/settings?tab=billing&locked=ocrImport"
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] transition-colors"
+            >
+              <Lock className="w-4 h-4" />
+              Re-extract with OCR — Full plan
+            </Link>
           )}
           <div className="flex-1" />
           <button

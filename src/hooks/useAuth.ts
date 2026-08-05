@@ -9,7 +9,7 @@ import { useReconciliationStore } from '../store/reconciliationStore'
 import { useHealthStore } from '../store/healthStore'
 import { useFinanceStore } from '../store/financeStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
-import type { OrgStatus, UserProfile, UserRole } from '../types'
+import type { OrgStatus, PlanTier, UserProfile, UserRole } from '../types'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 const PROFILE_FETCH_TIMEOUT_MS = 10_000
@@ -36,9 +36,9 @@ async function fetchAllOrgMemberships(
   }
   const base = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active`
 
-  // Attempt 1: full columns including deletion-lifecycle fields
+  // Attempt 1: full columns including deletion-lifecycle + plan fields
   const res1 = await fetch(
-    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata)`,
+    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count)`,
     { signal, headers },
   )
 
@@ -55,6 +55,9 @@ async function fetchAllOrgMemberships(
         deleted_at:          string | null
         purge_at:            string | null
         metadata:            Record<string, unknown> | null
+        plan_tier:           PlanTier | null
+        plan_expires_at:     string | null
+        imported_rows_count: number | null
       } | null
     }>
     return rows.map(row => ({
@@ -68,6 +71,9 @@ async function fetchAllOrgMemberships(
       org_deleted_at:      row.organizations?.deleted_at ?? null,
       org_purge_at:        row.organizations?.purge_at ?? null,
       org_type:            (row.organizations?.metadata?.org_type as string | null) ?? null,
+      plan_tier:           row.organizations?.plan_tier ?? null,
+      plan_expires_at:     row.organizations?.plan_expires_at ?? null,
+      imported_rows_count: row.organizations?.imported_rows_count ?? 0,
     }))
   }
 

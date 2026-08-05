@@ -12,6 +12,7 @@ import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useOrgStore } from '../../store/orgStore'
+import { resolveEffectiveTier } from '../../hooks/usePlan'
 import { useAllocationStore, buildVersionIndex } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -1468,14 +1469,41 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
 
       // Apply dup skip filter (allSkipIds comes from pre-import stage only)
-      const inflowToInsert  = allSkipIds.size > 0
+      let inflowToInsert  = allSkipIds.size > 0
         ? inflowRows.filter(r => { const id = r.transaction_ref as string | undefined; return !id || !allSkipIds.has(id) })
         : inflowRows
-      const outflowToInsert = allSkipIds.size > 0
+      let outflowToInsert = allSkipIds.size > 0
         ? outflowRows.filter(r => { const id = r.transaction_id as string | undefined; return !id || !allSkipIds.has(id) })
         : outflowRows
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
+
+      // ── Free-tier import cap ────────────────────────────────────────────────
+      // Cumulative across all imports for this org (not per-file) — otherwise
+      // a free user bypasses the cap by re-importing. Truncate rather than
+      // hard-block so the user can still see the feature work on their data.
+      const IMPORT_CAP = 100
+      const { planTier, planExpiresAt, importedRowsCount } = useOrgStore.getState()
+      const effectiveTier = resolveEffectiveTier(planTier, planExpiresAt)
+      let capTruncated = 0
+      if (effectiveTier === 'free') {
+        const remaining = Math.max(0, IMPORT_CAP - importedRowsCount)
+        const wouldInsert = inflowToInsert.length + outflowToInsert.length
+        if (wouldInsert > remaining) {
+          capTruncated = wouldInsert - remaining
+          // Fill the remaining allowance with inflow rows first, then outflow.
+          const keepInflow = Math.min(inflowToInsert.length, remaining)
+          const keepOutflow = Math.max(0, remaining - keepInflow)
+          inflowToInsert  = inflowToInsert.slice(0, keepInflow)
+          outflowToInsert = outflowToInsert.slice(0, keepOutflow)
+          skipped += capTruncated
+          errors.push(
+            remaining === 0
+              ? `You've reached the free plan's 100-transaction import limit — upgrade to import the rest of this statement.`
+              : `Free plan limit reached after ${remaining} more row(s) — the remaining ${capTruncated} row(s) were skipped. Upgrade to import your full statement.`,
+          )
+        }
+      }
 
       const total = inflowToInsert.length + outflowToInsert.length
       // 250 rows/insert. This is a POST body, unlike the dedup query's
@@ -1572,6 +1600,18 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
       if (outflowToInsert.length > 0) {
         useTransactionSyncStore.getState().bumpOutflow()
+      }
+
+      // Bump the free-tier import counter by rows actually inserted (not
+      // attempted) — failed rows shouldn't count against the allowance.
+      if (effectiveTier === 'free' && imported > 0 && orgId) {
+        const { data: newCount, error: countErr } = await supabase.rpc('increment_import_count', {
+          p_org_id: orgId,
+          p_count:  imported,
+        })
+        if (!countErr && typeof newCount === 'number') {
+          useOrgStore.getState().setImportedRowsCount(newCount)
+        }
       }
 
       importCompletedRef.current = true
