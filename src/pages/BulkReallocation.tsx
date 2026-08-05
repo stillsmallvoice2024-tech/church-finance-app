@@ -173,10 +173,10 @@ export default function BulkReallocation() {
     })
 
   const handlePreview = () => {
-    if (srcPortion === dstPortion) { toast('Source and destination portions must differ.', 'error'); return }
+    if (srcPortion === dstPortion) { toast('Source and destination fund types must differ.', 'error'); return }
     if (selectedIds.size === 0)    { toast('Select at least one fund.', 'error'); return }
     if (selectedRows.every(r => r.amount <= 0)) { toast('No positive amounts to transfer.', 'error'); return }
-    if (!description) setDescription(`Bulk reallocation: ${srcPortion} → ${dstPortion}`)
+    if (!description) setDescription(`Bulk reallocation: ${PORTION_LABELS[srcPortion] ?? srcPortion} → ${PORTION_LABELS[dstPortion] ?? dstPortion}`)
     setStep('preview')
   }
 
@@ -239,12 +239,12 @@ export default function BulkReallocation() {
           <div className="flex flex-wrap gap-4 items-center text-sm">
             <div className="flex items-center gap-2">
               <span className="text-gray-500">From:</span>
-              <span className="font-semibold text-gray-800 bg-gray-100 px-2 py-0.5 rounded">{srcPortion}</span>
+              <span className="font-semibold text-gray-800 bg-gray-100 px-2 py-0.5 rounded">{PORTION_LABELS[srcPortion] ?? srcPortion}</span>
             </div>
             <ArrowRight className="w-4 h-4 text-gray-400 shrink-0" />
             <div className="flex items-center gap-2">
               <span className="text-gray-500">To:</span>
-              <span className="font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">{dstPortion}</span>
+              <span className="font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">{PORTION_LABELS[dstPortion] ?? dstPortion}</span>
             </div>
             <div className="ml-auto flex items-center gap-4 text-xs text-gray-500">
               <span>{validRows.length} fund{validRows.length !== 1 ? 's' : ''}</span>
@@ -336,7 +336,7 @@ export default function BulkReallocation() {
           <div className="flex gap-2 items-start px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              {willZero.length} {willZero.length === 1 ? 'fund' : 'funds'} will reach zero in <strong>{srcPortion}</strong> after this move.
+              {willZero.length} {willZero.length === 1 ? 'fund' : 'funds'} will reach zero in <strong>{PORTION_LABELS[srcPortion] ?? srcPortion}</strong> after this move.
             </span>
           </div>
         )}
@@ -382,7 +382,7 @@ export default function BulkReallocation() {
       <Card>
         <div className="flex flex-wrap gap-4 items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Source Portion</label>
+            <label className="text-xs font-medium text-gray-500">Source Fund Type</label>
             <select
               value={srcPortion}
               onChange={e => setSrcPortion(e.target.value as BudgetPortion)}
@@ -395,7 +395,7 @@ export default function BulkReallocation() {
           <ArrowRight className="w-4 h-4 text-gray-400 self-end mb-2.5 shrink-0" />
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Destination Portion</label>
+            <label className="text-xs font-medium text-gray-500">Destination Fund Type</label>
             <select
               value={dstPortion}
               onChange={e => setDstPortion(e.target.value as BudgetPortion)}
@@ -448,7 +448,7 @@ export default function BulkReallocation() {
           )}
 
           {!portionsDiffer && (
-            <p className="text-xs text-danger self-end mb-2.5">Source and destination must differ</p>
+            <p className="text-xs text-danger self-end mb-2.5">Source and destination fund types must differ</p>
           )}
 
           <button
@@ -511,10 +511,10 @@ export default function BulkReallocation() {
                   Fund
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
-                  {srcPortion} Balance
+                  {PORTION_LABELS[srcPortion] ?? srcPortion} Balance
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
-                  {dstPortion} Balance
+                  {PORTION_LABELS[dstPortion] ?? dstPortion} Balance
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">
                   Amount to Move

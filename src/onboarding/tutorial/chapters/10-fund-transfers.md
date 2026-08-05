@@ -10,8 +10,8 @@ Find both at **Daily Finance → Fund-to-Fund Transfer**. The page has two tabs:
 
 1. Click **Add Transfer**.
 2. Pick the **Date** and type the **Amount**.
-3. Pick the **From Fund** (where the money leaves) and the **From Portion** (which pocket: **Regular Funds**, **Designated Gift**, or **Savings Funds**).
-4. Pick the **To Fund** and the **To Portion**.
+3. Pick the **From Fund** (where the money leaves) and the **From Fund Type** (which pocket: **Regular Funds**, **Designated Gift**, or **Savings Funds**).
+4. Pick the **To Fund** and the **To Fund Type**.
 5. Type a **Description** (example: "Move surplus to Building Fund").
 6. Optional: add a **Transaction Ref** and a **Remark**.
 7. Click **Save Transfer**.
@@ -31,7 +31,7 @@ Example: at year end, you want to move half of every fund's Regular Funds into S
 ### How to do a bulk reallocation
 
 1. Click the **Bulk Reallocation** tab.
-2. Pick the **Source Portion** (where money comes from) and the **Destination Portion** (where it goes). They must be different.
+2. Pick the **Source Fund Type** (where money comes from) and the **Destination Fund Type** (where it goes). They must be different.
 3. Pick the **Mode**: **Full Balance** (move everything), **Percentage** (move a share, like 50%), or **Fixed Amount** (move the same amount from each).
 4. In the table, tick the funds you want to include (or tick the box in the header for all). The **Amount to Move** column shows exactly what will move for each.
 5. Check the summary cards: **Selected** and **Total to Move**.
@@ -43,6 +43,6 @@ The app creates one transfer per fund and shows: "Bulk reallocation complete".
 
 ## If something goes wrong
 
-- **"Source and destination must differ"** — you picked the same portion twice; change one.
+- **"Source and destination fund types must differ"** — you picked the same fund type twice; change one.
 - **"N funds were skipped"** — those funds had nothing to move. That's okay.
 - **You made a mistake** — every bulk run is just a set of normal transfers. Go to the Fund-to-Fund Transfer tab, find them (same date and description), and edit or delete them.
