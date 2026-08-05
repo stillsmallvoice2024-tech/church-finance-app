@@ -20,6 +20,17 @@ const ANTHROPIC_API_KEY    = Deno.env.get('ANTHROPIC_API_KEY')
  */
 const UPSTREAM_TIMEOUT_MS = 55_000
 
+// Browser calls via supabase.functions.invoke send a CORS preflight (OPTIONS)
+// because of the custom Authorization/Content-Type headers. Without these
+// headers on every response, the preflight fails and the browser never gets
+// to send the real POST — surfacing as "Failed to send a request to the
+// Edge Function" with no further detail.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OcrResult {
@@ -151,15 +162,19 @@ function getProvider(): OcrProviderFn {
 // ── Request handler ───────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS })
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 })
+    return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS })
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
-      status: 401, headers: { 'Content-Type': 'application/json' },
+      status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 
@@ -167,7 +182,7 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authErr } = await service.auth.getUser(authHeader.slice(7))
   if (authErr || !user) {
     return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
-      status: 401, headers: { 'Content-Type': 'application/json' },
+      status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 
@@ -175,14 +190,14 @@ Deno.serve(async (req) => {
   let body: { image?: string; mimeType?: string; pageNumber?: number }
   try { body = await req.json() } catch {
     return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON body' }), {
-      status: 400, headers: { 'Content-Type': 'application/json' },
+      status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 
   const { image, mimeType = 'image/png', pageNumber = 1 } = body
   if (!image) {
     return new Response(JSON.stringify({ ok: false, error: 'image is required' }), {
-      status: 400, headers: { 'Content-Type': 'application/json' },
+      status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 
@@ -190,13 +205,13 @@ Deno.serve(async (req) => {
   try {
     const result = await getProvider()(image, mimeType)
     return new Response(JSON.stringify({ ok: true, pageNumber, ...result }), {
-      status: 200, headers: { 'Content-Type': 'application/json' },
+      status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[pdf-ocr] page ${pageNumber}:`, msg)
     return new Response(JSON.stringify({ ok: false, error: msg, pageNumber }), {
-      status: 200, headers: { 'Content-Type': 'application/json' },
+      status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 })
