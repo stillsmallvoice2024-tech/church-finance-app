@@ -20,6 +20,7 @@ import { useToastStore } from '../../store/toastStore'
 import { propagateBankOpeningBalance } from '../../utils/bankOpeningBalance'
 import { allocatePercent } from '../../utils/financeMath'
 import { useAllocationStore } from '../../store/allocationStore'
+import { usePlan } from '../../hooks/usePlan'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -75,6 +76,17 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const { categories, refetch: refetchCategories } = useCategories()
   const { currencies } = useCurrencies()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
+  const { hasFeature } = usePlan()
+  const canUseFx = hasFeature('fx')
+  // A bank auto-becomes "foreign currency" just by picking a non-default
+  // currency (see is_foreign_currency below), which then unlocks the FX
+  // import path outside the gated Foreign Currency page — so without the fx
+  // feature, the currency picker itself is restricted to the org's default
+  // (plus whatever currency an existing FX bank was already saved with, so
+  // editing it doesn't silently change its currency out from under it).
+  const selectableCurrencies = canUseFx
+    ? currencies
+    : currencies.filter(c => c.code === (defaultCurrency ?? 'NGN') || c.code === editRecord?.currency)
   const orgId           = useOrgStore(s => s.orgId) ?? ''
   const { push: toast } = useToastStore()
 
@@ -552,7 +564,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
         <Field label="Account Currency">
           <select {...register('currency')} className={`${inputCls(false)} bg-white`}>
-            {currencies.map(c => (
+            {selectableCurrencies.map(c => (
               <option key={c.code} value={c.code}>
                 {c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}
               </option>
@@ -561,6 +573,11 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           {isForeignCurrencyBank && (
             <p className="text-xs text-amber-600 font-medium mt-0.5">
               Foreign Currency Bank — import transactions will be restricted to FX Inflow / FX Outflow types.
+            </p>
+          )}
+          {!canUseFx && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              More currencies available on Clariva Growth.
             </p>
           )}
         </Field>

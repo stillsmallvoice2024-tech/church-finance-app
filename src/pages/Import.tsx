@@ -38,7 +38,7 @@ import { useOutflowClassificationRules } from '../hooks/useOutflowClassification
 import { classifyOutflow } from '../utils/classifyOutflow'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
-import { usePlan } from '../hooks/usePlan'
+import { usePlan, TXN_TYPE_FEATURE } from '../hooks/usePlan'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../components/ui/RootTransactionSearch'
 import { isOffsetableType } from '../utils/transactionTypes'
@@ -645,6 +645,7 @@ function ManualEntryForm() {
   const addOutflow = useAddOutflow()
   const updateInflowRoot  = useUpdateTransaction('inflow_transactions')
   const updateOutflowRoot = useUpdateTransaction('outflow_transactions')
+  const { hasFeature } = usePlan()
 
   useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
@@ -802,7 +803,13 @@ function ManualEntryForm() {
     if (!filteredManualCategories.some(c => c.name === outflowS1)) setOutflowS1('')
   }, [filteredManualCategories, outflowS1])
 
-  const availableTxnTypes = TXN_TYPE_OPTIONS
+  const availableTxnTypes = useMemo(
+    () => TXN_TYPE_OPTIONS.filter(o => {
+      const feature = TXN_TYPE_FEATURE[o.value]
+      return !feature || hasFeature(feature)
+    }),
+    [hasFeature],
+  )
 
   // ── Duplicate check helpers ──────────────────────────────────────────────
   // bankName scopes the check to the selected bank so the same ID in a

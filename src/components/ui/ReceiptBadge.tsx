@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Paperclip, X, Download, Trash2, Loader2, Upload, AlertTriangle } from 'lucide-react'
 import { useReceipts, type ReceiptEntityType, type Receipt } from '../../hooks/useReceipts'
 import { useToastStore } from '../../store/toastStore'
+import { usePlan } from '../../hooks/usePlan'
 
 export const MIGRATION_SQL =
 `-- Receipts table
@@ -57,6 +58,7 @@ interface Props {
 }
 
 export function ReceiptBadge({ entityType, entityId }: Props) {
+  const { hasFeature } = usePlan()
   const { receipts, loading, error, upload, remove, getDownloadUrl } = useReceipts(entityType, entityId)
   const { push: toast } = useToastStore()
   const [open,      setOpen]      = useState(false)
@@ -152,6 +154,12 @@ function friendlyUploadError(msg: string | null): string {
   if (/storage.*not.*found|no such bucket|bucket.*not/i.test(msg)) return 'storage bucket not configured — run migration SQL'
   return msg
 }
+
+  // Receipts are a Growth+ feature — the dedicated /receipts page is route-
+  // gated, but this badge is embedded on Inflows/Outflows/Bank Ledger rows,
+  // which aren't, so it needs its own check to avoid exposing full
+  // attach/view/delete on Free.
+  if (!hasFeature('receipts')) return null
 
   return (
     <>

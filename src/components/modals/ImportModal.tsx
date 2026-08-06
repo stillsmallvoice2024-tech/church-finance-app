@@ -12,7 +12,7 @@ import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useOrgStore } from '../../store/orgStore'
-import { resolveEffectiveTier, resolveEffectiveImportCount, IMPORT_ROWS_PER_MONTH } from '../../hooks/usePlan'
+import { usePlan, resolveEffectiveTier, resolveEffectiveImportCount, IMPORT_ROWS_PER_MONTH, TXN_TYPE_FEATURE } from '../../hooks/usePlan'
 import { useAllocationStore, buildVersionIndex } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -261,6 +261,14 @@ const TEMPLATES_KEY = 'church-import-templates'
 
 export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, preloadedFile, onPdfFile, onSuccess }: Props) {
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
+  const { hasFeature } = usePlan()
+  const visibleTxnTypeOptions = useMemo(
+    () => TXN_TYPE_OPTIONS.filter(o => {
+      const feature = TXN_TYPE_FEATURE[o.value]
+      return !feature || hasFeature(feature)
+    }),
+    [hasFeature],
+  )
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const importCompletedRef = useRef(false)
@@ -2420,8 +2428,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
               const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
 
-              const availableInflowTypes  = TXN_TYPE_OPTIONS
-              const availableOutflowTypes = TXN_TYPE_OPTIONS
+              const availableInflowTypes  = visibleTxnTypeOptions
+              const availableOutflowTypes = visibleTxnTypeOptions
 
               // Rows come from the model built at Step 3→4 and are memoized —
               // previously this remapped and re-parsed every row on every

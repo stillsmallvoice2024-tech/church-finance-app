@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { History, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { usePlan } from '../../hooks/usePlan'
 
 interface StoryEvent {
   id:         string
@@ -50,6 +51,7 @@ function fmtWhen(iso: string, locale = 'en-GB') {
  * transaction, sourced from the existing field_changes audit table.
  */
 export function TransactionStory({ table, recordId, createdAt, locale }: TransactionStoryProps) {
+  const { hasFeature } = usePlan()
   const [events,  setEvents]  = useState<StoryEvent[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [open,    setOpen]    = useState(false)
@@ -83,6 +85,11 @@ export function TransactionStory({ table, recordId, createdAt, locale }: Transac
       })
     return () => { cancelled = true }
   }, [open, events, table, recordId])
+
+  // The dedicated Change Log page is Impact-only, but this same
+  // field_changes data is also viewable per-transaction here on
+  // Inflows/Outflows rows, on every tier — needs its own check.
+  if (!hasFeature('changeLog')) return null
 
   return (
     <div className="col-span-2 sm:col-span-3 lg:col-span-4 pt-2 border-t border-gray-100 mt-1">

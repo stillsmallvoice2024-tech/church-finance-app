@@ -42,6 +42,21 @@ export const FEATURE_TIERS: Record<PlanFeature, PlanTier> = {
   ocrImport:                'full',
 }
 
+// Which gated feature a given inflow/outflow `transaction_type` value
+// requires, if any — the underlying data model has no plan check of its own
+// (RLS allows any authenticated org member to write any transaction_type),
+// so every UI surface that lets a user pick one (Import, ImportModal,
+// AddInflowModal, AddOutflowModal) must filter its options through this so
+// a Free/Growth org can't create refund/reversal/bank_deposit/
+// intrabank_transfer rows the Adjustments/Bank Movement pages exist to
+// manage, just by not going through those pages.
+export const TXN_TYPE_FEATURE: Partial<Record<string, PlanFeature>> = {
+  refund:             'adjustments',
+  reversal:           'adjustments',
+  bank_deposit:       'bankMovement',
+  intrabank_transfer: 'bankMovement',
+}
+
 // Some features aren't simply on/off per tier — they're available starting a
 // given tier but capped at a smaller quantity until a higher tier removes the
 // cap. `null` = unlimited. Only meaningful once `hasFeature()` is already true.
