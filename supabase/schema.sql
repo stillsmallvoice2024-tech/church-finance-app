@@ -1734,9 +1734,12 @@ create index if not exists idx_intra_flows_org_batch       on public.intra_flows
   where batch_id is not null;
 create index if not exists idx_tas_org_txn                 on public.transaction_allocation_snapshots(org_id, transaction_id);
 
--- Balance Brought Forward deduplication index
-create unique index if not exists idx_inflow_bf_unique_bank
-  on public.inflow_transactions (bank_name)
+-- Balance Brought Forward deduplication index.
+-- Must be org-scoped: banks are plain text and tenants share bank names
+-- (Nigerian churches largely use the same handful), so an unscoped unique
+-- index would let the first tenant to claim a name lock out all others.
+create unique index if not exists idx_inflow_bf_unique_org_bank
+  on public.inflow_transactions (org_id, bank_name)
   where transaction_type = 'balance_brought_forward';
 
 create index if not exists idx_inflow_bank_name   on public.inflow_transactions(bank_name);
