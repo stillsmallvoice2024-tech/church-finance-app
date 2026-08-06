@@ -9,7 +9,7 @@ import { useReconciliationStore } from '../store/reconciliationStore'
 import { useHealthStore } from '../store/healthStore'
 import { useFinanceStore } from '../store/financeStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
-import type { OrgStatus, PlanTier, UserProfile, UserRole } from '../types'
+import type { OrgStatus, PlanStatus, PlanTier, UserProfile, UserRole } from '../types'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 const PROFILE_FETCH_TIMEOUT_MS = 10_000
@@ -38,7 +38,7 @@ async function fetchAllOrgMemberships(
 
   // Attempt 1: full columns including deletion-lifecycle + plan fields
   const res1 = await fetch(
-    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count,imported_rows_period_start)`,
+    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count,imported_rows_period_start,plan_status,trial_ends_at)`,
     { signal, headers },
   )
 
@@ -59,6 +59,8 @@ async function fetchAllOrgMemberships(
         plan_expires_at:     string | null
         imported_rows_count: number | null
         imported_rows_period_start: string | null
+        plan_status:         PlanStatus | null
+        trial_ends_at:       string | null
       } | null
     }>
     return rows.map(row => ({
@@ -76,6 +78,8 @@ async function fetchAllOrgMemberships(
       plan_expires_at:     row.organizations?.plan_expires_at ?? null,
       imported_rows_count: row.organizations?.imported_rows_count ?? 0,
       imported_rows_period_start: row.organizations?.imported_rows_period_start ?? null,
+      plan_status:         row.organizations?.plan_status ?? null,
+      trial_ends_at:       row.organizations?.trial_ends_at ?? null,
     }))
   }
 
