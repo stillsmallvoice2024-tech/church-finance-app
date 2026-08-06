@@ -43,6 +43,7 @@ interface OrgState {
   setTimezone:          (tz: string | null) => void
   setOrgType:           (type: string | null) => void
   setImportedRowsCount: (count: number) => void
+  setPlanTier:          (tier: PlanTier, expiresAt?: string | null) => void
   setSwitching:         (v: boolean) => void
   clearOrg:             () => void
   persistActive:        (userId: string, orgId: string) => void
@@ -97,6 +98,8 @@ export const useOrgStore = create<OrgState>((set) => ({
   setOrgType: (type) => set({ orgType: type }),
 
   setImportedRowsCount: (count) => set({ importedRowsCount: count }),
+
+  setPlanTier: (tier, expiresAt = null) => set({ planTier: tier, planExpiresAt: expiresAt }),
 
   setSwitching: (v) => set({ switching: v }),
 
