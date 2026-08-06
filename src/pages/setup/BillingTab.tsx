@@ -43,12 +43,29 @@ const FEATURE_LABEL: Record<PlanFeature, string> = {
 
 const CONTACT_EMAIL = 'stillsmallvoice2024@gmail.com'
 
+// Stripe checkout/portal endpoints already exist (create-checkout-session,
+// create-portal-session below) but aren't fully wired up yet — every plan
+// change (upgrade, downgrade, manage billing) routes through a support
+// email until this flips to true. Flip it once Stripe is actually live;
+// the permanent "prefer email" contact link at the bottom of this tab stays
+// either way, so email keeps working as a fallback even after Stripe is on.
+const STRIPE_BILLING_ENABLED = false
+
 function planChangeMailto(orgName: string | null, currentTier: PlanTier, targetTier: PlanTier): string {
   const action = TIER_RANK[targetTier] > TIER_RANK[currentTier] ? 'Upgrade' : 'Downgrade'
   const subject = encodeURIComponent(`${action} to ${TIER_DISPLAY_NAME[targetTier]} — ${orgName ?? 'my organisation'}`)
   const body = encodeURIComponent(
     `Hi,\n\nI'd like to ${action.toLowerCase()} our organisation from ${TIER_DISPLAY_NAME[currentTier]} to ` +
     `${TIER_DISPLAY_NAME[targetTier]}.\n\nOrganisation: ${orgName ?? ''}\n`,
+  )
+  return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`
+}
+
+function manageBillingMailto(orgName: string | null, currentTier: PlanTier): string {
+  const subject = encodeURIComponent(`Manage billing — ${orgName ?? 'my organisation'}`)
+  const body = encodeURIComponent(
+    `Hi,\n\nI'd like to manage our organisation's billing (update payment method, view invoices, change plan, etc.).\n\n` +
+    `Organisation: ${orgName ?? ''}\nCurrent plan: ${TIER_DISPLAY_NAME[currentTier]}\n`,
   )
   return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`
 }
@@ -273,15 +290,25 @@ export function BillingTab() {
         )}
 
         {tier !== 'free' && (
-          <button
-            type="button"
-            onClick={openBillingPortal}
-            disabled={portalPending}
-            className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary dark:text-primary-dm hover:underline disabled:opacity-60"
-          >
-            {portalPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Settings className="w-3.5 h-3.5" />}
-            Manage billing
-          </button>
+          STRIPE_BILLING_ENABLED ? (
+            <button
+              type="button"
+              onClick={openBillingPortal}
+              disabled={portalPending}
+              className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary dark:text-primary-dm hover:underline disabled:opacity-60"
+            >
+              {portalPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Settings className="w-3.5 h-3.5" />}
+              Manage billing
+            </button>
+          ) : (
+            <a
+              href={manageBillingMailto(orgName, tier)}
+              className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary dark:text-primary-dm hover:underline"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              Manage billing
+            </a>
+          )
         )}
       </Card>
 
@@ -342,16 +369,26 @@ export function BillingTab() {
                     Your current plan
                   </div>
                 ) : TIER_RANK[t] > TIER_RANK[tier] && isPayableTier(t) ? (
-                  <button
-                    type="button"
-                    onClick={() => startCheckout(t)}
-                    disabled={pendingTier !== null}
-                    className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity disabled:opacity-60"
-                  >
-                    {pendingTier === t ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    Move to {TIER_SHORT_NAME[t]}
-                  </button>
-                ) : t === 'free' ? (
+                  STRIPE_BILLING_ENABLED ? (
+                    <button
+                      type="button"
+                      onClick={() => startCheckout(t)}
+                      disabled={pendingTier !== null}
+                      className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity disabled:opacity-60"
+                    >
+                      {pendingTier === t ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Move to {TIER_SHORT_NAME[t]}
+                    </button>
+                  ) : (
+                    <a
+                      href={planChangeMailto(orgName, tier, t)}
+                      className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      Move to {TIER_SHORT_NAME[t]}
+                    </a>
+                  )
+                ) : t === 'free' && STRIPE_BILLING_ENABLED ? (
                   <button
                     type="button"
                     onClick={openBillingPortal}
@@ -359,7 +396,7 @@ export function BillingTab() {
                     className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 border border-gray-300 dark:border-white/15 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60"
                   >
                     {portalPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    Cancel to {TIER_SHORT_NAME[t]}
+                    Switch to {TIER_SHORT_NAME[t]}
                   </button>
                 ) : (
                   <a
@@ -381,6 +418,15 @@ export function BillingTab() {
           You've used this month's free import allowance — it resets {resetDateLabel}, or upgrade to keep importing now.
         </p>
       )}
+
+      {/* Permanent fallback — stays even once Stripe checkout/portal is live. */}
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        Prefer email? Reach us at{' '}
+        <a href={`mailto:${CONTACT_EMAIL}`} className="underline hover:text-primary dark:hover:text-primary-dm">
+          {CONTACT_EMAIL}
+        </a>{' '}
+        any time for help with your plan or billing.
+      </p>
     </div>
   )
 }
