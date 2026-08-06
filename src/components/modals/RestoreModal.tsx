@@ -5,6 +5,7 @@ import {
 import { Modal } from '../ui/Modal'
 import { useToastStore } from '../../store/toastStore'
 import { useOrgStore } from '../../store/orgStore'
+import { useAuthStore } from '../../store/authStore'
 import {
   MANAGED_TABLES,
   parseBackupFile,
@@ -12,6 +13,10 @@ import {
   getRestoreSummary,
   restoreFromBackup,
   preflightReplace,
+  isAtomicRestoreAvailable,
+  createBackup,
+  downloadBackup,
+  ATOMIC_RESTORE_MIGRATION,
   type ReplacePreflight,
   type BackupFileV2,
   type RestoreSummaryV2,
@@ -22,6 +27,7 @@ import {
 
 type Step = 'select' | 'preview' | 'confirm' | 'restoring' | 'done'
 type Mode = 'merge' | 'replace'
+type SnapshotState = 'idle' | 'running' | 'done' | 'error'
 
 interface Props {
   open:    boolean
@@ -43,6 +49,7 @@ const RESTORE_MODE_COLORS: Record<RestoreMode, string> = {
 export function RestoreModal({ open, onClose, onDone }: Props) {
   const { push: toast } = useToastStore()
   const orgId = useOrgStore(s => s.orgId)
+  const user  = useAuthStore(s => s.user)
 
   const [step,             setStep]             = useState<Step>('select')
   const [mode,             setMode]             = useState<Mode>('merge')
@@ -58,6 +65,9 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [preflightErr,     setPreflightErr]     = useState<string | null>(null)
   const [ack,              setAck]              = useState('')
+  const [atomic,           setAtomic]           = useState<boolean | null>(null)
+  const [snapshotState,    setSnapshotState]    = useState<SnapshotState>('idle')
+  const [snapshotErr,      setSnapshotErr]      = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const reset = () => {
@@ -75,25 +85,54 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
     setPreflightLoading(false)
     setPreflightErr(null)
     setAck('')
+    setAtomic(null)
+    setSnapshotState('idle')
+    setSnapshotErr(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // Server-side snapshot before any destructive replace: compares live row
-  // counts against what the backup carries, so a truncated or stale file
-  // cannot silently delete the difference.
+  // Two independent checks before any destructive replace:
+  //   1. preflight — compares live row counts against what the backup carries,
+  //      so a truncated or stale file cannot silently delete the difference.
+  //   2. atomic    — whether commit_restore() exists. Without it the delete and
+  //      the insert cannot share a transaction and replace stays disabled.
   const goToConfirm = async () => {
     setStep('confirm')
     setAck('')
     setPreflight(null)
     setPreflightErr(null)
+    setSnapshotState('idle')
+    setSnapshotErr(null)
     if (mode !== 'replace' || !backup || !orgId) return
     setPreflightLoading(true)
     try {
-      setPreflight(await preflightReplace(backup, orgId))
+      const [pf, hasRpc] = await Promise.all([
+        preflightReplace(backup, orgId),
+        isAtomicRestoreAvailable(),
+      ])
+      setPreflight(pf)
+      setAtomic(hasRpc)
     } catch (e) {
       setPreflightErr(e instanceof Error ? e.message : 'Could not verify live row counts')
     } finally {
       setPreflightLoading(false)
+    }
+  }
+
+  // Rollback path for the one failure the transaction cannot cover: restoring
+  // the *wrong* file. Atomicity guarantees the commit is all-or-nothing, not
+  // that the operator picked the right backup.
+  const takeSafetySnapshot = async () => {
+    if (!orgId || !user) return
+    setSnapshotState('running')
+    setSnapshotErr(null)
+    try {
+      const snap = await createBackup(user.id, user.email ?? 'unknown', undefined, undefined, orgId)
+      downloadBackup(snap)
+      setSnapshotState('done')
+    } catch (e) {
+      setSnapshotState('error')
+      setSnapshotErr(e instanceof Error ? e.message : 'Snapshot failed')
     }
   }
 
@@ -192,13 +231,17 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
       })).filter(g => g.tables.length > 0)
     : []
 
-  // Replace is blocked until the preflight has run and either cleared the
-  // backup or been explicitly acknowledged. Merge is never blocked.
+  // Replace is blocked until: the atomic path is confirmed present, the
+  // preflight has run and either cleared the backup or been explicitly
+  // acknowledged, and a safety snapshot has been taken. Merge is never blocked —
+  // it only ever upserts.
   const restoreBlocked =
     mode === 'replace' &&
     (preflightLoading ||
       !!preflightErr ||
       !preflight ||
+      atomic !== true ||
+      snapshotState !== 'done' ||
       (!preflight.safe && ack.trim().toUpperCase() !== ACK_PHRASE))
 
   const managedItems   = items.filter(it => it.section === 'managed')
@@ -423,6 +466,63 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
               </div>
             )}
 
+            {/* Transaction availability — replace is refused without it */}
+            {mode === 'replace' && atomic === false && (
+              <div className="flex items-start gap-2 rounded-xl bg-red-50 border-2 border-red-300 px-4 py-3 text-sm text-red-700">
+                <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Replace is unavailable on this database</p>
+                  <p className="text-xs">
+                    Atomic restore is not installed, so the delete and the insert cannot be committed
+                    together — an interruption would leave the ledger half-restored. Run migration{' '}
+                    <code className="bg-red-100 px-1 rounded">{ATOMIC_RESTORE_MIGRATION}</code>, or use
+                    merge mode, which never deletes.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {mode === 'replace' && atomic === true && (
+              <div className="flex items-start gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2.5 text-sm text-green-700">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                Atomic restore available — the delete and the insert commit as one transaction, so a
+                failure at any point leaves your current data untouched.
+              </div>
+            )}
+
+            {/* Safety snapshot — the rollback path for restoring the wrong file */}
+            {mode === 'replace' && atomic === true && (
+              <div className="rounded-xl border border-gray-200 px-4 py-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-sm">
+                    <p className="font-medium text-gray-900">Safety snapshot</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Downloads your current data before anything is replaced. Required — it is the
+                      only way back if this turns out to be the wrong backup file.
+                    </p>
+                  </div>
+                  <button
+                    onClick={takeSafetySnapshot}
+                    disabled={snapshotState === 'running' || snapshotState === 'done'}
+                    className="shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-gray-700 rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {snapshotState === 'running' ? 'Exporting…' : snapshotState === 'done' ? 'Saved' : 'Download'}
+                  </button>
+                </div>
+
+                {snapshotState === 'done' && (
+                  <p className="flex items-center gap-1.5 text-xs text-green-700">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Snapshot downloaded — keep it until you have verified the restore.
+                  </p>
+                )}
+                {snapshotState === 'error' && (
+                  <p className="flex items-start gap-1.5 text-xs text-red-700">
+                    <XCircle className="w-3.5 h-3.5 shrink-0 mt-px" /> {snapshotErr}
+                  </p>
+                )}
+              </div>
+            )}
+
             {mode === 'replace' && preflightErr && (
               <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700">
                 <XCircle className="w-4 h-4 shrink-0 mt-0.5" /> {preflightErr}
@@ -544,7 +644,14 @@ export function RestoreModal({ open, onClose, onDone }: Props) {
               <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
                 <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                 <div className="text-sm text-red-700 space-y-1">
-                  <p className="font-semibold">Restore completed with errors</p>
+                  <p className="font-semibold">
+                    {result.partiallyApplied ? 'Restore aborted part-way' : 'Restore failed — no data was changed'}
+                  </p>
+                  <p className="text-xs">
+                    {result.partiallyApplied
+                      ? 'This database is not on the atomic restore path, so some tables may already have been written. Compare against your safety snapshot before retrying.'
+                      : 'The restore ran as a single transaction and was rolled back in full. Your existing data is exactly as it was.'}
+                  </p>
                   {managedErrors.length > 0 && (
                     <>
                       <p className="text-xs font-semibold">Managed failures:</p>

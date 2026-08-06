@@ -279,10 +279,13 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
 export const BACKUP_TABLES = MANAGED_TABLES
 
 /** Delete order for replace mode — derived from registry, never stale.
- *  Excludes append-mode tables (they are never deleted). */
+ *  Excludes append-mode tables (they are never deleted) and non-org-scoped
+ *  tables: `deleteFull` can only scope a DELETE by `org_id`, so a table without
+ *  that column (`currencies`, `organizations`) would be wiped instance-wide for
+ *  every tenant. Both are restored by upsert instead. */
 const DELETE_TABLES: string[] = [...MANAGED_TABLES]
   .reverse()
-  .filter(t => t.restoreMode !== 'append' && t.backupEnabled)
+  .filter(t => t.restoreMode !== 'append' && t.backupEnabled && t.orgScoped !== false)
   .map(t => t.key)
 
 /** Tables known to exist in the public schema but that are not application data */
@@ -402,6 +405,15 @@ export interface RestoreResultV2 {
   managedRestored: string[]
   unmanagedRestored: string[]
   errors: { table: string; section: 'managed' | 'unmanaged'; message: string }[]
+  /**
+   * 'atomic'  — replayed by commit_restore(); delete+insert committed together,
+   *             so a failure left the ledger exactly as it was.
+   * 'staged'  — the legacy per-table path; a failure may have left the org
+   *             partially restored. Only reachable when the RPC is not installed.
+   */
+  path?: 'atomic' | 'staged'
+  /** Only set on the staged path when a failure aborted the run mid-flight. */
+  partiallyApplied?: boolean
 }
 
 /** Backward compat alias */
@@ -865,7 +877,129 @@ export type RestoreProgressCallback = (
   count?: number,
 ) => void
 
-export async function restoreFromBackup(
+// ── Atomic restore (commit_restore RPC) ───────────────────────────────────────
+
+/** Migration that installs the atomic path. Surfaced in operator-facing errors. */
+export const ATOMIC_RESTORE_MIGRATION = '20260806000002_atomic_restore_rpc.sql'
+
+/** Rows per staging insert. Chunking the *upload* is safe — only the commit
+ *  has to be atomic, and that is one RPC call regardless of payload size. */
+const STAGE_CHUNK_SIZE = 500
+
+/** PostgREST/Postgres signatures for "this migration has not been run". */
+function isNotInstalled(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false
+  // PGRST202/PGRST205: function or table absent from the schema cache.
+  // 42883 undefined_function, 42P01 undefined_table.
+  if (['PGRST202', 'PGRST205', '42883', '42P01'].includes(err.code ?? '')) return true
+  return /schema cache|does not exist/i.test(err.message ?? '')
+}
+
+/**
+ * True when `commit_restore` and its staging tables are present, i.e. restore
+ * can run as a single transaction. False means the deployment is still on the
+ * legacy per-table path and `replace` mode is unsafe.
+ */
+export async function isAtomicRestoreAvailable(): Promise<boolean> {
+  const { error } = await supabase
+    .from('restore_allowed_tables')
+    .select('table_key', { head: true, count: 'exact' })
+    .limit(1)
+  return !error
+}
+
+/**
+ * Stages the whole payload, then replays it in one server-side transaction.
+ * Returns `null` (having touched nothing) when the migration is not installed,
+ * so the caller can decide what to do rather than silently degrading.
+ */
+async function restoreAtomic(
+  backup: BackupFileV2,
+  options: RestoreOptions,
+  orgId: string,
+  onProgress?: RestoreProgressCallback,
+): Promise<RestoreResultV2 | null> {
+  const active = MANAGED_TABLES.filter(def => {
+    const rows = backup.managed[def.key]
+    return def.backupEnabled && Array.isArray(rows) && rows.length > 0
+  })
+
+  const { data: batch, error: batchErr } = await supabase
+    .from('restore_batches')
+    .insert({ org_id: orgId } as never)
+    .select('id')
+    .single()
+
+  if (batchErr) {
+    if (isNotInstalled(batchErr)) return null
+    throw new Error(`Could not open a restore batch: ${batchErr.message}`)
+  }
+  const batchId = (batch as { id: string }).id
+
+  const abandon = async () => {
+    // Best-effort: staged rows are inert, and purge_stale_restore_batches()
+    // sweeps anything left behind.
+    await supabase.from('restore_batches').update({ status: 'aborted' } as never).eq('id', batchId)
+  }
+
+  try {
+    for (const def of active) {
+      const rows = backup.managed[def.key] as Record<string, unknown>[]
+      onProgress?.('managed', def.key, 'running')
+
+      for (let i = 0; i < rows.length; i += STAGE_CHUNK_SIZE) {
+        const { error } = await supabase
+          .from('restore_staging')
+          .insert({ batch_id: batchId, table_key: def.key, rows: rows.slice(i, i + STAGE_CHUNK_SIZE) } as never)
+        if (error) {
+          if (isNotInstalled(error)) { await abandon(); return null }
+          throw new Error(`${def.key}: staging failed — ${error.message}`)
+        }
+      }
+    }
+
+    const { error: commitErr } = await supabase.rpc('commit_restore', {
+      p_batch_id:              batchId,
+      p_mode:                  options.mode,
+      p_acknowledge_data_loss: options.acknowledgeDataLoss ?? false,
+    })
+
+    if (commitErr) {
+      if (isNotInstalled(commitErr)) { await abandon(); return null }
+      throw new Error(commitErr.message)
+    }
+  } catch (e) {
+    // Nothing was applied: the delete and the insert both live inside
+    // commit_restore's transaction, so a throw here means the ledger is
+    // untouched. Report per-table so the modal can stop showing spinners.
+    for (const def of active) onProgress?.('managed', def.key, 'error')
+    await abandon()
+    throw e instanceof Error ? e : new Error('Restore failed')
+  }
+
+  for (const def of active) {
+    onProgress?.('managed', def.key, 'done', (backup.managed[def.key] ?? []).length)
+  }
+
+  return {
+    success: true,
+    managedRestored: active.map(d => d.key),
+    unmanagedRestored: [],
+    errors: [],
+    path: 'atomic',
+  }
+}
+
+// ── Legacy path ───────────────────────────────────────────────────────────────
+
+/**
+ * Pre-RPC restore: each delete and each 500-row upsert is its own commit, so a
+ * failure anywhere leaves the org partially restored with no rollback. Retained
+ * only for deployments that have not run {@link ATOMIC_RESTORE_MIGRATION}, and
+ * it now fails fast — the first error aborts rather than pressing on. A
+ * half-restored ledger is worse than an aborted one: it looks valid.
+ */
+async function restoreStaged(
   backup: BackupFileV2,
   options: RestoreOptions,
   orgId: string,
@@ -874,38 +1008,34 @@ export async function restoreFromBackup(
   const managedRestored:   string[] = []
   const unmanagedRestored: string[] = []
   const errors: RestoreResultV2['errors'] = []
+  let destructiveStarted = false
 
   // ── Replace: delete in reverse dependency order ──────────────────────────────
-  // receipts / audit_log / field_changes are no longer wiped here — they are
+  // receipts / audit_log / field_changes are not wiped here — they are
   // registered as append-mode tables, so DELETE_TABLES excludes them and the
   // audit trail survives every restore.
   if (options.mode === 'replace') {
-    const preflight = await preflightReplace(backup, orgId)
-    if (!preflight.safe && !options.acknowledgeDataLoss) {
-      const detail = preflight.shortfalls
-        .slice(0, 5)
-        .map(t => `${t.label}: ${t.liveRows.toLocaleString()} live vs ${t.backupRows.toLocaleString()} in backup`)
-        .join('; ')
-      throw new Error(
-        'Replace aborted: the backup holds fewer rows than the live data, so replacing would ' +
-        `permanently delete ${preflight.totalShortfall.toLocaleString()} row(s). ` +
-        (detail ? `${detail}. ` : '') +
-        (preflight.unreadable.length > 0 ? `Could not read live counts for: ${preflight.unreadable.join(', ')}. ` : '') +
-        'Use merge mode, or re-confirm explicitly to proceed.',
-      )
-    }
-
     for (const tableKey of DELETE_TABLES) {
       try {
+        destructiveStarted = true
         await deleteFull(tableKey, orgId)
       } catch (e) {
-        // Never silent: a failed delete is indistinguishable from an empty
-        // table otherwise, and leaves replace mode half-applied.
+        // Abort before a single row is inserted. Continuing would delete the
+        // remaining tables and then insert on top of a partial wipe.
         errors.push({
           table: tableKey,
           section: 'managed',
           message: `Replace-mode delete failed: ${e instanceof Error ? e.message : 'Unknown error'}`,
         })
+        onProgress?.('managed', tableKey, 'error')
+        return {
+          success: false,
+          managedRestored,
+          unmanagedRestored,
+          errors,
+          path: 'staged',
+          partiallyApplied: true,
+        }
       }
     }
   }
@@ -917,16 +1047,26 @@ export async function restoreFromBackup(
 
     onProgress?.('managed', def.key, 'running')
     try {
-      // In replace mode, append-mode tables skip delete (already excluded from DELETE_TABLES)
-      // and are always upserted
+      // In replace mode, append-mode tables skip delete (already excluded from
+      // DELETE_TABLES) and are always upserted
       await insertBatch(def.key, rows, def.conflictColumn)
       managedRestored.push(def.key)
+      destructiveStarted = true
       onProgress?.('managed', def.key, 'done', rows.length)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error'
       errors.push({ table: def.key, section: 'managed', message: msg })
       onProgress?.('managed', def.key, 'error')
-      // Continue — partial restore is better than full abort
+      // Stop here: later tables reference this one, and every table restored
+      // after a failure widens the inconsistency.
+      return {
+        success: false,
+        managedRestored,
+        unmanagedRestored,
+        errors,
+        path: 'staged',
+        partiallyApplied: destructiveStarted,
+      }
     }
   }
 
@@ -957,7 +1097,75 @@ export async function restoreFromBackup(
     managedRestored,
     unmanagedRestored,
     errors,
+    path: 'staged',
   }
+}
+
+export async function restoreFromBackup(
+  backup: BackupFileV2,
+  options: RestoreOptions,
+  orgId: string,
+  onProgress?: RestoreProgressCallback,
+): Promise<RestoreResultV2> {
+  // Runs on both paths. commit_restore repeats the check server-side, but doing
+  // it here keeps the failure cheap and the message specific.
+  if (options.mode === 'replace') {
+    const preflight = await preflightReplace(backup, orgId)
+    if (!preflight.safe && !options.acknowledgeDataLoss) {
+      const detail = preflight.shortfalls
+        .slice(0, 5)
+        .map(t => `${t.label}: ${t.liveRows.toLocaleString()} live vs ${t.backupRows.toLocaleString()} in backup`)
+        .join('; ')
+      throw new Error(
+        'Replace aborted: the backup holds fewer rows than the live data, so replacing would ' +
+        `permanently delete ${preflight.totalShortfall.toLocaleString()} row(s). ` +
+        (detail ? `${detail}. ` : '') +
+        (preflight.unreadable.length > 0 ? `Could not read live counts for: ${preflight.unreadable.join(', ')}. ` : '') +
+        'Use merge mode, or re-confirm explicitly to proceed.',
+      )
+    }
+  }
+
+  const atomic = await restoreAtomic(backup, options, orgId, onProgress)
+
+  if (atomic) {
+    // Unmanaged tables are outside the allowlist and therefore outside the
+    // transaction. They are best-effort by definition and run only after the
+    // managed commit has succeeded.
+    if (options.restoreUnmanaged) {
+      for (const [tableKey, rows] of Object.entries(backup.unmanaged ?? {})) {
+        if (!Array.isArray(rows) || rows.length === 0) continue
+        onProgress?.('unmanaged', tableKey, 'running')
+        try {
+          await insertBatch(tableKey, rows, 'id')
+          atomic.unmanagedRestored.push(tableKey)
+          onProgress?.('unmanaged', tableKey, 'done', rows.length)
+        } catch (e) {
+          atomic.errors.push({
+            table: tableKey,
+            section: 'unmanaged',
+            message: e instanceof Error ? e.message : 'Unknown error',
+          })
+          onProgress?.('unmanaged', tableKey, 'error')
+        }
+      }
+    }
+    return atomic
+  }
+
+  // ── Fallback: migration not installed ───────────────────────────────────────
+  // `replace` without a transaction is the exact scenario the audit flagged:
+  // the delete can succeed and the insert fail, leaving nothing behind. Refuse
+  // it rather than offer a destructive best-effort.
+  if (options.mode === 'replace') {
+    throw new Error(
+      'Replace mode is unavailable: this database has not been migrated to atomic restore, ' +
+      `so the delete and the insert cannot be committed together. Run ${ATOMIC_RESTORE_MIGRATION}, ` +
+      'or use merge mode, which never deletes.',
+    )
+  }
+
+  return restoreStaged(backup, options, orgId, onProgress)
 }
 
 // ── File parsing ───────────────────────────────────────────────────────────────
