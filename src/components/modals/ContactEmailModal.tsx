@@ -64,7 +64,7 @@ export function ContactEmailModal({ open, onClose, draft, description }: Props) 
         />
 
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          No email app set up on this device? Copy the message and paste it into whatever you use.
+          No email app available on this device? Copy the message and paste it into your preferred email service.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
