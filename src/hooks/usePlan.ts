@@ -48,7 +48,7 @@ export const QUANTITY_LIMITS: Partial<Record<PlanFeature, Record<PlanTier, numbe
 }
 
 export const TIER_DISPLAY_NAME: Record<PlanTier, string> = {
-  free:   'Clariva Start Free',
+  free:   'Clariva Start',
   level1: 'Clariva Growth',
   full:   'Clariva Impact',
 }
@@ -61,7 +61,7 @@ export const TIER_PRICING: Record<PlanTier, { monthly: number; annual: number }>
   full:   { monthly: 25000, annual: 250000 },
 }
 
-const TIER_RANK: Record<PlanTier, number> = { free: 0, level1: 1, full: 2 }
+export const TIER_RANK: Record<PlanTier, number> = { free: 0, level1: 1, full: 2 }
 
 export function tierAtLeast(tier: PlanTier, min: PlanTier): boolean {
   return TIER_RANK[tier] >= TIER_RANK[min]

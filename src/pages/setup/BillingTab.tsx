@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card'
 import { useOrgStore } from '../../store/orgStore'
 import { useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import {
-  usePlan, FEATURE_TIERS, TIER_DISPLAY_NAME, TIER_PRICING, QUANTITY_LIMITS,
+  usePlan, FEATURE_TIERS, TIER_DISPLAY_NAME, TIER_PRICING, QUANTITY_LIMITS, TIER_RANK,
   type PlanFeature,
 } from '../../hooks/usePlan'
 import type { PlanTier } from '../../types'
@@ -36,10 +36,12 @@ const FEATURE_LABEL: Record<PlanFeature, string> = {
 
 const CONTACT_EMAIL = 'stillsmallvoice2024@gmail.com'
 
-function upgradeMailto(orgName: string | null, targetTier: PlanTier): string {
-  const subject = encodeURIComponent(`${TIER_DISPLAY_NAME[targetTier]} — ${orgName ?? 'my organisation'}`)
+function planChangeMailto(orgName: string | null, currentTier: PlanTier, targetTier: PlanTier): string {
+  const action = TIER_RANK[targetTier] > TIER_RANK[currentTier] ? 'Upgrade' : 'Downgrade'
+  const subject = encodeURIComponent(`${action} to ${TIER_DISPLAY_NAME[targetTier]} — ${orgName ?? 'my organisation'}`)
   const body = encodeURIComponent(
-    `Hi,\n\nI'd like to move our organisation onto ${TIER_DISPLAY_NAME[targetTier]}.\n\nOrganisation: ${orgName ?? ''}\n`,
+    `Hi,\n\nI'd like to ${action.toLowerCase()} our organisation from ${TIER_DISPLAY_NAME[currentTier]} to ` +
+    `${TIER_DISPLAY_NAME[targetTier]}.\n\nOrganisation: ${orgName ?? ''}\n`,
   )
   return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`
 }
@@ -198,7 +200,7 @@ export function BillingTab() {
             >
               <div className={`relative px-5 py-5 ${bandClasses[t]}`}>
                 {isCurrent && (
-                  <span className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wide bg-white/25 px-2.5 py-1 rounded-full">
+                  <span className="absolute top-2 right-2.5 text-[8px] font-bold uppercase tracking-wide bg-white/25 px-1.5 py-0.5 rounded-full">
                     Current plan
                   </span>
                 )}
@@ -238,13 +240,20 @@ export function BillingTab() {
                   <div className="w-full text-center text-sm font-semibold rounded-lg py-2.5 bg-primary-50 dark:bg-primary/15 text-primary dark:text-primary-dm">
                     Your current plan
                   </div>
-                ) : (
+                ) : TIER_RANK[t] > TIER_RANK[tier] ? (
                   <a
-                    href={upgradeMailto(orgName, t)}
+                    href={planChangeMailto(orgName, tier, t)}
                     className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity"
                   >
                     <Mail className="w-3.5 h-3.5" />
-                    {t === 'free' ? 'Contact us' : 'Upgrade'}
+                    Upgrade
+                  </a>
+                ) : (
+                  <a
+                    href={planChangeMailto(orgName, tier, t)}
+                    className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 border border-gray-300 dark:border-white/15 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                  >
+                    Downgrade
                   </a>
                 )}
               </div>
