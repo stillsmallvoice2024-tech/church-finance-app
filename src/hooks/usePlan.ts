@@ -63,6 +63,10 @@ export const TXN_TYPE_FEATURE: Partial<Record<string, PlanFeature>> = {
 export const QUANTITY_LIMITS: Partial<Record<PlanFeature, Record<PlanTier, number | null>>> = {
   customDistributionRules: { free: 0, level1: 2, full: null },
   multiBank:               { free: 1, level1: null, full: null },
+  // Distinct foreign currencies in use across the org's banks — not a cap on
+  // the number of FX banks. Growth can run as many banks as it likes in that
+  // one currency; only Impact removes the currency-count cap.
+  fx:                       { free: 0, level1: 1, full: null },
 }
 
 export const IMPORT_ROWS_PER_MONTH = 100

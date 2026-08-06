@@ -432,9 +432,28 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { mutate: addBank } = useAddBank()
   const { push: toast } = useToastStore()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
-  const { quantityLimit } = usePlan()
+  const { hasFeature, quantityLimit } = usePlan()
   const bankLimit = quantityLimit('multiBank')
   const atCap = !loading && bankLimit !== null && banks.length >= bankLimit
+  const canUseFx = hasFeature('fx')
+  const fxCurrencyLimit = quantityLimit('fx')
+  const existingForeignCurrencies = useMemo(() => {
+    const set = new Set<string>()
+    for (const b of banks) {
+      if (b.currency && b.currency !== (defaultCurrency ?? 'NGN')) set.add(b.currency)
+    }
+    return set
+  }, [banks, defaultCurrency])
+  const atFxCurrencyCap = fxCurrencyLimit !== null && existingForeignCurrencies.size >= fxCurrencyLimit
+  // Mirrors the same fx-feature/currency-cap restriction as AddBankModal —
+  // this step has its own duplicate currency picker, so it needs its own
+  // check to avoid bypassing the tier's foreign-currency limit during
+  // onboarding.
+  const selectableCurrencies = !canUseFx
+    ? currencies.filter(c => c.code === (defaultCurrency ?? 'NGN'))
+    : atFxCurrencyCap
+      ? currencies.filter(c => c.code === (defaultCurrency ?? 'NGN') || existingForeignCurrencies.has(c.code))
+      : currencies
 
   const [name, setName]         = useState('')
   const [acctNum, setAcctNum]   = useState('')
@@ -523,11 +542,21 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
             onChange={e => setCurrency(e.target.value)}
             className={`${inputCls} flex-1`}
           >
-            {currencies.map(c => (
+            {selectableCurrencies.map(c => (
               <option key={c.code} value={c.code}>{c.code}</option>
             ))}
           </select>
         </div>
+        {!canUseFx && (
+          <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+            More currencies available on {TIER_SHORT_NAME.level1}.
+          </p>
+        )}
+        {canUseFx && atFxCurrencyCap && (
+          <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+            {TIER_SHORT_NAME.level1} allows one foreign currency across as many banks as you like — move to {TIER_SHORT_NAME.full} for unlimited foreign currencies.
+          </p>
+        )}
         <div className="flex justify-end">
           <button
             type="submit"

@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { useOrgStore } from '../../store/orgStore'
 import { useToastStore } from '../../store/toastStore'
 import { useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
+import { useBanks } from '../../hooks/useBanks'
 import {
   usePlan, FEATURE_TIERS, TIER_DISPLAY_NAME, TIER_SHORT_NAME, TIER_PRICING, QUANTITY_LIMITS, TIER_RANK,
   type PlanFeature,
@@ -73,10 +74,16 @@ export function BillingTab() {
   const planExpiresAt  = useOrgStore(s => s.planExpiresAt)
   const planStatus     = useOrgStore(s => s.planStatus)
   const trialEndsAt    = useOrgStore(s => s.trialEndsAt)
+  const defaultCurrency = useOrgStore(s => s.defaultCurrency)
   const { tier, importedRowsCount, importRowsRemaining, importResetDate } = usePlan()
   const resetDateLabel = formatDate(importResetDate())
   const { groups: customRuleGroups } = useSpecialConfigGroups()
   const customRuleCap = QUANTITY_LIMITS.customDistributionRules?.level1 ?? 2
+  const { banks } = useBanks()
+  const fxCurrencyCap = QUANTITY_LIMITS.fx?.level1 ?? 1
+  const fxCurrenciesUsed = new Set(
+    banks.filter(b => b.currency && b.currency !== (defaultCurrency ?? 'NGN')).map(b => b.currency)
+  ).size
   const { push: toast } = useToastStore()
 
   useEffect(() => {
@@ -143,7 +150,12 @@ export function BillingTab() {
     ],
     level1: [
       { label: 'Unlimited bank accounts' },
-      { label: 'Foreign currency & FX tracking' },
+      {
+        label: `Foreign currency & FX tracking — up to ${fxCurrencyCap}`,
+        sub: tier === 'level1'
+          ? `${fxCurrenciesUsed} of ${fxCurrencyCap} currencies used · unlimited banks in it`
+          : 'One foreign currency, unlimited banks in it',
+      },
       { label: 'Unlimited statement import', sub: 'No monthly row cap' },
       { label: 'Standard Reports' },
       { label: 'Receipt attachments' },
@@ -158,6 +170,7 @@ export function BillingTab() {
     ],
     full: [
       { label: 'Unlimited custom distribution rules', sub: `No cap — Growth is limited to ${customRuleCap}` },
+      { label: 'Unlimited foreign currencies', sub: `No cap — Growth is limited to ${fxCurrencyCap}` },
       { label: 'Board Report' },
       { label: 'Custom report builder' },
       { label: 'Bulk fund reallocation' },
